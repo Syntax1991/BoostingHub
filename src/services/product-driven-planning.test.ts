@@ -9,7 +9,7 @@ import { raidRepository } from "@/repositories/raid.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { runTemplateRepository } from "@/repositories/run-template.repository";
 import { communityScheduleService } from "@/services/community-schedule.service";
-import { contentCatalogService } from "@/services/content-catalog.service";
+import { raidCatalogService } from "@/services/raid-catalog.service";
 import { productPlanningService } from "@/services/product-planning.service";
 import { runDetailService } from "@/services/run-detail.service";
 import { runService } from "@/services/run.service";
@@ -113,21 +113,21 @@ beforeAll(async () => {
 
   // Two new raids (not offered for new Runs on their own, like Tide / Kith'ix).
   const metadata = { season: "QA", sortOrder: 80, trackLockouts: false, blizzardInstanceId: null };
-  raidA = (await contentCatalogService.createRaid(admin, { name: "QA Dynamic Raid A", ...metadata })).raidId;
-  raidB = (await contentCatalogService.createRaid(admin, { name: "QA Dynamic Raid B", ...metadata })).raidId;
+  raidA = (await raidCatalogService.createRaid(admin, { name: "QA Dynamic Raid A", ...metadata })).raidId;
+  raidB = (await raidCatalogService.createRaid(admin, { name: "QA Dynamic Raid B", ...metadata })).raidId;
   created.raids.push(raidA, raidB);
   for (const [raidId, count] of [
     [raidA, 1],
     [raidB, 2],
   ] as const) {
     for (let index = 1; index <= count; index += 1) {
-      await contentCatalogService.createEncounter(admin, { raidId, name: `Boss ${index}`, blizzardEncounterIds: [], wclEncounterIds: [] });
+      await raidCatalogService.createEncounter(admin, { raidId, name: `Boss ${index}`, blizzardEncounterIds: [], wclEncounterIds: [] });
     }
   }
 
   // Persisted order: Venomous (VARIABLE) → Raid A (FIXED 1) → Raid B (FIXED 2).
   created.productId = (
-    await contentCatalogService.createProduct(admin, {
+    await raidCatalogService.createProduct(admin, {
       name: "QA Dynamic Three Content",
       active: true,
       selectable: true,
@@ -286,7 +286,7 @@ describe("dynamic three-content product", () => {
     const before = await Promise.all(created.runs.map(runContents));
     const setupId = created.templates[0]!;
     const setupBefore = await templateContents(setupId);
-    await contentCatalogService.setProductSelectable(admin, product.id, false);
+    await raidCatalogService.setProductSelectable(admin, product.id, false);
     try {
       const has = (products: readonly { key: string }[]) => products.some((row) => row.key === "QA_DYNAMIC_THREE_CONTENT");
       expect(has(await productPlanningService.listSelectable())).toBe(false);
@@ -304,11 +304,11 @@ describe("dynamic three-content product", () => {
       expect((await runTemplateService.listUsableForCreation(lead)).some((row) => row.id === setupId)).toBe(true);
 
       // Inactive: the setup's raids are not standalone-available → no longer usable.
-      await contentCatalogService.setProductActive(admin, product.id, false);
+      await raidCatalogService.setProductActive(admin, product.id, false);
       expect((await runTemplateService.listUsableForCreation(lead)).some((row) => row.id === setupId)).toBe(false);
     } finally {
-      await contentCatalogService.setProductActive(admin, product.id, true);
-      await contentCatalogService.setProductSelectable(admin, product.id, true);
+      await raidCatalogService.setProductActive(admin, product.id, true);
+      await raidCatalogService.setProductSelectable(admin, product.id, true);
     }
   });
 
@@ -320,7 +320,7 @@ describe("dynamic three-content product", () => {
       await productPlanningService.listAll();
       const baseline = spy.mock.calls.length;
       expect(baseline).toBeLessThanOrEqual(4);
-      const extra = await contentCatalogService.createProduct(admin, {
+      const extra = await raidCatalogService.createProduct(admin, {
         name: "QA Dynamic Extra",
         active: true,
         selectable: true,

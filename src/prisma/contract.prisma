@@ -573,9 +573,11 @@ model BoosterAccess {
   @@map("booster_access")
 }
 
-/// Raid content catalog (database authority). Stable UUIDs are historical
-/// identity: Runs, templates and lockouts reference them forever.
-/// `isActive` keeps its legacy meaning (standalone Create Run product).
+/// Raid catalog (database authority). Stable UUIDs are historical identity:
+/// Runs, templates and lockouts reference them forever.
+/// `isActive` is an admin flag ("Available for new Runs") for historical /
+/// non-product-matched template usability — Product.active/selectable own
+/// new Product planning selection. Never rename to a second ambiguous `active`.
 model Raid {
   id        String   @id @default(uuid())
   name      String
@@ -598,7 +600,6 @@ model Raid {
   lockouts CharacterRaidLockout[]
   runContents RunRaidContent[]
   templateContents RunTemplateRaidContent[]
-  templates RunTemplate[]
   productContents ProductRaidContent[]
 
   @@map("raid")
@@ -627,7 +628,7 @@ enum ProductBossCountMode {
 }
 
 /// Sellable BoostingHub product (e.g. a raid or a multi-raid Bundle).
-/// Catalog data only in this phase — Run Setup still reads run-content-presets.
+/// Seeded Product catalog fixture identity. Runtime planning reads DB Products.
 model Product {
   id         String  @id @default(uuid())
   key        String  @unique
@@ -807,20 +808,12 @@ model RunStartSnapshot {
 /// Run.templateId anywhere.
 ///
 /// Authoritative raid identity is ordered `contents` (RunTemplateRaidContent),
-/// mirroring RunRaidContent. Legacy singular `raidId` / `plannedBossCount` are
-/// dual-written mirrors of the primary (Venomous) content for transitional
-/// readers only — never invent Bundle from those columns alone.
+/// mirroring RunRaidContent. Never invent Bundle from a singular raid column.
 model RunTemplate {
   id                 String         @id @default(uuid())
   name               String
-  /// Legacy dual-write mirror of the primary content raid (usually Venomous).
-  /// Prefer `contents` for product authority.
-  raidId             String
-  raid               Raid           @relation(fields: [raidId], references: [id], onDelete: Restrict)
   difficulty         RaidDifficulty
   lootType           RunLootType
-  /// Legacy dual-write mirror of the primary content plannedBossCount.
-  plannedBossCount   Int
   /// Default composition inherited by Schedule slots unless they override.
   desiredTankCount   Int
   desiredHealerCount Int
@@ -839,7 +832,6 @@ model RunTemplate {
   contents           RunTemplateRaidContent[]
 
   @@index([isActive])
-  @@index([raidId])
   @@map("run_template")
 }
 

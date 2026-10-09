@@ -1,4 +1,4 @@
-import { assertCanManageContentCatalog, type AuthenticatedUser } from "@/auth/authorization";
+import { assertCanManageRaidCatalog, type AuthenticatedUser } from "@/auth/authorization";
 import { DomainError } from "@/lib/errors";
 import { allocateUniqueProductKey } from "@/lib/product-key";
 import { PRODUCT_CATALOG_FIXTURE, type ProductBossCountMode, type ProductDefinition } from "@/lib/product-catalog";
@@ -6,12 +6,12 @@ import type { CatalogBoss, CatalogRaid, RaidCatalog } from "@/lib/raid-catalog";
 import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
 import { activityRepository } from "@/repositories/activity.repository";
 import {
-  contentCatalogRepository,
+  raidCatalogRepository,
   EMPTY_RAID_REFERENCES,
   isRaidReferenced,
   type ProductContentWrite,
   type RaidReferenceCounts,
-} from "@/repositories/content-catalog.repository";
+} from "@/repositories/raid-catalog.repository";
 import { productRepository } from "@/repositories/product.repository";
 import { raidRepository } from "@/repositories/raid.repository";
 import {
@@ -26,17 +26,17 @@ import {
   type RaidMetadataInput,
   type UpdateProductInput,
   type UpdateRaidInput,
-} from "@/validators/content-catalog";
+} from "@/validators/raid-catalog";
 
 /**
- * Content Catalog administration (/manage/content) — ADMIN / OWNER only.
+ * Raid Catalog administration (/manage/raid-catalog) — ADMIN / OWNER only.
  *
  * Reads only the persisted DB catalog. The bootstrap fixtures are consulted
  * solely to know which rows are seeded (the insert-only bootstrap would
  * re-create a deleted seed row, so seeded rows are never hard-deleted).
  *
- * Historical safety: a Raid referenced by Runs, Run Setups (contents or the
- * legacy mirror), Products or Character lockouts keeps its encounter structure
+ * Historical safety: a Raid referenced by Runs, Run Setups (contents),
+ * Products or Character lockouts keeps its encounter structure
  * (count, order, ids) frozen — boss totals and `killedBossIds` depend on it.
  * Identity-preserving metadata (names, season, order, lockout tracking,
  * Blizzard / Warcraft Logs ids) stays editable.
@@ -45,7 +45,7 @@ import {
 const SEEDED_RAID_IDS = new Set(WOW_RAID_CATALOG.map((raid) => raid.id));
 const SEEDED_PRODUCT_IDS = new Set(PRODUCT_CATALOG_FIXTURE.map((product) => product.id));
 
-export type ContentRaidRow = CatalogRaid & {
+export type RaidCatalogRaidRow = CatalogRaid & {
   references: RaidReferenceCounts;
   referenced: boolean;
   seeded: boolean;
@@ -53,26 +53,26 @@ export type ContentRaidRow = CatalogRaid & {
   structureLocked: boolean;
 };
 
-export type ContentProductContentRow = ProductDefinition["contents"][number] & {
+export type RaidCatalogProductContentRow = ProductDefinition["contents"][number] & {
   raidName: string;
   raidBossTotal: number;
   /** e.g. "Fixed 1/1" or "Variable 1–8 (default 8)". */
   summary: string;
 };
 
-export type ContentProductRow = Omit<ProductDefinition, "contents"> & {
+export type RaidCatalogProductRow = Omit<ProductDefinition, "contents"> & {
   seeded: boolean;
-  contents: ContentProductContentRow[];
+  contents: RaidCatalogProductContentRow[];
 };
 
-export type ContentCatalogPage = {
-  raids: ContentRaidRow[];
-  products: ContentProductRow[];
+export type RaidCatalogPageData = {
+  raids: RaidCatalogRaidRow[];
+  products: RaidCatalogProductRow[];
   /** Distinct persisted seasons for the Season selector (no hardcoded list). */
   seasons: string[];
 };
 
-function toRaidRow(raid: CatalogRaid, references: RaidReferenceCounts): ContentRaidRow {
+function toRaidRow(raid: CatalogRaid, references: RaidReferenceCounts): RaidCatalogRaidRow {
   const referenced = isRaidReferenced(references);
   const seeded = SEEDED_RAID_IDS.has(raid.id);
   return { ...raid, references, referenced, seeded, structureLocked: referenced || seeded };
@@ -86,7 +86,7 @@ export function summarizeProductContent(
   return `Variable ${content.minBossCount ?? "?"}–${raidBossTotal} (default ${content.defaultBossCount ?? "?"})`;
 }
 
-function toProductRow(product: ProductDefinition, catalog: RaidCatalog): ContentProductRow {
+function toProductRow(product: ProductDefinition, catalog: RaidCatalog): RaidCatalogProductRow {
   return {
     ...product,
     seeded: SEEDED_PRODUCT_IDS.has(product.id),
@@ -106,7 +106,7 @@ function toProductRow(product: ProductDefinition, catalog: RaidCatalog): Content
 function referenceSummary(references: RaidReferenceCounts): string {
   const parts = [
     [references.runContents, "Run content"],
-    [references.templateContents + references.templates, "Run Setup reference"],
+    [references.templateContents, "Run Setup reference"],
     [references.productContents, "Product content"],
     [references.lockouts, "Character lockout"],
   ] as const;
@@ -235,7 +235,7 @@ async function assertEncounterStructureEditable(raid: CatalogRaid): Promise<void
       `${raid.name} is core catalog content: its encounters cannot be added, removed or reordered.`,
     );
   }
-  const references = await contentCatalogRepository.raidReferenceCounts(raid.id);
+  const references = await raidCatalogRepository.raidReferenceCounts(raid.id);
   if (isRaidReferenced(references)) {
     throw new DomainError(
       "CONTENT_ENCOUNTER_IN_USE",
@@ -267,7 +267,7 @@ async function applyWclDiscovery(
     const { raid } = await loadRaidContext(raidId);
     const result = await discoverWarcraftLogsRaidMetadata(raid, options);
     if (result.raidPatch) {
-      await contentCatalogRepository.updateRaidWclMapping(raid.id, {
+      await raidCatalogRepository.updateRaidWclMapping(raid.id, {
         ...result.raidPatch,
         now: now.toISOString(),
       });
@@ -302,28 +302,28 @@ async function applyWclDiscovery(
       } catch {
         continue;
       }
-      await contentCatalogRepository.updateEncounter(boss.id, {
+      await raidCatalogRepository.updateEncounter(boss.id, {
         name: boss.name,
         blizzardEncounterIds,
         wclEncounterIds,
       });
     }
   } catch (error) {
-    console.error("[content-catalog] WCL discovery failed", { raidId }, error);
+    console.error("[raid-catalog] WCL discovery failed", { raidId }, error);
   }
 }
 
 /* --------------------------------------------------------------- service */
 
-export const contentCatalogService = {
+export const raidCatalogService = {
   /** Raids + encounters (1 query), reference counts (5 grouped counts), products + contents (1 query). */
-  async getPage(admin: AuthenticatedUser): Promise<ContentCatalogPage> {
-    assertCanManageContentCatalog(admin);
+  async getPage(admin: AuthenticatedUser): Promise<RaidCatalogPageData> {
+    assertCanManageRaidCatalog(admin);
     const [catalog, references, products, seasons] = await Promise.all([
       raidRepository.loadCatalog(),
-      contentCatalogRepository.listRaidReferenceCounts(),
+      raidCatalogRepository.listRaidReferenceCounts(),
       productRepository.listAll(),
-      contentCatalogRepository.listDistinctSeasons(),
+      raidCatalogRepository.listDistinctSeasons(),
     ]);
     return {
       raids: catalog.raids.map((raid) => toRaidRow(raid, references.get(raid.id) ?? EMPTY_RAID_REFERENCES)),
@@ -333,25 +333,25 @@ export const contentCatalogService = {
   },
 
   async listSeasons(admin: AuthenticatedUser): Promise<string[]> {
-    assertCanManageContentCatalog(admin);
-    return contentCatalogRepository.listDistinctSeasons();
+    assertCanManageRaidCatalog(admin);
+    return raidCatalogRepository.listDistinctSeasons();
   },
 
-  async getRaidDetail(admin: AuthenticatedUser, raidId: string): Promise<ContentRaidRow> {
-    assertCanManageContentCatalog(admin);
+  async getRaidDetail(admin: AuthenticatedUser, raidId: string): Promise<RaidCatalogRaidRow> {
+    assertCanManageRaidCatalog(admin);
     const [{ raid }, references] = await Promise.all([
       loadRaidContext(raidId),
-      contentCatalogRepository.raidReferenceCounts(raidId),
+      raidCatalogRepository.raidReferenceCounts(raidId),
     ]);
     return toRaidRow(raid, references);
   },
 
   async createRaid(admin: AuthenticatedUser, input: RaidMetadataInput, now = new Date()): Promise<{ raidId: string }> {
-    assertCanManageContentCatalog(admin);
+    assertCanManageRaidCatalog(admin);
     const catalog = await raidRepository.loadCatalog();
     const raidId = crypto.randomUUID();
     assertIntegrationIds(catalog, { raidId, blizzardInstanceId: input.blizzardInstanceId });
-    await contentCatalogRepository.createRaid({
+    await raidCatalogRepository.createRaid({
       id: raidId,
       name: input.name,
       season: input.season,
@@ -369,11 +369,11 @@ export const contentCatalogService = {
   },
 
   async updateRaid(admin: AuthenticatedUser, input: UpdateRaidInput, now = new Date()): Promise<void> {
-    assertCanManageContentCatalog(admin);
+    assertCanManageRaidCatalog(admin);
     const { catalog, raid } = await loadRaidContext(input.raidId);
     assertIntegrationIds(catalog, { raidId: raid.id, blizzardInstanceId: input.blizzardInstanceId });
     const nameChanged = raid.name !== input.name;
-    await contentCatalogRepository.updateRaid(raid.id, {
+    await raidCatalogRepository.updateRaid(raid.id, {
       name: input.name,
       season: input.season,
       isActive: input.availableForRuns,
@@ -391,7 +391,7 @@ export const contentCatalogService = {
 
   /** Explicit Retry detection — may overwrite prior WCL raid/encounter mappings. */
   async retryWclDetection(admin: AuthenticatedUser, raidId: string, now = new Date()): Promise<{ resolved: boolean }> {
-    assertCanManageContentCatalog(admin);
+    assertCanManageRaidCatalog(admin);
     await loadRaidContext(raidId);
     await applyWclDiscovery(raidId, { force: true }, now);
     const { raid } = await loadRaidContext(raidId);
@@ -401,9 +401,9 @@ export const contentCatalogService = {
 
   /** Clear raid-level WCL mapping (zone + ranking encounter). Encounter boss ids are left alone. */
   async clearWclMapping(admin: AuthenticatedUser, raidId: string, now = new Date()): Promise<void> {
-    assertCanManageContentCatalog(admin);
+    assertCanManageRaidCatalog(admin);
     const { raid } = await loadRaidContext(raidId);
-    await contentCatalogRepository.updateRaidWclMapping(raid.id, {
+    await raidCatalogRepository.updateRaidWclMapping(raid.id, {
       wclZoneId: null,
       wclRankingEncounterId: null,
       now: now.toISOString(),
@@ -413,7 +413,7 @@ export const contentCatalogService = {
 
   /** Hard delete only for an unreferenced, non-seeded Raid. Otherwise mark it unavailable for new Runs. */
   async deleteRaid(admin: AuthenticatedUser, raidId: string): Promise<{ name: string }> {
-    assertCanManageContentCatalog(admin);
+    assertCanManageRaidCatalog(admin);
     const { raid } = await loadRaidContext(raidId);
     if (SEEDED_RAID_IDS.has(raid.id)) {
       throw new DomainError(
@@ -421,14 +421,14 @@ export const contentCatalogService = {
         `${raid.name} is core catalog content and cannot be deleted. Turn off "Available for new Runs" instead.`,
       );
     }
-    const references = await contentCatalogRepository.raidReferenceCounts(raid.id);
+    const references = await raidCatalogRepository.raidReferenceCounts(raid.id);
     if (isRaidReferenced(references)) {
       throw new DomainError(
         "CONTENT_RAID_IN_USE",
         `${raid.name} is in use (${referenceSummary(references)}) and cannot be deleted. Turn off "Available for new Runs" instead.`,
       );
     }
-    await contentCatalogRepository.deleteRaid(raid.id);
+    await raidCatalogRepository.deleteRaid(raid.id);
     await record(admin, "CONTENT_RAID_DELETED", `Raid "${raid.name}" deleted.`);
     return { name: raid.name };
   },
@@ -437,7 +437,7 @@ export const contentCatalogService = {
     admin: AuthenticatedUser,
     input: EncounterAdminFieldsInput & { raidId: string; /** Test / recovery only — never from admin create schema. */ wclEncounterIds?: readonly number[] },
   ): Promise<{ bossId: string }> {
-    assertCanManageContentCatalog(admin);
+    assertCanManageRaidCatalog(admin);
     const fields = encounterAdminFieldsSchema.parse(input); // sorted, unique, positive blizzard ids
     const wclEncounterIds = [...(input.wclEncounterIds ?? [])].sort((a, b) => a - b);
     const { catalog, raid } = await loadRaidContext(input.raidId);
@@ -450,7 +450,7 @@ export const contentCatalogService = {
     });
     const bossId = crypto.randomUUID();
     const nextOrder = raid.bosses.reduce((max, boss) => Math.max(max, boss.sortOrder), 0) + 1;
-    await contentCatalogRepository.createEncounter({
+    await raidCatalogRepository.createEncounter({
       id: bossId,
       raidId: raid.id,
       name: fields.name,
@@ -465,13 +465,13 @@ export const contentCatalogService = {
 
   /**
    * Name and Blizzard ids from the admin form. Optional `wclEncounterIds` is for tests /
-   * recovery only — the Content Catalog UI never submits it (discovery fills empty ids).
+   * recovery only — the Raid Catalog UI never submits it (discovery fills empty ids).
    */
   async updateEncounter(
     admin: AuthenticatedUser,
     input: EncounterAdminFieldsInput & { bossId: string; wclEncounterIds?: readonly number[] },
   ): Promise<void> {
-    assertCanManageContentCatalog(admin);
+    assertCanManageRaidCatalog(admin);
     const fields = encounterAdminFieldsSchema.parse(input);
     const { catalog, raid, boss } = await loadBossContext(input.bossId);
     const wclEncounterIds =
@@ -482,7 +482,7 @@ export const contentCatalogService = {
       blizzardEncounterIds: fields.blizzardEncounterIds,
       wclEncounterIds,
     });
-    await contentCatalogRepository.updateEncounter(boss.id, {
+    await raidCatalogRepository.updateEncounter(boss.id, {
       name: fields.name,
       blizzardEncounterIds: fields.blizzardEncounterIds,
       wclEncounterIds,
@@ -492,7 +492,7 @@ export const contentCatalogService = {
   },
 
   async moveEncounter(admin: AuthenticatedUser, input: { bossId: string; direction: "UP" | "DOWN" }): Promise<void> {
-    assertCanManageContentCatalog(admin);
+    assertCanManageRaidCatalog(admin);
     const { raid, boss } = await loadBossContext(input.bossId);
     await assertEncounterStructureEditable(raid);
     const ordered = raid.bosses.map((row) => row.id);
@@ -500,14 +500,14 @@ export const contentCatalogService = {
     const target = input.direction === "UP" ? index - 1 : index + 1;
     if (target < 0 || target >= ordered.length) return;
     [ordered[index], ordered[target]] = [ordered[target]!, ordered[index]!];
-    await contentCatalogRepository.setEncounterOrder(ordered);
+    await raidCatalogRepository.setEncounterOrder(ordered);
   },
 
   async deleteEncounter(admin: AuthenticatedUser, bossId: string): Promise<{ name: string }> {
-    assertCanManageContentCatalog(admin);
+    assertCanManageRaidCatalog(admin);
     const { raid, boss } = await loadBossContext(bossId);
     await assertEncounterStructureEditable(raid);
-    await contentCatalogRepository.deleteEncounter(
+    await raidCatalogRepository.deleteEncounter(
       boss.id,
       raid.bosses.filter((row) => row.id !== boss.id).map((row) => row.id),
     );
@@ -516,13 +516,13 @@ export const contentCatalogService = {
   },
 
   async createProduct(admin: AuthenticatedUser, input: CreateProductInput, now = new Date()): Promise<{ productId: string }> {
-    assertCanManageContentCatalog(admin);
+    assertCanManageRaidCatalog(admin);
     const contents = validateProductContents(input.contents, await raidRepository.loadCatalog());
     const productId = crypto.randomUUID();
     const key = await allocateUniqueProductKey(input.name, async (candidate) =>
-      Boolean(await contentCatalogRepository.findProductIdByKey(candidate)),
+      Boolean(await raidCatalogRepository.findProductIdByKey(candidate)),
     );
-    await contentCatalogRepository.createProduct({
+    await raidCatalogRepository.createProduct({
       id: productId,
       key,
       name: input.name,
@@ -538,10 +538,10 @@ export const contentCatalogService = {
 
   /** The key is immutable; contents are replaced in order. Runs and Run Setups are never rewritten. */
   async updateProduct(admin: AuthenticatedUser, input: UpdateProductInput, now = new Date()): Promise<void> {
-    assertCanManageContentCatalog(admin);
+    assertCanManageRaidCatalog(admin);
     const product = await loadProduct(input.productId);
     const contents = validateProductContents(input.contents, await raidRepository.loadCatalog());
-    await contentCatalogRepository.updateProduct(product.id, {
+    await raidCatalogRepository.updateProduct(product.id, {
       name: input.name,
       active: input.active,
       selectable: input.selectable,
@@ -553,9 +553,9 @@ export const contentCatalogService = {
   },
 
   async setProductActive(admin: AuthenticatedUser, productId: string, active: boolean, now = new Date()) {
-    assertCanManageContentCatalog(admin);
+    assertCanManageRaidCatalog(admin);
     const product = await loadProduct(productId);
-    await contentCatalogRepository.setProductFlags(product.id, { active, now: now.toISOString() });
+    await raidCatalogRepository.setProductFlags(product.id, { active, now: now.toISOString() });
     await record(
       admin,
       active ? "CONTENT_PRODUCT_ACTIVATED" : "CONTENT_PRODUCT_DEACTIVATED",
@@ -565,9 +565,9 @@ export const contentCatalogService = {
   },
 
   async setProductSelectable(admin: AuthenticatedUser, productId: string, selectable: boolean, now = new Date()) {
-    assertCanManageContentCatalog(admin);
+    assertCanManageRaidCatalog(admin);
     const product = await loadProduct(productId);
-    await contentCatalogRepository.setProductFlags(product.id, { selectable, now: now.toISOString() });
+    await raidCatalogRepository.setProductFlags(product.id, { selectable, now: now.toISOString() });
     await record(
       admin,
       "CONTENT_PRODUCT_UPDATED",
@@ -578,7 +578,7 @@ export const contentCatalogService = {
 
   /** Seeded products are never hard-deleted (the bootstrap would re-create them) — deactivate them instead. */
   async deleteProduct(admin: AuthenticatedUser, productId: string): Promise<{ name: string }> {
-    assertCanManageContentCatalog(admin);
+    assertCanManageRaidCatalog(admin);
     const product = await loadProduct(productId);
     if (SEEDED_PRODUCT_IDS.has(product.id)) {
       throw new DomainError(
@@ -586,7 +586,7 @@ export const contentCatalogService = {
         `${product.name} is core catalog content and cannot be deleted. Deactivate it instead.`,
       );
     }
-    await contentCatalogRepository.deleteProduct(product.id);
+    await raidCatalogRepository.deleteProduct(product.id);
     await record(admin, "CONTENT_PRODUCT_DELETED", `Product "${product.name}" (${product.key}) deleted.`);
     return { name: product.name };
   },

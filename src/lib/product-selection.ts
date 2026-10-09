@@ -1,7 +1,7 @@
 /**
  * Product-driven Run planning (client-safe, no DB access).
  *
- * A Product (DB authority, managed in /manage/content) is an ordered list of
+ * A Product (DB authority, managed in /manage/raid-catalog) is an ordered list of
  * raid contents. Selecting it for a new Run / Run Setup expands to one
  * RunRaidContent / RunTemplateRaidContent per ProductRaidContent, in the
  * persisted ProductRaidContent order — never assuming a number of contents,

@@ -12,7 +12,7 @@ import type {
   WowRegion,
 } from "@/models/enums";
 import { UPCOMING_RUN_STATUSES } from "@/models/enums";
-import { projectRunContentDisplay } from "@/lib/run-content-presets";
+import { projectRunContentDisplay } from "@/lib/run-content-display";
 import {
   asBoolean,
   asNumber,

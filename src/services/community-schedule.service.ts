@@ -327,17 +327,7 @@ function templateProductFields(
   productLabel: string;
   titleCoverage: string;
 } {
-  const contentRows =
-    template.contents.length > 0
-      ? template.contents
-      : [
-          {
-            raidId: template.raidId,
-            sortOrder: 1,
-            plannedBossCount: template.plannedBossCount,
-            totalBossCount: template.totalBossCount,
-          },
-        ];
+  const contentRows = template.contents;
   const coverage = templateCoverage(template);
   const display = templateContentDisplay(template);
   const selection = matchProductForContents(activeProducts, contentRows);

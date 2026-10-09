@@ -1,12 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Field, fieldInputClass } from "@/components/manage/content/content-dialog";
+import { Field, fieldInputClass } from "@/components/manage/raid-catalog/raid-catalog-dialog";
 
 const ADD_NEW = "__add_new_season__";
 
 /**
- * Season picker for Content Catalog raids.
+ * Season picker for Raid Catalog raids.
  * Options come from distinct persisted `Raid.season` values (no hardcoded list).
  * "+ Add new season" reveals a text input; the resulting trimmed string is what saves.
  */

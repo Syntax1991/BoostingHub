@@ -7,7 +7,7 @@ import { normalizeOfferedRoles } from "@/lib/offered-roles";
 import {
   projectRunContentDisplay,
   type RunContentDisplay,
-} from "@/lib/run-content-presets";
+} from "@/lib/run-content-display";
 import type {
   RaidDifficulty,
   RunLootType,

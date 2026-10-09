@@ -151,14 +151,8 @@ function fakeTemplate(overrides: Partial<RunTemplateRecord> = {}): RunTemplateRe
   return {
     id: "fake",
     name: "Fake",
-    raidId,
-    raidName: "Venomous Abyss",
-    raidSeason: "Season",
-    raidAvailableForRuns: true,
-    totalBossCount: 8,
     difficulty: "HEROIC",
     lootType: "UNSAVED",
-    plannedBossCount: 8,
     contents: [
       {
         id: "fake-content",
@@ -228,8 +222,6 @@ describe("computeUsability — pure boolean logic", () => {
     expect(
       usabilityWithSeededProducts(
         fakeTemplate({
-          raidId: MANAFORGE_OMEGA_RAID_ID,
-          raidAvailableForRuns: false,
           contents: [
             {
               id: "mf",
@@ -282,10 +274,6 @@ describe("computeUsability — pure boolean logic", () => {
     expect(
       usabilityWithSeededProducts(
         fakeTemplate({
-          raidId: TIDEBOUND_GROTTO_RAID_ID,
-          raidAvailableForRuns: false,
-          totalBossCount: 1,
-          plannedBossCount: 1,
           contents: [
             {
               id: "tide",
@@ -311,7 +299,6 @@ describe("computeUsability — pure boolean logic", () => {
     expect(
       usabilityWithSeededProducts(
         fakeTemplate({
-          plannedBossCount: 99,
           contents: [
             {
               id: "fake-content",
@@ -330,7 +317,6 @@ describe("computeUsability — pure boolean logic", () => {
     expect(
       usabilityWithSeededProducts(
         fakeTemplate({
-          plannedBossCount: 0,
           contents: [
             {
               id: "fake-content",

@@ -5,7 +5,7 @@ import { updateRunAction } from "@/controllers/run.actions";
 import { Button } from "@/components/ui/button";
 import { fromDatetimeLocalValue, toDatetimeLocalValue } from "@/lib/datetime";
 import { DIFFICULTY_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
-import { projectRunContentCoverage } from "@/lib/run-content-presets";
+import { projectRunContentCoverage } from "@/lib/run-content-display";
 import { selectionCoveragePreview, type ProductSelection } from "@/lib/product-selection";
 import { KEEP_CURRENT_CONTENTS, ProductContentPicker } from "@/components/runs/product-content-picker";
 import { buildRunTitle } from "@/lib/run-title";

@@ -13,7 +13,7 @@ import {
   projectRunContentCoverage,
   projectRunContentDisplay,
   type ExpandedRunContent,
-} from "@/lib/run-content-presets";
+} from "@/lib/run-content-display";
 import {
   defaultContentBossCounts,
   matchProductForContents,
@@ -576,22 +576,17 @@ export const runService = {
     } | null;
   }): Promise<RunCreateWithContentsInput> {
     await raidRepository.ensureReferenceRaids();
-    // Authoritative template contents (RunTemplateRaidContent) — never reduce
-    // Bundle back to the singular dual-write mirror columns.
-    const contents: ExpandedRunContent[] =
-      input.template.contents.length > 0
-        ? input.template.contents.map((row) => ({
-            raidId: row.raidId,
-            sortOrder: row.sortOrder,
-            plannedBossCount: row.plannedBossCount,
-          }))
-        : [
-            {
-              raidId: input.template.raidId,
-              sortOrder: 1,
-              plannedBossCount: input.template.plannedBossCount,
-            },
-          ];
+    if (input.template.contents.length === 0) {
+      throw new DomainError(
+        "RUN_TEMPLATE_UNUSABLE",
+        "This template has no raid content.",
+      );
+    }
+    const contents: ExpandedRunContent[] = input.template.contents.map((row) => ({
+      raidId: row.raidId,
+      sortOrder: row.sortOrder,
+      plannedBossCount: row.plannedBossCount,
+    }));
     const composition = resolveEffectiveRunComposition({
       template: input.template,
       scheduleSlot: input.scheduleSlot,
@@ -710,17 +705,7 @@ export const runService = {
 
     const usableTemplates = await runTemplateService.listUsableForCreation(user);
     const templates = usableTemplates.map((template) => {
-      const contentRows =
-        template.contents.length > 0
-          ? template.contents
-          : [
-              {
-                raidId: template.raidId,
-                sortOrder: 1,
-                plannedBossCount: template.plannedBossCount,
-                totalBossCount: template.totalBossCount,
-              },
-            ];
+      const contentRows = template.contents;
       const coverage = projectRunContentCoverage(contentRows);
       // Applying a template preselects its product while that product is still selectable.
       const selection = matchProductForContents(products, contentRows);

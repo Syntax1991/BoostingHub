@@ -106,7 +106,7 @@ export const DOMAIN_ERROR_CODES = [
   "CHARACTER_BULK_REFRESH_COOLDOWN",
   "BLIZZARD_LEVEL_TOO_LOW",
   "USER_MANAGEMENT_FORBIDDEN",
-  // Content Catalog (/manage/content)
+  // Raid Catalog (/manage/raid-catalog)
   "CONTENT_RAID_NOT_FOUND",
   "CONTENT_RAID_IN_USE",
   "CONTENT_ENCOUNTER_NOT_FOUND",

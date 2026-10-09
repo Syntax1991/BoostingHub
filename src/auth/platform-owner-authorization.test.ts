@@ -60,7 +60,7 @@ describe("account role hierarchy — OWNER > ADMIN > RAID_LEAD > USER", () => {
       "schedule",
       "users",
       "characters",
-      "content",
+      "raidCatalog",
       "analytics",
       "system",
     ]);

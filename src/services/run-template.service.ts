@@ -5,7 +5,7 @@ import {
   projectRunContentCoverage,
   projectRunContentDisplay,
   type ExpandedRunContent,
-} from "@/lib/run-content-presets";
+} from "@/lib/run-content-display";
 import {
   matchProductForContents,
   type ContentBossCounts,
@@ -60,22 +60,8 @@ function requireCanUseTemplates(user: AuthenticatedUser): void {
   }
 }
 
-/** Template contents as ordered rows (falls back to the legacy singular mirror). */
 function templateContentRows(template: RunTemplateRecord) {
-  return template.contents.length > 0
-    ? template.contents
-    : [
-        {
-          raidId: template.raidId,
-          sortOrder: 1,
-          plannedBossCount: template.plannedBossCount,
-          totalBossCount: template.totalBossCount,
-          raidAvailableForRuns: template.raidAvailableForRuns,
-          raidName: template.raidName,
-          raidSeason: template.raidSeason,
-          id: "legacy",
-        },
-      ];
+  return template.contents;
 }
 
 /**
@@ -188,34 +174,11 @@ export function computeUsability(
 }
 
 export function templateContentDisplay(template: RunTemplateRecord) {
-  const contents =
-    template.contents.length > 0
-      ? template.contents
-      : [
-          {
-            raidId: template.raidId,
-            raidName: template.raidName,
-            sortOrder: 1,
-            plannedBossCount: template.plannedBossCount,
-            totalBossCount: template.totalBossCount,
-          },
-        ];
-  return projectRunContentDisplay(contents);
+  return projectRunContentDisplay(template.contents);
 }
 
 export function templateCoverage(template: RunTemplateRecord) {
-  const contents =
-    template.contents.length > 0
-      ? template.contents
-      : [
-          {
-            raidId: template.raidId,
-            sortOrder: 1,
-            plannedBossCount: template.plannedBossCount,
-            totalBossCount: template.totalBossCount,
-          },
-        ];
-  return projectRunContentCoverage(contents);
+  return projectRunContentCoverage(template.contents);
 }
 
 async function persistFromProduct(
@@ -367,20 +330,14 @@ export const runTemplateService = {
     const existing = await loadManagedTemplate(user, templateId);
     await raidRepository.ensureReferenceRaids();
 
-    const contents =
-      existing.contents.length > 0
-        ? existing.contents.map((row) => ({
-            raidId: row.raidId,
-            sortOrder: row.sortOrder,
-            plannedBossCount: row.plannedBossCount,
-          }))
-        : [
-            {
-              raidId: existing.raidId,
-              sortOrder: 1,
-              plannedBossCount: existing.plannedBossCount,
-            },
-          ];
+    if (existing.contents.length === 0) {
+      throw new DomainError("RUN_TEMPLATE_UNUSABLE", "This template has no raid content.");
+    }
+    const contents = existing.contents.map((row) => ({
+      raidId: row.raidId,
+      sortOrder: row.sortOrder,
+      plannedBossCount: row.plannedBossCount,
+    }));
     await assertCopyableContents(contents, await productPlanningService.listActive());
 
     const id = await runTemplateRepository.create({

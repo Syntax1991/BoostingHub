@@ -7,7 +7,7 @@ import type { CatalogBoss, CatalogRaid } from "@/lib/raid-catalog";
 import { normalizeRaidName } from "@/lib/wow-raid-catalog";
 
 /**
- * Deterministic Warcraft Logs catalog metadata discovery for Content Catalog raids.
+ * Deterministic Warcraft Logs catalog metadata discovery for Raid Catalog raids.
  * Uses the existing WCL GraphQL client (`worldData.zones`) — never scrapes HTML.
  *
  * Safety: only exact (normalized) matches; never guesses when zero or multiple
@@ -170,7 +170,7 @@ export type DiscoverRaidMetadataResult = {
 
 /**
  * Fetch WCL zones and resolve metadata for one catalog raid.
- * Does not write to the DB — the Content Catalog service applies patches.
+ * Does not write to the DB — the Raid Catalog service applies patches.
  */
 export async function discoverWarcraftLogsRaidMetadata(
   raid: CatalogRaid,

@@ -6,7 +6,7 @@ import { TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid
  * The DATABASE is the authority — read it through `productRepository`.
  * `PRODUCT_CATALOG_FIXTURE` only seeds missing rows (insert-only bootstrap)
  * and is the parity reference in tests. Run Setup / Create Run forms still use
- * `run-content-presets` in this phase.
+ * `run-content-display` for labels and coverage on persisted contents.
  */
 export type ProductBossCountMode = "FIXED" | "VARIABLE";
 

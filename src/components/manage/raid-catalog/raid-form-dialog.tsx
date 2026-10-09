@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createRaidAction, updateRaidAction } from "@/controllers/content-catalog.actions";
-import { CheckboxField, ContentDialog, Field, fieldInputClass } from "@/components/manage/content/content-dialog";
-import { SeasonSelector } from "@/components/manage/content/season-selector";
+import { createRaidAction, updateRaidAction } from "@/controllers/raid-catalog.actions";
+import { CheckboxField, RaidCatalogDialog, Field, fieldInputClass } from "@/components/manage/raid-catalog/raid-catalog-dialog";
+import { SeasonSelector } from "@/components/manage/raid-catalog/season-selector";
 
 export type RaidFormValues = {
   raidId?: string;
@@ -53,7 +53,7 @@ export function RaidFormDialog({ raid, seasons }: { raid?: RaidFormValues; seaso
   const fields = { name, season, sortOrder, trackLockouts, blizzardInstanceId };
 
   return (
-    <ContentDialog
+    <RaidCatalogDialog
       triggerLabel={editing ? "Edit raid" : "New raid"}
       triggerVariant={editing ? "secondary" : "primary"}
       triggerClassName={editing ? "h-8 px-2 text-xs" : "h-9 px-3 text-sm"}
@@ -72,7 +72,7 @@ export function RaidFormDialog({ raid, seasons }: { raid?: RaidFormValues; seaso
       }
       onSuccess={(result) => {
         const created = result as { raidId?: string };
-        if (!editing && created.raidId) router.push(`/manage/content/raids/${created.raidId}`);
+        if (!editing && created.raidId) router.push(`/manage/raid-catalog/raids/${created.raidId}`);
       }}
     >
       <Field label="Name">
@@ -127,6 +127,6 @@ export function RaidFormDialog({ raid, seasons }: { raid?: RaidFormValues; seaso
           </div>
         ) : null}
       </div>
-    </ContentDialog>
+    </RaidCatalogDialog>
   );
 }

@@ -1,26 +1,26 @@
 import Link from "next/link";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
-import type { ContentRaidRow } from "@/services/content-catalog.service";
+import type { RaidCatalogRaidRow } from "@/services/raid-catalog.service";
 import {
   formatBlizzard,
   formatIdList,
   pluralize,
   runAvailabilityLabel,
-} from "@/components/manage/content/content-format";
-import { RaidFormDialog } from "@/components/manage/content/raid-form-dialog";
-import { RaidWclIntegration } from "@/components/manage/content/raid-wcl-integration";
-import { DeleteRaidButton } from "@/components/manage/content/delete-raid-button";
+} from "@/components/manage/raid-catalog/raid-catalog-format";
+import { RaidFormDialog } from "@/components/manage/raid-catalog/raid-form-dialog";
+import { RaidWclIntegration } from "@/components/manage/raid-catalog/raid-wcl-integration";
+import { DeleteRaidButton } from "@/components/manage/raid-catalog/delete-raid-button";
 import {
   DeleteEncounterButton,
   EncounterFormDialog,
   EncounterMoveButtons,
-} from "@/components/manage/content/encounter-controls";
+} from "@/components/manage/raid-catalog/encounter-controls";
 
-function referenceLines(raid: ContentRaidRow): string[] {
+function referenceLines(raid: RaidCatalogRaidRow): string[] {
   const { references } = raid;
   const lines: string[] = [];
   if (references.runContents > 0) lines.push(pluralize(references.runContents, "Run content"));
-  const setups = references.templateContents + references.templates;
+  const setups = references.templateContents;
   if (setups > 0) lines.push(pluralize(setups, "Run Setup reference"));
   if (references.productContents > 0) lines.push(pluralize(references.productContents, "Product content"));
   if (references.lockouts > 0) lines.push(pluralize(references.lockouts, "Character lockout"));
@@ -28,14 +28,14 @@ function referenceLines(raid: ContentRaidRow): string[] {
 }
 
 /** One raid: identity-preserving metadata, usage, and its encounters (structure locked when in use). */
-export function ManageContentRaidView({ raid, seasons }: { raid: ContentRaidRow; seasons: readonly string[] }) {
+export function ManageRaidCatalogRaidView({ raid, seasons }: { raid: RaidCatalogRaidRow; seasons: readonly string[] }) {
   const usage = referenceLines(raid);
   const canDelete = !raid.referenced && !raid.seeded;
 
   return (
     <div>
-      <Link href="/manage/content" className="mb-3 inline-block text-xs text-muted hover:text-foreground">
-        ← Content
+      <Link href="/manage/raid-catalog" className="mb-3 inline-block text-xs text-muted hover:text-foreground">
+        ← Raid Catalog
       </Link>
       <PageHeader
         title={raid.name}

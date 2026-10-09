@@ -1,14 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { deleteRaidAction } from "@/controllers/content-catalog.actions";
-import { ContentDialog } from "@/components/manage/content/content-dialog";
+import { deleteRaidAction } from "@/controllers/raid-catalog.actions";
+import { RaidCatalogDialog } from "@/components/manage/raid-catalog/raid-catalog-dialog";
 
 /** Hard delete for an unused, non-core Raid (the server re-checks every reference). */
 export function DeleteRaidButton({ raidId, name }: { raidId: string; name: string }) {
   const router = useRouter();
   return (
-    <ContentDialog
+    <RaidCatalogDialog
       triggerLabel="Delete raid"
       triggerVariant="ghost"
       triggerClassName="h-8 px-2 text-xs text-danger"
@@ -18,7 +18,7 @@ export function DeleteRaidButton({ raidId, name }: { raidId: string; name: strin
       pendingLabel="Deleting…"
       danger
       onSubmit={() => deleteRaidAction({ raidId })}
-      onSuccess={() => router.push("/manage/content")}
+      onSuccess={() => router.push("/manage/raid-catalog")}
     />
   );
 }
