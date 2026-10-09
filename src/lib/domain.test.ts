@@ -177,8 +177,9 @@ describe("run and signup state machines", () => {
 
 describe("booster access", () => {
   it("is the account-level Booster role, not scoped by difficulty", () => {
-    expect(isApprovedBooster({ isBooster: true })).toBe(true);
-    expect(isApprovedBooster({ isBooster: false })).toBe(false);
+    expect(isApprovedBooster({ isBooster: true, discordRaidBooster: false })).toBe(true);
+    expect(isApprovedBooster({ isBooster: false, discordRaidBooster: true })).toBe(true);
+    expect(isApprovedBooster({ isBooster: false, discordRaidBooster: false })).toBe(false);
     expect(isApprovedBooster(null)).toBe(false);
     expect(isApprovedBooster(undefined)).toBe(false);
   });

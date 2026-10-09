@@ -79,7 +79,12 @@ function baseCharacter(overrides: Partial<CharacterRow> = {}): CharacterRow {
 function basePage(overrides: Partial<Page> = {}): Page {
   return {
     characters: [baseCharacter()],
-    boostingRoles: { isBooster: false, isLootbuddy: false },
+    boostingRoles: {
+      isBooster: false,
+      isLootbuddy: false,
+      discordRaidBooster: false,
+      discordLootbuddy: false,
+    },
     discordTicketUrl: null,
     totalCharacters: 1,
     activeCharacters: 1,

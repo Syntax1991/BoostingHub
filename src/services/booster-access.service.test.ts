@@ -236,7 +236,12 @@ describe("boosterAccessService approving a historical request", () => {
     const pendingId = await createPendingAccess(ids.owner, character.id, "PALADIN", "HEALER", "HEROIC");
     await boosterAccessService.approveAccess(admin, pendingId);
 
-    expect(await userRepository.findBoostingRoles(ids.owner)).toEqual({ isBooster: true, isLootbuddy: false });
+    expect(await userRepository.findBoostingRoles(ids.owner)).toEqual({
+      isBooster: true,
+      isLootbuddy: false,
+      discordRaidBooster: false,
+      discordLootbuddy: false,
+    });
     // A legacy request that named HEROIC unlocks Normal, Heroic and Mythic Runs alike;
     // the Character's specialization only determines the signup DEFAULT role.
     for (const runId of [ids.normalOpen, ids.heroicOpen, ids.mythicOpen]) {
@@ -286,7 +291,12 @@ describe("boosterAccessService rejecting and listing historical requests", () =>
     const character = await createPaladin(owner);
     const pendingId = await createPendingAccess(ids.owner, character.id, "PALADIN", "HEALER", "NORMAL");
     await boosterAccessService.rejectAccess(admin, pendingId, "Need more experience.");
-    expect(await userRepository.findBoostingRoles(ids.owner)).toEqual({ isBooster: false, isLootbuddy: false });
+    expect(await userRepository.findBoostingRoles(ids.owner)).toEqual({
+      isBooster: false,
+      isLootbuddy: false,
+      discordRaidBooster: false,
+      discordLootbuddy: false,
+    });
     const options = await signupService.getSignupOptions(owner, ids.heroicOpen);
     expect(options.booster.eligible.some((item) => item.characterId === character.id)).toBe(false);
   });

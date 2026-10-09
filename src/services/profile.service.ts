@@ -18,7 +18,12 @@ export const profileService = {
       characterCount: characters.length,
       activeCharacterCount: characters.filter((character) => character.isActive).length,
       /** Boosting Roles (operational) — independent of the account role. */
-      boostingRoles: boostingRoles ?? { isBooster: false, isLootbuddy: false },
+      boostingRoles: boostingRoles ?? {
+        isBooster: false,
+        isLootbuddy: false,
+        discordRaidBooster: false,
+        discordLootbuddy: false,
+      },
       strikes,
       participation: {
         boosterSignups: signups.filter((signup) => signup.participationType === "BOOSTER").length,

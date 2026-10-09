@@ -22,6 +22,12 @@ import { BoosterAccessReviewDialog } from "@/components/manage/booster-access-re
 import { BoostingRoleControl } from "@/components/manage/boosting-role-control";
 import { AddStrikeDialog } from "@/components/manage/add-strike-dialog";
 import { RevokeStrikeDialog } from "@/components/manage/revoke-strike-dialog";
+import {
+  boosterAccessSourceLabel,
+  hasEffectiveBoosterAccess,
+  hasEffectiveLootbuddyAccess,
+  lootbuddyAccessSourceLabel,
+} from "@/services/boosting-role.service";
 import type { managementController } from "@/controllers/app.controller";
 
 type Page = Awaited<ReturnType<typeof managementController.getUserDetailPage>>;
@@ -48,17 +54,30 @@ export function ManageUserDetailView({ data }: { data: Page }) {
     currentLockoutRaids,
     pendingAccess,
   } = data;
-  const roleRows: Array<{ role: BoostingRole; label: string; enabled: boolean; description: string }> = [
+  const boosterGrant = hasEffectiveBoosterAccess(boostingRoles);
+  const lootbuddyGrant = hasEffectiveLootbuddyAccess(boostingRoles);
+  const roleRows: Array<{
+    role: BoostingRole;
+    label: string;
+    manual: boolean;
+    grant: ReturnType<typeof hasEffectiveBoosterAccess>;
+    sourceLabel: string | null;
+    description: string;
+  }> = [
     {
       role: "BOOSTER",
-      label: "Booster",
-      enabled: boostingRoles.isBooster,
+      label: "Raid Booster Access",
+      manual: boostingRoles.isBooster,
+      grant: boosterGrant,
+      sourceLabel: boosterAccessSourceLabel(boosterGrant),
       description: "May sign up and be rostered as a Booster on Normal, Heroic and Mythic runs.",
     },
     {
       role: "LOOTBUDDY",
-      label: "Lootbuddy",
-      enabled: boostingRoles.isLootbuddy,
+      label: "Lootbuddy Access",
+      manual: boostingRoles.isLootbuddy,
+      grant: lootbuddyGrant,
+      sourceLabel: lootbuddyAccessSourceLabel(lootbuddyGrant),
       description: "Recognised Lootbuddy. Lootbuddy signups are not gated by this role.",
     },
   ];
@@ -154,7 +173,7 @@ export function ManageUserDetailView({ data }: { data: Page }) {
         <Card className="lg:col-span-2">
           <CardHeader
             title="Boosting access"
-            description="Approved Booster / Lootbuddy roles and any unresolved historical requests. Not scoped by raid difficulty."
+            description="Manual grants and Discord-derived access are independent. Effective access is Manual or Discord for each capability."
           />
           <ul className="divide-y divide-border">
             {roleRows.map((row) => (
@@ -162,20 +181,25 @@ export function ManageUserDetailView({ data }: { data: Page }) {
                 key={row.role}
                 className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm"
               >
-                <div className="min-w-0 flex-1">
-                  <p className="flex flex-wrap items-center gap-2 font-medium">
-                    {row.label}
-                    <span className={row.enabled ? "text-xs text-success" : "text-xs text-muted"}>
-                      {row.enabled ? "Enabled" : "Disabled"}
-                    </span>
-                  </p>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="font-medium">{row.label}</p>
                   <p className="text-xs text-muted">{row.description}</p>
+                  <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+                    <dt className="text-muted">Manual</dt>
+                    <dd>{row.manual ? "On" : "Off"}</dd>
+                    <dt className="text-muted">Effective</dt>
+                    <dd className={row.grant.granted ? "text-success" : "text-muted"}>
+                      {row.grant.granted ? "Granted" : "Not granted"}
+                    </dd>
+                    <dt className="text-muted">Source</dt>
+                    <dd>{row.sourceLabel ?? "—"}</dd>
+                  </dl>
                 </div>
                 <BoostingRoleControl
                   userId={user.id}
                   userName={user.name}
                   role={row.role}
-                  enabled={row.enabled}
+                  enabled={row.manual}
                 />
               </li>
             ))}

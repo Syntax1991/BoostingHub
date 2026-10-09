@@ -111,31 +111,47 @@ beforeEach(async () => {
 
 describe("Boosting Roles on User", () => {
   it("default to neither role", async () => {
-    expect(await roles(ids.target)).toEqual({ isBooster: false, isLootbuddy: false });
+    expect(await roles(ids.target)).toEqual({
+      isBooster: false,
+      isLootbuddy: false,
+      discordRaidBooster: false,
+      discordLootbuddy: false,
+    });
   });
 
-  it("isApprovedBooster reads only the Booster flag", () => {
-    expect(isApprovedBooster({ isBooster: true })).toBe(true);
-    expect(isApprovedBooster({ isBooster: false })).toBe(false);
+  it("isApprovedBooster uses effective Booster access (manual or Discord)", () => {
+    expect(isApprovedBooster({ isBooster: true, discordRaidBooster: false })).toBe(true);
+    expect(isApprovedBooster({ isBooster: false, discordRaidBooster: true })).toBe(true);
+    expect(isApprovedBooster({ isBooster: false, discordRaidBooster: false })).toBe(false);
     expect(isApprovedBooster(null)).toBe(false);
   });
 
   it("grants and revokes the Lootbuddy role", async () => {
     const granted = await boostingRoleService.setRole(admin, { userId: ids.target, role: "LOOTBUDDY", enabled: true });
     expect(granted).toMatchObject({ changed: true, roles: { isBooster: false, isLootbuddy: true } });
-    expect(await roles(ids.target)).toEqual({ isBooster: false, isLootbuddy: true });
+    expect(await roles(ids.target)).toEqual({
+      isBooster: false,
+      isLootbuddy: true,
+      discordRaidBooster: false,
+      discordLootbuddy: false,
+    });
 
     const revoked = await boostingRoleService.setRole(admin, { userId: ids.target, role: "LOOTBUDDY", enabled: false });
     expect(revoked).toMatchObject({ changed: true, roles: { isLootbuddy: false } });
-    expect(await roles(ids.target)).toEqual({ isBooster: false, isLootbuddy: false });
+    expect(await roles(ids.target)).toEqual({
+      isBooster: false,
+      isLootbuddy: false,
+      discordRaidBooster: false,
+      discordLootbuddy: false,
+    });
   });
 
   it("represents all four Booster / Lootbuddy combinations independently", async () => {
     const combos = [
-      { isBooster: false, isLootbuddy: false },
-      { isBooster: true, isLootbuddy: false },
-      { isBooster: false, isLootbuddy: true },
-      { isBooster: true, isLootbuddy: true },
+      { isBooster: false, isLootbuddy: false, discordRaidBooster: false, discordLootbuddy: false },
+      { isBooster: true, isLootbuddy: false, discordRaidBooster: false, discordLootbuddy: false },
+      { isBooster: false, isLootbuddy: true, discordRaidBooster: false, discordLootbuddy: false },
+      { isBooster: true, isLootbuddy: true, discordRaidBooster: false, discordLootbuddy: false },
     ];
     for (const combo of combos) {
       await boostingRoleService.setRole(admin, { userId: ids.target, role: "BOOSTER", enabled: combo.isBooster });
@@ -144,13 +160,23 @@ describe("Boosting Roles on User", () => {
     }
     // Revoking one role never touches the other.
     await boostingRoleService.setRole(admin, { userId: ids.target, role: "BOOSTER", enabled: false });
-    expect(await roles(ids.target)).toEqual({ isBooster: false, isLootbuddy: true });
+    expect(await roles(ids.target)).toEqual({
+      isBooster: false,
+      isLootbuddy: true,
+      discordRaidBooster: false,
+      discordLootbuddy: false,
+    });
   });
 
   it("never changes the account role", async () => {
     await boostingRoleService.setRole(admin, { userId: ids.adminTarget, role: "BOOSTER", enabled: true });
     await boostingRoleService.setRole(admin, { userId: ids.adminTarget, role: "LOOTBUDDY", enabled: true });
-    expect(await roles(ids.adminTarget)).toEqual({ isBooster: true, isLootbuddy: true });
+    expect(await roles(ids.adminTarget)).toEqual({
+      isBooster: true,
+      isLootbuddy: true,
+      discordRaidBooster: false,
+      discordLootbuddy: false,
+    });
     expect(await accountRoleOf(ids.adminTarget)).toBe("ADMIN");
 
     await boostingRoleService.setRole(admin, { userId: ids.target, role: "BOOSTER", enabled: true });
@@ -160,7 +186,12 @@ describe("Boosting Roles on User", () => {
   it("lets OWNER manage roles, including on an OWNER-level account with both roles", async () => {
     await boostingRoleService.setRole(owner, { userId: ids.ownerTarget, role: "BOOSTER", enabled: true });
     await boostingRoleService.setRole(owner, { userId: ids.ownerTarget, role: "LOOTBUDDY", enabled: true });
-    expect(await roles(ids.ownerTarget)).toEqual({ isBooster: true, isLootbuddy: true });
+    expect(await roles(ids.ownerTarget)).toEqual({
+      isBooster: true,
+      isLootbuddy: true,
+      discordRaidBooster: false,
+      discordLootbuddy: false,
+    });
   });
 
   it("is a no-op (no write, no audit event) when the role is already in that state", async () => {
@@ -188,7 +219,12 @@ describe("Boosting Roles on User", () => {
       }),
       "USER_NOT_FOUND",
     );
-    expect(await roles(ids.target)).toEqual({ isBooster: false, isLootbuddy: false });
+    expect(await roles(ids.target)).toEqual({
+      isBooster: false,
+      isLootbuddy: false,
+      discordRaidBooster: false,
+      discordLootbuddy: false,
+    });
   });
 
   it("records BOOSTER_* / LOOTBUDDY_* audit events on the target's user detail, without a difficulty", async () => {
@@ -207,7 +243,12 @@ describe("Boosting Roles on User", () => {
     for (const event of boosterEvents) {
       expect(event.message).not.toMatch(/normal|heroic|mythic|difficulty/i);
     }
-    expect(detail.boostingRoles).toEqual({ isBooster: false, isLootbuddy: false });
+    expect(detail.boostingRoles).toEqual({
+      isBooster: false,
+      isLootbuddy: false,
+      discordRaidBooster: false,
+      discordLootbuddy: false,
+    });
   });
 
   it("filters the admin user directory by Boosting Role", async () => {

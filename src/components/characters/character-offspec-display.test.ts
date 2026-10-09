@@ -87,7 +87,12 @@ type AdminDetail = Awaited<ReturnType<typeof managementController.getCharacterOp
 function userPage(character: CharacterRow): UserPage {
   return {
     characters: [character],
-    boostingRoles: { isBooster: false, isLootbuddy: false },
+    boostingRoles: {
+      isBooster: false,
+      isLootbuddy: false,
+      discordRaidBooster: false,
+      discordLootbuddy: false,
+    },
     discordTicketUrl: null,
     totalCharacters: 1,
     activeCharacters: 1,
@@ -247,7 +252,12 @@ function renderAdminDetail(row: AdminPage["rows"][number]): string {
     },
     currentReset: "2026-W38",
     weeklyAvailability: null,
-    ownerBoostingRoles: { isBooster: false, isLootbuddy: false },
+    ownerBoostingRoles: {
+      isBooster: false,
+      isLootbuddy: false,
+      discordRaidBooster: false,
+      discordLootbuddy: false,
+    },
   } as unknown as AdminDetail;
   return renderToStaticMarkup(createElement(ManageCharacterDetailView, { data }));
 }

@@ -23,7 +23,7 @@ Run participation (`RunSignup.participationType` = `BOOSTER` / `LOOTBUDDY`) is s
 
 **The Booster role is not scoped by raid difficulty.** An approved Booster may boost Normal, Heroic and Mythic Runs alike. **Run difficulty remains relevant** everywhere else — Runs, raid contents, lockouts, weekly availability, signup display, rosters, Discord run posts, history and payouts — it is simply not part of the Booster question.
 
-The single check is `isApprovedBooster({ isBooster })` in `src/services/boosting-role.service.ts`. It does not depend on Character, WoW Class, specialization, Character Role, Item Level, account role, or Raid Difficulty.
+The single check is `isApprovedBooster(...)` / `hasEffectiveBoosterAccess(...)` in `src/services/boosting-role.service.ts` (manual `isBooster` ∨ Discord `discordRaidBooster`). It does not depend on Character, WoW Class, specialization, Character Role, Item Level, account role, Lootbuddy, or Raid Difficulty.
 
 | Concern | Question |
 | --- | --- |
@@ -45,7 +45,7 @@ Signup options and roster revalidation read the signup owner's `isBooster` only 
 
 ADMIN / OWNER (`canManageBoostingRoles`) retain the manual controls through the explicit operation `boostingRoleService.setRole(admin, { userId, role: "BOOSTER" | "LOOTBUDDY", enabled, reason? })` (server action `setBoostingRoleAction`). The raw booleans are never accepted by a generic User update. Setting a role to the state it already has is a no-op (no write, no audit event).
 
-Additionally, when `DISCORD_BOOSTER_ROLE_ID` is configured alongside the bot token and guild ID, a Discord sign-in grants Booster if the persisted Discord member holds that role. This is additive only: role absence, removal, member lookup failure, or incomplete configuration never revokes a manual grant. A manual revoke remains effective until the next sign-in while the User still holds the configured Discord role. The automatic grant does not affect Lootbuddy or the account role and does not write a human-admin `ActivityEvent`.
+Additionally, when `DISCORD_BOOSTER_ROLE_ID` and `DISCORD_LOOTBUDDY_ROLE_ID` are configured alongside the bot token and guild ID, a Discord sign-in reconciles Discord-derived grants into `User.discordRaidBooster` / `User.discordLootbuddy`. These are independent of the manual flags: Discord never overwrites `isBooster` / `isLootbuddy`. Effective Booster access is `manual ∨ Discord Raid Booster`; effective Lootbuddy access is `manual ∨ Discord Lootbuddy`. Authoritative role absence, guild departure, or Discord unlink clears only the Discord-derived grants. Transient Discord API failures preserve last-known Discord grants. M+ Booster and staff/ping roles never grant either access.
 
 Surfaces:
 
