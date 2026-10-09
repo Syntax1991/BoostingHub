@@ -4,6 +4,9 @@
  * Identity: bot-authored messages whose embed footer contains
  * `guide:raidlead:v2:<cardKey>[ · asset:<12hex>]`.
  *
+ * Footer keys listed in RAIDLEAD_GUIDE_CARD_KEY_RENAMES resolve to their current
+ * card and are edited in place; any other unknown key makes the publisher refuse.
+ *
  * Screenshot-only changes bump the `asset:` revision and force an edit.
  * Legacy retirement requires a complete known six-message set and a
  * post-upsert verification of all six canonical cards.
@@ -132,6 +135,48 @@ export const LEGACY_RAIDLEAD_GUIDE_FINGERPRINTS: readonly LegacyRaidleadGuideFin
   },
 ];
 
+/**
+ * Explicit historical card-key renames for the v2 guide. A published message whose
+ * footer still carries `from` is the same canonical card as `to` and is edited in
+ * place (its footer becomes `to`). Single-step only; anything not listed here and
+ * not a current card key stays an unknown key and the publisher refuses.
+ * Kept after the migration so older snapshots / restored state still resolve.
+ */
+export type RaidleadGuideCardKeyRename = { from: string; to: string };
+
+export const RAIDLEAD_GUIDE_CARD_KEY_RENAMES: readonly RaidleadGuideCardKeyRename[] = [
+  // Payout/settlement domain removed (PR #228): the completion card no longer covers payouts.
+  { from: "complete-payout", to: "complete-run" },
+];
+
+export function validateRaidleadGuideCardKeyRenames(
+  cards: readonly RaidleadGuideCard[] = RAIDLEAD_GUIDE_CARDS,
+  renames: readonly RaidleadGuideCardKeyRename[] = RAIDLEAD_GUIDE_CARD_KEY_RENAMES,
+): string[] {
+  const errors: string[] = [];
+  const cardKeys = new Set(cards.map((c) => c.key));
+  const sources = new Set<string>();
+  for (const { from, to } of renames) {
+    if (from === to) errors.push(`Card key rename "${from}" maps to itself.`);
+    if (!cardKeys.has(to)) errors.push(`Card key rename "${from}" → "${to}": target is not a current card.`);
+    if (cardKeys.has(from)) errors.push(`Card key rename "${from}": source is still a current card key.`);
+    if (sources.has(from)) errors.push(`Card key rename "${from}" is declared more than once.`);
+    sources.add(from);
+  }
+  for (const { from, to } of renames) {
+    if (sources.has(to)) errors.push(`Card key rename "${from}" → "${to}": target is itself renamed (no chaining).`);
+  }
+  return errors;
+}
+
+/** Current canonical key for a footer key: the declared rename target, else the key itself. */
+export function resolveRaidleadGuideCardKey(
+  rawKey: string,
+  renames: readonly RaidleadGuideCardKeyRename[] = RAIDLEAD_GUIDE_CARD_KEY_RENAMES,
+): string {
+  return renames.find((r) => r.from === rawKey)?.to ?? rawKey;
+}
+
 function isOurBotMessage(message: DiscordMessageLike, botUserId: string): boolean {
   if (botUserId) return message.author?.id === botUserId;
   return Boolean(message.author?.bot);
@@ -214,6 +259,7 @@ export function isLegacyRaidleadGuideMessage(message: DiscordMessageLike, botUse
 export function indexCanonicalGuideMessages(
   messages: DiscordMessageLike[],
   botUserId: string,
+  renames: readonly RaidleadGuideCardKeyRename[] = RAIDLEAD_GUIDE_CARD_KEY_RENAMES,
 ): {
   byKey: Map<string, DiscordMessageLike[]>;
   foreignBotGuideLike: DiscordMessageLike[];
@@ -223,8 +269,10 @@ export function indexCanonicalGuideMessages(
 
   for (const message of messages) {
     const footer = message.embeds?.[0]?.footer?.text ?? "";
-    const key = parseRaidleadGuideCardKey(footer);
-    if (!key) continue;
+    const rawKey = parseRaidleadGuideCardKey(footer);
+    if (!rawKey) continue;
+    // A renamed message and a current one for the same card both land on one key → ambiguous refusal.
+    const key = resolveRaidleadGuideCardKey(rawKey, renames);
     if (botUserId && message.author?.id && message.author.id !== botUserId) {
       foreignBotGuideLike.push(message);
       continue;
@@ -351,9 +399,14 @@ export function verifyCanonicalRaidleadGuideState(input: {
   botUserId: string;
   cards?: readonly RaidleadGuideCard[];
   assetRevisions: Record<string, string | null>;
+  renames?: readonly RaidleadGuideCardKeyRename[];
 }): { ok: boolean; errors: string[]; byKey: Map<string, DiscordMessageLike> } {
   const cards = input.cards ?? RAIDLEAD_GUIDE_CARDS;
-  const { byKey, foreignBotGuideLike } = indexCanonicalGuideMessages(input.messages, input.botUserId);
+  const { byKey, foreignBotGuideLike } = indexCanonicalGuideMessages(
+    input.messages,
+    input.botUserId,
+    input.renames ?? RAIDLEAD_GUIDE_CARD_KEY_RENAMES,
+  );
   const errors: string[] = [];
   if (foreignBotGuideLike.length > 0) {
     errors.push(`Found ${foreignBotGuideLike.length} foreign guide-marked message(s).`);
@@ -387,10 +440,12 @@ export function planRaidleadGuidePublish(input: {
   assetRevisions: Record<string, string | null>;
   /** When true, validate that a complete known legacy set exists (retirement planned separately after verify). */
   retireLegacy?: boolean;
+  renames?: readonly RaidleadGuideCardKeyRename[];
 }): GuidePublishPlan {
   const cards = input.cards ?? RAIDLEAD_GUIDE_CARDS;
-  const errors = validateRaidleadGuideCards(cards);
-  const { byKey, foreignBotGuideLike } = indexCanonicalGuideMessages(input.messages, input.botUserId);
+  const renames = input.renames ?? RAIDLEAD_GUIDE_CARD_KEY_RENAMES;
+  const errors = [...validateRaidleadGuideCards(cards), ...validateRaidleadGuideCardKeyRenames(cards, renames)];
+  const { byKey, foreignBotGuideLike } = indexCanonicalGuideMessages(input.messages, input.botUserId, renames);
   const legacySet = identifyKnownLegacyRaidleadGuideSet(input.messages, input.botUserId);
 
   if (foreignBotGuideLike.length > 0) {
