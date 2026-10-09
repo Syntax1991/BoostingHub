@@ -52,6 +52,7 @@ function baseCharacter(overrides: Partial<CharacterRow> = {}): CharacterRow {
     specialization: "Restoration",
     primaryRole: "HEALER",
     playableSpecs: [] as string[],
+    offspecRoles: [] as const,
     itemLevel: 640,
     isActive: true,
     lastSyncedAt: null,

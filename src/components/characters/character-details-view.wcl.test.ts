@@ -56,6 +56,7 @@ function baseDetails(overrides: Partial<Details> = {}): Details {
     specialization: "Restoration",
     primaryRole: "HEALER",
     playableSpecs: [] as string[],
+    offspecRoles: [],
     itemLevel: 640,
     isActive: true,
     createdAt: "2026-09-01T00:00:00.000Z",

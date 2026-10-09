@@ -66,6 +66,8 @@ export type RosterCharacterSnapshot = {
   primaryRole: CharacterRole;
   /** Additional playable specializations beyond primary (never includes primary). */
   playableSpecs: string[];
+  /** Preferred offspec roster roles (never includes primaryRole). */
+  offspecRoles: CharacterRole[];
   itemLevel: number | null;
   isActive: boolean;
   /** Informational WCL profile id — never a schedule or eligibility gate. */
@@ -140,6 +142,21 @@ function mapPlayableSpecs(value: unknown): string[] {
     .sort((a, b) => a.localeCompare(b, "en-US"));
 }
 
+function mapOffspecRoles(value: unknown): CharacterRole[] {
+  if (!Array.isArray(value)) return [];
+  const roles = value
+    .map((row) => {
+      try {
+        return mapCharacterRole((row as Record<string, unknown>).role);
+      } catch {
+        return null;
+      }
+    })
+    .filter((role): role is CharacterRole => role != null);
+  const order = ["TANK", "HEALER", "MELEE_DPS", "RANGED_DPS"] as const;
+  return order.filter((role) => roles.includes(role));
+}
+
 function mapCharacter(row: Record<string, unknown>): RosterCharacterSnapshot {
   const lockouts = Array.isArray(row.lockouts) ? row.lockouts : [];
   return {
@@ -151,6 +168,7 @@ function mapCharacter(row: Record<string, unknown>): RosterCharacterSnapshot {
     specialization: asStringOrNull(row.specialization),
     primaryRole: mapCharacterRole(row.primaryRole),
     playableSpecs: mapPlayableSpecs(row.playableSpecs),
+    offspecRoles: mapOffspecRoles(row.offspecRoles),
     itemLevel: asNumberOrNull(row.itemLevel),
     isActive: asBoolean(row.isActive, true),
     warcraftLogsId: asStringOrNull(row.warcraftLogsId),
@@ -608,7 +626,9 @@ export const rosterRepository = {
     const rows = await orm.RunSignup
       .where({ runId })
       .include("user")
-      .include("character", (character) => character.include("lockouts").include("playableSpecs"))
+      .include("character", (character) =>
+        character.include("lockouts").include("playableSpecs").include("offspecRoles"),
+      )
       .include("offeredRoles")
       .include("rosterEntries")
       .orderBy((signup) => signup.createdAt.asc())

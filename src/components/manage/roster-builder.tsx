@@ -1299,6 +1299,15 @@ function SignupRowCard({
                 </option>
               ))}
             </select>
+            {assignedRole && character ? (
+              <span className="text-xs text-muted">
+                {character.primaryRole === assignedRole ? "Main" : "Offspec"}
+              </span>
+            ) : null}
+          </div>
+        ) : selected && assignedRole && character ? (
+          <div className="mt-2 text-xs text-muted">
+            {character.primaryRole === assignedRole ? "Main" : "Offspec"}
           </div>
         ) : null}
         {(() => {

@@ -2,6 +2,8 @@ import { isDpsRole, type ConcreteCharacterRole } from "@/lib/character-roles";
 import {
   ROSTER_BUILDER_BUFF_IMPORTANCE,
   ROSTER_BUILDER_ILVL_WEIGHT,
+  ROSTER_BUILDER_OFFSPEC_ROLE_WEIGHT,
+  ROSTER_BUILDER_PRIMARY_ROLE_WEIGHT,
   ROSTER_BUILDER_UTILITY_DUPLICATE_WEIGHT,
   ROSTER_BUILDER_WCL_HEALER_WEIGHT,
   ROSTER_BUILDER_WCL_WEIGHT,
@@ -31,6 +33,10 @@ export type RosterBuilderCandidateInput = {
   participationType: ParticipationType;
   /** Concrete assignable roles from offered signup roles (never invent offspecs). */
   assignableRoles: ConcreteCharacterRole[];
+  /** Character primary role — soft preference when assignable. */
+  primaryRole: CharacterRole | null;
+  /** Preferred offspec roles — soft preference below primary when assignable. */
+  offspecRoles: readonly CharacterRole[];
   wowClass: WowClass | null;
   characterName: string | null;
   itemLevel: number | null;
@@ -152,15 +158,27 @@ function rolesForBucket(candidate: RosterBuilderCandidateInput, bucket: RosterBu
   return candidate.assignableRoles.filter((role) => isDpsRole(role));
 }
 
+function rolePreferenceRank(
+  candidate: RosterBuilderCandidateInput,
+  role: CharacterRole,
+): number {
+  if (candidate.primaryRole === role) return 2;
+  if (candidate.offspecRoles.includes(role)) return 1;
+  return 0;
+}
+
 function pickRoleForBucket(candidate: RosterBuilderCandidateInput, bucket: RosterBuilderBucket): CharacterRole | null {
   const roles = rolesForBucket(candidate, bucket);
   if (bucket === "LOOTBUDDY") return null;
   if (roles.length === 0) return null;
   if (bucket === "DPS") {
-    // Prefer primary-matching concrete subtype when offered; else stable order MELEE then RANGED.
+    // Prefer primary, then preferred offspec, then WCL / stable MELEE→RANGED.
     const melee = roles.find((role) => role === "MELEE_DPS");
     const ranged = roles.find((role) => role === "RANGED_DPS");
     if (melee && ranged) {
+      const meleeRank = rolePreferenceRank(candidate, melee);
+      const rangedRank = rolePreferenceRank(candidate, ranged);
+      if (meleeRank !== rangedRank) return meleeRank > rangedRank ? melee : ranged;
       const meleeWcl = candidate.wclByRole.MELEE_DPS ?? null;
       const rangedWcl = candidate.wclByRole.RANGED_DPS ?? null;
       if (meleeWcl != null && rangedWcl != null) return meleeWcl >= rangedWcl ? melee : ranged;
@@ -170,7 +188,21 @@ function pickRoleForBucket(candidate: RosterBuilderCandidateInput, bucket: Roste
     }
     return melee ?? ranged ?? roles[0]!;
   }
-  return roles[0]!;
+  // Tank / Healer: prefer primary match when both somehow present (defensive).
+  const preferred = [...roles].sort(
+    (left, right) => rolePreferenceRank(candidate, right) - rolePreferenceRank(candidate, left),
+  );
+  return preferred[0]!;
+}
+
+function rolePreferenceScore(
+  candidate: RosterBuilderCandidateInput,
+  role: CharacterRole | null,
+): number {
+  if (role == null) return 0;
+  if (candidate.primaryRole === role) return ROSTER_BUILDER_PRIMARY_ROLE_WEIGHT;
+  if (candidate.offspecRoles.includes(role)) return ROSTER_BUILDER_OFFSPEC_ROLE_WEIGHT;
+  return 0;
 }
 
 function wclForRole(candidate: RosterBuilderCandidateInput, role: CharacterRole | null): number | null {
@@ -238,10 +270,11 @@ function scoreCandidateAgainstCoverage(
   alreadyCovered: Set<RaidBuffId>,
 ): { score: number; provided: RaidBuffId[]; wclPct: number | null } {
   const { score: utilScore, provided } = marginalUtilityScore(candidate.wowClass, alreadyCovered);
+  const roleScore = rolePreferenceScore(candidate, role);
   const wclPct = wclForRole(candidate, role);
   const wclScore = (wclPct ?? 0) * softWclWeight(role);
   const ilvlScore = (candidate.itemLevel ?? 0) * ROSTER_BUILDER_ILVL_WEIGHT;
-  return { score: utilScore + wclScore + ilvlScore, provided, wclPct };
+  return { score: utilScore + roleScore + wclScore + ilvlScore, provided, wclPct };
 }
 
 function compareCandidateOrder(
@@ -334,7 +367,8 @@ function shortageRemaining(
  * Algorithm:
  * 1. Seed with locked existing picks + external boosters (buff coverage baseline).
  * 2. Greedy-fill remaining Tank → Healer → DPS → Lootbuddy shortages from Run signup candidates,
- *    maximizing marginal utility then WCL then ilvl (stable name/id ties).
+ *    maximizing marginal utility, then primary/offspec role preference, then WCL, then ilvl
+ *    (stable name/id ties).
  * 3. Improvement swaps within each bucket until no swap raises total soft score.
  *
  * Hard constraints are enforced by the caller (eligible candidate universe only).
@@ -698,11 +732,15 @@ function softScoreWithExternals(picks: WorkingPick[], externals: RosterBuilderEx
   for (const id of covered) {
     util += ROSTER_BUILDER_BUFF_IMPORTANCE[id] ?? 0;
   }
+  let rolePref = 0;
   let wcl = 0;
   let ilvl = 0;
   for (const pick of picks) {
+    if (pick.candidate) {
+      rolePref += rolePreferenceScore(pick.candidate, pick.selectedRole);
+    }
     wcl += (pick.wclPct ?? 0) * softWclWeight(pick.selectedRole);
     ilvl += (pick.locked?.itemLevel ?? pick.candidate?.itemLevel ?? 0) * ROSTER_BUILDER_ILVL_WEIGHT;
   }
-  return util + wcl + ilvl;
+  return util + rolePref + wcl + ilvl;
 }

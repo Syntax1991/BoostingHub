@@ -10,6 +10,8 @@ function booster(input: {
   userName: string;
   wowClass: RosterBuilderCandidateInput["wowClass"];
   roles: RosterBuilderCandidateInput["assignableRoles"];
+  primaryRole?: RosterBuilderCandidateInput["primaryRole"];
+  offspecRoles?: RosterBuilderCandidateInput["offspecRoles"];
   itemLevel?: number;
   wcl?: number | null;
   characterName?: string;
@@ -24,6 +26,8 @@ function booster(input: {
     userName: input.userName,
     participationType: "BOOSTER",
     assignableRoles: input.roles,
+    primaryRole: input.primaryRole ?? input.roles[0] ?? null,
+    offspecRoles: input.offspecRoles ?? [],
     wowClass: input.wowClass,
     characterName: input.characterName ?? input.userName,
     itemLevel: input.itemLevel ?? 330,
@@ -273,5 +277,205 @@ describe("optimizeRosterProposal", () => {
     expect(ids).toContain("s-mage-2");
     expect(ids).toContain("s-priest");
     expect(ids).not.toContain("s-mage-1");
+  });
+
+  it("1. HEALER primary + RANGED_DPS offspec → healer slot treats as primary", () => {
+    const result = optimizeRosterProposal({
+      shortages: { tanks: 0, healers: 1, dps: 0, lootbuddies: 0 },
+      locked: [],
+      externals: [],
+      candidates: [
+        booster({
+          signupId: "s-resto",
+          userId: "u-resto",
+          userName: "Resto",
+          wowClass: "SHAMAN",
+          roles: ["HEALER", "RANGED_DPS"],
+          primaryRole: "HEALER",
+          offspecRoles: ["RANGED_DPS"],
+          wcl: 70,
+        }),
+      ],
+    });
+    expect(result.proposed).toHaveLength(1);
+    expect(result.proposed[0]?.selectedRole).toBe("HEALER");
+    expect(result.proposed[0]?.bucket).toBe("HEALER");
+  });
+
+  it("2. same Character for ranged DPS slot → eligible as offspec", () => {
+    const result = optimizeRosterProposal({
+      shortages: { tanks: 0, healers: 0, dps: 1, lootbuddies: 0 },
+      locked: [],
+      externals: [],
+      candidates: [
+        booster({
+          signupId: "s-resto",
+          userId: "u-resto",
+          userName: "Resto",
+          wowClass: "SHAMAN",
+          roles: ["HEALER", "RANGED_DPS"],
+          primaryRole: "HEALER",
+          offspecRoles: ["RANGED_DPS"],
+          wcl: 70,
+        }),
+      ],
+    });
+    expect(result.proposed).toHaveLength(1);
+    expect(result.proposed[0]?.selectedRole).toBe("RANGED_DPS");
+  });
+
+  it("3. same Character for melee slot → not eligible without melee capability", () => {
+    const result = optimizeRosterProposal({
+      shortages: { tanks: 0, healers: 0, dps: 1, lootbuddies: 0 },
+      locked: [],
+      externals: [],
+      candidates: [
+        booster({
+          signupId: "s-resto",
+          userId: "u-resto",
+          userName: "Resto",
+          wowClass: "SHAMAN",
+          roles: ["HEALER", "RANGED_DPS"],
+          primaryRole: "HEALER",
+          offspecRoles: ["RANGED_DPS"],
+          wcl: 70,
+        }),
+      ],
+    });
+    expect(result.proposed[0]?.selectedRole).not.toBe("MELEE_DPS");
+    expect(result.proposed[0]?.selectedRole).toBe("RANGED_DPS");
+  });
+
+  it("4. MELEE_DPS primary + HEALER offspec → melee preferred when both shortages", () => {
+    const result = optimizeRosterProposal({
+      shortages: { tanks: 0, healers: 1, dps: 1, lootbuddies: 0 },
+      locked: [],
+      externals: [],
+      candidates: [
+        booster({
+          signupId: "s-enh",
+          userId: "u-enh",
+          userName: "Enh",
+          wowClass: "SHAMAN",
+          roles: ["MELEE_DPS", "HEALER"],
+          primaryRole: "MELEE_DPS",
+          offspecRoles: ["HEALER"],
+          wcl: 80,
+        }),
+        booster({
+          signupId: "s-resto",
+          userId: "u-resto",
+          userName: "RestoAlt",
+          wowClass: "PRIEST",
+          roles: ["HEALER"],
+          primaryRole: "HEALER",
+          wcl: 80,
+        }),
+        booster({
+          signupId: "s-rogue",
+          userId: "u-rogue",
+          userName: "Rogue",
+          wowClass: "ROGUE",
+          roles: ["MELEE_DPS"],
+          primaryRole: "MELEE_DPS",
+          wcl: 80,
+        }),
+      ],
+    });
+    const enh = result.proposed.find((row) => row.signupId === "s-enh");
+    expect(enh?.selectedRole).toBe("MELEE_DPS");
+  });
+
+  it("5. primary DPS beats healer-main offspec when utility is equalized", () => {
+    const result = optimizeRosterProposal({
+      shortages: { tanks: 0, healers: 0, dps: 1, lootbuddies: 0 },
+      locked: [
+        {
+          signupId: "s-locked-shaman",
+          userId: "u-locked",
+          userName: "LockedShaman",
+          participationType: "BOOSTER",
+          selectedRole: "RANGED_DPS",
+          wowClass: "SHAMAN",
+          characterName: "LockedShaman",
+          itemLevel: 630,
+          wclPct: 50,
+          lockoutAttention: false,
+          lootbuddyMode: null,
+        },
+      ],
+      externals: [],
+      candidates: [
+        booster({
+          signupId: "s-mage",
+          userId: "u-mage",
+          userName: "EqualMage",
+          wowClass: "MAGE",
+          roles: ["RANGED_DPS"],
+          primaryRole: "RANGED_DPS",
+          wcl: 85,
+          itemLevel: 640,
+        }),
+        booster({
+          signupId: "s-resto",
+          userId: "u-resto",
+          userName: "EqualResto",
+          wowClass: "SHAMAN",
+          roles: ["HEALER", "RANGED_DPS"],
+          primaryRole: "HEALER",
+          offspecRoles: ["RANGED_DPS"],
+          wcl: 90,
+          itemLevel: 645,
+        }),
+      ],
+    });
+    const newly = result.proposed.filter((row) => !row.locked);
+    expect(newly).toHaveLength(1);
+    expect(newly[0]?.signupId).toBe("s-mage");
+  });
+
+  it("6. offspec candidate still used when needed to fill composition", () => {
+    const result = optimizeRosterProposal({
+      shortages: { tanks: 0, healers: 0, dps: 1, lootbuddies: 0 },
+      locked: [],
+      externals: [],
+      candidates: [
+        booster({
+          signupId: "s-resto",
+          userId: "u-resto",
+          userName: "OnlyOffspec",
+          wowClass: "SHAMAN",
+          roles: ["HEALER", "RANGED_DPS"],
+          primaryRole: "HEALER",
+          offspecRoles: ["RANGED_DPS"],
+          wcl: 50,
+        }),
+      ],
+    });
+    expect(result.proposed).toHaveLength(1);
+    expect(result.proposed[0]?.signupId).toBe("s-resto");
+    expect(result.proposed[0]?.selectedRole).toBe("RANGED_DPS");
+  });
+
+  it("10. Character with no offspec continues working", () => {
+    const result = optimizeRosterProposal({
+      shortages: { tanks: 0, healers: 1, dps: 0, lootbuddies: 0 },
+      locked: [],
+      externals: [],
+      candidates: [
+        booster({
+          signupId: "s-disc",
+          userId: "u-disc",
+          userName: "Disc",
+          wowClass: "PRIEST",
+          roles: ["HEALER"],
+          primaryRole: "HEALER",
+          offspecRoles: [],
+          wcl: 75,
+        }),
+      ],
+    });
+    expect(result.proposed).toHaveLength(1);
+    expect(result.proposed[0]?.selectedRole).toBe("HEALER");
   });
 });

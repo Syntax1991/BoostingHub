@@ -109,6 +109,7 @@ export function CharacterDetailsView({ data }: { data: Details }) {
                 wowClass: data.wowClass,
                 specialization: data.specialization ?? "",
                 playableSpecs: data.playableSpecs ?? [],
+                offspecRoles: data.offspecRoles ?? [],
                 itemLevel: data.itemLevel,
               }}
             />
@@ -145,6 +146,20 @@ export function CharacterDetailsView({ data }: { data: Details }) {
               <dt className="text-muted">Primary role</dt>
               <dd className="mt-1">
                 <RoleBadge role={data.primaryRole} />
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted">Preferred offspecs</dt>
+              <dd className="mt-1">
+                {(data.offspecRoles ?? []).length > 0 ? (
+                  <span className="flex flex-wrap gap-1">
+                    {data.offspecRoles.map((role) => (
+                      <RoleBadge key={role} role={role} />
+                    ))}
+                  </span>
+                ) : (
+                  "None"
+                )}
               </dd>
             </div>
             <div>
