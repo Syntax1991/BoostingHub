@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/auth/session";
 import { mapActionError, type ActionResult } from "@/lib/action-result";
-import { contentCatalogService } from "@/services/content-catalog.service";
+import { raidCatalogService } from "@/services/raid-catalog.service";
 import {
   createEncounterSchema,
   createProductSchema,
@@ -15,22 +15,22 @@ import {
   updateEncounterSchema,
   updateProductSchema,
   updateRaidSchema,
-} from "@/validators/content-catalog";
+} from "@/validators/raid-catalog";
 import { z } from "zod";
 
-/** Content Catalog (/manage/content) — ADMIN / OWNER only (requireAdmin + service assertion). */
+/** Raid Catalog (/manage/raid-catalog) — ADMIN / OWNER only (requireAdmin + service assertion). */
 
-function revalidateContent(raidId?: string) {
-  revalidatePath("/manage/content");
-  if (raidId) revalidatePath(`/manage/content/raids/${raidId}`);
+function revalidateRaidCatalog(raidId?: string) {
+  revalidatePath("/manage/raid-catalog");
+  if (raidId) revalidatePath(`/manage/raid-catalog/raids/${raidId}`);
 }
 
 export async function createRaidAction(input: unknown): Promise<ActionResult & { raidId?: string }> {
   try {
     const admin = await requireAdmin();
     const parsed = createRaidSchema.parse(input);
-    const { raidId } = await contentCatalogService.createRaid(admin, parsed);
-    revalidateContent(raidId);
+    const { raidId } = await raidCatalogService.createRaid(admin, parsed);
+    revalidateRaidCatalog(raidId);
     return { ok: true, message: `Raid "${parsed.name}" created.`, raidId };
   } catch (error) {
     return mapActionError(error);
@@ -41,8 +41,8 @@ export async function updateRaidAction(input: unknown): Promise<ActionResult> {
   try {
     const admin = await requireAdmin();
     const parsed = updateRaidSchema.parse(input);
-    await contentCatalogService.updateRaid(admin, parsed);
-    revalidateContent(parsed.raidId);
+    await raidCatalogService.updateRaid(admin, parsed);
+    revalidateRaidCatalog(parsed.raidId);
     return { ok: true, message: `Raid "${parsed.name}" saved.` };
   } catch (error) {
     return mapActionError(error);
@@ -53,8 +53,8 @@ export async function retryWclDetectionAction(input: unknown): Promise<ActionRes
   try {
     const admin = await requireAdmin();
     const { raidId } = raidIdSchema.parse(input);
-    const { resolved } = await contentCatalogService.retryWclDetection(admin, raidId);
-    revalidateContent(raidId);
+    const { resolved } = await raidCatalogService.retryWclDetection(admin, raidId);
+    revalidateRaidCatalog(raidId);
     return {
       ok: true,
       message: resolved
@@ -70,8 +70,8 @@ export async function clearWclMappingAction(input: unknown): Promise<ActionResul
   try {
     const admin = await requireAdmin();
     const { raidId } = raidIdSchema.parse(input);
-    await contentCatalogService.clearWclMapping(admin, raidId);
-    revalidateContent(raidId);
+    await raidCatalogService.clearWclMapping(admin, raidId);
+    revalidateRaidCatalog(raidId);
     return { ok: true, message: "Warcraft Logs mapping cleared." };
   } catch (error) {
     return mapActionError(error);
@@ -82,8 +82,8 @@ export async function deleteRaidAction(input: unknown): Promise<ActionResult> {
   try {
     const admin = await requireAdmin();
     const { raidId } = raidIdSchema.parse(input);
-    const { name } = await contentCatalogService.deleteRaid(admin, raidId);
-    revalidateContent();
+    const { name } = await raidCatalogService.deleteRaid(admin, raidId);
+    revalidateRaidCatalog();
     return { ok: true, message: `Raid "${name}" deleted.` };
   } catch (error) {
     return mapActionError(error);
@@ -94,8 +94,8 @@ export async function createEncounterAction(input: unknown): Promise<ActionResul
   try {
     const admin = await requireAdmin();
     const parsed = createEncounterSchema.parse(input);
-    await contentCatalogService.createEncounter(admin, parsed);
-    revalidateContent(parsed.raidId);
+    await raidCatalogService.createEncounter(admin, parsed);
+    revalidateRaidCatalog(parsed.raidId);
     return { ok: true, message: `Encounter "${parsed.name}" added.` };
   } catch (error) {
     return mapActionError(error);
@@ -106,9 +106,9 @@ export async function updateEncounterAction(input: unknown): Promise<ActionResul
   try {
     const admin = await requireAdmin();
     const parsed = updateEncounterSchema.parse(input);
-    await contentCatalogService.updateEncounter(admin, parsed);
-    revalidateContent();
-    revalidatePath("/manage/content/raids/[raidId]", "page");
+    await raidCatalogService.updateEncounter(admin, parsed);
+    revalidateRaidCatalog();
+    revalidatePath("/manage/raid-catalog/raids/[raidId]", "page");
     return { ok: true, message: `Encounter "${parsed.name}" saved.` };
   } catch (error) {
     return mapActionError(error);
@@ -119,8 +119,8 @@ export async function moveEncounterAction(input: unknown): Promise<ActionResult>
   try {
     const admin = await requireAdmin();
     const parsed = moveEncounterSchema.parse(input);
-    await contentCatalogService.moveEncounter(admin, parsed);
-    revalidatePath("/manage/content/raids/[raidId]", "page");
+    await raidCatalogService.moveEncounter(admin, parsed);
+    revalidatePath("/manage/raid-catalog/raids/[raidId]", "page");
     return { ok: true, message: "Encounter order saved." };
   } catch (error) {
     return mapActionError(error);
@@ -131,9 +131,9 @@ export async function deleteEncounterAction(input: unknown): Promise<ActionResul
   try {
     const admin = await requireAdmin();
     const { bossId } = encounterIdSchema.parse(input);
-    const { name } = await contentCatalogService.deleteEncounter(admin, bossId);
-    revalidateContent();
-    revalidatePath("/manage/content/raids/[raidId]", "page");
+    const { name } = await raidCatalogService.deleteEncounter(admin, bossId);
+    revalidateRaidCatalog();
+    revalidatePath("/manage/raid-catalog/raids/[raidId]", "page");
     return { ok: true, message: `Encounter "${name}" deleted.` };
   } catch (error) {
     return mapActionError(error);
@@ -144,8 +144,8 @@ export async function createProductAction(input: unknown): Promise<ActionResult>
   try {
     const admin = await requireAdmin();
     const parsed = createProductSchema.parse(input);
-    await contentCatalogService.createProduct(admin, parsed);
-    revalidateContent();
+    await raidCatalogService.createProduct(admin, parsed);
+    revalidateRaidCatalog();
     return { ok: true, message: `Product "${parsed.name}" created.` };
   } catch (error) {
     return mapActionError(error);
@@ -156,8 +156,8 @@ export async function updateProductAction(input: unknown): Promise<ActionResult>
   try {
     const admin = await requireAdmin();
     const parsed = updateProductSchema.parse(input);
-    await contentCatalogService.updateProduct(admin, parsed);
-    revalidateContent();
+    await raidCatalogService.updateProduct(admin, parsed);
+    revalidateRaidCatalog();
     return { ok: true, message: `Product "${parsed.name}" saved.` };
   } catch (error) {
     return mapActionError(error);
@@ -170,8 +170,8 @@ export async function setProductActiveAction(input: unknown): Promise<ActionResu
   try {
     const admin = await requireAdmin();
     const { productId, value } = productFlagSchema.parse(input);
-    const { name } = await contentCatalogService.setProductActive(admin, productId, value);
-    revalidateContent();
+    const { name } = await raidCatalogService.setProductActive(admin, productId, value);
+    revalidateRaidCatalog();
     return { ok: true, message: `Product "${name}" ${value ? "activated" : "deactivated"}.` };
   } catch (error) {
     return mapActionError(error);
@@ -182,8 +182,8 @@ export async function setProductSelectableAction(input: unknown): Promise<Action
   try {
     const admin = await requireAdmin();
     const { productId, value } = productFlagSchema.parse(input);
-    const { name } = await contentCatalogService.setProductSelectable(admin, productId, value);
-    revalidateContent();
+    const { name } = await raidCatalogService.setProductSelectable(admin, productId, value);
+    revalidateRaidCatalog();
     return { ok: true, message: `Product "${name}" is now ${value ? "selectable" : "hidden from selection"}.` };
   } catch (error) {
     return mapActionError(error);
@@ -194,8 +194,8 @@ export async function deleteProductAction(input: unknown): Promise<ActionResult>
   try {
     const admin = await requireAdmin();
     const { productId } = productIdSchema.parse(input);
-    const { name } = await contentCatalogService.deleteProduct(admin, productId);
-    revalidateContent();
+    const { name } = await raidCatalogService.deleteProduct(admin, productId);
+    revalidateRaidCatalog();
     return { ok: true, message: `Product "${name}" deleted.` };
   } catch (error) {
     return mapActionError(error);

@@ -22,7 +22,7 @@ import { parseAdminUserFilters } from "@/validators/user-management";
 import { characterOperationsService } from "@/services/character-operations.service";
 import { parseCharacterOperationsFilters } from "@/validators/character-operations";
 import { systemHealthService } from "@/services/system-health.service";
-import { contentCatalogService } from "@/services/content-catalog.service";
+import { raidCatalogService } from "@/services/raid-catalog.service";
 import { parseSystemHealthFilters } from "@/validators/system-health";
 import { operationalAnalyticsService } from "@/services/operational-analytics.service";
 import { communityScheduleService } from "@/services/community-schedule.service";
@@ -266,16 +266,16 @@ export const managementController = {
     return characterOperationsService.getDetail(user, characterId);
   },
 
-  async getContentPage() {
-    const user = await requireAdminOrRedirect("/manage/content");
-    return contentCatalogService.getPage(user);
+  async getRaidCatalogPage() {
+    const user = await requireAdminOrRedirect("/manage/raid-catalog");
+    return raidCatalogService.getPage(user);
   },
 
-  async getContentRaidPage(raidId: string) {
-    const user = await requireAdminOrRedirect(`/manage/content/raids/${raidId}`);
+  async getRaidCatalogRaidPage(raidId: string) {
+    const user = await requireAdminOrRedirect(`/manage/raid-catalog/raids/${raidId}`);
     const [raid, seasons] = await Promise.all([
-      contentCatalogService.getRaidDetail(user, raidId),
-      contentCatalogService.listSeasons(user),
+      raidCatalogService.getRaidDetail(user, raidId),
+      raidCatalogService.listSeasons(user),
     ]);
     return { raid, seasons };
   },

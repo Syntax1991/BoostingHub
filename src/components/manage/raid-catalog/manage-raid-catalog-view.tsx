@@ -1,20 +1,20 @@
 import Link from "next/link";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { cn } from "@/lib/cn";
-import type { ContentCatalogPage } from "@/services/content-catalog.service";
+import type { RaidCatalogPageData } from "@/services/raid-catalog.service";
 import {
   formatBlizzard,
   formatWarcraftLogs,
   pluralize,
   runAvailabilityLabel,
-} from "@/components/manage/content/content-format";
-import { RaidFormDialog } from "@/components/manage/content/raid-form-dialog";
+} from "@/components/manage/raid-catalog/raid-catalog-format";
+import { RaidFormDialog } from "@/components/manage/raid-catalog/raid-form-dialog";
 import {
   DeleteProductButton,
   ProductFlagToggle,
   ProductFormDialog,
   type ProductRaidOption,
-} from "@/components/manage/content/product-controls";
+} from "@/components/manage/raid-catalog/product-controls";
 
 function StatusPill({ on, children }: { on: boolean; children: string }) {
   return (
@@ -29,8 +29,8 @@ function StatusPill({ on, children }: { on: boolean; children: string }) {
   );
 }
 
-/** Admin Content Catalog: persisted raids (with encounters) and products — DB authority only. */
-export function ManageContentView({ page }: { page: ContentCatalogPage }) {
+/** Admin Raid Catalog: persisted raids (with encounters) and run presets — DB authority only. */
+export function ManageRaidCatalogView({ page }: { page: RaidCatalogPageData }) {
   const raidOptions: ProductRaidOption[] = page.raids.map((raid) => ({
     id: raid.id,
     name: raid.name,
@@ -40,15 +40,15 @@ export function ManageContentView({ page }: { page: ContentCatalogPage }) {
   return (
     <div>
       <PageHeader
-        title="Content"
-        description="Manage raid metadata, encounters and schedulable products."
+        title="Raid Catalog"
+        description="Manage raids, encounters and reusable run presets."
         actions={
-          <nav aria-label="Content sections" className="flex gap-2 text-sm">
+          <nav aria-label="Raid Catalog sections" className="flex gap-2 text-sm">
             <a href="#raids" className="rounded-md px-2 py-1 text-muted hover:bg-surface-raised hover:text-foreground">
               Raids
             </a>
-            <a href="#products" className="rounded-md px-2 py-1 text-muted hover:bg-surface-raised hover:text-foreground">
-              Products
+            <a href="#run-presets" className="rounded-md px-2 py-1 text-muted hover:bg-surface-raised hover:text-foreground">
+              Run Presets
             </a>
           </nav>
         }
@@ -98,7 +98,7 @@ export function ManageContentView({ page }: { page: ContentCatalogPage }) {
                     </td>
                     <td className="px-4 py-3">
                       <Link
-                        href={`/manage/content/raids/${raid.id}`}
+                        href={`/manage/raid-catalog/raids/${raid.id}`}
                         className="inline-flex h-8 items-center rounded-md border border-border bg-surface-raised px-2 text-xs font-medium hover:bg-[#222a3b]"
                       >
                         Manage
@@ -113,9 +113,9 @@ export function ManageContentView({ page }: { page: ContentCatalogPage }) {
       </Card>
 
       <Card>
-        <div id="products" className="scroll-mt-20">
+        <div id="run-presets" className="scroll-mt-20">
           <CardHeader
-            title="Products"
+            title="Run Presets"
             description="What can be scheduled or sold. Run creation still uses the current presets; products drive selection in a later update."
             action={<ProductFormDialog raids={raidOptions} />}
           />

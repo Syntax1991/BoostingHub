@@ -8,8 +8,8 @@ import {
   setProductActiveAction,
   setProductSelectableAction,
   updateProductAction,
-} from "@/controllers/content-catalog.actions";
-import { CheckboxField, ContentDialog, Field, fieldInputClass } from "@/components/manage/content/content-dialog";
+} from "@/controllers/raid-catalog.actions";
+import { CheckboxField, RaidCatalogDialog, Field, fieldInputClass } from "@/components/manage/raid-catalog/raid-catalog-dialog";
 
 export type ProductRaidOption = { id: string; name: string; bossTotal: number };
 
@@ -95,7 +95,7 @@ export function ProductFormDialog({ product, raids }: { product?: ProductFormVal
   }
 
   return (
-    <ContentDialog
+    <RaidCatalogDialog
       triggerLabel={editing ? "Edit" : "New product"}
       triggerVariant={editing ? "secondary" : "primary"}
       triggerClassName={editing ? "h-8 px-2 text-xs" : "h-9 px-3 text-sm"}
@@ -227,7 +227,7 @@ export function ProductFormDialog({ product, raids }: { product?: ProductFormVal
         </button>
         <p className="text-xs text-muted">The maximum boss count always follows the raid&apos;s encounter count.</p>
       </fieldset>
-    </ContentDialog>
+    </RaidCatalogDialog>
   );
 }
 
@@ -279,7 +279,7 @@ export function ProductFlagToggle({
 
 export function DeleteProductButton({ productId, name }: { productId: string; name: string }) {
   return (
-    <ContentDialog
+    <RaidCatalogDialog
       triggerLabel="Delete"
       triggerVariant="ghost"
       triggerClassName="h-8 px-2 text-xs text-danger"

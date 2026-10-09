@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { clearWclMappingAction, retryWclDetectionAction } from "@/controllers/content-catalog.actions";
+import { clearWclMappingAction, retryWclDetectionAction } from "@/controllers/raid-catalog.actions";
 
 /** Raid detail Integrations card: Warcraft Logs status + Retry / Clear (no raw ID editing). */
 export function RaidWclIntegration({

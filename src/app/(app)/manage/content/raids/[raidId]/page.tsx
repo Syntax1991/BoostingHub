@@ -1,18 +1,11 @@
-import { notFound } from "next/navigation";
-import { isDomainError } from "@/lib/errors";
-import { managementController } from "@/controllers/app.controller";
-import { ManageContentRaidView } from "@/components/manage/content/manage-content-raid-view";
+import { redirect } from "next/navigation";
 
-export default async function ManageContentRaidPage({ params }: { params: Promise<{ raidId: string }> }) {
+/** Legacy bookmark: /manage/raid-catalog/raids/[raidId] → Raid Catalog raid detail. */
+export default async function ManageContentRaidRedirectPage({
+  params,
+}: {
+  params: Promise<{ raidId: string }>;
+}) {
   const { raidId } = await params;
-  let page: Awaited<ReturnType<typeof managementController.getContentRaidPage>>;
-  try {
-    page = await managementController.getContentRaidPage(raidId);
-  } catch (error) {
-    if (isDomainError(error) && error.code === "CONTENT_RAID_NOT_FOUND") {
-      notFound();
-    }
-    throw error;
-  }
-  return <ManageContentRaidView raid={page.raid} seasons={page.seasons} />;
+  redirect(`/manage/raid-catalog/raids/${raidId}`);
 }

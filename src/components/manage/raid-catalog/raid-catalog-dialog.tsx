@@ -6,10 +6,10 @@ import { Button } from "@/components/ui/button";
 import type { ActionResult } from "@/lib/action-result";
 
 /**
- * Shared modal shell for Content Catalog forms and confirmations: native
+ * Shared modal shell for Raid Catalog forms and confirmations: native
  * <dialog>, server-action submit, inline error, refresh on success.
  */
-export function ContentDialog({
+export function RaidCatalogDialog({
   triggerLabel,
   triggerVariant = "secondary",
   triggerClassName = "h-8 px-2 text-xs",

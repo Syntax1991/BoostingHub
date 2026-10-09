@@ -4,8 +4,8 @@ import {
   createRaidSchema,
   encounterFieldsSchema,
   encounterIdList,
-} from "@/validators/content-catalog";
-import { summarizeProductContent } from "@/services/content-catalog.service";
+} from "@/validators/raid-catalog";
+import { summarizeProductContent } from "@/services/raid-catalog.service";
 
 describe("encounter id lists", () => {
   const blizzard = encounterIdList("Blizzard encounter");

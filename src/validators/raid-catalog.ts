@@ -2,7 +2,7 @@ import { z } from "zod";
 import { PRODUCT_KEY_PATTERN } from "@/lib/product-key";
 
 /**
- * Content Catalog (/manage/content) input validation.
+ * Raid Catalog (/manage/raid-catalog) input validation.
  * Blizzard and Warcraft Logs identities are validated separately and never merged.
  */
 

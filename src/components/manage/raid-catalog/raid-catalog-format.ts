@@ -1,4 +1,4 @@
-/** Display helpers for the Content Catalog admin (pure, client-safe). */
+/** Display helpers for the Raid Catalog admin (pure, client-safe). */
 
 export function formatIdList(ids: readonly number[]): string {
   return ids.length === 0 ? "—" : ids.join(", ");

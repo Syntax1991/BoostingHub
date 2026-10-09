@@ -4,7 +4,7 @@ import type { ProductBossCountMode } from "@/lib/product-catalog";
 import { serializeEncounterIds } from "@/lib/raid-catalog";
 
 /**
- * Write-side + reference reads for the Content Catalog admin (/manage/content).
+ * Write-side + reference reads for the Raid Catalog admin (/manage/raid-catalog).
  * Catalog reads (raids + bosses, products + contents) stay on raidRepository /
  * productRepository so the admin sees exactly what the runtime reads.
  */
@@ -95,7 +95,7 @@ async function writeProductContents(txOrm: TxOrm, productId: string, contents: r
   }
 }
 
-export const contentCatalogRepository = {
+export const raidCatalogRepository = {
   /** Distinct non-empty `Raid.season` values for the Season selector (newest / lexical order). */
   async listDistinctSeasons(): Promise<string[]> {
     const rows = (await orm.Raid.select("season").all()) as Array<{ season: unknown }>;

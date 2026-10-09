@@ -1,7 +1,6 @@
-import { managementController } from "@/controllers/app.controller";
-import { ManageContentView } from "@/components/manage/content/manage-content-view";
+import { redirect } from "next/navigation";
 
-export default async function ManageContentPage() {
-  const page = await managementController.getContentPage();
-  return <ManageContentView page={page} />;
+/** Legacy bookmark: /manage/raid-catalog → Raid Catalog. */
+export default function ManageContentRedirectPage() {
+  redirect("/manage/raid-catalog");
 }

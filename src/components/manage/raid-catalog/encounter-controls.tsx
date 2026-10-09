@@ -7,9 +7,9 @@ import {
   deleteEncounterAction,
   moveEncounterAction,
   updateEncounterAction,
-} from "@/controllers/content-catalog.actions";
-import { ContentDialog, Field, fieldInputClass } from "@/components/manage/content/content-dialog";
-import { idListInputValue } from "@/components/manage/content/content-format";
+} from "@/controllers/raid-catalog.actions";
+import { RaidCatalogDialog, Field, fieldInputClass } from "@/components/manage/raid-catalog/raid-catalog-dialog";
+import { idListInputValue } from "@/components/manage/raid-catalog/raid-catalog-format";
 
 type EncounterValues = {
   bossId?: string;
@@ -34,7 +34,7 @@ export function EncounterFormDialog({ raidId, encounter }: { raidId: string; enc
   const fields = { name, blizzardEncounterIds: blizzard };
 
   return (
-    <ContentDialog
+    <RaidCatalogDialog
       triggerLabel={editing ? "Edit" : "Add encounter"}
       triggerVariant={editing ? "ghost" : "secondary"}
       title={editing ? `Edit encounter · ${encounter?.name}` : "Add encounter"}
@@ -79,7 +79,7 @@ export function EncounterFormDialog({ raidId, encounter }: { raidId: string; enc
           </div>
         ) : null}
       </div>
-    </ContentDialog>
+    </RaidCatalogDialog>
   );
 }
 
@@ -131,7 +131,7 @@ export function EncounterMoveButtons({ bossId, first, last }: { bossId: string; 
 
 export function DeleteEncounterButton({ bossId, name }: { bossId: string; name: string }) {
   return (
-    <ContentDialog
+    <RaidCatalogDialog
       triggerLabel="Delete"
       triggerVariant="ghost"
       triggerClassName="h-8 px-2 text-xs text-danger"
