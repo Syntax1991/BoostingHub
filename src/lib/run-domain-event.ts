@@ -27,6 +27,10 @@ export const RUN_DOMAIN_EVENT_PAYLOAD_ALLOWLIST = [
   "scheduleWindowStartAt",
   "occurrenceStartAt",
   "materializedBy",
+  // Post-completion attendance correction (ATTENDANCE_CORRECTED).
+  "attendanceId",
+  "participantName",
+  "correctionPhase",
 ] as const;
 
 export type RunDomainEventPayloadKey = (typeof RUN_DOMAIN_EVENT_PAYLOAD_ALLOWLIST)[number];

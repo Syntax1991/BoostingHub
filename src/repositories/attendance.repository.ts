@@ -1,4 +1,5 @@
 import { db, orm } from "@/lib/prisma";
+import { serializeRunDomainEventPayload } from "@/lib/run-domain-event";
 import { DomainError } from "@/lib/errors";
 import type { ExternalBoosterInput } from "@/lib/external-booster";
 import { ATTENDANCE_NOTE_MAX } from "@/services/run-state";
@@ -59,6 +60,16 @@ export type AttendanceRecord = {
 };
 
 type TxOrm = typeof orm;
+
+const CORRECTION_STATUS_LABELS: Record<AttendanceStatus, string> = {
+  UNMARKED: "Unmarked",
+  PRESENT: "Present",
+  LATE: "Late",
+  LEFT_EARLY: "Left early",
+  NO_SHOW: "No show",
+  EXCUSED: "Excused",
+  STANDBY: "Standby",
+};
 
 function mapAttendance(row: Record<string, unknown>): AttendanceRecord {
   const entry = (row.rosterEntry as Record<string, unknown> | undefined) ?? {};
@@ -598,6 +609,83 @@ export const attendanceRepository = {
         occurredAt: now,
       });
       return { replacementName };
+    });
+  },
+
+  /**
+   * Post-completion attendance correction — one transaction:
+   * lock the attendance row, re-read it, assert it belongs to a COMPLETED Run,
+   * verify the caller's expected status (stale-write guard), reject no-ops,
+   * write the new status and append the ATTENDANCE_CORRECTED RunDomainEvent.
+   * Never touches the Run lifecycle, roster, signups or Discord state.
+   */
+  async correctCompletedStatusAtomic(input: {
+    runId: string;
+    attendanceId: string;
+    expectedCurrentStatus: AttendanceStatus;
+    newStatus: AttendanceStatus;
+    reason: string;
+    actorId: string;
+  }): Promise<{ fromStatus: AttendanceStatus; toStatus: AttendanceStatus; participantName: string }> {
+    return db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const now = new Date().toISOString();
+
+      // Row lock (same pattern as lockRosterInTx): a concurrent correction of
+      // this row waits here and then re-reads the committed value below.
+      await txOrm.RunAttendance.where({ id: input.attendanceId, runId: input.runId }).update({ updatedAt: now });
+      const locked = (await txOrm.RunAttendance.where({ id: input.attendanceId })
+        .include("rosterEntry", (entry) => entry.include("signup", (signup) => signup.include("user").include("character")))
+        .first()) as Record<string, unknown> | null;
+      if (!locked || asString(locked.runId) !== input.runId) {
+        throw new DomainError("ATTENDANCE_NOT_FOUND", "Attendance was not found for this run.", 404);
+      }
+      const run = (await txOrm.Run.where({ id: input.runId }).select("id", "status").first()) as Record<string, unknown> | null;
+      if (!run || asString(run.status) !== "COMPLETED") {
+        throw new DomainError(
+          "ATTENDANCE_CORRECTION_NOT_ALLOWED",
+          "Attendance can only be corrected on a completed run.",
+        );
+      }
+      const record = mapAttendance(locked);
+      if (record.status !== input.expectedCurrentStatus) {
+        throw new DomainError(
+          "ATTENDANCE_CORRECTION_STALE",
+          `${record.characterName} is already ${CORRECTION_STATUS_LABELS[record.status]} (changed since you opened this). Refresh and try again.`,
+          409,
+        );
+      }
+      if (record.status === input.newStatus) {
+        throw new DomainError(
+          "ATTENDANCE_CORRECTION_NOOP",
+          `${record.characterName} is already ${CORRECTION_STATUS_LABELS[record.status]}.`,
+        );
+      }
+
+      await txOrm.RunAttendance.where({ id: input.attendanceId }).update({
+        status: input.newStatus,
+        markedAt: now,
+        markedById: input.actorId,
+        updatedAt: now,
+      });
+      await txOrm.RunDomainEvent.create({
+        id: crypto.randomUUID(),
+        runId: input.runId,
+        actorUserId: input.actorId,
+        actorKind: "USER",
+        type: "ATTENDANCE_CORRECTED",
+        summary: `Attendance corrected after completion: ${record.characterName} ${CORRECTION_STATUS_LABELS[record.status]} → ${CORRECTION_STATUS_LABELS[input.newStatus]}.`.slice(0, 500),
+        payloadJson: serializeRunDomainEventPayload({
+          correctionPhase: "AFTER_COMPLETION",
+          attendanceId: input.attendanceId,
+          participantName: record.characterName,
+          fromStatus: record.status,
+          toStatus: input.newStatus,
+          reason: input.reason,
+        }),
+        occurredAt: now,
+      });
+      return { fromStatus: record.status, toStatus: input.newStatus, participantName: record.characterName };
     });
   },
 

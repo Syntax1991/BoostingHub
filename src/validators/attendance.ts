@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ATTENDANCE_STATUSES, CHARACTER_ROLES, WOW_CLASSES } from "@/models/enums";
+import { ATTENDANCE_STATUSES, CHARACTER_ROLES, MARKABLE_ATTENDANCE_STATUSES, WOW_CLASSES } from "@/models/enums";
 import { ATTENDANCE_NOTE_MAX } from "@/services/run-state";
 import { entityIdSchema } from "@/validators/ids";
 
@@ -38,3 +38,25 @@ export const setAttendanceSchema = z.object({
     .optional()
     .nullable(),
 });
+
+export const ATTENDANCE_CORRECTION_REASON_MIN = 5;
+export const ATTENDANCE_CORRECTION_REASON_MAX = 300;
+
+/**
+ * Post-completion attendance correction (COMPLETED Runs only). Status-only:
+ * the row is identified by attendanceId; expectedCurrentStatus is the
+ * stale-write guard. UNMARKED is never a valid correction target — a
+ * completed Run has every participant marked.
+ */
+export const correctAttendanceSchema = z.object({
+  runId: entityIdSchema,
+  attendanceId: entityIdSchema,
+  expectedCurrentStatus: z.enum(ATTENDANCE_STATUSES),
+  newStatus: z.enum(MARKABLE_ATTENDANCE_STATUSES as unknown as [string, ...string[]]),
+  reason: z
+    .string()
+    .trim()
+    .min(ATTENDANCE_CORRECTION_REASON_MIN, `Give a reason of at least ${ATTENDANCE_CORRECTION_REASON_MIN} characters.`)
+    .max(ATTENDANCE_CORRECTION_REASON_MAX, `The reason must be ${ATTENDANCE_CORRECTION_REASON_MAX} characters or fewer.`),
+});
+export type CorrectAttendanceInput = z.infer<typeof correctAttendanceSchema>;

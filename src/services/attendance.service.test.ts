@@ -11,6 +11,8 @@ import { runDetailService } from "@/services/run-detail.service";
 import { runService } from "@/services/run.service";
 import { venomousCreateInput } from "@/lib/test-run-input";
 import type { AttendanceStatus, CharacterRole, ParticipationType } from "@/models/enums";
+import { correctAttendanceSchema } from "@/validators/attendance";
+import { operationalAnalyticsRepository } from "@/repositories/operational-analytics.repository";
 
 const ids = {
   user: "aaaaaaaa-aaaa-4aaa-8aaa-at0000000001",
@@ -711,5 +713,214 @@ describe("user attendance data protection", () => {
     expect(leadView.attendance.manager?.rows.some((row) => row.note === "manager only note")).toBe(true);
     expect(leadView.capabilities.canManageAttendance).toBe(true);
     expect(leadView.capabilities.canComplete).toBe(true);
+  });
+});
+
+/* ------------------------------------------------ post-completion correction */
+
+describe("post-completion attendance correction", () => {
+  const owner = asUser(ids.admin, "Attendance Owner", "OWNER");
+
+  async function completedRun() {
+    const { runId, booster, lootbuddy } = await publishedRunWithRoster();
+    await runService.startRun(lead, { runId });
+    await attendanceService.markAllUnmarkedPresent(lead, runId);
+    await runService.completeRun(lead, runId);
+    const attendance = (await attendanceService.getManagerAttendance(lead, runId)).rows;
+    const boosterRow = attendance.find((row) => row.participationType === "BOOSTER" && !row.isBackup)!;
+    return { runId, booster, lootbuddy, attendance, boosterRow };
+  }
+
+  function correction(runId: string, attendanceId: string, from: AttendanceStatus, to: string, reason = "Incorrectly marked during the raid.") {
+    return { runId, attendanceId, expectedCurrentStatus: from, newStatus: to, reason };
+  }
+
+  async function correctionEvents(runId: string) {
+    const rows = (await orm.RunDomainEvent.where({ runId, type: "ATTENDANCE_CORRECTED" }).all()) as Array<{
+      id: string;
+      actorUserId: string | null;
+      payloadJson: string | null;
+      summary: string;
+      occurredAt: string;
+    }>;
+    return rows
+      .map((row) => ({ ...row, payload: row.payloadJson ? (JSON.parse(row.payloadJson) as Record<string, unknown>) : null }))
+      .filter((row) => row.payload?.correctionPhase === "AFTER_COMPLETION")
+      .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
+  }
+
+  it("lets the assigned RAID_LEAD, ADMIN and OWNER correct; the Run stays COMPLETED", async () => {
+    const { runId, boosterRow } = await completedRun();
+    await attendanceService.correctCompletedAttendance(lead, correction(runId, boosterRow.id, "PRESENT", "NO_SHOW"));
+    await attendanceService.correctCompletedAttendance(admin, correction(runId, boosterRow.id, "NO_SHOW", "LATE"));
+    await attendanceService.correctCompletedAttendance(owner, correction(runId, boosterRow.id, "LATE", "PRESENT"));
+    const row = await orm.RunAttendance.where({ id: boosterRow.id }).first();
+    expect(String((row as { status: string }).status)).toBe("PRESENT");
+    expect((await runRepository.findById(runId))?.status).toBe("COMPLETED");
+  });
+
+  it("denies USER and a RAID_LEAD not assigned to the Run", async () => {
+    const { runId, boosterRow } = await completedRun();
+    await expectDomainCode(
+      attendanceService.correctCompletedAttendance(user, correction(runId, boosterRow.id, "PRESENT", "NO_SHOW")),
+      "ATTENDANCE_NOT_MANAGEABLE",
+    );
+    await expectDomainCode(
+      attendanceService.correctCompletedAttendance(otherLead, correction(runId, boosterRow.id, "PRESENT", "NO_SHOW")),
+      "ATTENDANCE_NOT_MANAGEABLE",
+    );
+    expect(await correctionEvents(runId)).toHaveLength(0);
+  });
+
+  it("rejects IN_PROGRESS and PUBLISHED Runs through the correction path", async () => {
+    const { runId } = await publishedRunWithRoster();
+    await expectDomainCode(
+      attendanceService.correctCompletedAttendance(lead, correction(runId, crypto.randomUUID(), "PRESENT", "NO_SHOW")),
+      "ATTENDANCE_CORRECTION_NOT_ALLOWED",
+    );
+    await runService.startRun(lead, { runId });
+    const inProgressRow = (await attendanceService.getManagerAttendance(lead, runId)).rows[0]!;
+    await expectDomainCode(
+      attendanceService.correctCompletedAttendance(lead, correction(runId, inProgressRow.id, "UNMARKED", "PRESENT")),
+      "ATTENDANCE_CORRECTION_NOT_ALLOWED",
+    );
+    expect(await correctionEvents(runId)).toHaveLength(0);
+  });
+
+  it("rejects no-ops, short reasons, UNMARKED targets and rows of another Run", async () => {
+    const { runId, boosterRow } = await completedRun();
+    await expectDomainCode(
+      attendanceService.correctCompletedAttendance(lead, correction(runId, boosterRow.id, "PRESENT", "PRESENT")),
+      "ATTENDANCE_CORRECTION_NOOP",
+    );
+    expect(correctAttendanceSchema.safeParse(correction(runId, boosterRow.id, "PRESENT", "NO_SHOW", "   ")).success).toBe(false);
+    expect(correctAttendanceSchema.safeParse(correction(runId, boosterRow.id, "PRESENT", "NO_SHOW", "abc")).success).toBe(false);
+    expect(correctAttendanceSchema.safeParse(correction(runId, boosterRow.id, "PRESENT", "UNMARKED")).success).toBe(false);
+    await expectDomainCode(
+      attendanceService.correctCompletedAttendance(lead, correction(runId, boosterRow.id, "PRESENT", "NO_SHOW", "  ab  ")),
+      "VALIDATION_FAILED",
+    );
+    await expectDomainCode(
+      attendanceService.correctCompletedAttendance(lead, correction(runId, boosterRow.id, "PRESENT", "UNMARKED")),
+      "ATTENDANCE_INVALID_STATUS",
+    );
+    const other = await completedRun();
+    await expectDomainCode(
+      attendanceService.correctCompletedAttendance(lead, correction(runId, other.boosterRow.id, "PRESENT", "NO_SHOW")),
+      "ATTENDANCE_NOT_FOUND",
+    );
+    await expectDomainCode(
+      attendanceService.correctCompletedAttendance(lead, correction(runId, crypto.randomUUID(), "PRESENT", "NO_SHOW")),
+      "ATTENDANCE_NOT_FOUND",
+    );
+    expect(await correctionEvents(runId)).toHaveLength(0);
+    expect(await correctionEvents(other.runId)).toHaveLength(0);
+  });
+
+  it("appends one structured RunDomainEvent per correction and never rewrites earlier ones", async () => {
+    const { runId, boosterRow } = await completedRun();
+    await attendanceService.correctCompletedAttendance(
+      lead,
+      correction(runId, boosterRow.id, "PRESENT", "NO_SHOW", "  Player was incorrectly marked present.  "),
+    );
+    const first = await correctionEvents(runId);
+    expect(first).toHaveLength(1);
+    expect(first[0]).toMatchObject({ actorUserId: ids.lead });
+    expect(first[0]!.payload).toEqual({
+      correctionPhase: "AFTER_COMPLETION",
+      attendanceId: boosterRow.id,
+      participantName: boosterRow.characterName,
+      fromStatus: "PRESENT",
+      toStatus: "NO_SHOW",
+      reason: "Player was incorrectly marked present.",
+    });
+    expect(first[0]!.summary).toContain("Present → No show");
+
+    await attendanceService.correctCompletedAttendance(admin, correction(runId, boosterRow.id, "NO_SHOW", "EXCUSED", "Excused by officers."));
+    const both = await correctionEvents(runId);
+    expect(both).toHaveLength(2);
+    expect(both[0]).toEqual(first[0]);
+    expect(both[1]!.payload).toMatchObject({ fromStatus: "NO_SHOW", toStatus: "EXCUSED", reason: "Excused by officers." });
+    expect(both[1]!.actorUserId).toBe(ids.admin);
+  });
+
+  it("rejects a stale expected status instead of overwriting a newer correction", async () => {
+    const { runId, boosterRow } = await completedRun();
+    await attendanceService.correctCompletedAttendance(lead, correction(runId, boosterRow.id, "PRESENT", "LATE"));
+    await expectDomainCode(
+      attendanceService.correctCompletedAttendance(admin, correction(runId, boosterRow.id, "PRESENT", "NO_SHOW")),
+      "ATTENDANCE_CORRECTION_STALE",
+    );
+    const row = await orm.RunAttendance.where({ id: boosterRow.id }).first();
+    expect(String((row as { status: string }).status)).toBe("LATE");
+    expect(await correctionEvents(runId)).toHaveLength(1);
+  });
+
+  it("serializes concurrent corrections of the same row: one wins, the other is rejected", async () => {
+    const { runId, boosterRow } = await completedRun();
+    const results = await Promise.allSettled([
+      attendanceService.correctCompletedAttendance(lead, correction(runId, boosterRow.id, "PRESENT", "NO_SHOW")),
+      attendanceService.correctCompletedAttendance(admin, correction(runId, boosterRow.id, "PRESENT", "EXCUSED")),
+    ]);
+    const fulfilled = results.filter((result) => result.status === "fulfilled");
+    const rejected = results.filter((result) => result.status === "rejected") as PromiseRejectedResult[];
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect(isDomainError(rejected[0]!.reason) && rejected[0]!.reason.code).toBe("ATTENDANCE_CORRECTION_STALE");
+    expect(await correctionEvents(runId)).toHaveLength(1);
+  });
+
+  it("touches attendance only: no lifecycle, roster, signup, content or timestamp mutation", async () => {
+    const { runId, boosterRow } = await completedRun();
+    const snapshot = async () => {
+      const run = (await orm.Run.where({ id: runId }).first()) as Record<string, unknown>;
+      const roster = (await orm.RunRoster.where({ runId }).first()) as Record<string, unknown>;
+      const signups = (await orm.RunSignup.where({ runId }).all()) as Array<Record<string, unknown>>;
+      const contents = (await orm.RunRaidContent.where({ runId }).all()) as Array<Record<string, unknown>>;
+      const start = (await orm.RunStartSnapshot.where({ runId }).first()) as Record<string, unknown> | null;
+      return JSON.stringify({
+        run: [run.status, run.signupsOpen, run.completedAt, run.scheduledStartAt, run.archivedAt, run.updatedAt],
+        roster: [roster.version, roster.publishedAt, roster.updatedAt],
+        signups: signups.map((row) => [row.id, row.status, row.publishedRole, row.updatedAt]).sort(),
+        contents: contents.map((row) => [row.id, row.raidId, row.plannedBossCount]).sort(),
+        start: start ? [start.startedAt, start.startedById] : null,
+      });
+    };
+    const before = await snapshot();
+    await attendanceService.correctCompletedAttendance(lead, correction(runId, boosterRow.id, "PRESENT", "NO_SHOW"));
+    expect(await snapshot()).toBe(before);
+  });
+
+  it("operational analytics read the corrected current status", async () => {
+    const { runId, boosterRow } = await completedRun();
+    const run = (await runRepository.findById(runId))!;
+    const from = new Date(Date.parse(run.scheduledStartAt) - 60_000).toISOString();
+    const to = new Date(Date.parse(run.scheduledStartAt) + 60_000).toISOString();
+    const rowFor = async () =>
+      (await operationalAnalyticsRepository.listRunsInRange(from, to)).find((row) => row.id === runId)!;
+    expect((await rowFor()).noShowCount).toBe(0);
+    await attendanceService.correctCompletedAttendance(lead, correction(runId, boosterRow.id, "PRESENT", "NO_SHOW"));
+    expect((await rowFor()).noShowCount).toBe(1);
+  });
+
+  it("exposes Correct Attendance only to authorized managers of a COMPLETED Run; normal controls stay read-only", async () => {
+    const { runId } = await publishedRunWithRoster();
+    await runService.startRun(lead, { runId });
+    const inProgress = await runDetailService.getRunDetail(lead, runId);
+    expect(inProgress.attendance.manager).toMatchObject({ canMutate: true, canCorrect: false });
+
+    await attendanceService.markAllUnmarkedPresent(lead, runId);
+    await runService.completeRun(lead, runId);
+    const leadView = await runDetailService.getRunDetail(lead, runId);
+    expect(leadView.attendance.manager).toMatchObject({ canMutate: false, canCorrect: true });
+    const adminView = await runDetailService.getRunDetail(admin, runId);
+    expect(adminView.attendance.manager).toMatchObject({ canMutate: false, canCorrect: true });
+    // Participants and other Raid Leads never get the manager attendance view (no correction action).
+    const userView = await runDetailService.getRunDetail(user, runId);
+    expect(userView.attendance.manager).toBeNull();
+    await expectDomainCode(
+      attendanceService.setStatus(lead, { attendanceId: leadView.attendance.manager!.rows[0]!.id, status: "NO_SHOW" }),
+      "ATTENDANCE_NOT_MANAGEABLE",
+    );
   });
 });
