@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** Legacy bookmark: /manage/raid-catalog → Raid Catalog. */
+/** Legacy bookmark: /manage/content → /manage/raid-catalog. */
 export default function ManageContentRedirectPage() {
   redirect("/manage/raid-catalog");
 }
