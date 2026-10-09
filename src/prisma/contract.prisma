@@ -463,6 +463,9 @@ model Character {
   weeklyUnavailability CharacterWeeklyUnavailability[]
   /// Additional playable specializations (never includes primary `specialization`).
   playableSpecs CharacterPlayableSpec[]
+  /// Preferred offspec roster roles (concrete). Subset of capability roles minus primaryRole.
+  /// Empty means no preferred offspec — Auto Build still may use offered non-primary roles with a soft penalty.
+  offspecRoles  CharacterOffspecRole[]
   signups       RunSignup[]
   boosterAccess BoosterAccess[]
   payoutEntries RunPayoutEntry[]
@@ -489,6 +492,20 @@ model CharacterPlayableSpec {
   @@unique([characterId, specialization])
   @@index([characterId])
   @@map("character_playable_spec")
+}
+
+/// Preferred offspec roster roles for Auto Build soft preference and signup UX.
+/// Never duplicates Character.primaryRole. Capability still comes from specs.
+model CharacterOffspecRole {
+  id          String        @id @default(uuid())
+  characterId String
+  character   Character     @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  role        CharacterRole
+  createdAt   TimestamptzString @default(now())
+
+  @@unique([characterId, role])
+  @@index([characterId])
+  @@map("character_offspec_role")
 }
 
 /// Cached Warcraft Logs Best/Avg zone (or encounter) percentiles for roster UI.

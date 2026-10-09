@@ -3,6 +3,9 @@ import {
   assertOfferedRolesAllowed,
   availableRoles,
   configuredSpecs,
+  isOffspecRoleAssignment,
+  isPrimaryRoleAssignment,
+  normalizeOffspecRoles,
   normalizePlayableSpecs,
   remainingSpecsForClass,
 } from "@/lib/character-capabilities";
@@ -136,5 +139,55 @@ describe("character capabilities", () => {
     expect(
       configuredSpecs({ wowClass: "SHAMAN", specialization: "Restoration", playableSpecs: [] }),
     ).toEqual([{ specialization: "Restoration", role: "HEALER" }]);
+  });
+
+  it("offspec: empty is allowed; primary cannot appear; invalid class/role rejected", () => {
+    const restoEle = {
+      wowClass: "SHAMAN" as const,
+      specialization: "Restoration",
+      playableSpecs: ["Elemental"],
+    };
+    expect(
+      normalizeOffspecRoles({
+        capability: restoEle,
+        primaryRole: "HEALER",
+        offspecRoles: [],
+      }),
+    ).toEqual([]);
+    expect(
+      normalizeOffspecRoles({
+        capability: restoEle,
+        primaryRole: "HEALER",
+        offspecRoles: ["RANGED_DPS"],
+      }),
+    ).toEqual(["RANGED_DPS"]);
+    expect(() =>
+      normalizeOffspecRoles({
+        capability: restoEle,
+        primaryRole: "HEALER",
+        offspecRoles: ["HEALER"],
+      }),
+    ).toThrow(/Primary role cannot also appear/);
+    expect(() =>
+      normalizeOffspecRoles({
+        capability: restoEle,
+        primaryRole: "HEALER",
+        offspecRoles: ["MELEE_DPS"],
+      }),
+    ).toThrow(/not available/);
+    expect(() =>
+      normalizeOffspecRoles({
+        capability: restoEle,
+        primaryRole: "HEALER",
+        offspecRoles: ["DPS"],
+      }),
+    ).toThrow(/concrete/);
+  });
+
+  it("assignment helpers distinguish Main vs preferred Offspec", () => {
+    expect(isPrimaryRoleAssignment("HEALER", "HEALER")).toBe(true);
+    expect(isOffspecRoleAssignment("HEALER", ["RANGED_DPS"], "RANGED_DPS")).toBe(true);
+    expect(isOffspecRoleAssignment("HEALER", ["RANGED_DPS"], "HEALER")).toBe(false);
+    expect(isOffspecRoleAssignment("HEALER", ["RANGED_DPS"], "MELEE_DPS")).toBe(false);
   });
 });

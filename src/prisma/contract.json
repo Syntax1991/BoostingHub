@@ -32,6 +32,10 @@
       "model": "CharacterAvailabilityBlock",
       "namespace": "public"
     },
+    "character_offspec_role": {
+      "model": "CharacterOffspecRole",
+      "namespace": "public"
+    },
     "character_playable_spec": {
       "model": "CharacterPlayableSpec",
       "namespace": "public"
@@ -1899,6 +1903,21 @@
                   "namespace": "public"
                 }
               },
+              "offspecRoles": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "characterId"
+                  ]
+                },
+                "to": {
+                  "model": "CharacterOffspecRole",
+                  "namespace": "public"
+                }
+              },
               "payoutEntries": {
                 "cardinality": "1:N",
                 "on": {
@@ -2158,6 +2177,79 @@
               },
               "namespaceId": "public",
               "table": "character_availability_block"
+            }
+          },
+          "CharacterOffspecRole": {
+            "fields": {
+              "characterId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "role": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "CharacterRole",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              }
+            },
+            "relations": {
+              "character": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "characterId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Character",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "characterId": {
+                  "column": "characterId"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "role": {
+                  "column": "role"
+                }
+              },
+              "namespaceId": "public",
+              "table": "character_offspec_role"
             }
           },
           "CharacterPlayableSpec": {
@@ -11258,6 +11350,89 @@
               },
               "uniques": []
             },
+            "character_offspec_role": {
+              "checks": [
+                {
+                  "expression": "\"role\" IN ('TANK', 'HEALER', 'MELEE_DPS', 'RANGED_DPS', 'DPS')",
+                  "name": "character_offspec_role_role_check_e8a47be4",
+                  "prefix": "character_offspec_role_role_check"
+                }
+              ],
+              "columns": {
+                "characterId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "role": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "CharacterRole",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "characterId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "character_offspec_role"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "character"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "characterId"
+                  ],
+                  "name": "character_offspec_role_characterId_idx_2423fe9d",
+                  "prefix": "character_offspec_role_characterId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "characterId",
+                    "role"
+                  ]
+                }
+              ]
+            },
             "character_playable_spec": {
               "columns": {
                 "characterId": {
@@ -18073,10 +18248,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "f82031150f6f206346f775373f3fe2226506d5f2d032b00ecd47d1cef18cec24"
+    "storageHash": "b5f7252fce6aebcbd89a8664435c92a715f6b389581a79c4ef137fe117b3373b"
   },
   "execution": {
-    "executionHash": "489f638004aa609265422276e8984e4f57fd71ad9f8ba862780ff3cc38ef2fdc",
+    "executionHash": "7e9285993d44fbe24c0aed13bb72ee19ac0d65223b9419231b914e2adbd0b3a6",
     "mutations": {
       "defaults": [
         {
@@ -18229,6 +18404,17 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "character_availability_block"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "character_offspec_role"
           }
         },
         {

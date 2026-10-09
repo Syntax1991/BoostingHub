@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { WOW_REGIONS } from "@/models/enums";
+import { CONCRETE_CHARACTER_ROLES } from "@/lib/character-roles";
 import { entityIdSchema } from "@/validators/ids";
 import {
   CHARACTER_NAME_MAX,
@@ -31,6 +32,12 @@ const playableSpecsSchema = z
   .default([])
   .transform((specs) => [...new Set(specs.map((spec) => spec.trim()).filter(Boolean))]);
 
+const offspecRolesSchema = z
+  .array(z.enum(CONCRETE_CHARACTER_ROLES))
+  .max(4)
+  .default([])
+  .transform((roles) => [...new Set(roles)]);
+
 /** Raider.IO Character profile URL for a single Add Character row. */
 export const lookupCharacterFromRaiderIoSchema = z.object({
   url: z.string().trim().min(1, "Enter a Raider.IO character profile link.").max(500),
@@ -55,6 +62,7 @@ export const createCharacterSchema = z.object({
   region: z.enum(WOW_REGIONS),
   specialization: z.string().trim().min(1, "Choose a specialization."),
   playableSpecs: playableSpecsSchema,
+  offspecRoles: offspecRolesSchema,
 });
 
 /** Bulk Add Character — each item re-resolves Blizzard; clientId maps results to rows. */
@@ -77,4 +85,5 @@ export const updateCharacterSchema = z.object({
   region: z.enum(WOW_REGIONS),
   specialization: z.string().trim().min(1, "Choose a specialization."),
   playableSpecs: playableSpecsSchema,
+  offspecRoles: offspecRolesSchema,
 });
