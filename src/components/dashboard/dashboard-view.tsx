@@ -34,15 +34,6 @@ function operationHint(item: DashboardOperationItem): string {
   if (item.nextAction.kind === "COMPLETE") {
     return "Ready to complete";
   }
-  if (item.nextAction.kind === "PREPARE_PAYOUT") {
-    return "Needs payout";
-  }
-  if (item.nextAction.kind === "REVIEW_PAYOUT") {
-    return "Settlement draft";
-  }
-  if (item.nextAction.kind === "MARK_PAID") {
-    return "Settlement finalized";
-  }
   return item.nextAction.label;
 }
 
@@ -196,26 +187,6 @@ export function DashboardView({ data, timeZone }: { data: DashboardData; timeZon
                     <Link href={operationHref(item)} className="text-xs text-accent hover:underline">
                       {item.nextAction.label}
                     </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-        ) : null}
-
-        {data.isAdmin ? (
-          <Card>
-            <CardHeader title="Admin attention" description="Finalized settlements awaiting Mark Paid." />
-            {data.adminMarkPaid.length === 0 ? (
-              <p className="px-4 py-4 text-sm text-muted">No settlements need Mark Paid.</p>
-            ) : (
-              <ul className="divide-y divide-border">
-                {data.adminMarkPaid.map((item) => (
-                  <li key={item.runId} className="px-4 py-3 text-sm">
-                    <Link href={operationHref(item)} className="font-medium text-accent hover:underline">
-                      Mark paid · {item.runTitle}
-                    </Link>
-                    <p className="mt-0.5 text-xs text-muted">{operationHint(item)}</p>
                   </li>
                 ))}
               </ul>

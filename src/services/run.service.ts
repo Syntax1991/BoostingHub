@@ -484,7 +484,6 @@ export const runService = {
         archivedAt: run.archivedAt,
         actionLabel: handoff.nextAction.label,
         attendance: handoff.attendance,
-        settlementStage: handoff.settlement.stage,
         attention: handoff.attention,
         nextAction: handoff.nextAction,
         capabilities,
@@ -1351,7 +1350,7 @@ export const runService = {
 
   /**
    * Archive is administrative visibility, never a RunStatus — status and every
-   * historical relation (signups, roster, strikes, attendance, payout, Discord
+   * historical relation (signups, roster, strikes, attendance, Discord
    * state) are left completely untouched.
    */
   async archiveRun(user: AuthenticatedUser, runId: string) {
@@ -1390,7 +1389,7 @@ export const runService = {
 
   /**
    * Permanent deletion. ADMIN-only, and only for an empty Draft — a Draft with
-   * any real relation history (signups, roster, strikes, attendance, payout,
+   * any real relation history (signups, roster, strikes, attendance,
    * Discord state) must be cancelled/archived instead. Never relies on a bare
    * FK failure: every blocker is checked explicitly first.
    */

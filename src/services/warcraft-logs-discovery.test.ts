@@ -26,7 +26,7 @@ import { GET as syncGet } from "@/app/api/bot/discord/sync/route";
 
 /**
  * Central discovery end to end: the log bot's report link in a dedicated log
- * channel → recorded → matched to the seeded COMPLETED "Settlement QA" Run
+ * channel → recorded → matched to the seeded COMPLETED "Large Completed" Run
  * (window 14:00–15:20) by its fights → linked → audited by the existing
  * automatic audit. WCL is mocked; every row written here is removed again.
  */

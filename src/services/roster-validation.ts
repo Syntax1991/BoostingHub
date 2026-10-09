@@ -99,7 +99,7 @@ export function validateRosterDraft(input: {
         signupId: item.signupId,
       });
     }
-    // A published BOOSTER slot is what attendance and payout are grouped by,
+    // A published BOOSTER slot is what attendance is grouped by,
     // so it can never ship without a concrete role assignment.
     if (item.participationType === "BOOSTER" && !item.selectedRole) {
       blockers.push({

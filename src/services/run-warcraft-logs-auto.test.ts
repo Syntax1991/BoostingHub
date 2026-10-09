@@ -26,7 +26,7 @@ import { snowflakeAtTime } from "@/lib/discord-snowflake";
 
 /**
  * Log bot → Run channel → report auto-linked → Run COMPLETED → automatic audit.
- * Uses the seeded COMPLETED "Settlement QA" Run (window 14:00–15:20) and the
+ * Uses the seeded COMPLETED "Large Completed" Run (window 14:00–15:20) and the
  * seeded IN_PROGRESS Run; writes only Discord post / association / audit rows,
  * one start snapshot and completedAt, all restored afterwards.
  */

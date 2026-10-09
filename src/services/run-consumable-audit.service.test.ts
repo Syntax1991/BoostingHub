@@ -20,7 +20,7 @@ import { knownSpecializationIds, specializationById } from "@/lib/wow-specializa
  * Two seeded COMPLETED Runs with IDENTICAL RunRaidContent (Manaforge Omega,
  * Heroic, both led by Thorne) share ONE Warcraft Logs report:
  *
- *   Run A (Settlement QA, 20 boosters)  active 14:00–15:20
+ *   Run A (Large completed, 20 boosters)  active 14:00–15:20
  *   Run B (Completed Heroic, Kael)      active 15:28–16:50
  *   Report ABC: fights 1–8 during A, 9–16 during B, 17 at 15:24 (both windows).
  *
@@ -33,7 +33,7 @@ const RUN_A = "r9999996-9996-4996-8996-999999999996";
 const RUN_B = "r9999992-9992-4992-8992-999999999992";
 const LEGACY_RUN = "r9999993-9993-4993-8993-999999999993";
 const IN_PROGRESS_RUN = "r9999991-9991-4991-8991-999999999991";
-const SETTLEMENT_ROSTER_ID = "o9999996-9996-4996-8996-999999999996";
+const LARGE_COMPLETED_ROSTER_ID = "o9999996-9996-4996-8996-999999999996";
 const OTHER_LEAD_ID = "ca000001-0000-4000-8000-00000000c0a1";
 const EXTERNAL_ID = "ca000002-0000-4000-8000-00000000c0a2";
 const REPORT = "AbCdEfGhIjKlMnOp";
@@ -623,7 +623,7 @@ describe("consumable facts per assigned fight", () => {
     const now = new Date().toISOString();
     await orm.RunExternalBooster.create({
       id: EXTERNAL_ID,
-      rosterId: SETTLEMENT_ROSTER_ID,
+      rosterId: LARGE_COMPLETED_ROSTER_ID,
       name: rosterA[0]!.characterName, // same text as a real actor — still never matched
       wowClass: "MAGE",
       participationType: "BOOSTER",
@@ -924,7 +924,7 @@ describe("run deletion cascades", () => {
     await client.connect();
     try {
       await client.query("BEGIN");
-      // Attendance first (payout entries restrict it elsewhere); then the Run itself.
+      // Attendance first (roster entries restrict it); then the Run itself.
       await client.query('DELETE FROM run_attendance WHERE "runId" = $1', [RUN_A]);
       await client.query("DELETE FROM run WHERE id = $1", [RUN_A]);
       const count = async (sql: string, params: unknown[]) => Number((await client.query(sql, params)).rows[0].n);

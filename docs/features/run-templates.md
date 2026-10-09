@@ -134,4 +134,4 @@ View → Controller → Service → Repository, matching every other feature in 
 
 - Discord Current/Next-ID category routing (separate future feature)
 - Any recurrence/scheduling engine
-- Cross-run Character reservation, raid-save semantics, payouts, attendance (unaffected by this feature)
+- Cross-run Character reservation, raid-save semantics, attendance (unaffected by this feature)

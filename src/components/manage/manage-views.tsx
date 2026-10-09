@@ -58,7 +58,6 @@ export function ManageRunsView({ data, massCreatedCount }: { data: ManagedRunsPa
                 {data.runs.map((run) => {
                   const attentionHint = formatOperationalAttentionHint({
                     attendance: run.attendance,
-                    settlement: { stage: run.settlementStage },
                     attention: run.attention,
                     nextAction: run.nextAction,
                   });

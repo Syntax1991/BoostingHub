@@ -678,7 +678,7 @@ export const rosterRepository = {
   /**
    * Atomically replace the full draft selection set — including each slot's
    * assigned role — and bump version once. A slot that stays selected keeps
-   * its existing entry row (and therefore its attendance/payout identity);
+   * its existing entry row (and therefore its attendance identity);
    * only its `selectedRole` is rewritten. Optional race-safety nets re-check
    * WITHDRAWN and cross-Run reservations inside the transaction (batch save
    * path). Seed/prepare callers may omit them.

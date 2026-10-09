@@ -136,16 +136,12 @@ export type DashboardOperationItem = {
   attention: RunOperationalAttention;
   nextAction: RunOperationalAction;
   unmarkedCount: number;
-  settlementStage: string;
   priority: number;
 };
 
 const ACTIONABLE_KINDS = new Set([
   "ATTENDANCE",
   "COMPLETE",
-  "PREPARE_PAYOUT",
-  "REVIEW_PAYOUT",
-  "MARK_PAID",
   "BUILD_ROSTER",
   "CONTINUE_ROSTER",
   "START",
@@ -153,15 +149,10 @@ const ACTIONABLE_KINDS = new Set([
 
 function operationPriority(kind: RunOperationalAction["kind"]): number {
   switch (kind) {
-    case "MARK_PAID":
-      return 10;
     case "ATTENDANCE":
       return 20;
     case "COMPLETE":
       return 30;
-    case "PREPARE_PAYOUT":
-    case "REVIEW_PAYOUT":
-      return 40;
     case "START":
       return 50;
     case "BUILD_ROSTER":
@@ -185,17 +176,13 @@ export function projectDashboardOperations(input: {
       attention: RunOperationalAttention;
       nextAction: RunOperationalAction;
       attendance: { unmarkedCount: number };
-      settlement: { stage: string };
     };
   }>;
   includeRosterWork: boolean;
-  adminOnlyMarkPaid: boolean;
 }): {
   operations: DashboardOperationItem[];
-  adminMarkPaid: DashboardOperationItem[];
 } {
   const operations: DashboardOperationItem[] = [];
-  const adminMarkPaid: DashboardOperationItem[] = [];
 
   for (const row of input.rows) {
     const kind = row.handoff.nextAction.kind;
@@ -203,8 +190,6 @@ export function projectDashboardOperations(input: {
     if (kind === "BUILD_ROSTER" || kind === "CONTINUE_ROSTER") {
       if (!input.includeRosterWork) continue;
     }
-    if (kind === "VIEW_PAYOUT") continue;
-
     const item: DashboardOperationItem = {
       runId: row.run.id,
       runTitle: row.run.title,
@@ -214,18 +199,8 @@ export function projectDashboardOperations(input: {
       attention: row.handoff.attention,
       nextAction: row.handoff.nextAction,
       unmarkedCount: row.handoff.attendance.unmarkedCount,
-      settlementStage: row.handoff.settlement.stage,
       priority: operationPriority(kind),
     };
-
-    if (kind === "MARK_PAID") {
-      if (input.adminOnlyMarkPaid) {
-        adminMarkPaid.push(item);
-      }
-      continue;
-    }
-
-    // RAID_LEAD FINALIZED → VIEW_PAYOUT is skipped above; informational optional omitted for V1
     operations.push(item);
   }
 
@@ -233,13 +208,9 @@ export function projectDashboardOperations(input: {
     if (a.priority !== b.priority) return a.priority - b.priority;
     return a.scheduledStartAt.localeCompare(b.scheduledStartAt) || a.runId.localeCompare(b.runId);
   });
-  adminMarkPaid.sort(
-    (a, b) => a.scheduledStartAt.localeCompare(b.scheduledStartAt) || a.runId.localeCompare(b.runId),
-  );
 
   return {
     operations: operations.slice(0, ATTENTION_CAP),
-    adminMarkPaid: adminMarkPaid.slice(0, ATTENTION_CAP),
   };
 }
 

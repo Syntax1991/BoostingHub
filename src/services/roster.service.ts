@@ -1087,7 +1087,7 @@ export const rosterService = {
   /**
    * Persist a complete draft selection in one mutation. Each selection names
    * the role the Raid Lead is assigning that slot — the decision that drives
-   * composition, publish, attendance, and payout. A BOOSTER slot must resolve
+   * composition, publish, and attendance. A BOOSTER slot must resolve
    * to exactly one of its offered roles (a single-role offer resolves itself);
    * a LOOTBUDDY slot must carry none. Validates every requested signup before
    * writing; rejects malformed same-user Booster batches instead of silently
@@ -1347,7 +1347,7 @@ export const rosterService = {
   /**
    * Add Player: rosters a registered User's Character as a normal BOOSTER
    * signup — never an External Booster — so commitments, reservations, My
-   * Runs, notifications, Discord, Final Setup, attendance and payout treat it
+   * Runs, notifications, Discord, Final Setup and attendance treat it
    * like any other pick. Eligibility is the self-signup rule set plus the
    * roster's schedule-conflict check (no Raid Lead bypass). The signup
    * (reused, role-extended or newly created) and the draft slot are written in

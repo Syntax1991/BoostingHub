@@ -4,7 +4,7 @@
 
 Let a **raid lead** or **admin** build a persistent draft roster for a run, validate it, and publish it. Publication writes final `RunSignup` statuses and moves the run to `PUBLISHED`.
 
-This is internal operations tooling. It is not raid-group assignment, payouts, or attendance marking. Attendance after Start is documented in [run-lifecycle-attendance.md](run-lifecycle-attendance.md).
+This is internal operations tooling. It is not raid-group assignment or attendance marking. Attendance after Start is documented in [run-lifecycle-attendance.md](run-lifecycle-attendance.md).
 
 Canonical Run URL: `/runs/[runId]`. See [run-detail.md](run-detail.md). Run create/open/cancel: [run-management.md](run-management.md).
 
@@ -86,7 +86,7 @@ If one BOOSTER character is `SELECTED`, the user's other active BOOSTER offers o
 
 **Add Booster** adds a **registered** player who did not sign up — typically a last-minute replacement. It is offered in the Run header (next to **External Boosters** / **Edit Run**) and in the Roster tab's Boosters card, to managers only, while the roster is editable (`OPEN` / `ROSTERING` / `PUBLISHED`). Flow: search a player (server-side, `ACTIVE` accounts, name or Discord username, max 10 results, only id / name / Discord username exposed) → choose one of their Characters → role → **Add to Roster**.
 
-- The player is rostered as a normal **BOOSTER `RunSignup`** — never a `RunExternalBooster` — so My Runs, commitments, reservations, notifications, Discord, Final Setup, attendance and payout treat them like any pick.
+- The player is rostered as a normal **BOOSTER `RunSignup`** — never a `RunExternalBooster` — so My Runs, commitments, reservations, notifications, Discord, Final Setup, attendance and out treat them like any pick.
 - Same safeguards as a self-signup plus roster selection, no Raid Lead bypass, always against the **current** Run (difficulty, schedule, content): Character owned and active, the owner's Booster role (any Run difficulty), a role the class can play, weekly availability, cross-Run reservation / schedule conflicts, one selected Booster per User (adding a second Character replaces the first slot), roster version. Only the signup window is not required. Lockouts never block, but a saved Character needs the Raid Lead's confirmation (see [Selection risk](#selection-risk-clean--warning--blocked)).
 - An existing active offer for that Character is reused (the assigned role is added to its offered roles if missing); otherwise a normal `PENDING` offer is created. A `WITHDRAWN` offer is never revived — the player has to sign up again.
 - Atomic: the signup (reuse / role extension / creation) and the draft slot are written in one transaction with the Save Roster race checks and notifications (`rosterRepository.addManagedBoosterAtomic`). On any failure (version race, reservation race, withdrawal) nothing is left behind.
@@ -104,7 +104,7 @@ Boosters who are **not registered** on the website (e.g. in-house helpers) are m
 - External boosters count toward the Tank/Healer/DPS composition, external lootbuddies toward the lootbuddy count; both count in the Class Buff Checker and never create validation blockers. External lootbuddies are listed with the lootbuddies everywhere (roster views, Discord roster, Final Setup as `@name`). Replace after Start fills a lootbuddy slot with an external lootbuddy.
 - **Live roster data, not draft data:** there is no separate published snapshot. Saving them while `PUBLISHED` changes the published roster (`getPublishedRosterView`) immediately, bumps the roster version (so the Discord roster post is edited) and is **not** an "unpublished change" — Start and the Final Setup use the current rows.
 - Shown as `@name <class emoji>` (plain text, never a ping) on the Discord **Roster** embed (DPS split melee/ranged by class), the Start Run preview and the Final Setup post — never fabricated onto the Signup embed.
-- Not signups: no notifications/DMs, no attendance, payouts, strikes, lockouts or Raid Invites.
+- Not signups: no notifications/DMs, no attendance, strikes, lockouts or Raid Invites.
 - Names allow letters, digits, space, `.`, `_`, `-` (max 32); `everyone`/`here` and markdown/mention syntax are rejected. Max 40 per roster.
 
 ## Composition
@@ -273,7 +273,7 @@ The published roster stays live until an Update succeeds. The lead may add a new
 ## Deferred
 
 - Raid groups 1–8, parties, markers, assignments
-- Wallets / extra organizational cuts (see [run-payouts.md](run-payouts.md))
+- Any financial workflow (BoostingHub does not pay boosters)
 - Battle.net, Warcraft Logs, Discord bot (except roster notifications on Save Roster / publish; see [user-notifications.md](user-notifications.md))
 - Customer bookings / boost market
 - Per-user timezones

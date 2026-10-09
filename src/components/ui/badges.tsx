@@ -10,7 +10,6 @@ import {
   PARTICIPATION_LABELS,
   ROLE_LABELS,
   RUN_STATUS_LABELS,
-  SETTLEMENT_STATUS_LABELS,
   SIGNUP_STATUS_LABELS,
 } from "@/lib/labels";
 import type {
@@ -21,7 +20,6 @@ import type {
   ParticipationType,
   RaidDifficulty,
   RunStatus,
-  SettlementStatus,
   SignupStatus,
   WowClass,
 } from "@/models/enums";
@@ -173,20 +171,6 @@ export function AttendanceStatusBadge({ status }: { status: AttendanceStatus }) 
       )}
     >
       {ATTENDANCE_STATUS_LABELS[status]}
-    </Badge>
-  );
-}
-
-export function SettlementStatusBadge({ status }: { status: SettlementStatus }) {
-  return (
-    <Badge
-      className={cn(
-        status === "DRAFT" && "bg-warning/15 text-warning",
-        status === "FINALIZED" && "bg-info/15 text-info",
-        status === "PAID" && "bg-success/15 text-success",
-      )}
-    >
-      {SETTLEMENT_STATUS_LABELS[status]}
     </Badge>
   );
 }

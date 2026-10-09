@@ -24,7 +24,7 @@ Sign in with **Discord**. As a **RAID_LEAD** you see **Manage** and work your as
 
 - You manage Runs where **you** are the Raid Lead.
 - **ADMIN** can manage every Run.
-- Use the **Dashboard** for Build Roster / Start / Attendance / Payout hand-offs.
+- Use the **Dashboard** for Build Roster / Start / Attendance hand-offs.
 
 CTA: Open Manawyrm Hub
 
@@ -110,23 +110,16 @@ Supporting Start Run view:
 
 ---
 
-## Card 6 — `complete-payout`
+## Card 6 — `complete-run`
 
-**Title:** 💰 Complete & Payout
+**Title:** ✅ Complete the run
 
-After **Complete**, open the **Payout** tab:
+When every participant is marked, press **Complete Run**.
 
-- Enter the gross gold pot
-- Review the split (boosters / Raid Lead / advertiser / Dawn)
-- Raid Lead cut mode **KEEP** or **SHARE**
-- Lootbuddies default to **0** cut
-- **External boosters are not on the settlement**
-- Finalize; an **Admin** does **Mark Paid**
+- Attendance becomes read-only
+- Mistakes found later: **Correct Attendance** (reason required, recorded in Run History)
+- Completed Runs also have a **Consumables** (WCL) audit tab
 
-Completed Runs also have a **Consumables** (WCL) audit tab.
+**Lifecycle:** Draft → Open → Rostering → Published → In Progress → Completed
 
-**Lifecycle:** Draft → Open → Rostering → Published → In Progress → Completed → Paid
-
-Discord: `/guide raidlead`
-
-![Payout](./screenshots/rl-09-payout.png)
+![Completed run](./screenshots/rl-06-run-overview.png)

@@ -13,7 +13,7 @@ export function ProfileView({ data }: { data: Profile }) {
     <div>
       <PageHeader
         title="Profile"
-        description="Account identity, permissions, and booster eligibility. Run payouts live on completed run detail."
+        description="Account identity, permissions, and booster eligibility."
       />
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">

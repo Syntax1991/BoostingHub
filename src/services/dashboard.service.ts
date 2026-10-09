@@ -35,10 +35,9 @@ export const dashboardService = {
     ]);
 
     const personal = projectPersonalDashboardAttention(myRuns);
-    const { operations, adminMarkPaid } = projectDashboardOperations({
+    const { operations } = projectDashboardOperations({
       rows: managedOps,
       includeRosterWork: true,
-      adminOnlyMarkPaid: isAdmin,
     });
 
     const upcomingRuns = runs.filter((run) => UPCOMING_RUN_STATUSES.includes(run.status));
@@ -69,7 +68,6 @@ export const dashboardService = {
     return {
       personal,
       operations: showOperations ? operations : [],
-      adminMarkPaid: isAdmin ? adminMarkPaid : [],
       showOperations,
       isAdmin,
       upcomingRuns: upcomingRuns.map((run) => ({

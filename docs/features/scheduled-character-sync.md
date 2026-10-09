@@ -135,7 +135,7 @@ Scheduled sync **may** update, per successfully-refreshed Character:
 
 Scheduled sync **never** updates `Character.specialization` or `Character.primaryRole` — those are Character metadata a Blizzard sync must not overwrite (only the User editing the Character changes them). Item level may still be raised from Raider.IO after the Blizzard apply when that source reports a higher equipped value (same soft enrichment as manual Refresh). It also never calls `applyBlizzardLink()` (the initial-link path); it only ever calls `applyBlizzardSync()`, same as manual refresh — a PUBLIC sync never stamps Blizzard ids.
 
-It also never changes Weekly Availability, Boosting Roles, historical Booster Access requests, signup/roster/run commitments, payout, or attendance data.
+It also never changes Weekly Availability, Boosting Roles, historical Booster Access requests, signup/roster/run commitments, or attendance data.
 
 ### Partial failure policy
 

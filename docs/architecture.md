@@ -10,7 +10,7 @@ Boostting Bot is a modular Next.js application with an internal **MVCS** boundar
 - Better Auth for sessions and OAuth
 - Zod at HTTP/form boundaries
 
-MVCS is used because later boosting operations will accumulate non-trivial rules around eligibility, lockouts, rostering, attendance, and payouts. Those rules must stay testable outside React trees.
+MVCS is used because later boosting operations will accumulate non-trivial rules around eligibility, lockouts, rostering, and attendance. Those rules must stay testable outside React trees.
 
 ## Layer responsibilities
 
@@ -22,7 +22,7 @@ Persistent domain entities, Prisma contract, relationships, and domain enums. No
 
 React pages and components: layout, tables, badges, filters, empty states. Views consume prepared data. They do not query Prisma and do not decide whether a signup transition is legal.
 
-Client components are limited to interaction islands (`AppShell` navigation, `Button`, Discord OAuth click, run filters, signup dialog, withdraw button, roster builder, run detail tabs, character form, character lifecycle, Battle.net connect/import panels, booster access request/review dialogs, run create form, run edit/cancel/start/complete dialogs, attendance table, payout settlement actions, manager lifecycle actions). Shared presentation primitives are not marked `"use client"` so tables stay server-rendered.
+Client components are limited to interaction islands (`AppShell` navigation, `Button`, Discord OAuth click, run filters, signup dialog, withdraw button, roster builder, run detail tabs, character form, character lifecycle, Battle.net connect/import panels, booster access request/review dialogs, run create form, run edit/cancel/start/complete dialogs, attendance table, manager lifecycle actions). Shared presentation primitives are not marked `"use client"` so tables stay server-rendered.
 
 ### Controller
 
@@ -38,7 +38,7 @@ Better Auth's `/api/auth/*` handler is the authentication controller for OAuth a
 
 ### Service
 
-Application and business rules: Boosting Roles (Booster / Lootbuddy grant/revoke, legacy booster request review), Booster role check, lockout conflict, run/signup state machines, run create/edit/open/signup-window/cancel/start/complete, signup eligibility, multi-character offer reconciliation, roster draft/publish, attendance snapshot/update/completeness, completed-run payout settlement, User disciplinary strikes, canonical run-detail DTO shaping, character identity/lifecycle, Battle.net connect/import/link/refresh, dashboard composition, Discord sync-work computation and embed DTO shaping.
+Application and business rules: Boosting Roles (Booster / Lootbuddy grant/revoke, legacy booster request review), Booster role check, lockout conflict, run/signup state machines, run create/edit/open/signup-window/cancel/start/complete, signup eligibility, multi-character offer reconciliation, roster draft/publish, attendance snapshot/update/completeness and post-completion correction, User disciplinary strikes, canonical run-detail DTO shaping, character identity/lifecycle, Battle.net connect/import/link/refresh, dashboard composition, Discord sync-work computation and embed DTO shaping.
 
 ### Repository
 

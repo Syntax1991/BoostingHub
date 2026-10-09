@@ -159,7 +159,7 @@ export const BOOSTER_GUIDE_CARDS: readonly BoosterGuideCard[] = [
       `**Not Selected / Withdrawn** — history / current outcome`,
       ``,
       `**Lifecycle**`,
-      `Signup → Roster → Publish → Start → Attendance → Complete → Payout`,
+      `Signup → Roster → Publish → Start → Attendance → Complete`,
       ``,
       `Quick status in Discord: \`/mysignups\``,
       ``,

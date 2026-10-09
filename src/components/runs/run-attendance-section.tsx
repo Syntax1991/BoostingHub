@@ -304,7 +304,7 @@ function ManagerAttendancePanel({
       {manager.externalBoosters.length > 0 ? (
         <div className="border-t border-border px-4 py-3 text-sm">
           <p className="text-xs uppercase tracking-wide text-muted">
-            External boosters &amp; lootbuddies (no attendance or payout)
+            External boosters &amp; lootbuddies (no attendance)
           </p>
           <ul className="mt-2 flex flex-wrap gap-3">
             {manager.externalBoosters.map((booster) => (

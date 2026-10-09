@@ -36,7 +36,7 @@ type EditDraft = {
  * Boosters without a website account (e.g. in-house helpers): edited here and
  * saved on their own. They count toward the role targets and show up as
  * `@name <class>` in the Discord roster and Final Setup — no DMs, attendance
- * or payouts. Saving reloads the page, so unsaved Roster builder edits are lost.
+ * Saving reloads the page, so unsaved Roster builder edits are lost.
  */
 export function ExternalBoostersDialog({
   runId,
@@ -206,7 +206,7 @@ export function ExternalBoostersDialog({
         <p className="mt-1 text-xs text-muted">
           Boosters and lootbuddies without a website account. Boosters fill a Tank/Healer/DPS slot, lootbuddies count
           as lootbuddies. Both appear as @name with their class in the Discord roster and Final Setup. No DMs,
-          attendance or payouts.
+          attendance.
         </p>
       </div>
       <div className="space-y-3 px-4 py-4 text-sm">

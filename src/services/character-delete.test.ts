@@ -11,7 +11,6 @@ import { characterService } from "@/services/character.service";
 import { runService } from "@/services/run.service";
 import { attendanceRepository } from "@/repositories/attendance.repository";
 import { attendanceService } from "@/services/attendance.service";
-import { payoutService } from "@/services/payout.service";
 import { rosterService } from "@/services/roster.service";
 import { runDetailService } from "@/services/run-detail.service";
 
@@ -124,8 +123,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   for (const runId of runIds) {
-    // Payout lines / attendance reference signups with RESTRICT: settlement (cascades lines) first.
-    await orm.RunSettlement.where({ runId }).deleteAll();
+    // Attendance references roster entries with RESTRICT: remove it first.
     await orm.RunAttendance.where({ runId }).deleteAll();
     const roster = (await orm.RunRoster.where({ runId }).first()) as { id: string } | null;
     if (roster) {
@@ -292,13 +290,13 @@ describe("admin delete", () => {
   });
 });
 
-describe("delete after completed-run history (settlement / payout preservation)", () => {
+describe("delete after completed-run history (signup / attendance preservation)", () => {
   async function qualify(userId: string) {
     await orm.User.where({ id: userId }).update({ isBooster: true });
   }
 
-  /** Real lifecycle: signup → roster publish → start → attendance → complete → prepare + finalize payout. */
-  async function completedRunWithSettlement(booster: AuthenticatedUser, characterId: string) {
+  /** Real lifecycle: signup → roster publish → start → attendance → complete. */
+  async function completedRunWithHistory(booster: AuthenticatedUser, characterId: string) {
     const created = await runService.createRun(
       lead,
       venomousCreateInput({
@@ -337,20 +335,14 @@ describe("delete after completed-run history (settlement / payout preservation)"
     const [attendance] = await attendanceRepository.listByRunId(created.id);
     await attendanceService.setStatus(lead, { attendanceId: attendance!.id, status: "PRESENT" });
     await runService.completeRun(lead, created.id);
-    const settlement = await payoutService.prepareSettlement(lead, created.id, { totalGold: 1_000_000, raidLeadCutMode: "SHARE" });
-    await payoutService.finalizeSettlement(lead, settlement.id);
-    return { runId: created.id, signupId, attendanceId: attendance!.id, settlementId: settlement.id };
+    return { runId: created.id, signupId, attendanceId: attendance!.id };
   }
 
-  it("deletes the Character but keeps user, signup, attendance, settlement and payout snapshots intact and renderable", async () => {
+  it("deletes the Character but keeps user, signup and attendance intact and renderable", async () => {
     const booster = await createUser("USER");
     await qualify(booster.id);
     const character = await createCharacter(booster);
-    const history = await completedRunWithSettlement(booster, character.id);
-
-    const payoutBefore = (await orm.RunPayoutEntry.where({ settlementId: history.settlementId }).first()) as Record<string, unknown>;
-    expect(payoutBefore.characterId).toBe(character.id);
-    expect(Number(payoutBefore.amountGold)).toBeGreaterThan(0);
+    const history = await completedRunWithHistory(booster, character.id);
 
     await characterService.deleteCharacter(booster, character.id);
 
@@ -365,29 +357,14 @@ describe("delete after completed-run history (settlement / payout preservation)"
     expect(signupRow!.status).toBe("SELECTED");
     expect(await orm.RunAttendance.where({ id: history.attendanceId }).first()).not.toBeNull();
 
-    // Settlement and payout line remain with snapshots and amounts untouched.
-    const settlementRow = (await orm.RunSettlement.where({ id: history.settlementId }).first()) as Record<string, unknown> | null;
-    expect(settlementRow?.status).toBe("FINALIZED");
-    const payoutAfter = (await orm.RunPayoutEntry.where({ settlementId: history.settlementId }).first()) as Record<string, unknown>;
-    expect(payoutAfter.characterId).toBeNull();
-    for (const field of ["characterName", "characterRealm", "userDisplayName", "shareUnits", "amountGold", "attendanceStatus", "participationType"]) {
-      expect(payoutAfter[field]).toEqual(payoutBefore[field]);
-    }
-
     // Historical projections still render without the Character relation.
-    const payoutView = await payoutService.getPayoutView(lead, history.runId);
-    expect(payoutView.manager?.status).toBe("FINALIZED");
-    expect(payoutView.manager?.entries[0]?.characterName).toBe(character.name);
-    expect(payoutView.manager?.entries[0]?.amountGold).toBe(Number(payoutBefore.amountGold));
-    const ownView = await payoutService.getPayoutView(booster, history.runId);
-    expect(ownView.own[0]?.characterName).toBe(character.name);
     const managerAttendance = await attendanceService.getManagerAttendance(lead, history.runId);
     expect(JSON.stringify(managerAttendance)).toContain(booster.name);
     expect(await attendanceService.getOwnAttendance(booster, history.runId)).toHaveLength(1);
     const detail = await runDetailService.getRunDetail(lead, history.runId);
     expect(detail.run.status).toBe("COMPLETED");
     const boosterDetail = await runDetailService.getRunDetail(booster, history.runId);
-    expect(boosterDetail.payout.own[0]?.amountGold).toBe(Number(payoutBefore.amountGold));
+    expect(boosterDetail.run.status).toBe("COMPLETED");
   }, 60_000);
 
   it("relations: availability blocks + WCL data cascade; legacy Booster Access and account qualification stay", async () => {

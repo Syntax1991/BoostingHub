@@ -14,7 +14,6 @@ import { userRepository } from "@/repositories/user.repository";
 import { emptyRunCapabilities, getRunLifecycleCapabilities, isSignupWindowOpen } from "@/services/run-state";
 import { hasAdminAccess } from "@/auth/authorization";
 import { attendanceService } from "@/services/attendance.service";
-import { payoutService } from "@/services/payout.service";
 import { CLASS_LABELS } from "@/lib/labels";
 import {
   groupFinalSetupParticipants,
@@ -164,7 +163,6 @@ export const runDetailService = {
 
     const ownAttendance = manage ? [] : await attendanceService.getOwnAttendance(user, runId);
     const managerAttendance = manage ? await attendanceService.getManagerAttendance(user, runId) : null;
-    const payout = await payoutService.getPayoutView(user, runId);
     const startSnapshot = manage ? await runStartSnapshotRepository.findByRunId(runId) : null;
     // ADMIN / the Run's RAID_LEAD only, COMPLETED Runs only. Everyone else gets
     // null without the audit tables ever being read. Database-only: never a WCL call.
@@ -298,7 +296,6 @@ export const runDetailService = {
         own: ownAttendance,
         manager: managerAttendance,
       },
-      payout,
       consumables,
     };
   },

@@ -29,7 +29,6 @@ const RUNS = {
   heroicPublished: "r5555555-5555-4555-8555-555555555555", // Published — Start Run controls
   heroicWeekend: "r7777777-7777-4777-8777-777777777777", // Open — signup window controls
   heroicInProgress: "r9999991-9991-4991-8991-999999999991", // Attendance
-  payoutDraft: "r9999993-9993-4993-8993-999999999993", // Payout tab
 } as const;
 
 function arg(name: string): string | undefined {
@@ -105,10 +104,6 @@ async function main() {
 
   await page.goto(`${baseUrl}/runs/${RUNS.heroicPublished}`, { waitUntil: "networkidle" });
   await shot(page, "rl-08-start-run.png");
-
-  // Card 6 — Payout
-  await page.goto(`${baseUrl}/runs/${RUNS.payoutDraft}?tab=payout`, { waitUntil: "networkidle" });
-  await shot(page, "rl-09-payout.png");
 
   await browser.close();
   console.log("Raid Lead guide screenshots capture complete.");

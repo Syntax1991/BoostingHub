@@ -1,0 +1,76 @@
+[
+  {
+    "id": "dropTable.run_payout_entry",
+    "label": "Drop table \"run_payout_entry\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run_payout_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run_payout_entry\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_payout_entry\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop table \"run_payout_entry\"",
+        "sql": "DROP TABLE \"public\".\"run_payout_entry\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run_payout_entry\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_payout_entry\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropTable.run_settlement",
+    "label": "Drop table \"run_settlement\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run_settlement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run_settlement\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_settlement\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop table \"run_settlement\"",
+        "sql": "DROP TABLE \"public\".\"run_settlement\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run_settlement\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_settlement\""
+        ]
+      }
+    ]
+  }
+]

@@ -213,4 +213,4 @@ Granting and revoking the Booster role: [boosting-roles.md](boosting-roles.md).
 
 ## Deferred
 
-Preferred/ranked Character among offers, wallets, escrow, extra organizational cuts, User-level time-window collision for characterless Lootbuddy. Completed-run settlement: see [run-payouts.md](run-payouts.md).
+Preferred/ranked Character among offers, wallets, escrow, extra organizational cuts, User-level time-window collision for characterless Lootbuddy.

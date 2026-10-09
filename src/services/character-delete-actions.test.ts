@@ -119,7 +119,7 @@ describe("owner /characters list", () => {
       expect(count(html, dialogTitle(character))).toBe(1);
     }
     expect(html).toContain("This permanently removes the Character from Manawyrm Hub");
-    expect(html).toContain("Historical completed-run records and payout history are preserved.");
+    expect(html).toContain("Historical completed-run records are preserved.");
     expect(html).toContain("Characters with active run signups cannot be deleted.");
     expect(count(html, ">Delete permanently<")).toBe(2);
     expect(count(html, ">Cancel<")).toBeGreaterThanOrEqual(2);

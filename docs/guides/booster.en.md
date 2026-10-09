@@ -78,7 +78,7 @@ Under **My Runs**:
 Lifecycle:
 
 ```text
-Signup → Roster → Publish → Start → Attendance → Complete → Payout
+Signup → Roster → Publish → Start → Attendance → Complete
 ```
 
 ![My Runs](./screenshots/bo-05-my-runs.png)
