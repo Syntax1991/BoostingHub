@@ -1,5 +1,6 @@
 import { parseKilledBossIds } from "@/lib/lockout-bosses";
 import { db, orm } from "@/lib/prisma";
+import { or } from "@prisma/orm-postgres/orm-client";
 import { DomainError } from "@/lib/errors";
 import {
   asBoolean,
@@ -180,8 +181,8 @@ async function replacePlayableSpecs(characterId: string, specs: readonly string[
 }
 
 /**
- * Attach each Character owner's Booster role (User.isBooster).
- * Booster eligibility is per User — not per Character, class, or difficulty.
+ * Attach each Character owner's *effective* Booster access (manual ∨ Discord
+ * Raid Booster). Eligibility is per User — not per Character, class, or difficulty.
  */
 async function withOwnerBoosterRole(characters: CharacterPageRecord[]): Promise<CharacterPageRecord[]> {
   if (characters.length === 0) return characters;
@@ -189,10 +190,13 @@ async function withOwnerBoosterRole(characters: CharacterPageRecord[]): Promise<
   const rolesByUser = await userRepository.listBoostingRolesByUserIds(
     characters.map((character) => character.userId),
   );
-  return characters.map((character) => ({
-    ...character,
-    ownerIsBooster: rolesByUser.get(character.userId)?.isBooster ?? false,
-  }));
+  return characters.map((character) => {
+    const roles = rolesByUser.get(character.userId);
+    return {
+      ...character,
+      ownerIsBooster: Boolean(roles?.isBooster || roles?.discordRaidBooster),
+    };
+  });
 }
 
 export const characterRepository = {
@@ -216,10 +220,8 @@ export const characterRepository = {
   async listActiveBoosterCharacters(): Promise<
     Array<CharacterPageRecord & { ownerName: string }>
   > {
-    const boosterRows = (await orm.User.where({
-      accountStatus: "ACTIVE",
-      isBooster: true,
-    })
+    const boosterRows = (await orm.User.where({ accountStatus: "ACTIVE" })
+      .where((user) => or(user.isBooster.eq(true), user.discordRaidBooster.eq(true)))
       .select("id", "name")
       .all()) as Array<Record<string, unknown>>;
     if (boosterRows.length === 0) return [];

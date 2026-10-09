@@ -8974,6 +8974,20 @@
                   "kind": "scalar"
                 }
               },
+              "discordLootbuddy": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "discordRaidBooster": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
               "discordRunChannelNickname": {
                 "nullable": true,
                 "type": {
@@ -9616,6 +9630,12 @@
                 },
                 "discordDmQuietHoursStart": {
                   "column": "discordDmQuietHoursStart"
+                },
+                "discordLootbuddy": {
+                  "column": "discordLootbuddy"
+                },
+                "discordRaidBooster": {
+                  "column": "discordRaidBooster"
                 },
                 "discordRunChannelNickname": {
                   "column": "discordRunChannelNickname"
@@ -17043,6 +17063,24 @@
                   "nativeType": "text",
                   "nullable": true
                 },
+                "discordLootbuddy": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
+                "discordRaidBooster": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
                 "discordRunChannelNickname": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -18035,7 +18073,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "cf6ac14eb6dc83ff8424bce619ba8a279407cbad759ef3a4ff3269f83e271e39"
+    "storageHash": "f82031150f6f206346f775373f3fe2226506d5f2d032b00ecd47d1cef18cec24"
   },
   "execution": {
     "executionHash": "489f638004aa609265422276e8984e4f57fd71ad9f8ba862780ff3cc38ef2fdc",

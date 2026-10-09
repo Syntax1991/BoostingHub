@@ -208,7 +208,10 @@ async function withOwnerBoosterRole(signups: RosterSignupRow[]): Promise<RosterS
       ...signup,
       character: {
         ...signup.character,
-        ownerIsBooster: rolesByUser.get(signup.userId)?.isBooster ?? false,
+        ownerIsBooster: (() => {
+          const roles = rolesByUser.get(signup.userId);
+          return Boolean(roles?.isBooster || roles?.discordRaidBooster);
+        })(),
       },
     };
   });
