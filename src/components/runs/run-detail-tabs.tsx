@@ -8,7 +8,6 @@ import { RunOverviewSection } from "@/components/runs/run-overview-section";
 import { RunSignupsSection } from "@/components/runs/run-signups-section";
 import { RunRosterSection } from "@/components/runs/run-roster-section";
 import { RunAttendanceSection } from "@/components/runs/run-attendance-section";
-import { RunPayoutSection } from "@/components/runs/run-payout-section";
 import { RunConsumablesSection } from "@/components/runs/run-consumables-section";
 import type { RunDetailView } from "@/services/run-detail.service";
 
@@ -17,7 +16,6 @@ const BASE_TABS: Array<{ id: RunDetailTab; label: string }> = [
   { id: "signups", label: "Signups" },
   { id: "roster", label: "Roster" },
   { id: "attendance", label: "Attendance" },
-  { id: "payout", label: "Payout" },
 ];
 
 export function RunDetailTabs({
@@ -97,7 +95,6 @@ export function RunDetailTabs({
         {tab === "signups" ? <RunSignupsSection data={data} /> : null}
         {tab === "roster" ? <RunRosterSection data={data} /> : null}
         {tab === "attendance" ? <RunAttendanceSection data={data} /> : null}
-        {tab === "payout" ? <RunPayoutSection data={data} /> : null}
         {tab === "consumables" && consumables ? <RunConsumablesSection audit={consumables} /> : null}
       </div>
     </div>

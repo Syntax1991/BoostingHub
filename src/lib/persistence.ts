@@ -13,8 +13,6 @@ import {
   LOOTBUDDY_VERIFICATIONS,
   ROSTER_STATES,
   ATTENDANCE_STATUSES,
-  RAID_LEAD_CUT_MODES,
-  SETTLEMENT_STATUSES,
   STRIKE_STATUSES,
   INTEGRATION_PROVIDERS,
   INTEGRATION_EVENT_STATUSES,
@@ -26,8 +24,6 @@ import {
   type AccountStatus,
   type AttendanceStatus,
   type BoosterAccessStatus,
-  type RaidLeadCutMode,
-  type SettlementStatus,
   type StrikeStatus,
   type CharacterRole,
   type LootbuddyMode,
@@ -154,14 +150,6 @@ export function mapRosterState(value: unknown): RosterState {
 
 export function mapAttendanceStatus(value: unknown): AttendanceStatus {
   return asEnum(value, ATTENDANCE_STATUSES, "UNMARKED");
-}
-
-export function mapSettlementStatus(value: unknown): SettlementStatus {
-  return asEnum(value, SETTLEMENT_STATUSES, "DRAFT");
-}
-
-export function mapRaidLeadCutMode(value: unknown): RaidLeadCutMode {
-  return asEnum(value, RAID_LEAD_CUT_MODES, "SHARE");
 }
 
 export function mapStrikeStatus(value: unknown): StrikeStatus {

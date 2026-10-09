@@ -161,7 +161,7 @@ export const attendanceService = {
       summary: summaryFrom(rows),
       rows: rows.map(toManagerRow),
       replacementCandidates,
-      /** Hand-added boosters in the raid (Final Setup only — no attendance or payout). */
+      /** Hand-added boosters in the raid (Final Setup only — no attendance). */
       externalBoosters: run.roster?.externalBoosters ?? [],
     };
   },
@@ -257,7 +257,7 @@ export const attendanceService = {
 
   /**
    * Exceptional, audited correction of one attendance status on a COMPLETED
-   * Run. The Run stays COMPLETED; roster, signups, payouts and Discord are
+   * Run. The Run stays COMPLETED; roster, signups and Discord are
    * untouched. Rejects stale expected status, no-ops and non-completed Runs.
    */
   async correctCompletedAttendance(user: AuthenticatedUser, input: CorrectAttendanceInput) {

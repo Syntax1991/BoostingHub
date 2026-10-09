@@ -119,17 +119,20 @@ describe("raid lead guide v2 content", () => {
       "open-manage-signups",
       "build-roster",
       "run-attendance",
-      "complete-payout",
+      "complete-run",
     ]);
   });
 
-  it("documents Community, Publish Roster, and external booster payout exclusion", () => {
+  it("documents Community, Publish Roster, and a completion step without any financial workflow", () => {
     const create = RAIDLEAD_GUIDE_CARDS.find((c) => c.key === "create-run")!;
     const roster = RAIDLEAD_GUIDE_CARDS.find((c) => c.key === "build-roster")!;
-    const payout = RAIDLEAD_GUIDE_CARDS.find((c) => c.key === "complete-payout")!;
+    const complete = RAIDLEAD_GUIDE_CARDS.find((c) => c.key === "complete-run")!;
     expect(create.description).toMatch(/Community/);
     expect(roster.description).toMatch(/Publish Roster/);
-    expect(payout.description).toMatch(/External boosters are not on the settlement/);
+    expect(complete.description).toMatch(/Correct Attendance/);
+    for (const card of RAIDLEAD_GUIDE_CARDS) {
+      expect(JSON.stringify(card)).not.toMatch(/payout|settlement|mark paid|gold pot/i);
+    }
   });
 
   it("attaches a screenshot to every card", () => {

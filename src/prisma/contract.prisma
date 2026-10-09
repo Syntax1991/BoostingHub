@@ -149,22 +149,6 @@ enum AttendanceStatus {
   STANDBY     = "STANDBY"
 }
 
-/// Bookkeeping lifecycle for one completed-run gold settlement. Not a wallet.
-enum SettlementStatus {
-  @@type("pg/text@1")
-  DRAFT     = "DRAFT"
-  FINALIZED = "FINALIZED"
-  PAID      = "PAID"
-}
-
-/// Settlement-time Raid Lead payout mode for the 3% Raid Lead cut.
-/// KEEP: Raid Lead keeps 3% separately. SHARE: 3% joins the Booster Pool.
-enum RaidLeadCutMode {
-  @@type("pg/text@1")
-  KEEP  = "KEEP"
-  SHARE = "SHARE"
-}
-
 /// No hard delete. REVOKED is a staff correction, not an expiry — there is no
 /// automatic expiry status in this contract.
 enum StrikeStatus {
@@ -277,10 +261,6 @@ model User {
   activity         ActivityEvent[]
   publishedRosters RunRoster[]     @relation("RosterPublisher")
   markedAttendance RunAttendance[] @relation("AttendanceMarker")
-  preparedSettlements  RunSettlement[] @relation("SettlementPreparer")
-  finalizedSettlements RunSettlement[] @relation("SettlementFinalizer")
-  paidSettlements      RunSettlement[] @relation("SettlementPayer")
-  payoutEntries        RunPayoutEntry[] @relation("PayoutRecipient")
   strikes              Strike[]        @relation("StrikeSubject")
   createdStrikes       Strike[]        @relation("StrikeCreator")
   revokedStrikes       Strike[]        @relation("StrikeRevoker")
@@ -468,7 +448,6 @@ model Character {
   offspecRoles  CharacterOffspecRole[]
   signups       RunSignup[]
   boosterAccess BoosterAccess[]
-  payoutEntries RunPayoutEntry[]
   wclPerformance CharacterWclPerformance[]
   defaultForUsers User[] @relation("UserDefaultCharacter")
 
@@ -761,7 +740,6 @@ model Run {
   roster        RunRoster?
   attendance    RunAttendance[]
   startSnapshot RunStartSnapshot?
-  settlement    RunSettlement?
   strikes       Strike[]
   discordPost   RunDiscordPost?
   notifications UserNotification[]
@@ -1019,7 +997,6 @@ model RunSignup {
 
   offeredRoles  RunSignupRole[]
   rosterEntries RunRosterEntry[]
-  payoutEntries RunPayoutEntry[]
   notifications UserNotification[]
 
   /// NULL is distinct per row under Postgres unique-index semantics, so this does
@@ -1092,7 +1069,6 @@ model RunAttendance {
   createdAt     TimestamptzString @default(now())
   updatedAt     temporal.updatedAtString()
 
-  payoutEntry RunPayoutEntry?
   consumableAuditPlayers RunConsumableAuditPlayer[]
 
   @@index([runId])
@@ -1103,7 +1079,7 @@ model RunAttendance {
 /// A booster added by the Raid Lead who is not registered on the website
 /// (e.g. an in-house helper). Saved with the roster draft (Save Roster),
 /// counts toward the role targets and is shown as `@name <class>` in the
-/// Discord roster / Final Setup. Never part of signups, attendance, payouts,
+/// Discord roster / Final Setup. Never part of signups, attendance,
 /// strikes or notifications.
 model RunExternalBooster {
   id        String        @id @default(uuid())
@@ -1140,82 +1116,10 @@ model RunRosterEntry {
   updatedAt    temporal.updatedAtString()
 
   attendance   RunAttendance?
-  payoutEntries RunPayoutEntry[]
 
   @@unique([rosterId, signupId])
   @@index([rosterId])
   @@map("run_roster_entry")
-}
-
-/// One gold settlement per completed Run. Amounts are whole WoW gold integers.
-/// Display snapshots are frozen at finalize; DRAFT may still refresh from live joins.
-/// totalGold is the GROSS pot: mutable while DRAFT, frozen at FINALIZED.
-/// Community cut BPS fields are snapshotted at prepare from current Dawn policy
-/// (Booster 62.5%, Raid Lead 3%, Advertiser 30%; Dawn is residual).
-/// raidLeadCutMode selects KEEP (RL keeps 3%) or SHARE (3% joins Booster Pool).
-model RunSettlement {
-  id               String           @id @default(uuid())
-  runId            String           @unique
-  run              Run              @relation(fields: [runId], references: [id], onDelete: Cascade)
-  totalGold        Int
-  raidLeadCutMode  RaidLeadCutMode  @default(SHARE)
-  boosterCutBps    Int              @default(6250)
-  raidLeadCutBps   Int              @default(300)
-  advertiserCutBps Int              @default(3000)
-  status           SettlementStatus @default(DRAFT)
-  preparedById     String
-  preparedBy       User             @relation("SettlementPreparer", fields: [preparedById], references: [id], onDelete: Restrict)
-  finalizedAt      TimestamptzString?
-  finalizedById    String?
-  finalizedBy      User?            @relation("SettlementFinalizer", fields: [finalizedById], references: [id], onDelete: SetNull)
-  paidAt           TimestamptzString?
-  paidById         String?
-  paidBy           User?            @relation("SettlementPayer", fields: [paidById], references: [id], onDelete: SetNull)
-  runTitle         String
-  raidName         String
-  difficulty       RaidDifficulty
-  raidLeadName     String
-  createdAt        TimestamptzString @default(now())
-  updatedAt        temporal.updatedAtString()
-
-  entries RunPayoutEntry[]
-
-  @@index([status])
-  @@map("run_settlement")
-}
-
-/// One attendance-derived payout line. Zero-share rows are kept for audit history.
-model RunPayoutEntry {
-  id                String            @id @default(uuid())
-  settlementId      String
-  settlement        RunSettlement     @relation(fields: [settlementId], references: [id], onDelete: Cascade)
-  attendanceId      String            @unique
-  attendance        RunAttendance     @relation(fields: [attendanceId], references: [id], onDelete: Restrict)
-  rosterEntryId     String
-  rosterEntry       RunRosterEntry    @relation(fields: [rosterEntryId], references: [id], onDelete: Restrict)
-  signupId          String
-  signup            RunSignup         @relation(fields: [signupId], references: [id], onDelete: Restrict)
-  userId            String
-  user              User              @relation("PayoutRecipient", fields: [userId], references: [id], onDelete: Restrict)
-  characterId       String?
-  character         Character?        @relation(fields: [characterId], references: [id], onDelete: SetNull)
-  userDisplayName   String
-  characterName     String
-  characterRealm    String
-  characterRegion   WowRegion?
-  participationType ParticipationType
-  attendanceStatus  AttendanceStatus
-  role              CharacterRole?
-  isBackup          Boolean
-  shareUnits        Int
-  amountGold        Int
-  adjustmentReason  String?
-  createdAt         TimestamptzString @default(now())
-  updatedAt         temporal.updatedAtString()
-
-  @@index([settlementId])
-  @@index([userId])
-  @@map("run_payout_entry")
 }
 
 model ActivityEvent {
@@ -1236,7 +1140,7 @@ model ActivityEvent {
 /// Boosting Role changes. No hard delete; REVOKED is a staff
 /// correction, not an expiry (there is no automatic expiry here).
 ///
-/// Attendance and payout/financial-deduction handling are owned by the
+/// Attendance handling is owned by the
 /// external Dawn Boosting operational workflow, not BoostingHub — Strike
 /// intentionally has no relation to RunAttendance or any financial record.
 model Strike {

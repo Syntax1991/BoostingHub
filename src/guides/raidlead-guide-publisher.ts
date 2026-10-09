@@ -284,9 +284,9 @@ export function validateRaidleadGuideCards(cards: readonly RaidleadGuideCard[] =
   if (rosterCard && !/Publish Roster/i.test(JSON.stringify(rosterCard))) {
     errors.push("build-roster card must mention Publish Roster");
   }
-  const payoutCard = cards.find((c) => c.key === "complete-payout");
-  if (payoutCard && !/External boosters are not on the settlement/i.test(JSON.stringify(payoutCard))) {
-    errors.push("complete-payout must state external boosters are not on the settlement");
+  // BoostingHub has no financial workflow: no card may describe payouts or settlements.
+  if (cards.some((c) => /payout|settlement|mark paid/i.test(JSON.stringify(c)))) {
+    errors.push("guide cards must not describe payouts or settlements");
   }
 
   return errors;

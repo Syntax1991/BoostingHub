@@ -39,7 +39,7 @@ Good:
 - `feature/blizzard-integration`
 - `feature/warcraftlogs-integration`
 - `feature/notifications`
-- `feature/payouts`
+- `feature/attendance-correction`
 
 Bad:
 

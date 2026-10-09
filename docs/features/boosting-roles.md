@@ -21,7 +21,7 @@ Run participation (`RunSignup.participationType` = `BOOSTER` / `LOOTBUDDY`) is s
 
 `User.isBooster = true` means the User is approved to sign up and be rostered as a Booster.
 
-**The Booster role is not scoped by raid difficulty.** An approved Booster may boost Normal, Heroic and Mythic Runs alike. **Run difficulty remains relevant** everywhere else — Runs, raid contents, lockouts, weekly availability, signup display, rosters, Discord run posts, history and payouts — it is simply not part of the Booster question.
+**The Booster role is not scoped by raid difficulty.** An approved Booster may boost Normal, Heroic and Mythic Runs alike. **Run difficulty remains relevant** everywhere else — Runs, raid contents, lockouts, weekly availability, signup display, rosters, Discord run posts and history — it is simply not part of the Booster question.
 
 The single check is `isApprovedBooster(...)` / `hasEffectiveBoosterAccess(...)` in `src/services/boosting-role.service.ts` (manual `isBooster` ∨ Discord `discordRaidBooster`). It does not depend on Character, WoW Class, specialization, Character Role, Item Level, account role, Lootbuddy, or Raid Difficulty.
 
@@ -38,7 +38,6 @@ Signup options and roster revalidation read the signup owner's `isBooster` only 
 `User.isLootbuddy = true` marks the User as a recognised Lootbuddy. Today it is a **management and display capability only**:
 
 - Lootbuddy signups (characterless `RunSignup` rows with class / mode / verification) are open to every User and are **not** gated by `isLootbuddy` — there was no Lootbuddy eligibility gate before, and none was invented.
-- Lootbuddy payout (`0` default Cuts) is unchanged.
 - Existing Users start with `isLootbuddy = false`; there was no authoritative source to derive it from.
 
 ## Managing the roles
@@ -99,4 +98,4 @@ Never shown: `Booster · Normal / Heroic / Mythic` — the Booster role has no d
 
 ## Out of scope here
 
-Automatic revocation from Discord, mass signup, Strikes, Deducts, Lootbuddy eligibility or payout rules, difficulty-specific booster permissions.
+Automatic revocation from Discord, mass signup, Strikes, Deducts, Lootbuddy eligibility rules, difficulty-specific booster permissions.

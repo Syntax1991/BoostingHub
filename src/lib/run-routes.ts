@@ -8,7 +8,7 @@ import type { RunStatus } from "@/models/enums";
  * "consumables" is only rendered when the viewer's payload carries the audit
  * (ADMIN / the Run's RAID_LEAD); for anyone else it falls back to Overview.
  */
-export const RUN_DETAIL_TABS = ["overview", "signups", "roster", "attendance", "payout", "consumables"] as const;
+export const RUN_DETAIL_TABS = ["overview", "signups", "roster", "attendance", "consumables"] as const;
 
 export type RunDetailTab = (typeof RUN_DETAIL_TABS)[number];
 
@@ -41,7 +41,6 @@ export function parseRunDetailTab(value: unknown): RunDetailTab {
     value === "signups" ||
     value === "roster" ||
     value === "attendance" ||
-    value === "payout" ||
     value === "consumables"
   ) {
     return value;
@@ -69,10 +68,7 @@ export function rosterActionLabel(
   if (status === "IN_PROGRESS") {
     return "Attendance";
   }
-  if (status === "COMPLETED") {
-    return "Payout";
-  }
-  if (status === "CANCELLED") {
+  if (status === "COMPLETED" || status === "CANCELLED") {
     return "View";
   }
   if (publishedAt) {

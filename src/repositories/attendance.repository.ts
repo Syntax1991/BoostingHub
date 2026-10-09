@@ -426,7 +426,7 @@ export const attendanceRepository = {
    *   the same participation type) becomes SELECTED in the original's role and
    *   gets its own PRESENT attendance row (full cut) plus a Raid Invite
    * - an external replacement is added to the roster as an external booster
-   *   (Final Setup only — no account, so no attendance or payout)
+   *   (Final Setup only — no account, so no attendance)
    * - the roster version is bumped so the Discord roster and Final Setup
    *   posts are edited
    */

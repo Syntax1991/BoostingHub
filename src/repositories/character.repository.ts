@@ -505,9 +505,8 @@ export const characterRepository = {
    * PENDING / SELECTED / NOT_SELECTED signup can still be rostered or step in
    * via Replace and needs its Character. Checked inside the delete transaction.
    * The schema's FKs do the rest: lockouts, availability, WCL performance
-   * cascade; signups of finished Runs, payout lines, Booster Access and the
-   * default-Character pointer keep their rows with the reference set to null
-   * (payout lines keep their name snapshots).
+   * cascade; signups of finished Runs, Booster Access and the
+   * default-Character pointer keep their rows with the reference set to null.
    */
   async deleteGuarded(characterId: string): Promise<void> {
     await db.transaction(async (tx) => {

@@ -23,8 +23,6 @@ describe("projectRunOperationalHandoff", () => {
       draftSelectedCount: 0,
       capabilities: caps("DRAFT"),
       attendance: null,
-      settlementStage: "NONE",
-      canMarkPaid: false,
     });
     expect(handoff.nextAction.kind).toBe("MANAGE");
     expect(handoff.nextAction.label).toBe("Manage");
@@ -39,8 +37,6 @@ describe("projectRunOperationalHandoff", () => {
       draftSelectedCount: 0,
       capabilities: caps("OPEN"),
       attendance: null,
-      settlementStage: "NONE",
-      canMarkPaid: false,
     });
     expect(handoff.nextAction.kind).toBe("BUILD_ROSTER");
     expect(handoff.nextAction.tab).toBe("roster");
@@ -54,8 +50,6 @@ describe("projectRunOperationalHandoff", () => {
       draftSelectedCount: 3,
       capabilities: caps("OPEN"),
       attendance: null,
-      settlementStage: "NONE",
-      canMarkPaid: false,
     });
     expect(handoff.nextAction.kind).toBe("CONTINUE_ROSTER");
   });
@@ -68,8 +62,6 @@ describe("projectRunOperationalHandoff", () => {
       draftSelectedCount: 2,
       capabilities: caps("ROSTERING"),
       attendance: null,
-      settlementStage: "NONE",
-      canMarkPaid: false,
     });
     expect(handoff.nextAction.kind).toBe("CONTINUE_ROSTER");
     expect(handoff.nextAction.label).toBe("Continue Roster");
@@ -83,8 +75,6 @@ describe("projectRunOperationalHandoff", () => {
       draftSelectedCount: 5,
       capabilities: caps("PUBLISHED"),
       attendance: null,
-      settlementStage: "NONE",
-      canMarkPaid: false,
     });
     expect(handoff.nextAction.kind).toBe("START");
     expect(handoff.nextAction.mode).toBe("dialog-start");
@@ -98,8 +88,6 @@ describe("projectRunOperationalHandoff", () => {
       draftSelectedCount: 5,
       capabilities: caps("IN_PROGRESS"),
       attendance: { total: 5, unmarkedCount: 3 },
-      settlementStage: "NONE",
-      canMarkPaid: false,
     });
     expect(handoff.attention).toBe("NEEDS_ATTENDANCE");
     expect(handoff.nextAction.kind).toBe("ATTENDANCE");
@@ -116,89 +104,26 @@ describe("projectRunOperationalHandoff", () => {
       draftSelectedCount: 5,
       capabilities: caps("IN_PROGRESS"),
       attendance: { total: 5, unmarkedCount: 0 },
-      settlementStage: "NONE",
-      canMarkPaid: false,
     });
     expect(handoff.attention).toBe("READY_TO_COMPLETE");
     expect(handoff.nextAction.kind).toBe("COMPLETE");
     expect(handoff.nextAction.mode).toBe("dialog-complete");
   });
 
-  it("COMPLETED with no settlement prepares payout", () => {
-    const handoff = projectRunOperationalHandoff({
-      status: "COMPLETED",
-      hasRoster: true,
-      publishedAt: "2026-01-01T00:00:00.000Z",
-      draftSelectedCount: 5,
-      capabilities: caps("COMPLETED"),
-      attendance: { total: 5, unmarkedCount: 0 },
-      settlementStage: "NONE",
-      canMarkPaid: false,
-    });
-    expect(handoff.attention).toBe("NEEDS_SETTLEMENT");
-    expect(handoff.nextAction.kind).toBe("PREPARE_PAYOUT");
-    expect(handoff.nextAction.tab).toBe("payout");
-  });
-
-  it("COMPLETED DRAFT settlement reviews payout", () => {
-    const handoff = projectRunOperationalHandoff({
-      status: "COMPLETED",
-      hasRoster: true,
-      publishedAt: "2026-01-01T00:00:00.000Z",
-      draftSelectedCount: 5,
-      capabilities: caps("COMPLETED"),
-      attendance: { total: 5, unmarkedCount: 0 },
-      settlementStage: "DRAFT",
-      canMarkPaid: false,
-    });
-    expect(handoff.nextAction.kind).toBe("REVIEW_PAYOUT");
-    expect(handoff.attention).toBe("NEEDS_SETTLEMENT");
-  });
-
-  it("COMPLETED FINALIZED as RAID_LEAD does not expose mark paid", () => {
-    const handoff = projectRunOperationalHandoff({
-      status: "COMPLETED",
-      hasRoster: true,
-      publishedAt: "2026-01-01T00:00:00.000Z",
-      draftSelectedCount: 5,
-      capabilities: caps("COMPLETED", false),
-      attendance: { total: 5, unmarkedCount: 0 },
-      settlementStage: "FINALIZED",
-      canMarkPaid: false,
-    });
-    expect(handoff.nextAction.kind).toBe("VIEW_PAYOUT");
-    expect(handoff.nextAction.label).toBe("View Payout");
-  });
-
-  it("COMPLETED FINALIZED as ADMIN exposes mark paid", () => {
-    const handoff = projectRunOperationalHandoff({
-      status: "COMPLETED",
-      hasRoster: true,
-      publishedAt: "2026-01-01T00:00:00.000Z",
-      draftSelectedCount: 5,
-      capabilities: caps("COMPLETED", true),
-      attendance: { total: 5, unmarkedCount: 0 },
-      settlementStage: "FINALIZED",
-      canMarkPaid: true,
-    });
-    expect(handoff.nextAction.kind).toBe("MARK_PAID");
-    expect(handoff.nextAction.tab).toBe("payout");
-  });
-
-  it("COMPLETED PAID is settled view payout", () => {
-    const handoff = projectRunOperationalHandoff({
-      status: "COMPLETED",
-      hasRoster: true,
-      publishedAt: "2026-01-01T00:00:00.000Z",
-      draftSelectedCount: 5,
-      capabilities: caps("COMPLETED"),
-      attendance: { total: 5, unmarkedCount: 0 },
-      settlementStage: "PAID",
-      canMarkPaid: true,
-    });
-    expect(handoff.attention).toBe("SETTLED");
-    expect(handoff.nextAction.kind).toBe("VIEW_PAYOUT");
-    expect(formatOperationalAttentionHint(handoff)).toBe("Paid");
+  it("COMPLETED is done: no attention and a plain View action (no financial follow-up)", () => {
+    for (const actorIsAdmin of [false, true]) {
+      const handoff = projectRunOperationalHandoff({
+        status: "COMPLETED",
+        hasRoster: true,
+        publishedAt: "2026-01-01T00:00:00.000Z",
+        draftSelectedCount: 5,
+        capabilities: caps("COMPLETED", actorIsAdmin),
+        attendance: { total: 5, unmarkedCount: 0 },
+      });
+      expect(handoff.attention).toBe("NONE");
+      expect(handoff.nextAction).toEqual({ kind: "VIEW", label: "View", mode: "link", tab: "overview" });
+      expect(formatOperationalAttentionHint(handoff)).toBeNull();
+    }
   });
 
   it("does not invent actions from empty capabilities alone", () => {
@@ -209,8 +134,6 @@ describe("projectRunOperationalHandoff", () => {
       draftSelectedCount: 1,
       capabilities: emptyRunCapabilities(),
       attendance: null,
-      settlementStage: "NONE",
-      canMarkPaid: false,
     });
     expect(handoff.nextAction.kind).toBe("VIEW_ROSTER");
   });

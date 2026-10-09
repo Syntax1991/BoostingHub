@@ -203,9 +203,9 @@ Post-run Warcraft Logs Consumables Audit snapshot, one per Run (`runId` unique),
 
 A Warcraft Logs report is a shared external resource (`code` unique): one report may hold several consecutive Runs, and a Run may use several reports. `RunWarcraftLogsReport` links a Run to a report; `RunWarcraftLogsFight` records each candidate fight for that Run with status `ASSIGNED` | `NEEDS_REVIEW` | `IGNORED` and decision `AUTO` | `MANUAL`. A `(report, fight)` is ASSIGNED to at most one Run (partial unique index). Matching uses the Run's active window `RunStartSnapshot.startedAt` → `Run.completedAt` (set on completion). See [run-consumables-audit.md](features/run-consumables-audit.md).
 
-## RunSettlement / RunPayoutEntry
+## No financial domain
 
-One gold settlement per completed Run. Entries come from `RunAttendance`. Status: `DRAFT` → `FINALIZED` → `PAID`. Amounts are whole gold integers. See [run-payouts.md](features/run-payouts.md).
+BoostingHub does not pay boosters: there is no settlement, payout, share or payment model. The former `RunSettlement` / `RunPayoutEntry` tables were dropped (migration `20261009T1352_remove_payout_settlement`). `RunAttendance.status` is the attendance authority.
 
 ## Strike
 

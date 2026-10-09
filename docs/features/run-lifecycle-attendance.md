@@ -8,7 +8,7 @@ Operational Run completion after roster publication:
 
 Assigned raid leads and admins start a published Run, record who actually attended, and complete the Run only when every attendance row is marked.
 
-This is not payout, Warcraft Logs, Blizzard, Discord notifications, or analytics.
+This is not Warcraft Logs, Blizzard, Discord notifications, or analytics.
 
 ## Lifecycle
 
@@ -91,7 +91,7 @@ While the Run is `IN_PROGRESS`, the manager can **Replace** any attendance row (
 
 - The original row becomes `NO_SHOW` (0 cut) with the note "Replaced by …"; the original signup leaves the live roster (`SELECTED` → `NOT_SELECTED`).
 - **Signed-up replacement:** a `PENDING` / `NOT_SELECTED` signup of the same Run and participation type (a player already holding a booster slot is rejected). It becomes `SELECTED` in the original's role, gets its own attendance row marked `PRESENT` (full cut — the substitute gets 100%) with the note "Replacement for …", and a `RAID_INVITE` notification.
-- **External replacement** (booster slots only): added to the roster as an external booster in the original's role (see [roster-management.md](roster-management.md)). It appears in the Final Setup but has no attendance or payout.
+- **External replacement** (booster slots only): added to the roster as an external booster in the original's role (see [roster-management.md](roster-management.md)). It appears in the Final Setup but has no attendance.
 - `RunRoster.version` is bumped: the Discord roster post and the **Final Setup** post are edited in place. The Final Setup omits `NO_SHOW` / `EXCUSED` rows. `RunDiscordPost.lastStartRosterVersion` records which roster version the posted Final Setup reflects; a Final Setup posted before this existed gets its baseline set by the first replacement.
 
 This is the one exception to the roster freeze below: draft saves and republish stay rejected after Start.
@@ -142,13 +142,13 @@ On success:
 - `signupsOpen = false`
 - attendance remains stored and becomes read-only in this feature
 
-Signup, roster, BoosterAccess, and lockout history stay intact. Payouts are a later explicit settlement on the Payout tab; completion does not compute gold.
+Signup, roster, BoosterAccess, and lockout history stay intact. Completion is final: BoostingHub has no financial follow-up. Exceptional mistakes are fixed with the audited **Correct Attendance** action.
 
 Post-completion ADMIN attendance corrections are deferred.
 
 ## Canonical Run Detail Integration
 
-Attendance lives on `/runs/[runId]` as a fourth tab: Overview, Signups, Roster, Attendance. Payout is a fifth tab after completion; see [run-payouts.md](run-payouts.md).
+Attendance lives on `/runs/[runId]` as a fourth tab: Overview, Signups, Roster, Attendance.
 
 There is no `/manage/runs/[runId]/attendance` implementation.
 

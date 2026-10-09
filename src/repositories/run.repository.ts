@@ -1004,10 +1004,6 @@ export const runRepository = {
       blockers.push("attendance history");
     }
 
-    const settlement = await orm.RunSettlement.where({ runId: id }).select("id").all();
-    if (settlement.length > 0) {
-      blockers.push("payout history");
-    }
 
     const discordPost = await orm.RunDiscordPost.where({ runId: id }).first();
     if (discordPost) {

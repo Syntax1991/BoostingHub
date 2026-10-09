@@ -62,7 +62,7 @@ Queries use `db.orm.public.Model`, not Prisma 7 `prisma.model.findMany`.
 
 ## Seed
 
-`npm run db:seed` wipes domain and auth rows, then upserts reference raid content and inserts deterministic users, characters, access, lockouts, fixture runs, signups, attendance, payout settlements, and activity.
+`npm run db:seed` wipes domain and auth rows, then upserts reference raid content and inserts deterministic users, characters, access, lockouts, fixture runs, signups, attendance, and activity.
 
 It is safe to re-run. It is not random. Seed is a fixture, not required production state; see **Seed policy** below.
 
@@ -105,7 +105,7 @@ Seed data is a development and test fixture.
 
 It is useful for local QA and deterministic Vitest runs. It is **not** required production state.
 
-The application must work when the database contains only a newly authenticated Discord user: zero characters, zero runs, zero signups, zero roster data, zero payouts.
+The application must work when the database contains only a newly authenticated Discord user: zero characters, zero runs, zero signups, zero roster data.
 
 Seed itself does not require Battle.net — it inserts Characters directly. Interactive local QA of Add Character does: `BLIZZARD_*` must be set, since Class/Item Level have no manual fallback. Battle.net *account* linking stays optional on top of that and is documented in [blizzard-integration.md](features/blizzard-integration.md).
 
@@ -140,7 +140,7 @@ Leave `DEV_ACCOUNT_BOOTSTRAP_ENABLED="false"` unless you specifically need this,
 `npx prisma migration plan --name slug` can emit a full recreate if `--from` is omitted incorrectly. Plan from the previous migration directory:
 
 ```bash
-npx prisma migration plan --name change_name --from 20260909T1304_run_payouts
+npx prisma migration plan --name change_name --from <previous migration dir or hash>
 ```
 
 ## Character management QA

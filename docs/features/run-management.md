@@ -244,7 +244,7 @@ View → Controller → Service → Repository.
 ## Deferred
 
 - Post-completion attendance corrections
-- Wallets / extra organizational cuts (completed-run settlement is in [run-payouts.md](run-payouts.md))
+- Any financial workflow (BoostingHub does not pay boosters)
 - Battle.net / Blizzard
 - Warcraft Logs
 - Discord/email notifications (activity events exist for later use)

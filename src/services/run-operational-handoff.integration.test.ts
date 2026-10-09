@@ -6,10 +6,9 @@ import { orm } from "@/lib/prisma";
 import { futureTestIso, venomousCreateInput } from "@/lib/test-run-input";
 import { raidRepository } from "@/repositories/raid.repository";
 import { attendanceRepository } from "@/repositories/attendance.repository";
-import { payoutRepository } from "@/repositories/payout.repository";
 import { attendanceService } from "@/services/attendance.service";
 import { managementHubService } from "@/services/management-hub.service";
-import { payoutService } from "@/services/payout.service";
+import { runRepository } from "@/repositories/run.repository";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import type { CharacterRole, ParticipationType } from "@/models/enums";
@@ -73,7 +72,6 @@ async function deleteIfPresent(table: string, id: string) {
     else if (table === "RunSignup") await orm.RunSignup.where({ id }).delete();
     else if (table === "RunSignupRole") await orm.RunSignupRole.where({ id }).delete();
     else if (table === "RunAttendance") await orm.RunAttendance.where({ id }).delete();
-    else if (table === "RunSettlement") await orm.RunSettlement.where({ id }).delete();
     else if (table === "Run") await orm.Run.where({ id }).delete();
   } catch {
     // Already gone.
@@ -166,15 +164,6 @@ async function selectAndPublish(actor: AuthenticatedUser, runId: string, signupI
 }
 
 async function cleanupRun(runId: string) {
-  const settlement = await orm.RunSettlement.where({ runId }).first();
-  if (settlement) {
-    const settlementId = (settlement as { id: string }).id;
-    const entries = await orm.RunPayoutEntry.where({ settlementId }).select("id").all();
-    for (const entry of entries) {
-      await orm.RunPayoutEntry.where({ id: (entry as { id: string }).id }).delete();
-    }
-    await deleteIfPresent("RunSettlement", settlementId);
-  }
   const snapshots = await orm.RunStartSnapshot.where({ runId }).select("id").all();
   for (const row of snapshots) {
     await orm.RunStartSnapshot.where({ id: (row as { id: string }).id }).delete();
@@ -358,44 +347,27 @@ describe("raid lead lifecycle handoffs (managed runs)", () => {
     const markedId = await inProgressWithTwoBoosters("Handoff batch B");
     await markAllPresent(markedId);
 
-    const completedDraftId = await inProgressWithTwoBoosters("Handoff batch C");
-    await markAllPresent(completedDraftId);
-    await runService.completeRun(lead, completedDraftId);
-    await payoutService.prepareSettlement(lead, completedDraftId, { totalGold: 1000 });
+    const completedId = await inProgressWithTwoBoosters("Handoff batch C");
+    await markAllPresent(completedId);
+    await runService.completeRun(lead, completedId);
 
-    const completedFinalId = await inProgressWithTwoBoosters("Handoff batch D");
-    await markAllPresent(completedFinalId);
-    await runService.completeRun(lead, completedFinalId);
-    const prepared = await payoutService.prepareSettlement(lead, completedFinalId, { totalGold: 1000 });
-    await payoutService.finalizeSettlement(lead, prepared.id);
-
-    const summary = await attendanceRepository.summarizeByRunIds([
-      unmarkedId,
-      markedId,
-      completedDraftId,
-      completedFinalId,
-    ]);
-    const settlements = await payoutRepository.listStatusByRunIds([
-      unmarkedId,
-      markedId,
-      completedDraftId,
-      completedFinalId,
-    ]);
+    const summary = await attendanceRepository.summarizeByRunIds([unmarkedId, markedId, completedId]);
     expect(summary.get(unmarkedId)?.unmarkedCount).toBe(2);
     expect(summary.get(markedId)?.unmarkedCount).toBe(0);
-    expect(settlements.get(completedDraftId)).toBe("DRAFT");
-    expect(settlements.get(completedFinalId)).toBe("FINALIZED");
 
     const page = await runService.getManagedRunsPage(lead, {});
     const byId = Object.fromEntries(page.runs.map((run) => [run.id, run]));
     expect(byId[unmarkedId]!.nextAction.kind).toBe("ATTENDANCE");
     expect(byId[markedId]!.nextAction.kind).toBe("COMPLETE");
-    expect(byId[completedDraftId]!.nextAction.kind).toBe("REVIEW_PAYOUT");
-    expect(byId[completedFinalId]!.nextAction.kind).toBe("VIEW_PAYOUT");
 
-    const asAdmin = await runService.getManagedRunsPage(admin, {});
-    const adminFinal = asAdmin.runs.find((run) => run.id === completedFinalId);
-    expect(adminFinal!.nextAction.kind).toBe("MARK_PAID");
+    // A COMPLETED Run is done for every role: no financial follow-up action.
+    for (const actor of [lead, admin]) {
+      const view = await runService.getManagedRunsPage(actor, {});
+      const completed = view.runs.find((run) => run.id === completedId);
+      if (!completed) continue; // completed Runs may be filtered out of the active list
+      expect(completed.attention).toBe("NONE");
+      expect(completed.nextAction.kind).toBe("VIEW");
+    }
   }, 120_000);
 
   it("management hub attention metrics use the same projection", async () => {
@@ -419,19 +391,15 @@ describe("raid lead lifecycle handoffs (managed runs)", () => {
     expect(rosterId).toBeTruthy();
   }, 120_000);
 
-  it("RAID_LEAD cannot mark paid; ADMIN can", async () => {
-    const runId = await inProgressWithTwoBoosters("Handoff auth paid");
+  it("completing a Run creates no settlement work and keeps the Run COMPLETED", async () => {
+    const runId = await inProgressWithTwoBoosters("Handoff complete is final");
     await markAllPresent(runId);
     await runService.completeRun(lead, runId);
-    const draft = await payoutService.prepareSettlement(lead, runId, { totalGold: 500 });
-    await payoutService.finalizeSettlement(lead, draft.id);
-    await expectDomainCode(payoutService.markPaid(lead, draft.id), "PAYOUT_ADMIN_REQUIRED");
-    await payoutService.markPaid(admin, draft.id);
-
-    const page = await runService.getManagedRunsPage(lead, {});
-    const row = page.runs.find((run) => run.id === runId);
-    expect(row!.settlementStage).toBe("PAID");
-    expect(row!.attention).toBe("SETTLED");
-    expect(row!.nextAction.kind).toBe("VIEW_PAYOUT");
+    const run = await runRepository.findById(runId);
+    expect(run?.status).toBe("COMPLETED");
+    const overview = await managementHubService.getOverview(admin);
+    const runsCard = overview.cards.find((card) => card.id === "runs");
+    const labels = (runsCard?.metrics ?? []).map((metric) => metric.label);
+    expect(labels.some((label) => /settle|payout|paid/i.test(label))).toBe(false);
   }, 60_000);
 });

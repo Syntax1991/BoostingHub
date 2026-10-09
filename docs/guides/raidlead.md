@@ -1,6 +1,6 @@
 # Raid Lead Guide
 
-Kurze Einführung in **Manawyrm Hub** als **RAID_LEAD**: Runs anlegen, Signups öffnen, Roster bauen, starten, Attendance markieren, Complete und Payout vorbereiten.
+Kurze Einführung in **Manawyrm Hub** als **RAID_LEAD**: Runs anlegen, Signups öffnen, Roster bauen, starten, Attendance markieren und Complete.
 
 > Du verwaltest **deine** zugewiesenen Runs. **ADMIN** kann alle Runs verwalten.
 
@@ -12,7 +12,7 @@ Live-Discord-Guide (v2 Embeds): siehe [raidlead-discord-preview.md](./raidlead-d
 
 ## 1. Raid Lead Basics
 
-Mit **Discord** anmelden. Du siehst **RAID LEAD** und **Manage**. Das **Dashboard** zeigt Hand-offs (Build Roster / Start / Attendance / Payout).
+Mit **Discord** anmelden. Du siehst **RAID LEAD** und **Manage**. Das **Dashboard** zeigt Hand-offs (Build Roster / Start / Attendance).
 
 ![Dashboard](./screenshots/rl-01-dashboard.png)
 
@@ -60,14 +60,12 @@ Attendance: Present / Late / No show / Standby / Excused · Mark all unmarked as
 
 ---
 
-## 6. Complete & Payout
+## 6. Run abschließen
 
-**Complete** → **Payout**-Tab: Pot → Split → KEEP/SHARE → Finalize → Admin **Mark Paid**.
-
-External Boosters stehen **nicht** auf dem Settlement. Nach Complete gibt es den Consumables-(WCL)-Audit.
+Sind alle Teilnehmer markiert: **Complete Run**. Attendance ist danach read-only; spätere Fehler über **Correct Attendance** (Begründung Pflicht, steht in der Run History). Nach Complete gibt es den Consumables-(WCL)-Audit.
 
 Lifecycle: Draft → Open → Rostering → Published → In Progress → Completed → Paid
 
-![Payout](./screenshots/rl-09-payout.png)
+![Abgeschlossener Run](./screenshots/rl-06-run-overview.png)
 
 Discord: `/guide raidlead`

@@ -15,7 +15,6 @@ const emptyDashboard = {
     pendingCount: 0,
   },
   operations: [],
-  adminMarkPaid: [],
   showOperations: false,
   isAdmin: false,
   upcomingRuns: [],
@@ -101,7 +100,7 @@ describe("DashboardView", () => {
     expect(html).not.toContain("HEALER + DPS");
   });
 
-  it("renders RAID_LEAD operations and ADMIN Mark Paid", () => {
+  it("renders RAID_LEAD operations and no financial attention for ADMIN", () => {
     const html = renderToStaticMarkup(
       createElement(DashboardView, { timeZone: "Europe/Berlin",
         data: {
@@ -118,22 +117,7 @@ describe("DashboardView", () => {
               attention: "NEEDS_ATTENDANCE",
               nextAction: { kind: "ATTENDANCE", label: "Mark Attendance", mode: "link", tab: "attendance" },
               unmarkedCount: 2,
-              settlementStage: "NONE",
               priority: 20,
-            },
-          ],
-          adminMarkPaid: [
-            {
-              runId: "run-pay",
-              runTitle: "Finalized Payout",
-              scheduledStartAt: "2026-10-09T20:00:00.000Z",
-              difficulty: "HEROIC",
-              productLabel: "Venomous",
-              attention: "NEEDS_SETTLEMENT",
-              nextAction: { kind: "MARK_PAID", label: "Mark Paid", mode: "link", tab: "payout" },
-              unmarkedCount: 0,
-              settlementStage: "FINALIZED",
-              priority: 10,
             },
           ],
         } as never,
@@ -145,7 +129,6 @@ describe("DashboardView", () => {
     expect(html).toContain("Mark Attendance");
     expect(html).toContain("2 unmarked");
     expect(html).toContain("tab=attendance");
-    expect(html).toContain("Mark paid · Finalized Payout");
-    expect(html).toContain("tab=payout");
+    expect(html).not.toMatch(/mark paid|payout|settlement/i);
   });
 });

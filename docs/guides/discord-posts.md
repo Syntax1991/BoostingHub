@@ -81,7 +81,7 @@ Preview: `docs/guides/raidlead-discord-preview.md`
 | 📣 Open & Manage Signups | `open-manage-signups` | `rl-06-run-overview.png` |
 | 👥 Build the Roster | `build-roster` | `rl-05-roster.png` |
 | ▶️ Run & Attendance | `run-attendance` | `rl-07-attendance.png` |
-| 💰 Complete & Payout | `complete-payout` | `rl-09-payout.png` |
+| ✅ Complete the run | `complete-run` | `rl-06-run-overview.png` |
 
 Accent: `#d4af37` (same as Booster). Card 1 includes Link button **Open Manawyrm Hub**.
 

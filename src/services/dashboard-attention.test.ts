@@ -172,13 +172,12 @@ describe("projectPersonalDashboardAttention", () => {
 describe("projectDashboardOperations", () => {
   function handoffRow(status: "IN_PROGRESS" | "COMPLETED", extras: {
     unmarkedCount?: number;
-    settlementStage?: "NONE" | "DRAFT" | "FINALIZED" | "PAID";
-    canMarkPaid?: boolean;
+    actorIsAdmin?: boolean;
   }) {
     const realCaps = getRunLifecycleCapabilities({
       status,
       signupsOpen: false,
-      actorIsAdmin: Boolean(extras.canMarkPaid),
+      actorIsAdmin: Boolean(extras.actorIsAdmin),
       archivedAt: null,
     });
     const realHandoff = projectRunOperationalHandoff({
@@ -188,8 +187,6 @@ describe("projectDashboardOperations", () => {
       draftSelectedCount: 2,
       capabilities: realCaps,
       attendance: { total: 2, unmarkedCount: extras.unmarkedCount ?? 0 },
-      settlementStage: extras.settlementStage ?? "NONE",
-      canMarkPaid: Boolean(extras.canMarkPaid),
     });
     return {
       run: {
@@ -207,7 +204,6 @@ describe("projectDashboardOperations", () => {
     const { operations } = projectDashboardOperations({
       rows: [handoffRow("IN_PROGRESS", { unmarkedCount: 2 })],
       includeRosterWork: true,
-      adminOnlyMarkPaid: false,
     });
     expect(operations[0]?.nextAction.kind).toBe("ATTENDANCE");
     expect(operations[0]?.unmarkedCount).toBe(2);
@@ -217,46 +213,17 @@ describe("projectDashboardOperations", () => {
     const { operations } = projectDashboardOperations({
       rows: [handoffRow("IN_PROGRESS", { unmarkedCount: 0 })],
       includeRosterWork: true,
-      adminOnlyMarkPaid: false,
     });
     expect(operations[0]?.nextAction.kind).toBe("COMPLETE");
   });
 
-  it("projects REVIEW_PAYOUT for DRAFT settlement", () => {
-    const { operations } = projectDashboardOperations({
-      rows: [handoffRow("COMPLETED", { settlementStage: "DRAFT" })],
-      includeRosterWork: true,
-      adminOnlyMarkPaid: false,
-    });
-    expect(operations[0]?.nextAction.kind).toBe("REVIEW_PAYOUT");
-  });
-
-  it("does not expose Mark Paid to RAID_LEAD", () => {
-    const { operations, adminMarkPaid } = projectDashboardOperations({
-      rows: [handoffRow("COMPLETED", { settlementStage: "FINALIZED", canMarkPaid: false })],
-      includeRosterWork: true,
-      adminOnlyMarkPaid: false,
-    });
-    expect(operations.every((row) => row.nextAction.kind !== "MARK_PAID")).toBe(true);
-    expect(adminMarkPaid).toHaveLength(0);
-  });
-
-  it("surfaces Mark Paid for ADMIN FINALIZED", () => {
-    const { adminMarkPaid } = projectDashboardOperations({
-      rows: [handoffRow("COMPLETED", { settlementStage: "FINALIZED", canMarkPaid: true })],
-      includeRosterWork: true,
-      adminOnlyMarkPaid: true,
-    });
-    expect(adminMarkPaid[0]?.nextAction.kind).toBe("MARK_PAID");
-  });
-
-  it("excludes PAID from Mark Paid attention", () => {
-    const { adminMarkPaid, operations } = projectDashboardOperations({
-      rows: [handoffRow("COMPLETED", { settlementStage: "PAID", canMarkPaid: true })],
-      includeRosterWork: true,
-      adminOnlyMarkPaid: true,
-    });
-    expect(adminMarkPaid).toHaveLength(0);
-    expect(operations).toHaveLength(0);
+  it("COMPLETED Runs produce no dashboard work for Raid Leads or Admins", () => {
+    for (const actorIsAdmin of [false, true]) {
+      const { operations } = projectDashboardOperations({
+        rows: [handoffRow("COMPLETED", { actorIsAdmin })],
+        includeRosterWork: true,
+      });
+      expect(operations).toHaveLength(0);
+    }
   });
 });

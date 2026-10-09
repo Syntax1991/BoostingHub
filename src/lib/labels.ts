@@ -10,9 +10,7 @@ import type {
   ParticipationType,
   RaidDifficulty,
   RunLootType,
-  RaidLeadCutMode,
   RunStatus,
-  SettlementStatus,
   SignupStatus,
   WowClass,
   WowRegion,
@@ -130,17 +128,6 @@ export const ATTENDANCE_STATUS_LABELS: Record<AttendanceStatus, string> = {
   NO_SHOW: "No show",
   EXCUSED: "Excused",
   STANDBY: "Standby",
-};
-
-export const SETTLEMENT_STATUS_LABELS: Record<SettlementStatus, string> = {
-  DRAFT: "Draft",
-  FINALIZED: "Finalized",
-  PAID: "Paid",
-};
-
-export const RAID_LEAD_CUT_MODE_LABELS: Record<RaidLeadCutMode, string> = {
-  KEEP: "Keep",
-  SHARE: "Share",
 };
 
 export const SIGNUP_STATUS_LABELS: Record<SignupStatus, string> = {

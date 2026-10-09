@@ -4,7 +4,7 @@
 
 A disciplinary history record against a `User`. This is BoostingHub-owned internal administration, independent of Run operations.
 
-BoostingHub owns Users (with their Boosting Roles), Characters, Runs, Signups, Rosters, and this Strike history. **Attendance tracking and payout/financial-deduction handling are an external, operational workflow (Dawn Boosting) and are not part of BoostingHub.** Strike is intentionally uncoupled from both — it has no relation to `RunAttendance` and does not touch payout data.
+BoostingHub owns Users (with their Boosting Roles), Characters, Runs, Signups, Rosters, and this Strike history. **Attendance tracking is an external, operational workflow (Dawn Boosting) and are not part of BoostingHub.** Strike is intentionally uncoupled from both — it has no relation to `RunAttendance`.
 
 Nothing here is automatic: every Strike is an explicit staff action. There is no automatic sanction, no automatic expiry, and no severity scoring.
 

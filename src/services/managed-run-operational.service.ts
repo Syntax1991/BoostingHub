@@ -1,12 +1,10 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { canManageRun, hasAdminAccess, hasRaidLeadAccess } from "@/auth/authorization";
 import { attendanceRepository } from "@/repositories/attendance.repository";
-import { payoutRepository } from "@/repositories/payout.repository";
 import { runRepository, type RunListRecord } from "@/repositories/run.repository";
 import {
   projectRunOperationalHandoff,
   type RunOperationalHandoff,
-  type RunSettlementStage,
 } from "@/services/run-operational-handoff";
 import {
   emptyRunCapabilities,
@@ -36,8 +34,8 @@ function capabilitiesForManagedRun(
 }
 
 /**
- * Batched attendance + settlement + handoff projection for already-authorized managed Runs.
- * One attendance summary query and one settlement status query for the whole set.
+ * Batched attendance + handoff projection for already-authorized managed Runs.
+ * One attendance summary query for the whole set.
  */
 export async function projectManagedRunHandoffs(
   user: AuthenticatedUser,
@@ -47,16 +45,11 @@ export async function projectManagedRunHandoffs(
     return [];
   }
   const runIds = runs.map((run) => run.id);
-  const [attendanceByRunId, settlementByRunId] = await Promise.all([
-    attendanceRepository.summarizeByRunIds(runIds),
-    payoutRepository.listStatusByRunIds(runIds),
-  ]);
-  const canMarkPaid = hasAdminAccess(user.accountRole);
+  const attendanceByRunId = await attendanceRepository.summarizeByRunIds(runIds);
 
   return runs.map((run) => {
     const capabilities = capabilitiesForManagedRun(user, run);
     const attendance = attendanceByRunId.get(run.id) ?? { total: 0, unmarkedCount: 0 };
-    const settlementStage: RunSettlementStage = settlementByRunId.get(run.id) ?? "NONE";
     const handoff = projectRunOperationalHandoff({
       status: run.status,
       hasRoster: Boolean(run.roster),
@@ -64,8 +57,6 @@ export async function projectManagedRunHandoffs(
       draftSelectedCount: run.roster?.draftSelectedCount ?? 0,
       capabilities,
       attendance,
-      settlementStage,
-      canMarkPaid,
     });
     return { run, capabilities, handoff };
   });
