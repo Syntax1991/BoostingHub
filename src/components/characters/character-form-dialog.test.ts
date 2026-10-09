@@ -175,6 +175,17 @@ describe("CharacterFormDialog — Raider.IO bulk Add Character", () => {
     expect(source).not.toContain("lookupCharacterAction");
   });
 
+  it("puts Raider.IO input and Remove on the same controls row under the label", () => {
+    // Number + content column; label above; input and Remove share one flex row.
+    expect(source).toContain('className="flex gap-2"');
+    expect(source).toContain("self-end");
+    expect(source).toContain('htmlFor={`raiderIoUrl-${row.id}`}');
+    expect(source).toContain('className="flex items-center gap-2"');
+    expect(source).toContain('className="h-9 min-w-0 flex-1 rounded-md border border-border bg-surface px-2"');
+    expect(source).toContain('className="h-9 shrink-0"');
+    expect(source).not.toMatch(/flex items-(start|end) gap-2[\s\S]{0,400}Remove/);
+  });
+
   it("auto-grows rows via normalizeCreateRows and never allows an 11th row", () => {
     expect(source).toContain("function normalizeCreateRows");
     expect(source).toContain("return normalizeCreateRows(updated)");
