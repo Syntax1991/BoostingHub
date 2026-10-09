@@ -33,31 +33,31 @@ describe("encounter id lists", () => {
 });
 
 describe("raid metadata", () => {
-  it("accepts optional positive integration ids and rejects invalid ones", () => {
+  it("accepts optional Blizzard instance id and rejects WCL fields / invalid values", () => {
     const base = { name: "Raid", season: "S", sortOrder: "3", trackLockouts: false };
-    expect(createRaidSchema.parse({ ...base, blizzardInstanceId: "", wclZoneId: "53", wclRankingEncounterId: null })).toMatchObject({
+    expect(createRaidSchema.parse({ ...base, blizzardInstanceId: "" })).toMatchObject({
       sortOrder: 3,
       blizzardInstanceId: null,
-      wclZoneId: 53,
-      wclRankingEncounterId: null,
     });
+    expect(createRaidSchema.parse({ ...base, blizzardInstanceId: "1320", wclZoneId: "53" })).toMatchObject({
+      blizzardInstanceId: 1320,
+    });
+    expect("wclZoneId" in createRaidSchema.parse({ ...base, blizzardInstanceId: null, wclZoneId: "53" })).toBe(false);
     for (const bad of ["0", "-1", "abc", "1.5"]) {
-      expect(createRaidSchema.safeParse({ ...base, blizzardInstanceId: bad, wclZoneId: null, wclRankingEncounterId: null }).success).toBe(false);
+      expect(createRaidSchema.safeParse({ ...base, blizzardInstanceId: bad }).success).toBe(false);
     }
-    expect(createRaidSchema.safeParse({ ...base, name: " ", blizzardInstanceId: null, wclZoneId: null, wclRankingEncounterId: null }).success).toBe(false);
+    expect(createRaidSchema.safeParse({ ...base, name: " ", blizzardInstanceId: null }).success).toBe(false);
   });
 });
 
 describe("product input", () => {
   const content = { raidId: "r", bossCountMode: "FIXED", fixedBossCount: "1", minBossCount: "", defaultBossCount: "" };
 
-  it("requires an UPPER_SNAKE_CASE key and at least one content", () => {
+  it("accepts create without a key and rejects empty contents; strips client-supplied keys", () => {
     const base = { name: "P", active: true, selectable: true, sortOrder: 1, contents: [content] };
-    expect(createProductSchema.parse({ ...base, key: "QA_PRODUCT" }).contents[0]).toMatchObject({ fixedBossCount: 1, minBossCount: null });
-    for (const key of ["qa_product", "1ABC", "A", "WITH SPACE", "DASH-KEY"]) {
-      expect(createProductSchema.safeParse({ ...base, key }).success).toBe(false);
-    }
-    expect(createProductSchema.safeParse({ ...base, key: "QA_PRODUCT", contents: [] }).success).toBe(false);
+    expect(createProductSchema.parse(base).contents[0]).toMatchObject({ fixedBossCount: 1, minBossCount: null });
+    expect("key" in createProductSchema.parse({ ...base, key: "FORCED_KEY" })).toBe(false);
+    expect(createProductSchema.safeParse({ ...base, contents: [] }).success).toBe(false);
   });
 
   it("summarizes contents with the raid encounter count as maximum", () => {

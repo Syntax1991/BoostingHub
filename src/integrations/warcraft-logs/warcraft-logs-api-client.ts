@@ -67,9 +67,46 @@ type GraphqlResponse = {
     reportData?: {
       report?: Record<string, unknown> | null;
     } | null;
+    worldData?: {
+      zones?: Array<Record<string, unknown>> | null;
+    } | null;
   } | null;
   errors?: Array<{ message?: string }>;
 };
+
+export type WarcraftLogsCatalogEncounter = {
+  id: number;
+  name: string;
+  /** Blizzard journal encounter id when WCL exposes it; null when absent. */
+  journalId: number | null;
+};
+
+export type WarcraftLogsCatalogZone = {
+  id: number;
+  name: string;
+  encounters: WarcraftLogsCatalogEncounter[];
+};
+
+export type WarcraftLogsZonesResult =
+  | { status: "SUCCESS"; zones: WarcraftLogsCatalogZone[] }
+  | { status: "NOT_CONFIGURED" }
+  | { status: "TEMPORARY_FAILURE"; message: string };
+
+const WORLD_ZONES_QUERY = `
+query WorldZones {
+  worldData {
+    zones {
+      id
+      name
+      encounters {
+        id
+        name
+        journalID
+      }
+    }
+  }
+}
+`.trim();
 
 const FIND_CHARACTER_QUERY = `
 query FindCharacter($name: String!, $serverSlug: String!, $serverRegion: String!) {
@@ -706,6 +743,55 @@ export const warcraftLogsApiClient = {
         status: "TEMPORARY_FAILURE",
         message: error instanceof Error ? error.message : "Warcraft Logs request failed.",
       });
+    }
+  },
+
+  /**
+   * All WCL zones with encounters (authoritative catalog metadata for Content Catalog discovery).
+   * Never throws for business outcomes.
+   */
+  async fetchZones(): Promise<WarcraftLogsZonesResult> {
+    if (!isWarcraftLogsConfigured()) {
+      return { status: "NOT_CONFIGURED" };
+    }
+    try {
+      const accessToken = await getAccessToken();
+      const root = await postGraphql(accessToken, WORLD_ZONES_QUERY, {}, "graphql-world-zones");
+      if (Array.isArray(root.errors) && root.errors.length > 0) {
+        const message = root.errors.map((row) => row.message).filter(Boolean).join("; ") || "GraphQL error";
+        return { status: "TEMPORARY_FAILURE", message };
+      }
+      const rawZones = root.data?.worldData?.zones;
+      if (!Array.isArray(rawZones)) {
+        return { status: "TEMPORARY_FAILURE", message: "Warcraft Logs zones payload was malformed." };
+      }
+      const zones: WarcraftLogsCatalogZone[] = [];
+      for (const raw of rawZones) {
+        const id = asInt(raw.id);
+        const name = asString(raw.name);
+        if (id == null || id <= 0 || !name) continue;
+        const encounters: WarcraftLogsCatalogEncounter[] = [];
+        const rawEncounters = Array.isArray(raw.encounters) ? raw.encounters : [];
+        for (const row of rawEncounters) {
+          const encounter = asRecord(row);
+          const encounterId = asInt(encounter?.id);
+          const encounterName = asString(encounter?.name);
+          if (encounterId == null || encounterId <= 0 || !encounterName) continue;
+          const journalRaw = asInt(encounter?.journalID ?? encounter?.journalId);
+          encounters.push({
+            id: encounterId,
+            name: encounterName,
+            journalId: journalRaw != null && journalRaw > 0 ? journalRaw : null,
+          });
+        }
+        zones.push({ id, name, encounters });
+      }
+      return { status: "SUCCESS", zones };
+    } catch (error) {
+      return {
+        status: "TEMPORARY_FAILURE",
+        message: error instanceof Error ? error.message : "Warcraft Logs request failed.",
+      };
     }
   },
 

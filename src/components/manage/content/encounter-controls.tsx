@@ -18,20 +18,20 @@ type EncounterValues = {
   wclEncounterIds: readonly number[];
 };
 
-/** Add an encounter (unlocked raids only) or edit one's name and integration ids (never its identity). */
+/** Add an encounter (unlocked raids only) or edit one's name and Blizzard ids. WCL ids are auto-discovered. */
 export function EncounterFormDialog({ raidId, encounter }: { raidId: string; encounter?: EncounterValues }) {
   const editing = Boolean(encounter?.bossId);
   const [name, setName] = useState(encounter?.name ?? "");
   const [blizzard, setBlizzard] = useState(idListInputValue(encounter?.blizzardEncounterIds ?? []));
-  const [wcl, setWcl] = useState(idListInputValue(encounter?.wclEncounterIds ?? []));
+  const [showAdvanced, setShowAdvanced] = useState((encounter?.blizzardEncounterIds.length ?? 0) > 0);
 
   function reset() {
     setName(encounter?.name ?? "");
     setBlizzard(idListInputValue(encounter?.blizzardEncounterIds ?? []));
-    setWcl(idListInputValue(encounter?.wclEncounterIds ?? []));
+    setShowAdvanced((encounter?.blizzardEncounterIds.length ?? 0) > 0);
   }
 
-  const fields = { name, blizzardEncounterIds: blizzard, wclEncounterIds: wcl };
+  const fields = { name, blizzardEncounterIds: blizzard };
 
   return (
     <ContentDialog
@@ -40,8 +40,8 @@ export function EncounterFormDialog({ raidId, encounter }: { raidId: string; enc
       title={editing ? `Edit encounter · ${encounter?.name}` : "Add encounter"}
       description={
         editing
-          ? "The encounter keeps its id and position, so stored lockouts (killed bosses) stay valid. New ids only affect future Blizzard syncs and Warcraft Logs scans."
-          : "Appended as the last encounter of this raid."
+          ? "The encounter keeps its id and position, so stored lockouts (killed bosses) stay valid. Warcraft Logs ids are detected automatically from the encounter name."
+          : "Appended as the last encounter of this raid. Warcraft Logs ids are detected automatically when the name matches."
       }
       submitLabel={editing ? "Save encounter" : "Add encounter"}
       onOpen={reset}
@@ -52,24 +52,33 @@ export function EncounterFormDialog({ raidId, encounter }: { raidId: string; enc
       <Field label="Name">
         <input className={fieldInputClass} value={name} maxLength={100} onChange={(e) => setName(e.target.value)} />
       </Field>
-      <Field label="Blizzard encounter ids" hint="Journal encounter ids, separated by commas. Leave empty if unknown.">
-        <input
-          className={fieldInputClass}
-          inputMode="numeric"
-          placeholder="e.g. 2849"
-          value={blizzard}
-          onChange={(e) => setBlizzard(e.target.value)}
-        />
-      </Field>
-      <Field label="Warcraft Logs encounter ids" hint="Report fight encounter ids, separated by commas. Each id may belong to one encounter only.">
-        <input
-          className={fieldInputClass}
-          inputMode="numeric"
-          placeholder="e.g. 3379"
-          value={wcl}
-          onChange={(e) => setWcl(e.target.value)}
-        />
-      </Field>
+      {editing && (encounter?.wclEncounterIds.length ?? 0) > 0 ? (
+        <p className="text-xs text-muted">
+          Warcraft Logs: <span className="font-mono">{encounter!.wclEncounterIds.join(", ")}</span> (read-only)
+        </p>
+      ) : null}
+      <div>
+        <button
+          type="button"
+          className="text-xs text-muted hover:text-foreground"
+          onClick={() => setShowAdvanced((open) => !open)}
+        >
+          {showAdvanced ? "Hide advanced" : "Advanced · Blizzard ids"}
+        </button>
+        {showAdvanced ? (
+          <div className="mt-2">
+            <Field label="Blizzard encounter ids" hint="Journal encounter ids, separated by commas. Leave empty if unknown.">
+              <input
+                className={fieldInputClass}
+                inputMode="numeric"
+                placeholder="e.g. 2849"
+                value={blizzard}
+                onChange={(e) => setBlizzard(e.target.value)}
+              />
+            </Field>
+          </div>
+        ) : null}
+      </div>
     </ContentDialog>
   );
 }

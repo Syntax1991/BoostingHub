@@ -23,7 +23,6 @@ type ContentRow = {
 
 export type ProductFormValues = {
   productId?: string;
-  key: string;
   name: string;
   active: boolean;
   selectable: boolean;
@@ -52,10 +51,9 @@ function toRows(values?: ProductFormValues): ContentRow[] {
   }));
 }
 
-/** Create or edit a Product with its ordered raid contents. The key is fixed once created. */
+/** Create or edit a Product with its ordered raid contents. The key is generated server-side and never edited. */
 export function ProductFormDialog({ product, raids }: { product?: ProductFormValues; raids: ProductRaidOption[] }) {
   const editing = Boolean(product?.productId);
-  const [key, setKey] = useState(product?.key ?? "");
   const [name, setName] = useState(product?.name ?? "");
   const [active, setActive] = useState(product?.active ?? true);
   const [selectable, setSelectable] = useState(product?.selectable ?? true);
@@ -63,7 +61,6 @@ export function ProductFormDialog({ product, raids }: { product?: ProductFormVal
   const [rows, setRows] = useState<ContentRow[]>(toRows(product));
 
   function reset() {
-    setKey(product?.key ?? "");
     setName(product?.name ?? "");
     setActive(product?.active ?? true);
     setSelectable(product?.selectable ?? true);
@@ -94,7 +91,7 @@ export function ProductFormDialog({ product, raids }: { product?: ProductFormVal
       defaultBossCount: row.bossCountMode === "VARIABLE" ? row.defaultBossCount : null,
     }));
     const fields = { name, active, selectable, sortOrder, contents };
-    return editing ? updateProductAction({ ...fields, productId: product!.productId }) : createProductAction({ ...fields, key });
+    return editing ? updateProductAction({ ...fields, productId: product!.productId }) : createProductAction(fields);
   }
 
   return (
@@ -103,30 +100,20 @@ export function ProductFormDialog({ product, raids }: { product?: ProductFormVal
       triggerVariant={editing ? "secondary" : "primary"}
       triggerClassName={editing ? "h-8 px-2 text-xs" : "h-9 px-3 text-sm"}
       title={editing ? `Edit product · ${product?.name}` : "New product"}
-      description="Products describe future selection only. Editing them never changes existing Runs or Run Setups. Run creation still uses the current presets until product-driven selection ships."
+      description="Products describe what can be scheduled. Editing them never changes existing Runs or Run Setups. The internal key is generated automatically and never shown here."
       submitLabel={editing ? "Save product" : "Create product"}
       wide
       onOpen={reset}
       onSubmit={submit}
     >
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Key" hint={editing ? "Stable identity — cannot be changed." : "UPPER_SNAKE_CASE, cannot be changed later."}>
-          <input
-            className={fieldInputClass}
-            value={key}
-            disabled={editing}
-            maxLength={64}
-            placeholder="e.g. VENOMOUS_ABYSS"
-            onChange={(e) => setKey(e.target.value.toUpperCase())}
-          />
-        </Field>
         <Field label="Name">
           <input className={fieldInputClass} value={name} maxLength={100} onChange={(e) => setName(e.target.value)} />
         </Field>
         <Field label="Order">
           <input className={fieldInputClass} type="number" min={0} value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} />
         </Field>
-        <div className="flex flex-col justify-end gap-2">
+        <div className="flex flex-col justify-end gap-2 sm:col-span-2">
           <CheckboxField label="Active" checked={active} onChange={setActive} />
           <CheckboxField label="Selectable" checked={selectable} onChange={setSelectable} />
         </div>

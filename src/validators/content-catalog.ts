@@ -1,9 +1,12 @@
 import { z } from "zod";
+import { PRODUCT_KEY_PATTERN } from "@/lib/product-key";
 
 /**
  * Content Catalog (/manage/content) input validation.
  * Blizzard and Warcraft Logs identities are validated separately and never merged.
  */
+
+export { PRODUCT_KEY_PATTERN };
 
 const MAX_ID = 2_147_483_647; // Postgres int4
 
@@ -50,14 +53,14 @@ const sortOrder = z.coerce
   .min(0, "Order cannot be negative.")
   .max(10_000, "Order is too large.");
 
+/** Primary raid fields admins edit. WCL ids are discovered server-side, never typed here. */
 export const raidMetadataSchema = z.object({
   name,
   season,
   sortOrder,
   trackLockouts: z.boolean(),
+  /** Optional advanced Blizzard journal instance id until auto-discovery exists. */
   blizzardInstanceId: optionalId("Blizzard instance id"),
-  wclZoneId: optionalId("Warcraft Logs zone id"),
-  wclRankingEncounterId: optionalId("Warcraft Logs ranking encounter id"),
 });
 export type RaidMetadataInput = z.infer<typeof raidMetadataSchema>;
 
@@ -72,6 +75,7 @@ export type UpdateRaidInput = z.infer<typeof updateRaidSchema>;
 
 export const raidIdSchema = z.object({ raidId: z.string().min(1) });
 
+/** Internal / discovery-facing encounter fields (includes WCL ids). */
 export const encounterFieldsSchema = z.object({
   name,
   blizzardEncounterIds: encounterIdList("Blizzard encounter"),
@@ -79,8 +83,15 @@ export const encounterFieldsSchema = z.object({
 });
 export type EncounterFieldsInput = z.infer<typeof encounterFieldsSchema>;
 
-export const createEncounterSchema = encounterFieldsSchema.extend({ raidId: z.string().min(1) });
-export const updateEncounterSchema = encounterFieldsSchema.extend({ bossId: z.string().min(1) });
+/** Admin create/edit: Blizzard ids optional; WCL ids are discovered server-side. */
+export const encounterAdminFieldsSchema = z.object({
+  name,
+  blizzardEncounterIds: encounterIdList("Blizzard encounter"),
+});
+export type EncounterAdminFieldsInput = z.infer<typeof encounterAdminFieldsSchema>;
+
+export const createEncounterSchema = encounterAdminFieldsSchema.extend({ raidId: z.string().min(1) });
+export const updateEncounterSchema = encounterAdminFieldsSchema.extend({ bossId: z.string().min(1) });
 export const encounterIdSchema = z.object({ bossId: z.string().min(1) });
 export const moveEncounterSchema = z.object({
   bossId: z.string().min(1),
@@ -111,15 +122,8 @@ const productFields = {
   contents: z.array(productContentSchema).min(1, "A product needs at least one raid content.").max(10),
 };
 
-export const PRODUCT_KEY_PATTERN = /^[A-Z][A-Z0-9_]{1,63}$/;
-
-export const createProductSchema = z.object({
-  key: z
-    .string()
-    .trim()
-    .regex(PRODUCT_KEY_PATTERN, "Key must be UPPER_SNAKE_CASE (letters, digits, underscores)."),
-  ...productFields,
-});
+/** Create never accepts a client-supplied key — the server generates it from `name`. */
+export const createProductSchema = z.object({ ...productFields });
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 
 /** The product key is stable identity: never part of an update. */

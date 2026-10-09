@@ -5,14 +5,14 @@ import { ManageContentRaidView } from "@/components/manage/content/manage-conten
 
 export default async function ManageContentRaidPage({ params }: { params: Promise<{ raidId: string }> }) {
   const { raidId } = await params;
-  let raid: Awaited<ReturnType<typeof managementController.getContentRaidPage>>;
+  let page: Awaited<ReturnType<typeof managementController.getContentRaidPage>>;
   try {
-    raid = await managementController.getContentRaidPage(raidId);
+    page = await managementController.getContentRaidPage(raidId);
   } catch (error) {
     if (isDomainError(error) && error.code === "CONTENT_RAID_NOT_FOUND") {
       notFound();
     }
     throw error;
   }
-  return <ManageContentRaidView raid={raid} />;
+  return <ManageContentRaidView raid={page.raid} seasons={page.seasons} />;
 }

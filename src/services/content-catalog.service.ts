@@ -1,5 +1,6 @@
 import { assertCanManageContentCatalog, type AuthenticatedUser } from "@/auth/authorization";
 import { DomainError } from "@/lib/errors";
+import { allocateUniqueProductKey } from "@/lib/product-key";
 import { PRODUCT_CATALOG_FIXTURE, type ProductBossCountMode, type ProductDefinition } from "@/lib/product-catalog";
 import type { CatalogBoss, CatalogRaid, RaidCatalog } from "@/lib/raid-catalog";
 import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
@@ -14,9 +15,13 @@ import {
 import { productRepository } from "@/repositories/product.repository";
 import { raidRepository } from "@/repositories/raid.repository";
 import {
-  encounterFieldsSchema,
+  discoverWarcraftLogsRaidMetadata,
+  type DiscoverRaidMetadataOptions,
+} from "@/services/warcraft-logs-raid-metadata.service";
+import {
+  encounterAdminFieldsSchema,
   type CreateProductInput,
-  type EncounterFieldsInput,
+  type EncounterAdminFieldsInput,
   type ProductContentInput,
   type RaidMetadataInput,
   type UpdateProductInput,
@@ -63,6 +68,8 @@ export type ContentProductRow = Omit<ProductDefinition, "contents"> & {
 export type ContentCatalogPage = {
   raids: ContentRaidRow[];
   products: ContentProductRow[];
+  /** Distinct persisted seasons for the Season selector (no hardcoded list). */
+  seasons: string[];
 };
 
 function toRaidRow(raid: CatalogRaid, references: RaidReferenceCounts): ContentRaidRow {
@@ -247,21 +254,87 @@ async function record(admin: AuthenticatedUser, type: string, message: string): 
   await activityRepository.create({ userId: admin.id, type, message });
 }
 
+/**
+ * Apply WCL discovery patches. Never throws — catalog writes already succeeded.
+ * Soft discovery fills only empty fields; `force` overwrites (Retry detection).
+ */
+async function applyWclDiscovery(
+  raidId: string,
+  options: DiscoverRaidMetadataOptions = {},
+  now = new Date(),
+): Promise<void> {
+  try {
+    const { raid } = await loadRaidContext(raidId);
+    const result = await discoverWarcraftLogsRaidMetadata(raid, options);
+    if (result.raidPatch) {
+      await contentCatalogRepository.updateRaidWclMapping(raid.id, {
+        ...result.raidPatch,
+        now: now.toISOString(),
+      });
+    }
+    for (const patch of result.encounterPatches) {
+      const boss = raid.bosses.find((row) => row.id === patch.bossId);
+      if (!boss) continue;
+      const blizzardEncounterIds =
+        boss.blizzardEncounterIds.length > 0 || patch.blizzardEncounterIds == null
+          ? [...boss.blizzardEncounterIds]
+          : [...patch.blizzardEncounterIds];
+      const wclEncounterIds =
+        options.force || boss.wclEncounterIds.length === 0
+          ? [...patch.wclEncounterIds]
+          : [...boss.wclEncounterIds];
+      const sameWcl =
+        wclEncounterIds.length === boss.wclEncounterIds.length &&
+        wclEncounterIds.every((id, index) => id === boss.wclEncounterIds[index]);
+      const sameBlizzard =
+        blizzardEncounterIds.length === boss.blizzardEncounterIds.length &&
+        blizzardEncounterIds.every((id, index) => id === boss.blizzardEncounterIds[index]);
+      if (sameWcl && sameBlizzard) continue;
+      // Skip if another boss already owns a WCL id we're about to write.
+      const catalog = await raidRepository.loadCatalog();
+      try {
+        assertEncounterIds(catalog, {
+          raidId: raid.id,
+          bossId: boss.id,
+          blizzardEncounterIds,
+          wclEncounterIds,
+        });
+      } catch {
+        continue;
+      }
+      await contentCatalogRepository.updateEncounter(boss.id, {
+        name: boss.name,
+        blizzardEncounterIds,
+        wclEncounterIds,
+      });
+    }
+  } catch (error) {
+    console.error("[content-catalog] WCL discovery failed", { raidId }, error);
+  }
+}
+
 /* --------------------------------------------------------------- service */
 
 export const contentCatalogService = {
   /** Raids + encounters (1 query), reference counts (5 grouped counts), products + contents (1 query). */
   async getPage(admin: AuthenticatedUser): Promise<ContentCatalogPage> {
     assertCanManageContentCatalog(admin);
-    const [catalog, references, products] = await Promise.all([
+    const [catalog, references, products, seasons] = await Promise.all([
       raidRepository.loadCatalog(),
       contentCatalogRepository.listRaidReferenceCounts(),
       productRepository.listAll(),
+      contentCatalogRepository.listDistinctSeasons(),
     ]);
     return {
       raids: catalog.raids.map((raid) => toRaidRow(raid, references.get(raid.id) ?? EMPTY_RAID_REFERENCES)),
       products: products.map((product) => toProductRow(product, catalog)),
+      seasons,
     };
+  },
+
+  async listSeasons(admin: AuthenticatedUser): Promise<string[]> {
+    assertCanManageContentCatalog(admin);
+    return contentCatalogRepository.listDistinctSeasons();
   },
 
   async getRaidDetail(admin: AuthenticatedUser, raidId: string): Promise<ContentRaidRow> {
@@ -278,8 +351,20 @@ export const contentCatalogService = {
     const catalog = await raidRepository.loadCatalog();
     const raidId = crypto.randomUUID();
     assertIntegrationIds(catalog, { raidId, blizzardInstanceId: input.blizzardInstanceId });
-    await contentCatalogRepository.createRaid({ id: raidId, ...input, now: now.toISOString() });
+    await contentCatalogRepository.createRaid({
+      id: raidId,
+      name: input.name,
+      season: input.season,
+      sortOrder: input.sortOrder,
+      trackLockouts: input.trackLockouts,
+      blizzardInstanceId: input.blizzardInstanceId,
+      wclZoneId: null,
+      wclRankingEncounterId: null,
+      now: now.toISOString(),
+    });
     await record(admin, "CONTENT_RAID_CREATED", `Raid "${input.name}" created.`);
+    // Soft discovery — never fails the create.
+    await applyWclDiscovery(raidId, {}, now);
     return { raidId };
   },
 
@@ -287,6 +372,7 @@ export const contentCatalogService = {
     assertCanManageContentCatalog(admin);
     const { catalog, raid } = await loadRaidContext(input.raidId);
     assertIntegrationIds(catalog, { raidId: raid.id, blizzardInstanceId: input.blizzardInstanceId });
+    const nameChanged = raid.name !== input.name;
     await contentCatalogRepository.updateRaid(raid.id, {
       name: input.name,
       season: input.season,
@@ -294,11 +380,35 @@ export const contentCatalogService = {
       sortOrder: input.sortOrder,
       trackLockouts: input.trackLockouts,
       blizzardInstanceId: input.blizzardInstanceId,
-      wclZoneId: input.wclZoneId,
-      wclRankingEncounterId: input.wclRankingEncounterId,
       now: now.toISOString(),
     });
     await record(admin, "CONTENT_RAID_UPDATED", `Raid "${input.name}" updated.`);
+    // Soft re-discovery when the match key may have changed; never erases existing mappings.
+    if (nameChanged || raid.wclZoneId == null) {
+      await applyWclDiscovery(raid.id, {}, now);
+    }
+  },
+
+  /** Explicit Retry detection — may overwrite prior WCL raid/encounter mappings. */
+  async retryWclDetection(admin: AuthenticatedUser, raidId: string, now = new Date()): Promise<{ resolved: boolean }> {
+    assertCanManageContentCatalog(admin);
+    await loadRaidContext(raidId);
+    await applyWclDiscovery(raidId, { force: true }, now);
+    const { raid } = await loadRaidContext(raidId);
+    await record(admin, "CONTENT_RAID_WCL_RETRY", `Warcraft Logs detection retried for "${raid.name}".`);
+    return { resolved: raid.wclZoneId != null };
+  },
+
+  /** Clear raid-level WCL mapping (zone + ranking encounter). Encounter boss ids are left alone. */
+  async clearWclMapping(admin: AuthenticatedUser, raidId: string, now = new Date()): Promise<void> {
+    assertCanManageContentCatalog(admin);
+    const { raid } = await loadRaidContext(raidId);
+    await contentCatalogRepository.updateRaidWclMapping(raid.id, {
+      wclZoneId: null,
+      wclRankingEncounterId: null,
+      now: now.toISOString(),
+    });
+    await record(admin, "CONTENT_RAID_WCL_CLEARED", `Warcraft Logs mapping cleared for "${raid.name}".`);
   },
 
   /** Hard delete only for an unreferenced, non-seeded Raid. Otherwise mark it unavailable for new Runs. */
@@ -325,13 +435,19 @@ export const contentCatalogService = {
 
   async createEncounter(
     admin: AuthenticatedUser,
-    input: EncounterFieldsInput & { raidId: string },
+    input: EncounterAdminFieldsInput & { raidId: string; /** Test / recovery only — never from admin create schema. */ wclEncounterIds?: readonly number[] },
   ): Promise<{ bossId: string }> {
     assertCanManageContentCatalog(admin);
-    const fields = encounterFieldsSchema.parse(input); // sorted, unique, positive ids
+    const fields = encounterAdminFieldsSchema.parse(input); // sorted, unique, positive blizzard ids
+    const wclEncounterIds = [...(input.wclEncounterIds ?? [])].sort((a, b) => a - b);
     const { catalog, raid } = await loadRaidContext(input.raidId);
     await assertEncounterStructureEditable(raid);
-    assertEncounterIds(catalog, { ...fields, raidId: raid.id, bossId: null });
+    assertEncounterIds(catalog, {
+      raidId: raid.id,
+      bossId: null,
+      blizzardEncounterIds: fields.blizzardEncounterIds,
+      wclEncounterIds,
+    });
     const bossId = crypto.randomUUID();
     const nextOrder = raid.bosses.reduce((max, boss) => Math.max(max, boss.sortOrder), 0) + 1;
     await contentCatalogRepository.createEncounter({
@@ -340,20 +456,39 @@ export const contentCatalogService = {
       name: fields.name,
       sortOrder: nextOrder,
       blizzardEncounterIds: fields.blizzardEncounterIds,
-      wclEncounterIds: fields.wclEncounterIds,
+      wclEncounterIds,
     });
     await record(admin, "CONTENT_ENCOUNTER_CREATED", `Encounter "${input.name}" added to ${raid.name}.`);
+    if (wclEncounterIds.length === 0) await applyWclDiscovery(raid.id);
     return { bossId };
   },
 
-  /** Name and integration ids; identity (id, raid, order) is never changed — allowed on referenced raids. */
-  async updateEncounter(admin: AuthenticatedUser, input: EncounterFieldsInput & { bossId: string }): Promise<void> {
+  /**
+   * Name and Blizzard ids from the admin form. Optional `wclEncounterIds` is for tests /
+   * recovery only — the Content Catalog UI never submits it (discovery fills empty ids).
+   */
+  async updateEncounter(
+    admin: AuthenticatedUser,
+    input: EncounterAdminFieldsInput & { bossId: string; wclEncounterIds?: readonly number[] },
+  ): Promise<void> {
     assertCanManageContentCatalog(admin);
-    const fields = encounterFieldsSchema.parse(input); // sorted, unique, positive ids
+    const fields = encounterAdminFieldsSchema.parse(input);
     const { catalog, raid, boss } = await loadBossContext(input.bossId);
-    assertEncounterIds(catalog, { ...fields, raidId: raid.id, bossId: boss.id });
-    await contentCatalogRepository.updateEncounter(boss.id, fields);
+    const wclEncounterIds =
+      input.wclEncounterIds !== undefined ? [...input.wclEncounterIds].sort((a, b) => a - b) : [...boss.wclEncounterIds];
+    assertEncounterIds(catalog, {
+      raidId: raid.id,
+      bossId: boss.id,
+      blizzardEncounterIds: fields.blizzardEncounterIds,
+      wclEncounterIds,
+    });
+    await contentCatalogRepository.updateEncounter(boss.id, {
+      name: fields.name,
+      blizzardEncounterIds: fields.blizzardEncounterIds,
+      wclEncounterIds,
+    });
     await record(admin, "CONTENT_ENCOUNTER_UPDATED", `Encounter "${input.name}" in ${raid.name} updated.`);
+    if (wclEncounterIds.length === 0) await applyWclDiscovery(raid.id);
   },
 
   async moveEncounter(admin: AuthenticatedUser, input: { bossId: string; direction: "UP" | "DOWN" }): Promise<void> {
@@ -382,14 +517,14 @@ export const contentCatalogService = {
 
   async createProduct(admin: AuthenticatedUser, input: CreateProductInput, now = new Date()): Promise<{ productId: string }> {
     assertCanManageContentCatalog(admin);
-    if (await contentCatalogRepository.findProductIdByKey(input.key)) {
-      throw new DomainError("CONTENT_PRODUCT_KEY_CONFLICT", `A product with key ${input.key} already exists.`);
-    }
     const contents = validateProductContents(input.contents, await raidRepository.loadCatalog());
     const productId = crypto.randomUUID();
+    const key = await allocateUniqueProductKey(input.name, async (candidate) =>
+      Boolean(await contentCatalogRepository.findProductIdByKey(candidate)),
+    );
     await contentCatalogRepository.createProduct({
       id: productId,
-      key: input.key,
+      key,
       name: input.name,
       active: input.active,
       selectable: input.selectable,
@@ -397,7 +532,7 @@ export const contentCatalogService = {
       contents,
       now: now.toISOString(),
     });
-    await record(admin, "CONTENT_PRODUCT_CREATED", `Product "${input.name}" (${input.key}) created.`);
+    await record(admin, "CONTENT_PRODUCT_CREATED", `Product "${input.name}" (${key}) created.`);
     return { productId };
   },
 
