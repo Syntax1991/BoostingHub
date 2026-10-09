@@ -13,6 +13,18 @@ import {
 } from "@/lib/external-booster";
 import type { CharacterRole, ParticipationType, WowClass } from "@/models/enums";
 import { runDomainEventService } from "@/services/run-domain-event.service";
+import type { CorrectAttendanceInput } from "@/validators/attendance";
+
+/**
+ * Post-completion correction authority: the Run's Raid Lead, ADMIN or OWNER
+ * (same rule as managing the Run), and only once the Run is COMPLETED.
+ */
+export function canCorrectCompletedAttendance(
+  user: AuthenticatedUser,
+  run: { status: string; raidLeadId: string },
+): boolean {
+  return run.status === "COMPLETED" && canManageRun(user, run);
+}
 
 /** Who can step in for a participant after Start: active signups of this Run that are not on the roster. */
 export type ReplacementCandidate = {
@@ -144,6 +156,8 @@ export const attendanceService = {
       runStatus: run.status,
       started: rows.length > 0,
       canMutate,
+      /** COMPLETED only: explicit, audited "Correct Attendance" (normal controls stay read-only). */
+      canCorrect: canCorrectCompletedAttendance(user, run),
       summary: summaryFrom(rows),
       rows: rows.map(toManagerRow),
       replacementCandidates,
@@ -239,6 +253,44 @@ export const attendanceService = {
       });
     }
     return { runId: row.runId };
+  },
+
+  /**
+   * Exceptional, audited correction of one attendance status on a COMPLETED
+   * Run. The Run stays COMPLETED; roster, signups, payouts and Discord are
+   * untouched. Rejects stale expected status, no-ops and non-completed Runs.
+   */
+  async correctCompletedAttendance(user: AuthenticatedUser, input: CorrectAttendanceInput) {
+    const run = await runRepository.findById(input.runId);
+    if (!run) {
+      throw new DomainError("NOT_FOUND", "Run was not found.", 404);
+    }
+    if (!canManageRun(user, run)) {
+      throw new DomainError("ATTENDANCE_NOT_MANAGEABLE", "You cannot correct attendance for this run.", 403);
+    }
+    if (run.status !== "COMPLETED") {
+      throw new DomainError(
+        "ATTENDANCE_CORRECTION_NOT_ALLOWED",
+        "Attendance can only be corrected on a completed run.",
+      );
+    }
+    const newStatus = assertAttendanceStatus(input.newStatus);
+    if (newStatus === "UNMARKED") {
+      throw new DomainError("ATTENDANCE_INVALID_STATUS", "A completed run cannot have unmarked attendance.");
+    }
+    const reason = input.reason.trim();
+    if (reason.length < 5) {
+      throw new DomainError("VALIDATION_FAILED", "Give a reason of at least 5 characters.");
+    }
+    const result = await attendanceRepository.correctCompletedStatusAtomic({
+      runId: run.id,
+      attendanceId: input.attendanceId,
+      expectedCurrentStatus: assertAttendanceStatus(input.expectedCurrentStatus),
+      newStatus,
+      reason,
+      actorId: user.id,
+    });
+    return { runId: run.id, ...result };
   },
 
   async markAllUnmarkedPresent(user: AuthenticatedUser, runId: string) {

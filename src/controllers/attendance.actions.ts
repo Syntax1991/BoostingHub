@@ -4,7 +4,13 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/auth/session";
 import { mapActionError, type ActionResult } from "@/lib/action-result";
 import { attendanceService } from "@/services/attendance.service";
-import { markAllPresentSchema, replaceParticipantSchema, setAttendanceSchema } from "@/validators/attendance";
+import {
+  correctAttendanceSchema,
+  markAllPresentSchema,
+  replaceParticipantSchema,
+  setAttendanceSchema,
+} from "@/validators/attendance";
+import { ATTENDANCE_STATUS_LABELS } from "@/lib/labels";
 
 function revalidateAttendance(runId: string) {
   revalidatePath("/runs");
@@ -50,6 +56,22 @@ export async function markAllPresentAction(input: unknown): Promise<ActionResult
         count === 0
           ? "No unmarked attendance remained."
           : `Marked ${count} unmarked ${count === 1 ? "participant" : "participants"} present.`,
+    };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+/** Exceptional audited correction on a COMPLETED Run (Raid Lead / ADMIN / OWNER). */
+export async function correctAttendanceAction(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = correctAttendanceSchema.parse(input);
+    const result = await attendanceService.correctCompletedAttendance(user, parsed);
+    revalidateAttendance(result.runId);
+    return {
+      ok: true,
+      message: `Attendance corrected: ${result.participantName} ${ATTENDANCE_STATUS_LABELS[result.fromStatus]} → ${ATTENDANCE_STATUS_LABELS[result.toStatus]}.`,
     };
   } catch (error) {
     return mapActionError(error);

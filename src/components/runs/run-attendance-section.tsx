@@ -21,6 +21,7 @@ import type { ReplacementInput } from "@/services/attendance.service";
 import { ATTENDANCE_NOTE_MAX } from "@/services/run-state";
 import { RunCompleteDialog } from "@/components/runs/run-complete-dialog";
 import { RunStartDialog } from "@/components/runs/run-start-dialog";
+import { AttendanceCorrectionDialog } from "@/components/runs/attendance-correction-dialog";
 import type { RunDetailView } from "@/services/run-detail.service";
 
 const SUMMARY_ORDER: AttendanceStatus[] = [
@@ -133,6 +134,7 @@ function ManagerAttendancePanel({
   const [error, setError] = useState<string | null>(null);
   const [noteRowId, setNoteRowId] = useState<string | null>(null);
   const [replaceRowId, setReplaceRowId] = useState<string | null>(null);
+  const [correctionOpen, setCorrectionOpen] = useState(false);
   const canMutate = manager.canMutate;
   const unmarked = manager.summary.unmarked;
 
@@ -165,6 +167,11 @@ function ManagerAttendancePanel({
                 Mark all unmarked as Present
               </Button>
             ) : null}
+            {manager.canCorrect ? (
+              <Button type="button" variant="secondary" disabled={pending} onClick={() => setCorrectionOpen(true)}>
+                Correct Attendance
+              </Button>
+            ) : null}
             {canComplete ? (
               <Button type="button" disabled={pending} onClick={onCompleteOpen}>
                 Complete Run{unmarked > 0 ? ` (${unmarked} unmarked)` : ""}
@@ -177,6 +184,9 @@ function ManagerAttendancePanel({
         <p role="alert" className="mx-4 mt-3 rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm">
           {error}
         </p>
+      ) : null}
+      {correctionOpen ? (
+        <AttendanceCorrectionDialog runId={runId} rows={manager.rows} onClose={() => setCorrectionOpen(false)} />
       ) : null}
       {!canMutate ? (
         <div className="flex flex-wrap gap-3 px-4 py-3 text-xs text-muted">
