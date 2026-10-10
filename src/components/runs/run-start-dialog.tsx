@@ -4,17 +4,49 @@ import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { startRunAction } from "@/controllers/run.actions";
 import { Button } from "@/components/ui/button";
 import { renderFinalSetupText, type FinalSetupInput } from "@/lib/run-start-message";
+import type { PreflightCheck, RunPreflightResult } from "@/services/run-preflight.service";
+
+function PreflightList({
+  title,
+  checks,
+  tone,
+}: {
+  title: string;
+  checks: PreflightCheck[];
+  tone: "danger" | "warning";
+}) {
+  if (checks.length === 0) return null;
+  const box =
+    tone === "danger" ? "border-danger/40 bg-danger/10" : "border-warning/40 bg-warning/10";
+  const heading = tone === "danger" ? "text-danger" : "text-warning";
+  return (
+    <div role={tone === "danger" ? "alert" : "status"} className={`rounded-md border px-3 py-2 ${box}`}>
+      <p className={`text-xs font-semibold uppercase tracking-wide ${heading}`}>{title}</p>
+      <ul className="mt-1 space-y-1">
+        {checks.map((check) => (
+          <li key={check.id}>
+            <span className="font-medium">{check.label}</span>
+            <span className="text-muted"> — {check.summary}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 export function RunStartDialog({
   runId,
   finalSetup,
   rosterHasUnpublishedChanges = false,
+  preflight = null,
   onClose,
 }: {
   runId: string;
   finalSetup?: FinalSetupInput | null;
   /** Supplemental warning only — the server refuses Start with unpublished roster changes. */
   rosterHasUnpublishedChanges?: boolean;
+  /** Advisory "Ready to start?" checklist — the server stays authoritative for Start. */
+  preflight?: RunPreflightResult | null;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -25,6 +57,8 @@ export function RunStartDialog({
   const [copied, setCopied] = useState(false);
 
   const previewText = finalSetup ? renderFinalSetupText(finalSetup) : null;
+  const blockers = preflight?.checks.filter((check) => check.status === "ERROR") ?? [];
+  const warnings = preflight?.checks.filter((check) => check.status === "WARNING") ?? [];
 
   useEffect(() => {
     dialogRef.current?.showModal();
@@ -73,7 +107,18 @@ export function RunStartDialog({
         </h2>
       </div>
       <div className="space-y-4 px-4 py-4 text-sm">
-        {rosterHasUnpublishedChanges ? (
+        {preflight ? (
+          preflight.overall === "READY" ? (
+            <p role="status" className="rounded-md border border-border bg-surface-raised px-3 py-2">
+              Ready to start — all preflight checks passed.
+            </p>
+          ) : (
+            <>
+              <PreflightList title="Start will be refused" checks={blockers} tone="danger" />
+              <PreflightList title="Check before starting" checks={warnings} tone="warning" />
+            </>
+          )
+        ) : rosterHasUnpublishedChanges ? (
           <p role="status" className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-warning">
             Roster has unpublished changes. Update the roster before starting the Run — Start uses the published
             roster.

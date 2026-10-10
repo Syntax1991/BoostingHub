@@ -14,7 +14,7 @@ Rationale: recent investment already landed Community Schedule, roster automatio
 | --- | --- |
 | LOC-1 | **Mostly shipped** (#200, #203, #208, #222): materialization applies the Run Setup product/contents, slot raid lead, and Schedule composition overrides; hourly + immediate auto-create exist. Remaining: optional per-setup "open signups on create". |
 | LOC-2 | **Shipped on the Schedule** (#210, `ScheduleOccurrenceStaffing`). Remaining: planned-vs-staffed metric on the Manage Runs list. |
-| LOC-3 | **Next.** `run-preflight.service.ts` already covers status, published roster, unpublished changes, selected entries, raid lead, signups, Discord channel/signup post. Missing: composition gaps, lockout attention, schedule conflicts, stale Blizzard sync. |
+| LOC-3 | **Shipped** (#233): preflight ERROR mirrors exactly the server Start rules; WARNING covers composition, missing Raid Lead, draft publish invariants, Discord readiness, and selected Booster Character risks (schedule conflicts, lockout attention, stale / never / failed Blizzard sync). The Start Run dialog shows *Start will be refused* vs *Check before starting*. |
 | LOC-4 | Shipped with this roadmap. |
 
 ---

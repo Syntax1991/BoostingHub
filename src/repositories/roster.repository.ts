@@ -74,6 +74,10 @@ export type RosterCharacterSnapshot = {
   warcraftLogsId: string | null;
   /** The owner's Booster role (User.isBooster) — account-level, never per difficulty. */
   ownerIsBooster: boolean;
+  /** Latest successful Blizzard sync (VERIFIED or PUBLIC); null when never synced. */
+  lastSyncedAt: string | null;
+  /** Latest failed Blizzard sync attempt; see lib/blizzard/sync-health. */
+  lastSyncErrorAt: string | null;
   lockouts: Array<{
     raidId: string;
     difficulty: RaidDifficulty;
@@ -174,6 +178,8 @@ function mapCharacter(row: Record<string, unknown>): RosterCharacterSnapshot {
     warcraftLogsId: asStringOrNull(row.warcraftLogsId),
     // Hydrated from the owner's User.isBooster after signup load.
     ownerIsBooster: false,
+    lastSyncedAt: asStringOrNull(row.lastSyncedAt),
+    lastSyncErrorAt: asStringOrNull(row.lastSyncErrorAt),
     lockouts: lockouts.map((item) => {
       const record = item as Record<string, unknown>;
       return {
