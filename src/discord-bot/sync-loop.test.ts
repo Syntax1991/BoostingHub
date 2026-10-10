@@ -1463,6 +1463,88 @@ describe("syncOnce — UserNotification DMs", () => {
   });
 });
 
+describe("syncOnce — notification DM failure classification", () => {
+  function setup(sendError: unknown) {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+    ]);
+    const sendDm = vi.fn().mockRejectedValue(sendError);
+    const { client } = makeDiscordClient(children);
+    (client as { users: { fetch: ReturnType<typeof vi.fn> } }).users = {
+      fetch: vi.fn().mockResolvedValue({ id: "discord-user-6", send: sendDm }),
+    };
+    const api = makeApi({ channels: [], signups: [], roster: [] });
+    (api.listSyncWork as ReturnType<typeof vi.fn>).mockResolvedValue({
+      channels: [],
+      signups: [],
+      roster: [],
+      start: [],
+      raidInvites: [],
+      notificationDms: [
+        {
+          notificationId: "cccccccc-cccc-4ccc-8ccc-ccccccccccc6",
+          type: "ROSTER_REMOVED",
+          discordUserId: "discord-user-6",
+          runId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa6",
+          signupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb6",
+          runChannelId: null,
+          productLabel: "Venom & Tide",
+          scheduledStartAt: "2026-09-16T13:30:00.000Z",
+          previousScheduledStartAt: null,
+          difficulty: "HEROIC",
+          lootType: "VIP",
+          participationType: "BOOSTER",
+          selectedRole: "HEALER",
+          characterName: "Synmist",
+          wowClass: "MONK",
+        },
+      ],
+    });
+    return { client, api, sendDm };
+  }
+
+  it.each([
+    ["50278 no mutual guilds", { code: 50278, message: "Cannot send messages to this user due to having no mutual guilds" }],
+    ["string 50278", { code: "50278", message: "no mutual guilds" }],
+    ["50007 closed DMs", { code: 50007, message: "Cannot send messages to this user" }],
+  ])("%s → FAILED_PERMANENT once, pass succeeds, compact log", async (_label, error) => {
+    const { client, api, sendDm } = setup(error);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await expect(syncOnce(client as never, botEnv(), api)).resolves.not.toThrow();
+
+    expect(sendDm).toHaveBeenCalledTimes(1);
+    expect(api.recordDiscordState).toHaveBeenCalledTimes(1);
+    expect(api.recordDiscordState).toHaveBeenCalledWith("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa6", {
+      kind: "notification-dm",
+      notificationId: "cccccccc-cccc-4ccc-8ccc-ccccccccccc6",
+      result: "FAILED_PERMANENT",
+    });
+    const line = warn.mock.calls.find((call) => String(call[0]).includes("cannot DM notification"));
+    expect(line?.[0]).toContain("cccccccc-cccc-4ccc-8ccc-ccccccccccc6");
+    expect(line?.[0]).toContain(`Discord ${Number(error.code)}`);
+    expect(line?.[0]).toContain("FAILED_PERMANENT");
+    // No error object: the DiscordAPIError would carry the DM request body.
+    expect(line).toHaveLength(1);
+    warn.mockRestore();
+  });
+
+  it.each([
+    ["429 rate limit", Object.assign(new Error("rate limited"), { name: "RateLimitError", status: 429 })],
+    ["5xx upstream", Object.assign(new Error("Internal Server Error"), { status: 500 })],
+    ["network timeout", Object.assign(new Error("connect ETIMEDOUT"), { code: "ETIMEDOUT" })],
+    ["unknown Discord code", { code: 50035, message: "Invalid Form Body" }],
+  ])("%s → stays PENDING (retryable), no delivery recorded", async (_label, error) => {
+    const { client, api } = setup(error);
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(syncOnce(client as never, botEnv(), api)).rejects.toBeTruthy();
+    expect(api.recordDiscordState).not.toHaveBeenCalled();
+    errorLog.mockRestore();
+  });
+});
+
 describe("syncOnce — Run lifecycle channel announcements", () => {
   it("posts reschedule then cancel in order before retirement; marks SENT", async () => {
     const children = new Map<string, Child>([

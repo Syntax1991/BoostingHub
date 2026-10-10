@@ -15,6 +15,15 @@ describe("discord integration event helpers", () => {
     });
   });
 
+  it("classifies 50278 no mutual guilds as WARNING cannot-DM, keeping the real code", () => {
+    expect(classifyDiscordTelemetryError({ code: 50278 })).toEqual({
+      errorCode: "DISCORD_CANNOT_DM",
+      status: "WARNING",
+      discordCode: 50278,
+      httpStatus: 403,
+    });
+  });
+
   it("classifies 50013 as ERROR Missing Permissions", () => {
     expect(classifyDiscordTelemetryError({ code: 50013 })).toEqual({
       errorCode: "DISCORD_MISSING_PERMISSIONS",
