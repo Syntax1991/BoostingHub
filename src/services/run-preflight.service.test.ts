@@ -82,13 +82,23 @@ function slot(selected: number, target: number) {
   return { selected, target, delta: selected - target };
 }
 
-function context(boosters: ReturnType<typeof booster>[]): RunPreflightContext {
+type ContextOverrides = {
+  status?: RunPreflightContext["run"]["status"];
+  raidLeadId?: string | null;
+  publishedAt?: string | null;
+  needsPublishSeed?: boolean;
+  hasUnpublishedChanges?: boolean;
+  publishedSelectedCount?: number;
+  blockers?: Array<{ code: string; message: string; signupId?: string }>;
+};
+
+function context(boosters: ReturnType<typeof booster>[], overrides: ContextOverrides = {}): RunPreflightContext {
   const manager = {
-    run: { publishedSelectedCount: boosters.length },
+    run: { publishedSelectedCount: overrides.publishedSelectedCount ?? boosters.length },
     roster: {
-      publishedAt: "2026-10-09T12:00:00.000Z",
-      needsPublishSeed: false,
-      hasUnpublishedChanges: false,
+      publishedAt: overrides.publishedAt === undefined ? "2026-10-09T12:00:00.000Z" : overrides.publishedAt,
+      needsPublishSeed: overrides.needsPublishSeed ?? false,
+      hasUnpublishedChanges: overrides.hasUnpublishedChanges ?? false,
       externalBoosters: [],
     },
     validation: {
@@ -100,14 +110,19 @@ function context(boosters: ReturnType<typeof booster>[]): RunPreflightContext {
         boosterTotal: boosters.length,
         total: boosters.length,
       },
-      blockers: [],
+      blockers: overrides.blockers ?? [],
       warnings: [],
     },
     boosters,
   } as unknown as RosterManagementView;
   return {
     runId: "run-1",
-    run: { status: "PUBLISHED", raidLeadId: "lead-1", raidLeadName: "Lead", signupsOpen: false },
+    run: {
+      status: overrides.status ?? "PUBLISHED",
+      raidLeadId: overrides.raidLeadId === undefined ? "lead-1" : overrides.raidLeadId,
+      raidLeadName: "Lead",
+      signupsOpen: false,
+    },
     manager,
     discordPost: { runChannelId: "c", signupMessageId: "m" },
     recentDiscordHasError: false,
@@ -177,5 +192,44 @@ describe("buildRunPreflight selected Character checks", () => {
       ),
     );
     expect(find(result, "selected_blizzard_sync")?.summary).toContain("+2 more");
+  });
+});
+
+describe("buildRunPreflight ERROR mirrors server Start rules only", () => {
+  const clean = () => [booster({ id: "s1", name: "Synmist" })];
+  const errorIds = (result: ReturnType<typeof buildRunPreflight>) =>
+    result.checks.filter((item) => item.status === "ERROR").map((item) => item.id);
+
+  it("blocks a Run that is not PUBLISHED", () => {
+    expect(errorIds(buildRunPreflight(context(clean(), { status: "ROSTERING" })))).toContain("run_status");
+  });
+
+  it("blocks without a published roster", () => {
+    expect(errorIds(buildRunPreflight(context(clean(), { publishedAt: null })))).toContain("roster_published");
+  });
+
+  it("blocks with unpublished roster changes", () => {
+    expect(errorIds(buildRunPreflight(context(clean(), { hasUnpublishedChanges: true })))).toEqual([
+      "unpublished_changes",
+    ]);
+  });
+
+  it("blocks without a published selected participant", () => {
+    expect(errorIds(buildRunPreflight(context([], { publishedSelectedCount: 0 })))).toEqual(["selected_entries"]);
+  });
+
+  it("only warns for missing Raid Lead, unseeded draft and draft publish blockers", () => {
+    const result = buildRunPreflight(
+      context(clean(), {
+        raidLeadId: null,
+        needsPublishSeed: true,
+        blockers: [{ code: "CHARACTER_INACTIVE", message: "Synmist is inactive.", signupId: "s1" }],
+      }),
+    );
+    expect(errorIds(result)).toEqual([]);
+    expect(result.overall).toBe("ATTENTION");
+    expect(find(result, "raid_lead")?.status).toBe("WARNING");
+    expect(find(result, "roster_published")?.status).toBe("WARNING");
+    expect(find(result, "publish_blocker:CHARACTER_INACTIVE:s1")?.status).toBe("WARNING");
   });
 });

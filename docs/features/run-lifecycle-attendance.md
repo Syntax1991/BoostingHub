@@ -42,7 +42,7 @@ Scheduled start time is **not** a blocker. Runs may start early or late.
 
 `runPreflightService` (`src/services/run-preflight.service.ts`) assembles an advisory checklist from the already-loaded roster management view. It is shown as the Preflight panel on Run Detail and inside the **Start Run** dialog, split into **Start will be refused** (ERROR — mirrors the hard rules above) and **Check before starting** (WARNING). Warnings never block Start; the server checks above stay authoritative.
 
-Warnings cover desired composition, Discord channel / signup message / integration health, and the selected registered Booster Characters:
+ERROR is used only for the server Start rules above (status, published roster, unpublished changes, ≥1 published selected participant). Warnings cover desired composition, a missing Raid Lead, an unseeded draft or draft publish invariants (they block the next Publish, not Start), Discord channel / signup message / integration health, and the selected registered Booster Characters:
 
 - **Schedule conflicts** — reserved on another Run or weekly unavailable (can appear after Publish)
 - **Lockouts** — known saved content needing attention (same `roster-selection-risk` classification as selection)

@@ -175,7 +175,9 @@ export function summarizePreflightChecks(checks: PreflightCheck[]) {
 
 /**
  * Pure assembly from already-loaded manager context.
- * Does not invent new hard rules — mirrors existing start/publish validators.
+ * ERROR mirrors exactly the server Start rules (status PUBLISHED, published
+ * roster, no unpublished roster changes, ≥1 published SELECTED participant);
+ * everything else is WARNING and never blocks Start.
  */
 export function buildRunPreflight(ctx: RunPreflightContext): RunPreflightResult {
   const { run, manager, discordPost } = ctx;
@@ -214,10 +216,11 @@ export function buildRunPreflight(ctx: RunPreflightContext): RunPreflightResult 
       summary: "Roster has not been published yet.",
     });
   } else if (manager.roster.needsPublishSeed) {
+    // Start uses the published roster; an unseeded draft is not a Start blocker.
     checks.push({
       id: "roster_published",
       label: "Roster published",
-      status: "ERROR",
+      status: "WARNING",
       summary: "Published roster draft needs to be seeded before management continues.",
     });
   } else {
@@ -272,12 +275,13 @@ export function buildRunPreflight(ctx: RunPreflightContext): RunPreflightResult 
     });
   }
 
-  // Publish blockers (inactive, missing publishedRole, generic DPS, etc.) → ERROR when present.
+  // Draft publish blockers (inactive, missing publishedRole, generic DPS, etc.) block the
+  // next Publish / Update Roster, not Start — Start snapshots the already-published roster.
   for (const blocker of manager.validation.blockers) {
     checks.push({
       id: `publish_blocker:${blocker.code}:${blocker.signupId ?? "run"}`,
       label: "Roster publish invariant",
-      status: "ERROR",
+      status: "WARNING",
       summary: blocker.message,
     });
   }
@@ -316,11 +320,11 @@ export function buildRunPreflight(ctx: RunPreflightContext): RunPreflightResult 
         : `${externalCount} External Booster(s) on the roster.`,
   });
 
-  // Raid Lead.
+  // Raid Lead — Start does not require one (an ADMIN may start), so WARNING only.
   checks.push({
     id: "raid_lead",
     label: "Raid Lead",
-    status: run.raidLeadId ? "PASS" : "ERROR",
+    status: run.raidLeadId ? "PASS" : "WARNING",
     summary: run.raidLeadId ? `Raid Lead: ${run.raidLeadName}.` : "No Raid Lead assigned.",
   });
 
