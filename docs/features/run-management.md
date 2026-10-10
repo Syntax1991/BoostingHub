@@ -243,9 +243,6 @@ View → Controller → Service → Repository.
 
 ## Deferred
 
-- Post-completion attendance corrections
 - Any financial workflow (BoostingHub does not pay boosters)
-- Battle.net / Blizzard
-- Warcraft Logs
-- Discord/email notifications (activity events exist for later use)
 - Destructive Run delete
+- Run template cron / RRULE auto-generation (templates remain explicit apply-only)

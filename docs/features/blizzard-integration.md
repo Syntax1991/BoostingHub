@@ -283,6 +283,6 @@ Views do not call Blizzard or Prisma. Controllers authenticate, validate, and de
 - Automatic realm-transfer handling
 - Boss-level persisted lockout rows / signup eligibility redesign
 - Persisted user OAuth tokens or long-lived user refresh (intentionally rejected)
-- Warcraft Logs
 - Using Battle.net as app login
 - Admin tools to reassign Blizzard identity across accounts
+- Live Blizzard raid catalog ingestion (reference catalog + DB persist remain operator-owned)

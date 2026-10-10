@@ -64,7 +64,7 @@ Attendance: Present / Late / No show / Standby / Excused · Mark all unmarked as
 
 When every participant is marked, press **Complete Run**. Attendance becomes read-only; later mistakes are fixed with **Correct Attendance** (reason required, recorded in Run History). Consumables (WCL) audit is available after Complete.
 
-Lifecycle: Draft → Open → Rostering → Published → In Progress → Completed → Paid
+Lifecycle: Draft → Open → Rostering → Published → In Progress → Completed
 
 ![Completed run](./screenshots/rl-06-run-overview.png)
 
