@@ -309,7 +309,7 @@ Please be online 10 minutes before start.
 - VIP appears only on the Assignment line (never duplicated on the schedule line).
 - `Channel:` uses the persisted `RunDiscordPost.runChannelId` as a real `<#id>` mention. When that id is missing, the Channel line is omitted — never `#unknown`.
 - `Voice:` links the Run's temporary voice channel (see below). The bot prefers the voice channel it created or deleted **in the same sync pass** (voice runs before DMs), else `RunDiscordPost.voiceChannelId` read when the DM is due — so a Quiet-Hours-delayed invite never links a channel that was already deleted. Omitted when there is none. The mention is rendered by the bot only; `UserNotification.message` never contains it.
-- Closed DMs (Discord 50007) → `FAILED_PERMANENT` (no retry). Transient errors leave `PENDING`.
+- Permanent DM failures (`isDiscordPermanentDmError`: closed DMs 50007, no mutual guilds 50278, Missing Access 50001 / Missing Permissions 50013) → `FAILED_PERMANENT` (no retry, one compact warn line with notification id and Discord code). Rate limits, 5xx, network/timeouts and unknown codes leave `PENDING` and retry on the next pass.
 - Successful RAID_INVITE DMs also append `RunDiscordPost.raidInviteSentSignupIds` for legacy continuity.
 - Users must share the guild with the bot and allow DMs from server members.
 - App-archived Runs do not enqueue notification DMs.

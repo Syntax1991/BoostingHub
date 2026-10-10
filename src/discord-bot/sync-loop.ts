@@ -22,7 +22,7 @@ import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
 import { syncGlobalAnnouncements } from "@/discord-bot/global-announcements";
 import {
-  isDiscordCannotDmError,
+  isDiscordPermanentDmError,
   isDiscordPermissionError,
   isDiscordUnknownChannelError,
   isDiscordUnknownMessageError,
@@ -85,6 +85,7 @@ import {
 import type { RosterEmbedData, RunStartEmbedData, SignupEmbedData } from "@/services/discord-sync.service";
 import {
   createDiscordSyncPassTelemetry,
+  extractDiscordApiCode,
   recordDiscordLaneFailure,
   recordDiscordSyncPass,
   type DiscordSyncPassTelemetry,
@@ -1195,10 +1196,9 @@ async function syncRaidInvite(
     const user = await client.users.fetch(item.discordUserId);
     await user.send({ content });
   } catch (error) {
-    if (isDiscordCannotDmError(error) || isDiscordPermissionError(error)) {
+    if (isDiscordPermanentDmError(error)) {
       console.warn(
-        `[discord-bot] cannot DM raid invite to ${item.discordUserId} for signup ${item.signupId} — marking sent to avoid retry loop`,
-        error,
+        `[discord-bot] cannot DM raid invite to ${item.discordUserId} for signup ${item.signupId} (Discord ${extractDiscordApiCode(error) ?? "unknown"}) — marking sent to avoid retry loop`,
       );
     } else {
       throw error;
@@ -1324,10 +1324,10 @@ async function syncNotificationDm(
       result: "SENT",
     });
   } catch (error) {
-    if (isDiscordCannotDmError(error) || isDiscordPermissionError(error)) {
+    if (isDiscordPermanentDmError(error)) {
+      // One line, no error object: the DiscordAPIError carries the DM request body.
       console.warn(
-        `[discord-bot] cannot DM notification ${item.notificationId} to ${item.discordUserId} — marking FAILED_PERMANENT`,
-        error,
+        `[discord-bot] cannot DM notification ${item.notificationId} (${item.type}) to ${item.discordUserId} (Discord ${extractDiscordApiCode(error) ?? "unknown"}) — marking FAILED_PERMANENT`,
       );
       await api.recordDiscordState(item.runId, {
         kind: "notification-dm",
