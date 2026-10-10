@@ -28,6 +28,16 @@ export function RunDetailView({
         description={`${run.productLabel}${run.contentSummary ? ` · ${run.contentSummary}` : ""} · Lead ${run.raidLeadName}`}
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">
+            {run.discordChannelUrl ? (
+              <a
+                href={run.discordChannelUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-accent hover:underline"
+              >
+                Discord channel ↗
+              </a>
+            ) : null}
             {data.permissions.canManageRun ? (
               <Link href="/manage/runs" className="text-sm text-accent hover:underline">
                 Manage runs

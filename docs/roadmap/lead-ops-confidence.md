@@ -112,7 +112,7 @@ Not part of Lead Ops Confidence; track separately when booster pain outweighs le
 
 | ID | Item |
 | --- | --- |
-| BWP-2 | Discord run-channel deep-link on Run Overview / detail |
+| BWP-2 | **Shipped:** Discord run-channel deep-link in the Run detail header (every viewer; hidden without channel / when archived) |
 | BWP-3 | Pass user timezone into `/runs` list (match My Runs / Dashboard) |
 | P0-A | Analytics date-range UI for existing `from`/`to` query params |
 | P1-R | Booster Reliability Summary (attendance + consumables/gear + strikes + WCL), RL-facing, no money |
