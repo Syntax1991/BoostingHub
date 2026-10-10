@@ -26,6 +26,8 @@ import { signupService } from "@/services/signup.service";
 import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { runConsumableAuditService } from "@/services/run-consumable-audit.service";
+import { getDiscordGuildId } from "@/lib/discord-config";
+import { runDiscordChannelUrl } from "@/lib/discord-links";
 import { runPreflightService, type RunPreflightResult } from "@/services/run-preflight.service";
 import { runDomainEventService, type RunDomainEventView } from "@/services/run-domain-event.service";
 
@@ -115,6 +117,7 @@ export const runDetailService = {
     }
 
     const publishedRoster = await rosterService.getPublishedRosterView(runId);
+    const discordPost = await runDiscordPostRepository.findByRunId(runId);
     const activeSignups = run.signups.filter((signup) => signup.status !== "WITHDRAWN");
     const selectedCount = run.signups.filter((signup) => signup.status === "SELECTED").length;
     const activeOwn = viewerSignups.filter((signup) => signup.status !== "WITHDRAWN");
@@ -152,6 +155,11 @@ export const runDetailService = {
       desiredDpsCount: run.desiredDpsCount,
       desiredLootbuddyCount: run.desiredLootbuddyCount,
       discordRolePing: run.discordRolePing,
+      discordChannelUrl: runDiscordChannelUrl({
+        guildId: getDiscordGuildId(),
+        runChannelId: discordPost?.runChannelId,
+        archivedAt: run.archivedAt,
+      }),
       activeSignupCount: activeSignups.length,
       selectedCount,
     };
@@ -171,7 +179,6 @@ export const runDetailService = {
     let preflight: RunPreflightResult | null = null;
     let history: RunDomainEventView[] | null = null;
     if (manage && manager) {
-      const discordPost = await runDiscordPostRepository.findByRunId(runId);
       if (discordPost?.archiveTranscriptHtml) {
         archiveTranscript = {
           filename: discordPost.archiveTranscriptFilename ?? "transcript.html",

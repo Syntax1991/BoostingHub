@@ -35,6 +35,12 @@ export function getDiscordBoosterRoleSyncConfig(): DiscordRoleAccessSyncConfig |
   return getDiscordRoleAccessSyncConfig();
 }
 
+/** The community guild (DISCORD_GUILD_ID) — public id, used for channel deep links. */
+export function getDiscordGuildId(): string | null {
+  const value = process.env.DISCORD_GUILD_ID?.trim();
+  return value && value.length > 0 ? value : null;
+}
+
 /** Management role ping for Community Schedule Share copy (not auto-posted). */
 export function getDiscordManagementScheduleRoleId(): string | null {
   const value = process.env.DISCORD_MANAGEMENT_SCHEDULE_ROLE_ID?.trim();

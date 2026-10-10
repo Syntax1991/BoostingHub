@@ -53,6 +53,7 @@ May manage any Run on the same `/runs/[runId]` route.
 ## Sections
 
 - **Header** — raid, difficulty, schedule, status, raid lead, signup window, compact composition, server-gated manager actions (edit / open / signup window / cancel / start / complete)
+- **Discord channel** — every viewer of the Run: `Discord channel ↗` header link (`https://discord.com/channels/{DISCORD_GUILD_ID}/{runChannelId}`, new tab) while the Run has a recorded Discord channel and is not archived. Absent for DRAFT Runs (no channel), archived Runs (channel retired) or without `DISCORD_GUILD_ID`. Built by `runDiscordChannelUrl` (`src/lib/discord-links.ts`); public ids only. Discord channel permissions still decide what the viewer can open.
 - **Archive transcript** — managers only, when HTML was persisted on app-archive: download link to `/runs/[runId]/archive-transcript`
 - **Overview** — prepared summary DTO
 - **Signups** — own participation for USER; operational signup list for authorized managers
