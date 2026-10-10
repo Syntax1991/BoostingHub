@@ -91,6 +91,10 @@ If `npx create-db@latest` was used, unclaimed databases expire after 24 hours. P
 
 Timestamps are stored in UTC. Personal surfaces format them with the User's Settings timezone (default `Europe/Berlin`). Community/server authority — Run titles, Discord channel names, raid-ID week boundaries — remains `Europe/Berlin` via `DEFAULT_TIME_ZONE`. Month names are avoided (`Thu 10/09/2026 21:00`) because Node and browsers disagree on `en-GB` abbreviations such as `Sept` vs `Sep`.
 
+## Product roadmap
+
+Next ops epic (decision + tickets): [roadmap/lead-ops-confidence.md](roadmap/lead-ops-confidence.md).
+
 ## GitHub workflow
 
 Stable branch is `main`. Feature work uses `feature/<domain-feature>`, not a branch per page.

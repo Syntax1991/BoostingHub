@@ -209,7 +209,7 @@ BoostingHub does not pay boosters: there is no settlement, payout, share or paym
 
 ## Strike
 
-Disciplinary history record against a **User** (never a Character). Optional `runId`, proven against BoostingHub's own signup history — never Attendance, which belongs to the external Dawn Boosting operational workflow and is out of scope here. Status `ACTIVE` \| `REVOKED`; no severity, no expiry, no hard delete — revocation is the only correction path and always requires a reason. See [user-strikes.md](features/user-strikes.md).
+Disciplinary history record against a **User** (never a Character). Optional `runId`, proven against BoostingHub's own signup history — never derived from `RunAttendance` (strikes stay manual; attendance is a separate Run lifecycle feature). Status `ACTIVE` \| `REVOKED`; no severity, no expiry, no hard delete — revocation is the only correction path and always requires a reason. See [user-strikes.md](features/user-strikes.md).
 
 ## RunDiscordPost
 

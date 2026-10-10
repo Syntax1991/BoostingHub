@@ -138,7 +138,7 @@ Full connect/import/link/security policy: [blizzard-integration.md](blizzard-int
 
 ## Deferred
 
-- Blizzard lockout sync and automatic realm-transfer handling
-- Warcraft Logs
+- Automatic realm-transfer handling (Refresh refuses identity changes today; see [blizzard-integration.md](blizzard-integration.md))
+- Boss-level lockout rows / signup eligibility redesign (current-raid lockouts sync and stay informational)
 - Automatic withdrawal of future signups on deactivate
 - Admin global character editing

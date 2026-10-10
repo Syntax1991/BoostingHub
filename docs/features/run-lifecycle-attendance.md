@@ -154,9 +154,7 @@ On success:
 - `signupsOpen = false`
 - attendance remains stored and becomes read-only in this feature
 
-Signup, roster, BoosterAccess, and lockout history stay intact. Completion is final: BoostingHub has no financial follow-up. Exceptional mistakes are fixed with the audited **Correct Attendance** action.
-
-Post-completion ADMIN attendance corrections are deferred.
+Signup, roster, BoosterAccess, and lockout history stay intact. Completion is final: BoostingHub has no financial follow-up. Exceptional mistakes are fixed with the audited **Correct Attendance** action (reason required; recorded in Run History).
 
 ## Canonical Run Detail Integration
 
@@ -207,9 +205,6 @@ No Prisma in views or controllers. No attendance transition rules in React.
 
 ## Deferred
 
-- attendance correction after completion
-- wallet / escrow / payment automation
-- Discord notifications
-- Warcraft Logs
-- Blizzard
-- analytics
+- wallet / escrow / payment automation (no financial domain; see [domain-model.md](../domain-model.md#no-financial-domain))
+- Discord-side attendance marking (Stay web-only; Discord DMs / lifecycle announcements already ship)
+- Broader performance / reputation products beyond consumables audit and roster WCL rankings

@@ -377,4 +377,6 @@ Every one of these moves is reconciled by the independent `channels` lane (see "
 
 ## Deferred
 
-`/runs` browse command, Discord-side Raid Lead/Admin actions (roster selection and Strike management stay Web-only), Discord role synchronization, preferred/ranked Character offers, Run type/progress channel-name segments (no domain field to source them from yet), Dawn Boosting integration of any kind.
+`/runs` browse command; Discord-side Raid Lead/Admin actions (roster selection and Strike management stay Web-only); preferred/ranked Character offers; Dawn Boosting integration of any kind.
+
+**Shipped (do not re-list as missing):** Discord role → access sync for Raid Booster / Lootbuddy Discord-derived flags (`discord-role-access-sync.service.ts`); run channel naming already includes difficulty / run-type / coverage segments from structured Run fields.
