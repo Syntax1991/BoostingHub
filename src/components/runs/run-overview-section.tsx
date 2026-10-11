@@ -1,10 +1,16 @@
-import { formatDateTime } from "@/lib/datetime";
+import { DEFAULT_TIME_ZONE, formatDateTime } from "@/lib/datetime";
 import { Card, CardHeader } from "@/components/ui/primitives";
 import { DifficultyBadge, RunStatusBadge } from "@/components/ui/badges";
 import { RunHistorySection } from "@/components/runs/run-history-section";
 import type { RunDetailView } from "@/services/run-detail.service";
 
-export function RunOverviewSection({ data }: { data: RunDetailView }) {
+export function RunOverviewSection({
+  data,
+  timeZone = DEFAULT_TIME_ZONE,
+}: {
+  data: RunDetailView;
+  timeZone?: string;
+}) {
   const run = data.overview;
   return (
     <div className="space-y-4">
@@ -28,7 +34,9 @@ export function RunOverviewSection({ data }: { data: RunDetailView }) {
           </div>
           <div>
             <dt className="text-muted">Scheduled</dt>
-            <dd className="mt-1">{formatDateTime(run.scheduledStartAt)}</dd>
+            <dd className="mt-1" title={timeZone}>
+              {formatDateTime(run.scheduledStartAt, timeZone)}
+            </dd>
           </div>
           <div>
             <dt className="text-muted">Raid Lead</dt>

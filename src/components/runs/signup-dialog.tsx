@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { getSignupOptionsAction, setCharacterOffersAction, setLootbuddiesAction } from "@/controllers/signup.actions";
 import { Button } from "@/components/ui/button";
 import { DifficultyBadge } from "@/components/ui/badges";
-import { formatDateTime } from "@/lib/datetime";
+import { DEFAULT_TIME_ZONE, formatDateTime } from "@/lib/datetime";
 import {
   CHARACTER_ROLE_LABELS,
   CLASS_LABELS,
@@ -91,10 +91,13 @@ export function RunSignupButton({
   runId,
   signupWindowOpen,
   ownSignupCount,
+  timeZone = DEFAULT_TIME_ZONE,
 }: {
   runId: string;
   signupWindowOpen: boolean;
   ownSignupCount: number;
+  /** Viewer's Settings timezone for the Run start time (fallback Europe/Berlin). */
+  timeZone?: string;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -297,7 +300,7 @@ export function RunSignupButton({
             <p className="mt-1 truncate text-sm text-muted">
               {options.run.title} · {options.run.productLabel}
               {options.run.contentSummary ? ` · ${options.run.contentSummary}` : ""} ·{" "}
-              {formatDateTime(options.run.scheduledStartAt)}
+              {formatDateTime(options.run.scheduledStartAt, timeZone)}
             </p>
           ) : (
             <p className="mt-1 text-sm text-muted">Loading options…</p>

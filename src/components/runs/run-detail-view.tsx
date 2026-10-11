@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { formatDate, formatDateTime, formatTime } from "@/lib/datetime";
+import { DEFAULT_TIME_ZONE, formatDate, formatDateTime, formatTime } from "@/lib/datetime";
 import { Card, CardHeader, PageHeader } from "@/components/ui/primitives";
 import { DifficultyBadge, RunStatusBadge } from "@/components/ui/badges";
 import { RunSignupButton } from "@/components/runs/signup-dialog";
@@ -12,9 +12,12 @@ import type { RunDetailView as RunDetailData } from "@/services/run-detail.servi
 export function RunDetailView({
   data,
   initialTab,
+  timeZone = DEFAULT_TIME_ZONE,
 }: {
   data: RunDetailData;
   initialTab: RunDetailTab;
+  /** Viewer's Settings timezone for the Run start time (fallback Europe/Berlin). */
+  timeZone?: string;
 }) {
   const run = data.run;
   return (
@@ -51,6 +54,7 @@ export function RunDetailView({
               runId={run.id}
               signupWindowOpen={run.signupWindowOpen}
               ownSignupCount={data.viewerSignups.filter((signup) => signup.status !== "WITHDRAWN").length}
+              timeZone={timeZone}
             />
           </div>
         }
@@ -79,8 +83,8 @@ export function RunDetailView({
         <div className="flex flex-wrap items-center gap-2 px-4 py-3">
           <DifficultyBadge difficulty={run.difficulty} />
           <RunStatusBadge status={run.status} />
-          <span className="text-sm text-muted">
-            {formatDate(run.scheduledStartAt)} · {formatTime(run.scheduledStartAt)}
+          <span className="text-sm text-muted" title={timeZone}>
+            {formatDate(run.scheduledStartAt, timeZone)} · {formatTime(run.scheduledStartAt, timeZone)}
           </span>
           <span className="text-sm text-muted">{run.signupWindowOpen ? "Signups open" : "Signups closed"}</span>
           <span className="text-sm text-muted">
@@ -115,7 +119,7 @@ export function RunDetailView({
           </div>
         </Card>
       ) : null}
-      <RunDetailTabs data={data} initialTab={initialTab} />
+      <RunDetailTabs data={data} initialTab={initialTab} timeZone={timeZone} />
     </div>
   );
 }
