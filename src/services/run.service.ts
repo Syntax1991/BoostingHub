@@ -9,6 +9,7 @@ import {
 import { DomainError } from "@/lib/errors";
 import { resolveEffectiveRunComposition } from "@/lib/run-composition";
 import { buildRunTitle } from "@/lib/run-title";
+import { diffRunScope, serializeRunScopeChanges } from "@/lib/run-scope-change";
 import {
   projectRunContentCoverage,
   projectRunContentDisplay,
@@ -39,6 +40,7 @@ import { attendanceService } from "@/services/attendance.service";
 import { discordSyncService } from "@/services/discord-sync.service";
 import {
   runRescheduledChannelSourceKey,
+  runScopeChangedChannelSourceKey,
 } from "@/repositories/run-discord-announcement.repository";
 import { runLifecycleNotificationService } from "@/services/run-lifecycle-notifications.service";
 import { runDomainEventService } from "@/services/run-domain-event.service";
@@ -994,6 +996,33 @@ export const runService = {
       raidLeadName,
     });
 
+    // Material raid-scope change (by raidId; a reorder is not one). Drives
+    // contentRevision + RUN_SCOPE_CHANGED; a DRAFT has no audience yet.
+    const scopeChanges = contentChanged
+      ? diffRunScope(
+          orderedCurrentContents.map((content) => ({
+            raidId: content.raidId,
+            raidName: content.raidName,
+            sortOrder: content.sortOrder,
+            plannedBossCount: content.plannedBossCount,
+            totalBossCount: content.totalBossCount,
+          })),
+          nextContents.map((content) => {
+            const raid = raidById.get(content.raidId)!;
+            return {
+              raidId: content.raidId,
+              raidName: raid.name,
+              sortOrder: content.sortOrder,
+              plannedBossCount: content.plannedBossCount,
+              totalBossCount: raid.totalBossCount,
+            };
+          }),
+        )
+      : [];
+    const scopeChanged = scopeChanges.length > 0;
+    const nextContentRevision = scopeChanged ? run.contentRevision + 1 : run.contentRevision;
+    const notifyScopeChange = scopeChanged && run.status !== "DRAFT";
+
     const scheduleChanged =
       Date.parse(scheduledStartAt) !== Date.parse(run.scheduledStartAt);
     const nextScheduleRevision = scheduleChanged ? run.scheduleRevision + 1 : run.scheduleRevision;
@@ -1004,6 +1033,7 @@ export const runService = {
       lootType: input.lootType,
       scheduledStartAt,
       ...(scheduleChanged ? { scheduleRevision: nextScheduleRevision } : {}),
+      ...(scopeChanged ? { contentRevision: nextContentRevision } : {}),
       raidLeadId,
       notes: nextNotes,
       desiredTankCount: input.desiredTankCount,
@@ -1023,6 +1053,21 @@ export const runService = {
           productLabel: display.productLabel,
           difficulty,
           lootType: input.lootType,
+          status: "PENDING" as const,
+        }
+      : null;
+
+    const scopeAnnouncement = notifyScopeChange
+      ? {
+          runId: run.id,
+          type: "RUN_SCOPE_CHANGED" as const,
+          sourceKey: runScopeChangedChannelSourceKey(run.id, nextContentRevision),
+          previousScheduledStartAt: null,
+          scheduledStartAt,
+          productLabel: display.productLabel,
+          difficulty,
+          lootType: input.lootType,
+          scopeChanges: serializeRunScopeChanges(scopeChanges),
           status: "PENDING" as const,
         }
       : null;
@@ -1050,6 +1095,7 @@ export const runService = {
       {
         contents: contentChanged ? nextContents : undefined,
         announcement: rescheduleAnnouncement,
+        scopeAnnouncement,
         rosterEffect,
       },
     );
@@ -1063,6 +1109,16 @@ export const runService = {
         scheduleRevision: nextScheduleRevision,
         difficulty,
         lootType: input.lootType,
+      });
+    }
+
+    if (notifyScopeChange) {
+      await runLifecycleNotificationService.notifyRunScopeChanged({
+        runId: run.id,
+        productLabel: display.productLabel,
+        scheduledStartAt,
+        contentRevision: nextContentRevision,
+        changes: scopeChanges,
       });
     }
 

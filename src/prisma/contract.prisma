@@ -169,6 +169,8 @@ enum NotificationType {
   ROSTER_WITHDRAWN = "ROSTER_WITHDRAWN"
   /// Correction after Reactivate Run — same audience as RUN_CANCELLED.
   RUN_REACTIVATED  = "RUN_REACTIVATED"
+  /// Planned raid scope (RunRaidContent) changed — to every signed-up User.
+  RUN_SCOPE_CHANGED = "RUN_SCOPE_CHANGED"
 }
 
 /// Discord DM delivery decision snapshotted at notification creation.
@@ -186,6 +188,7 @@ enum RunDiscordAnnouncementType {
   RUN_RESCHEDULED = "RUN_RESCHEDULED"
   RUN_CANCELLED   = "RUN_CANCELLED"
   RUN_REACTIVATED = "RUN_REACTIVATED"
+  RUN_SCOPE_CHANGED = "RUN_SCOPE_CHANGED"
 }
 
 /// Application account. Also serves as the Better Auth `user` table.
@@ -706,6 +709,8 @@ model Run {
   scheduledStartAt   TimestamptzString
   /// Increments only when scheduledStartAt changes — identity for RUN_RESCHEDULED.
   scheduleRevision   Int            @default(0)
+  /// Increments only when the planned RunRaidContent set changes — identity for RUN_SCOPE_CHANGED.
+  contentRevision    Int            @default(0)
   status             RunStatus
   raidLeadId         String
   raidLead           User           @relation("RunRaidLead", fields: [raidLeadId], references: [id], onDelete: Restrict)
@@ -1278,6 +1283,9 @@ model RunDiscordAnnouncement {
   productLabel             String
   difficulty               RaidDifficulty
   lootType                 RunLootType
+  /// RUN_SCOPE_CHANGED only: JSON RunScopeChange[] snapshot (before → after per raid content).
+  /// Also the render source for that revision's RUN_SCOPE_CHANGED DMs.
+  scopeChanges             String?
   status                   DiscordDeliveryStatus
   createdAt                TimestamptzString          @default(now())
   sentAt                   TimestamptzString?

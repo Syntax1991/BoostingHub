@@ -62,6 +62,7 @@ export type RunFieldsUpdate = {
   lootType?: RunLootType;
   scheduledStartAt?: string;
   scheduleRevision?: number;
+  contentRevision?: number;
   raidLeadId?: string;
   notes?: string | null;
   desiredTankCount?: number;
@@ -116,6 +117,8 @@ export type RunListRecord = {
   scheduledStartAt: string;
   /** Increments only when scheduledStartAt changes. */
   scheduleRevision: number;
+  /** Increments only when the planned RunRaidContent set materially changes. */
+  contentRevision: number;
   status: RunStatus;
   raidLeadId: string;
   raidLeadName: string;
@@ -285,6 +288,7 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
     lootType: mapLootType(run.lootType),
     scheduledStartAt: asString(run.scheduledStartAt),
     scheduleRevision: asNumber(run.scheduleRevision, 0),
+    contentRevision: asNumber(run.contentRevision, 0),
     status: mapRunStatus(run.status),
     raidLeadId: asString(run.raidLeadId ?? raidLead.id),
     raidLeadName: asString(raidLead.name, "Unknown lead"),
@@ -909,6 +913,8 @@ export const runRepository = {
     options: {
       contents?: RunContentWriteSpec[];
       announcement?: CreateRunDiscordAnnouncementInput | null;
+      /** RUN_SCOPE_CHANGED channel announcement — committed with the content rows. */
+      scopeAnnouncement?: CreateRunDiscordAnnouncementInput | null;
       rosterEffect?: "NONE" | "MARK_CHANGED" | "REFRESH_EMBED";
     } = {},
     hooks: LifecycleAnnouncementTxHooks = {},
@@ -942,6 +948,9 @@ export const runRepository = {
             ? { ...options.announcement, runId: "00000000-0000-4000-8000-000000000000" }
             : options.announcement,
         );
+      }
+      if (options.scopeAnnouncement) {
+        await insertAnnouncementIgnoreDuplicateTx(txOrm, options.scopeAnnouncement);
       }
       if (roster?.publishedAt && options.rosterEffect === "MARK_CHANGED") {
         await txOrm.RunRoster.where({ id: roster.id }).update({ runChangedSinceAck: true, updatedAt: now });

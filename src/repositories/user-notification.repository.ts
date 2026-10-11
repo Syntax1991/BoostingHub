@@ -128,6 +128,18 @@ export function runRescheduledSourceKey(runId: string, scheduleRevision: number,
   return `run-rescheduled:${runId}:${scheduleRevision}:${userId}`;
 }
 
+export function runScopeChangedSourceKey(runId: string, contentRevision: number, userId: string): string {
+  return `run-scope-changed:${runId}:${contentRevision}:${userId}`;
+}
+
+/** contentRevision of a personal `run-scope-changed:` source key, or null. */
+export function parseContentRevisionFromNotificationSourceKey(sourceKey: string): number | null {
+  const parts = sourceKey.split(":");
+  if (parts.length < 4 || parts[0] !== "run-scope-changed") return null;
+  const revision = Number(parts[2]);
+  return Number.isInteger(revision) && revision >= 0 ? revision : null;
+}
+
 /** Extract cancelRevision from personal cancel/reactivate notification source keys. */
 export function parseCancelRevisionFromNotificationSourceKey(sourceKey: string): number | null {
   const parts = sourceKey.split(":");

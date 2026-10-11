@@ -24,6 +24,8 @@ export type RunDiscordAnnouncementRecord = {
   productLabel: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
+  /** RUN_SCOPE_CHANGED only: JSON RunScopeChange[] snapshot (lib/run-scope-change). */
+  scopeChanges: string | null;
   status: DiscordDeliveryStatus;
   createdAt: string;
   sentAt: string | null;
@@ -40,6 +42,8 @@ export type CreateRunDiscordAnnouncementInput = {
   productLabel: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
+  /** RUN_SCOPE_CHANGED only: serialized RunScopeChange[]. */
+  scopeChanges?: string | null;
   /** Initial status — PENDING when a channel may exist; callers may pass SKIPPED. */
   status?: DiscordDeliveryStatus;
   createdAt?: string;
@@ -64,6 +68,7 @@ function mapRunDiscordAnnouncementRow(row: Record<string, unknown>): RunDiscordA
     productLabel: asString(row.productLabel),
     difficulty: mapDifficulty(row.difficulty),
     lootType: mapLootType(row.lootType),
+    scopeChanges: asStringOrNull(row.scopeChanges),
     status: asEnum(row.status, DISCORD_DELIVERY_STATUSES, "PENDING"),
     createdAt: asString(row.createdAt),
     sentAt: asStringOrNull(row.sentAt),
@@ -73,6 +78,10 @@ function mapRunDiscordAnnouncementRow(row: Record<string, unknown>): RunDiscordA
 
 export function runRescheduledChannelSourceKey(runId: string, scheduleRevision: number): string {
   return `run-rescheduled:${runId}:${scheduleRevision}`;
+}
+
+export function runScopeChangedChannelSourceKey(runId: string, contentRevision: number): string {
+  return `run-scope-changed:${runId}:${contentRevision}`;
 }
 
 export function runCancelledChannelSourceKey(runId: string, cancelRevision: number): string {
@@ -112,6 +121,7 @@ export async function insertAnnouncementIgnoreDuplicateTx(
     productLabel: input.productLabel,
     difficulty: input.difficulty,
     lootType: input.lootType,
+    scopeChanges: input.scopeChanges ?? null,
     status,
     createdAt: now,
     sentAt: null,

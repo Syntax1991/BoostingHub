@@ -25,7 +25,9 @@ import { attendanceRepository } from "@/repositories/attendance.repository";
 import {
   parseCancelRevisionFromChannelSourceKey,
   runDiscordAnnouncementRepository,
+  runScopeChangedChannelSourceKey,
 } from "@/repositories/run-discord-announcement.repository";
+import { parseRunScopeChanges, type RunScopeChange } from "@/lib/run-scope-change";
 import { runDiscordPostRepository, type RunDiscordPostRecord } from "@/repositories/run-discord-post.repository";
 import { discordSchedulePostRepository } from "@/repositories/discord-schedule-post.repository";
 import { rosterRepository, type RosterSignupRow } from "@/repositories/roster.repository";
@@ -41,6 +43,7 @@ import {
 } from "@/lib/discord-schedule";
 import {
   parseCancelRevisionFromNotificationSourceKey,
+  parseContentRevisionFromNotificationSourceKey,
   ROSTER_SWAPPED_SOURCE_KEY_PREFIX,
   userNotificationRepository,
 } from "@/repositories/user-notification.repository";
@@ -449,6 +452,8 @@ export type NotificationDmWorkItem = {
   scheduledStartAt: string;
   /** Set for RUN_RESCHEDULED — previous schedule before this revision. */
   previousScheduledStartAt: string | null;
+  /** RUN_SCOPE_CHANGED only (empty otherwise): that contentRevision's changed contents. */
+  scopeChanges: RunScopeChange[];
   difficulty: RaidDifficulty;
   lootType: RunLootType;
   participationType: "BOOSTER" | "LOOTBUDDY" | null;
@@ -470,10 +475,12 @@ export type NotificationDmWorkItem = {
 export type RunAnnouncementWorkItem = {
   announcementId: string;
   runId: string;
-  type: "RUN_RESCHEDULED" | "RUN_CANCELLED" | "RUN_REACTIVATED";
+  type: "RUN_RESCHEDULED" | "RUN_CANCELLED" | "RUN_REACTIVATED" | "RUN_SCOPE_CHANGED";
   /** Dedicated Run channel when present — null means bot should mark SKIPPED. */
   runChannelId: string | null;
   previousScheduledStartAt: string | null;
+  /** RUN_SCOPE_CHANGED only (empty otherwise): changed contents snapshot. */
+  scopeChanges: RunScopeChange[];
   scheduledStartAt: string;
   productLabel: string;
   difficulty: RaidDifficulty;
@@ -1016,6 +1023,7 @@ async function buildPendingNotificationDms(): Promise<NotificationDmWorkItem[]> 
       productLabel: run.contentDisplay.productLabel,
       scheduledStartAt: run.scheduledStartAt,
       previousScheduledStartAt: null as string | null,
+      scopeChanges: [] as RunScopeChange[],
       difficulty: run.difficulty,
       lootType: run.lootType,
       participationType: null as NotificationDmWorkItem["participationType"],
@@ -1029,6 +1037,18 @@ async function buildPendingNotificationDms(): Promise<NotificationDmWorkItem[]> 
 
     if (notification.type === "RUN_CANCELLED" || notification.type === "RUN_REACTIVATED") {
       notificationDmWorkItems.push(base);
+      continue;
+    }
+
+    if (notification.type === "RUN_SCOPE_CHANGED") {
+      // The structured change lives once on that revision's channel announcement
+      // (also kept when the channel post was SKIPPED) — not duplicated per User.
+      const revision = parseContentRevisionFromNotificationSourceKey(notification.sourceKey);
+      const announcement =
+        revision == null
+          ? null
+          : await runDiscordAnnouncementRepository.findBySourceKey(runScopeChangedChannelSourceKey(run.id, revision));
+      notificationDmWorkItems.push({ ...base, scopeChanges: parseRunScopeChanges(announcement?.scopeChanges) });
       continue;
     }
 
@@ -1428,6 +1448,7 @@ export const discordSyncService = {
       type: row.type,
       runChannelId: postsByRunId.get(row.runId)?.runChannelId ?? null,
       previousScheduledStartAt: row.previousScheduledStartAt,
+      scopeChanges: row.type === "RUN_SCOPE_CHANGED" ? parseRunScopeChanges(row.scopeChanges) : [],
       scheduledStartAt: row.scheduledStartAt,
       productLabel: row.productLabel,
       difficulty: row.difficulty,
@@ -1863,6 +1884,12 @@ export const discordSyncService = {
       return { deliver: true };
     }
 
+    if (announcement.type === "RUN_SCOPE_CHANGED") {
+      // A cancelled Run's scope update is moot — the cancel announcement covers it.
+      const run = await runRepository.findById(announcement.runId);
+      return { deliver: Boolean(run && run.status !== "CANCELLED") };
+    }
+
     // RUN_RESCHEDULED (and any future types): PENDING is sufficient.
     return { deliver: true };
   },
@@ -1893,6 +1920,12 @@ export const discordSyncService = {
       const revision = parseCancelRevisionFromNotificationSourceKey(notification.sourceKey);
       if (revision == null || revision !== run.cancelRevision) return { deliver: false };
       return { deliver: true };
+    }
+
+    if (notification.type === "RUN_SCOPE_CHANGED") {
+      if (!notification.runId) return { deliver: false };
+      const run = await runRepository.findById(notification.runId);
+      return { deliver: Boolean(run && run.status !== "CANCELLED") };
     }
 
     return { deliver: true };
