@@ -52,7 +52,11 @@ function boolPref(value: unknown, fallback = true): boolean {
   return value === false ? false : value === true ? true : fallback;
 }
 
-function mapSettings(row: Record<string, unknown> | null): UserSettingsRecord {
+/**
+ * Pure User row → settings mapping. Exported so in-transaction notification
+ * writers apply exactly the same preference / timezone semantics as reads here.
+ */
+export function mapSettings(row: Record<string, unknown> | null): UserSettingsRecord {
   if (!row) {
     return {
       notifications: { ...DEFAULT_NOTIFICATIONS },

@@ -49,6 +49,8 @@ export type LifecycleAnnouncementTxHooks = {
   failAfterRunUpdate?: boolean;
   /** Insert with a nonexistent runId so the FK fails and rolls back the Run write. */
   failAnnouncementInsert?: boolean;
+  /** Throw after every write of the transaction (incl. notification work), just before commit. */
+  failBeforeCommit?: boolean;
   /**
    * Invoked after the shared RunRoster lock is held and before authoritative
    * Run re-read / mutation. Used by concurrency tests to serialize races.
@@ -915,6 +917,12 @@ export const runRepository = {
       announcement?: CreateRunDiscordAnnouncementInput | null;
       /** RUN_SCOPE_CHANGED channel announcement — committed with the content rows. */
       scopeAnnouncement?: CreateRunDiscordAnnouncementInput | null;
+      /**
+       * Durable notification work that must commit with this edit (e.g.
+       * RUN_RESCHEDULED / RUN_SCOPE_CHANGED UserNotifications). Runs on this
+       * transaction's client after the Run, content and announcement writes.
+       */
+      writeInTx?: (txOrm: TxOrm) => Promise<void>;
       rosterEffect?: "NONE" | "MARK_CHANGED" | "REFRESH_EMBED";
     } = {},
     hooks: LifecycleAnnouncementTxHooks = {},
@@ -956,6 +964,12 @@ export const runRepository = {
         await txOrm.RunRoster.where({ id: roster.id }).update({ runChangedSinceAck: true, updatedAt: now });
       } else if (roster?.publishedAt && options.rosterEffect === "REFRESH_EMBED") {
         await txOrm.RunRoster.where({ id: roster.id }).update({ version: roster.version + 1, updatedAt: now });
+      }
+      if (options.writeInTx) {
+        await options.writeInTx(txOrm);
+      }
+      if (hooks.failBeforeCommit) {
+        throw new Error("TEST_HOOK_FAIL_BEFORE_COMMIT");
       }
     });
   },

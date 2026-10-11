@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
@@ -11,7 +11,10 @@ import {
   runScopeChangedSourceKey,
   userNotificationRepository,
 } from "@/repositories/user-notification.repository";
-import { runScopeChangedChannelSourceKey } from "@/repositories/run-discord-announcement.repository";
+import {
+  runRescheduledChannelSourceKey,
+  runScopeChangedChannelSourceKey,
+} from "@/repositories/run-discord-announcement.repository";
 import { parseRunScopeChanges } from "@/lib/run-scope-change";
 import { discordSyncService } from "@/services/discord-sync.service";
 import { rosterService } from "@/services/roster.service";
@@ -614,14 +617,189 @@ describe("run scope change notifications", () => {
   });
 });
 
+describe("Run edit notification atomicity", () => {
+  async function openRunWithSignups(daysAhead: number) {
+    const created = await runService.createRun(
+      lead,
+      venomousCreateInput({
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        scheduledStartAt: futureIso(daysAhead),
+        desiredTankCount: 1,
+        desiredHealerCount: 2,
+        desiredDpsCount: 1,
+      }),
+    );
+    createdRunIds.push(created.id);
+    await runService.openRun(lead, created.id);
+    await signupService.createBoosterSignup(player, { runId: created.id, characterId: charPlayer, role: "HEALER", isBackup: false });
+    await signupService.createBoosterSignup(multi, { runId: created.id, characterId: charMultiA, role: "HEALER", isBackup: false });
+    await signupService.createBoosterSignup(multi, { runId: created.id, characterId: charMultiB, role: "HEALER", isBackup: false });
+    return created.id;
+  }
+
+  const edit = (runId: string, scheduledStartAt: string, venomous: number, hooks = {}) =>
+    runService.updateRun(
+      lead,
+      {
+        runId,
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        scheduledStartAt,
+        desiredTankCount: 1,
+        desiredHealerCount: 2,
+        desiredDpsCount: 1,
+        notes: null,
+        ...seededProductSelection("VENOMOUS_ABYSS", venomous),
+      },
+      hooks,
+    );
+
+  async function notesOf(runId: string, type: "RUN_RESCHEDULED" | "RUN_SCOPE_CHANGED") {
+    return (await orm.UserNotification.where({ runId, type }).all()) as Array<{
+      userId: string;
+      sourceKey: string;
+      discordDeliveryStatus: string;
+      discordDeliverAfter: string | null;
+    }>;
+  }
+  async function announcementsOf(runId: string, type: "RUN_RESCHEDULED" | "RUN_SCOPE_CHANGED") {
+    return (await orm.RunDiscordAnnouncement.where({ runId, type }).all()) as Array<{ sourceKey: string }>;
+  }
+
+  it("reschedule: a failure just before commit rolls back Run, revision, announcement and UserNotifications together", async () => {
+    const runId = await openRunWithSignups(60);
+    const before = await runRepository.findById(runId);
+    const moved = new Date(Date.parse(before!.scheduledStartAt) + 90 * 60 * 1000).toISOString();
+
+    await expect(edit(runId, moved, 8, { failBeforeCommit: true })).rejects.toThrow(/TEST_HOOK_FAIL_BEFORE_COMMIT/);
+    const rolledBack = await runRepository.findById(runId);
+    expect(Date.parse(rolledBack!.scheduledStartAt)).toBe(Date.parse(before!.scheduledStartAt));
+    expect(rolledBack?.scheduleRevision).toBe(0);
+    expect(await announcementsOf(runId, "RUN_RESCHEDULED")).toHaveLength(0);
+    expect(await notesOf(runId, "RUN_RESCHEDULED")).toHaveLength(0);
+
+    await edit(runId, moved, 8);
+    const committed = await runRepository.findById(runId);
+    expect(committed?.scheduleRevision).toBe(1);
+    expect((await announcementsOf(runId, "RUN_RESCHEDULED")).map((row) => row.sourceKey)).toEqual([
+      runRescheduledChannelSourceKey(runId, 1),
+    ]);
+    const notes = await notesOf(runId, "RUN_RESCHEDULED");
+    // One per User (multi has two Characters), same revision as the announcement.
+    expect(notes.map((row) => row.userId).sort()).toEqual([ids.multi, ids.player].sort());
+    expect(notes.every((row) => row.sourceKey.startsWith(`run-rescheduled:${runId}:1:`))).toBe(true);
+
+    // Repeat the same request (no schedule change) → nothing new.
+    await edit(runId, committed!.scheduledStartAt, 8);
+    expect(await notesOf(runId, "RUN_RESCHEDULED")).toHaveLength(2);
+  });
+
+  it("scope 8/8 → 6/8: a failure just before commit rolls back contents, contentRevision, announcement and UserNotifications", async () => {
+    const runId = await openRunWithSignups(70);
+    const before = await runRepository.findById(runId);
+    const plannedBefore = (await runRepository.listRaidContents(runId)).map((row) => row.plannedBossCount);
+
+    await expect(edit(runId, before!.scheduledStartAt, 6, { failBeforeCommit: true })).rejects.toThrow(
+      /TEST_HOOK_FAIL_BEFORE_COMMIT/,
+    );
+    expect((await runRepository.listRaidContents(runId)).map((row) => row.plannedBossCount)).toEqual(plannedBefore);
+    expect((await runRepository.findById(runId))?.contentRevision).toBe(0);
+    expect(await announcementsOf(runId, "RUN_SCOPE_CHANGED")).toHaveLength(0);
+    expect(await notesOf(runId, "RUN_SCOPE_CHANGED")).toHaveLength(0);
+
+    await edit(runId, before!.scheduledStartAt, 6);
+    expect((await runRepository.findById(runId))?.contentRevision).toBe(1);
+    expect((await announcementsOf(runId, "RUN_SCOPE_CHANGED")).map((row) => row.sourceKey)).toEqual([
+      runScopeChangedChannelSourceKey(runId, 1),
+    ]);
+    const notes = await notesOf(runId, "RUN_SCOPE_CHANGED");
+    expect(notes.map((row) => row.userId).sort()).toEqual([ids.multi, ids.player].sort());
+    expect(notes.every((row) => row.sourceKey.startsWith(`run-scope-changed:${runId}:1:`))).toBe(true);
+
+    // 6/8 → 6/8: nothing created.
+    await edit(runId, before!.scheduledStartAt, 6);
+    expect(await notesOf(runId, "RUN_SCOPE_CHANGED")).toHaveLength(2);
+    expect(await announcementsOf(runId, "RUN_SCOPE_CHANGED")).toHaveLength(1);
+  });
+
+  it("a failing UserNotification write rolls back the whole Run edit (no committed change without its DM intent)", async () => {
+    const runId = await openRunWithSignups(100);
+    const before = await runRepository.findById(runId);
+    const moved = new Date(Date.parse(before!.scheduledStartAt) + 60 * 60 * 1000).toISOString();
+    const spy = vi.spyOn(userNotificationRepository, "createInTx").mockRejectedValueOnce(new Error("NOTIFICATION_WRITE_FAILED"));
+    try {
+      await expect(edit(runId, moved, 6)).rejects.toThrow(/NOTIFICATION_WRITE_FAILED/);
+    } finally {
+      spy.mockRestore();
+    }
+    const after = await runRepository.findById(runId);
+    expect(Date.parse(after!.scheduledStartAt)).toBe(Date.parse(before!.scheduledStartAt));
+    expect(after?.scheduleRevision).toBe(0);
+    expect(after?.contentRevision).toBe(0);
+    expect((await runRepository.listRaidContents(runId)).map((row) => row.plannedBossCount)).toEqual([8]);
+    expect(await announcementsOf(runId, "RUN_RESCHEDULED")).toHaveLength(0);
+    expect(await announcementsOf(runId, "RUN_SCOPE_CHANGED")).toHaveLength(0);
+    expect(await notesOf(runId, "RUN_RESCHEDULED")).toHaveLength(0);
+    expect(await notesOf(runId, "RUN_SCOPE_CHANGED")).toHaveLength(0);
+  });
+
+  it("recipients are the signups at commit time: a later withdrawal keeps its notification, a later signup gets none", async () => {
+    const runId = await openRunWithSignups(80);
+    const before = await runRepository.findById(runId);
+    await edit(runId, before!.scheduledStartAt, 7);
+    expect((await notesOf(runId, "RUN_SCOPE_CHANGED")).map((row) => row.userId).sort()).toEqual(
+      [ids.multi, ids.player].sort(),
+    );
+
+    const playerSignup = (await orm.RunSignup.where({ runId, userId: ids.player }).first()) as { id: string };
+    await signupService.withdrawSignup(player, playerSignup.id);
+    await signupService.createBoosterSignup(lead, { runId, characterId: charLeadTank, role: "TANK", isBackup: false });
+
+    const notes = await notesOf(runId, "RUN_SCOPE_CHANGED");
+    expect(notes.map((row) => row.userId).sort()).toEqual([ids.multi, ids.player].sort());
+  });
+
+  it("preferences and Quiet Hours are snapshotted exactly as before", async () => {
+    await orm.User.where({ id: ids.player }).update({ dmRunRescheduledEnabled: false });
+    await orm.User.where({ id: ids.multi }).update({
+      discordDmQuietHoursEnabled: true,
+      discordDmQuietHoursStart: "00:00",
+      discordDmQuietHoursEnd: "23:59",
+    });
+    try {
+      const runId = await openRunWithSignups(90);
+      const before = await runRepository.findById(runId);
+      await edit(runId, before!.scheduledStartAt, 5);
+      const notes = await notesOf(runId, "RUN_SCOPE_CHANGED");
+      const playerNote = notes.find((row) => row.userId === ids.player);
+      const multiNote = notes.find((row) => row.userId === ids.multi);
+      expect(playerNote?.discordDeliveryStatus).toBe("SKIPPED");
+      expect(multiNote?.discordDeliveryStatus).toBe("PENDING");
+      expect(multiNote?.discordDeliverAfter).not.toBeNull();
+    } finally {
+      await orm.User.where({ id: ids.player }).update({ dmRunRescheduledEnabled: true });
+      await orm.User.where({ id: ids.multi }).update({
+        discordDmQuietHoursEnabled: false,
+        discordDmQuietHoursStart: null,
+        discordDmQuietHoursEnd: null,
+      });
+    }
+  });
+});
+
 async function runLifecycleRetry(runId: string, contentRevision: number, changes: ReturnType<typeof parseRunScopeChanges>) {
-  const { runLifecycleNotificationService } = await import("@/services/run-lifecycle-notifications.service");
+  const { createRunScopeChangedNotificationsInTx } = await import("@/services/run-lifecycle-notifications.service");
+  const { db } = await import("@/lib/prisma");
   const run = await runRepository.findById(runId);
-  await runLifecycleNotificationService.notifyRunScopeChanged({
-    runId,
-    productLabel: run!.contentDisplay.productLabel,
-    scheduledStartAt: run!.scheduledStartAt,
-    contentRevision,
-    changes,
+  await db.transaction(async (tx) => {
+    const txOrm = ((tx.orm as { public?: typeof orm }).public ?? (tx.orm as unknown as typeof orm)) as typeof orm;
+    await createRunScopeChangedNotificationsInTx(txOrm, {
+      runId,
+      productLabel: run!.contentDisplay.productLabel,
+      scheduledStartAt: run!.scheduledStartAt,
+      contentRevision,
+      changes,
+    });
   });
 }

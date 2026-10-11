@@ -32,7 +32,11 @@ import { activityRepository } from "@/repositories/activity.repository";
 import { attendanceRepository } from "@/repositories/attendance.repository";
 import { raidRepository } from "@/repositories/raid.repository";
 import { communityScheduleRunRepository } from "@/repositories/community-schedule-run.repository";
-import { runRepository, type RunCreateWithContentsInput } from "@/repositories/run.repository";
+import {
+  runRepository,
+  type LifecycleAnnouncementTxHooks,
+  type RunCreateWithContentsInput,
+} from "@/repositories/run.repository";
 import type { RunTemplateRecord } from "@/repositories/run-template.repository";
 import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
 import { userRepository } from "@/repositories/user.repository";
@@ -42,7 +46,11 @@ import {
   runRescheduledChannelSourceKey,
   runScopeChangedChannelSourceKey,
 } from "@/repositories/run-discord-announcement.repository";
-import { runLifecycleNotificationService } from "@/services/run-lifecycle-notifications.service";
+import {
+  createRunRescheduledNotificationsInTx,
+  createRunScopeChangedNotificationsInTx,
+  runLifecycleNotificationService,
+} from "@/services/run-lifecycle-notifications.service";
 import { runDomainEventService } from "@/services/run-domain-event.service";
 import { runTemplateService } from "@/services/run-template.service";
 import {
@@ -860,7 +868,8 @@ export const runService = {
     return { ids };
   },
 
-  async updateRun(user: AuthenticatedUser, input: UpdateRunInput) {
+  /** `txHooks` is test-only fault injection for the edit transaction. */
+  async updateRun(user: AuthenticatedUser, input: UpdateRunInput, txHooks: LifecycleAnnouncementTxHooks = {}) {
     const run = await loadManagedRun(user, input.runId);
     // Pre-start only (Start Run is the freeze point); signup history never
     // locks a field. The repository re-checks the status under the roster lock.
@@ -1097,30 +1106,31 @@ export const runService = {
         announcement: rescheduleAnnouncement,
         scopeAnnouncement,
         rosterEffect,
+        // DM notification intent commits with the change itself — no window in
+        // which the Run changed and its announcement exists but DMs do not.
+        writeInTx: async (txOrm) => {
+          if (scheduleChanged) {
+            await createRunRescheduledNotificationsInTx(txOrm, {
+              runId: run.id,
+              productLabel: display.productLabel,
+              previousScheduledStartAt,
+              nextScheduledStartAt: scheduledStartAt,
+              scheduleRevision: nextScheduleRevision,
+            });
+          }
+          if (notifyScopeChange) {
+            await createRunScopeChangedNotificationsInTx(txOrm, {
+              runId: run.id,
+              productLabel: display.productLabel,
+              scheduledStartAt,
+              contentRevision: nextContentRevision,
+              changes: scopeChanges,
+            });
+          }
+        },
       },
+      txHooks,
     );
-
-    if (scheduleChanged) {
-      await runLifecycleNotificationService.notifyRunRescheduled({
-        runId: run.id,
-        productLabel: display.productLabel,
-        previousScheduledStartAt,
-        nextScheduledStartAt: scheduledStartAt,
-        scheduleRevision: nextScheduleRevision,
-        difficulty,
-        lootType: input.lootType,
-      });
-    }
-
-    if (notifyScopeChange) {
-      await runLifecycleNotificationService.notifyRunScopeChanged({
-        runId: run.id,
-        productLabel: display.productLabel,
-        scheduledStartAt,
-        contentRevision: nextContentRevision,
-        changes: scopeChanges,
-      });
-    }
 
     await activityRepository.create({
       userId: user.id,
