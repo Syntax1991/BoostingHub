@@ -54,6 +54,7 @@ suppress the channel post). They use deterministic `sourceKey` values distinct f
 UserNotification keys:
 
 - Reschedule: `run-rescheduled:<runId>:<scheduleRevision>`
+- **Durability:** `RUN_RESCHEDULED` and `RUN_SCOPE_CHANGED` UserNotifications are written inside the same Edit Run transaction as the Run fields / `RunRaidContent`, the revision bump and the announcement (`updatePreStartAtomic` → `writeInTx`). Recipients and DM preferences / Quiet Hours are read with that transaction's client, so the audience is the signup state at commit time; a committed change can never lack its DM intent. (`RUN_CANCELLED` / `RUN_REACTIVATED` UserNotifications are still created right after their lifecycle transaction — known follow-up.)
 - Scope change: `run-scope-changed:<runId>:<contentRevision>` — the row's `scopeChanges` JSON (before → after per changed content) is the single structured snapshot; that revision's `RUN_SCOPE_CHANGED` DMs (`run-scope-changed:<runId>:<contentRevision>:<userId>`) render from it. `Run.contentRevision` increments only on a material scope change.
 - Cancel: `run-cancelled:<runId>`
 
