@@ -21,9 +21,11 @@ const BASE_TABS: Array<{ id: RunDetailTab; label: string }> = [
 export function RunDetailTabs({
   data,
   initialTab,
+  timeZone,
 }: {
   data: RunDetailView;
   initialTab: RunDetailTab;
+  timeZone?: string;
 }) {
   const router = useRouter();
   const consumables = data.consumables;
@@ -91,7 +93,7 @@ export function RunDetailTabs({
         id={`run-panel-${tab}`}
         aria-labelledby={`run-tab-${tab}`}
       >
-        {tab === "overview" ? <RunOverviewSection data={data} /> : null}
+        {tab === "overview" ? <RunOverviewSection data={data} timeZone={timeZone} /> : null}
         {tab === "signups" ? <RunSignupsSection data={data} /> : null}
         {tab === "roster" ? <RunRosterSection data={data} /> : null}
         {tab === "attendance" ? <RunAttendanceSection data={data} /> : null}

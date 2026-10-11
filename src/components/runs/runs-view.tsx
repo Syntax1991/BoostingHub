@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { formatDate, formatTime } from "@/lib/datetime";
+import { DEFAULT_TIME_ZONE, formatDate, formatTime } from "@/lib/datetime";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DifficultyBadge, RunStatusBadge, SignupStatusBadge } from "@/components/ui/badges";
 import { RunsFilters } from "@/components/runs/runs-filters";
@@ -9,7 +9,12 @@ import type { runController } from "@/controllers/app.controller";
 
 type RunsPage = Awaited<ReturnType<typeof runController.getRunsPage>>;
 
-export function RunsView({ data }: { data: RunsPage }) {
+/**
+ * Run start times are absolute instants; they are displayed in the viewer's
+ * Settings timezone (fallback Europe/Berlin). Order and filters stay on the
+ * instant — formatting happens here only.
+ */
+export function RunsView({ data, timeZone = DEFAULT_TIME_ZONE }: { data: RunsPage; timeZone?: string }) {
   return (
     <div>
       <PageHeader
@@ -27,6 +32,12 @@ export function RunsView({ data }: { data: RunsPage }) {
         }
       />
       <RunsFilters difficulty={data.filters.difficulty} status={data.filters.status} />
+      <p className="mb-2 text-xs text-muted">
+        Times shown in <span className="text-foreground">{timeZone}</span> ·{" "}
+        <Link href="/settings" className="text-accent hover:underline">
+          change in Settings
+        </Link>
+      </p>
       <Card>
         {data.runs.length === 0 ? (
           <EmptyState
@@ -63,9 +74,9 @@ export function RunsView({ data }: { data: RunsPage }) {
                         <RunStatusBadge status={run.status} />
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-muted">
-                      <div>{formatDate(run.scheduledStartAt)}</div>
-                      <div className="text-xs">{formatTime(run.scheduledStartAt)}</div>
+                    <td className="px-4 py-3 text-muted" title={timeZone}>
+                      <div>{formatDate(run.scheduledStartAt, timeZone)}</div>
+                      <div className="text-xs">{formatTime(run.scheduledStartAt, timeZone)}</div>
                     </td>
                     <td className="px-4 py-3">{run.raidLeadName}</td>
                     <td className="px-4 py-3 text-xs text-muted">
@@ -94,6 +105,7 @@ export function RunsView({ data }: { data: RunsPage }) {
                         runId={run.id}
                         signupWindowOpen={run.signupWindowOpen}
                         ownSignupCount={run.ownSignupCount}
+                        timeZone={timeZone}
                       />
                     </td>
                   </tr>
