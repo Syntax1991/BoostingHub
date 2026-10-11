@@ -56,6 +56,23 @@ describe("role-copy toggle semantics", () => {
     expect(isRoleCopyChecked({ stagedRole: staged.get(signupId), groupRole: "HEALER" })).toBe(false);
   });
 
+  it("repicks the same User onto another signed Character in one step (A → B)", () => {
+    const staged = applyRoleCopyToggle({
+      staged: new Map<string, CharacterRole | null>([
+        ["user1-charA", "HEALER"],
+        ["user2-char", "TANK"],
+      ]),
+      signupId: "user1-charB",
+      groupRole: "RANGED_DPS",
+      checked: true,
+      replaceBoosterSignupIds: ["user1-charA", "user1-charC"],
+    });
+    expect([...staged.entries()].sort()).toEqual([
+      ["user1-charB", "RANGED_DPS"],
+      ["user2-char", "TANK"],
+    ]);
+  });
+
   it("reassigns through the Healer copy without creating a second slot", () => {
     let staged: Map<string, CharacterRole | null> = new Map([[signupId, "TANK"]]);
     staged = applyRoleCopyToggle({

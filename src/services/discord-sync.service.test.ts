@@ -661,7 +661,7 @@ describe("discordSyncService.getSignupEmbedData", () => {
     expect((posts[0] as { signupMessageId: string }).signupMessageId).toBe("pool-msg");
   });
 
-  it("Signed users counts distinct Users while several Characters of one User are picked", async () => {
+  it("Signed users counts distinct Users while one of their Characters is picked", async () => {
     const multiRunId = await runService
       .createRun(
         lead,
@@ -706,10 +706,130 @@ describe("discordSyncService.getSignupEmbedData", () => {
       selections: [{ signupId: tankSignupId, selectedRole: "TANK" }],
     });
     embed = await discordSyncService.getSignupEmbedData(multiRunId);
-    // Still one signed User; the unpicked healer Character stays in the pool.
+    // Still one signed User; the picked User's other Character leaves the pool too.
     expect(embed?.uniqueSignupCount).toBe(1);
     expect(embed?.members.signed.tanks).toHaveLength(0);
-    expect(embed?.members.signed.healers).toHaveLength(1);
+    expect(embed?.members.signed.healers).toHaveLength(0);
+  });
+
+  it("a picked User leaves Signups by role with ALL their booster Characters; web repick A → B keeps them hidden", async () => {
+    const userRunId = await runService
+      .createRun(
+        lead,
+        venomousCreateInput({
+          difficulty: "HEROIC",
+          lootType: "UNSAVED",
+          venomousPlannedBossCount: 8,
+          scheduledStartAt: futureIso(42),
+          desiredTankCount: 1,
+          desiredHealerCount: 0,
+          desiredDpsCount: 1,
+        }),
+      )
+      .then((run) => run.id);
+    createdRunIds.push(userRunId);
+    await runService.openRun(lead, userRunId);
+
+    await grantQualification(ids.loot);
+    await grantQualification(ids.tank);
+    const charA = await createCharacter(ids.loot, "MultiUserA", "PALADIN", "Protection", "TANK");
+    const charB = await createCharacter(ids.loot, "MultiUserB", "HUNTER", "Marksmanship", "RANGED_DPS");
+    const charOther = await createCharacter(ids.tank, "OtherUserTank", "WARRIOR", "Protection", "TANK");
+    const signupA = await createSignup({ runId: userRunId, userId: ids.loot, characterId: charA, participationType: "BOOSTER", role: "TANK" });
+    const signupB = await createSignup({ runId: userRunId, userId: ids.loot, characterId: charB, participationType: "BOOSTER", role: "RANGED_DPS" });
+    const signupOther = await createSignup({ runId: userRunId, userId: ids.tank, characterId: charOther, participationType: "BOOSTER", role: "TANK" });
+
+    const board = async () => {
+      const embed = await discordSyncService.getSignupEmbedData(userRunId);
+      const signed = embed!.members.signed;
+      return {
+        embed: embed!,
+        ids: new Set([...signed.tanks, ...signed.healers, ...signed.dps, ...signed.lootbuddies].map((m) => m.signupId)),
+      };
+    };
+    const settle = () =>
+      discordSyncService.recordSignupPost({ runId: userRunId, channelId: "user-chan", messageId: "user-msg" });
+    const workMessageId = async () =>
+      (await discordSyncService.listSyncWork()).signups.find((item) => item.runId === userRunId)?.existingMessageId;
+    const signupRowCount = async () => (await orm.RunSignup.where({ runId: userRunId }).all()).length;
+
+    // 1/2/13: unpicked → A, B and the other User visible; 2 signed Users.
+    let state = await board();
+    expect([...state.ids].sort()).toEqual([signupA, signupB, signupOther].sort());
+    expect(state.embed.uniqueSignupCount).toBe(2);
+    await settle();
+    const rowsBefore = await signupRowCount();
+
+    // 3/4: A draft-picked (still PENDING) → neither A nor B on Signups; A on the roster.
+    let view = await rosterService.getRosterManagementView(lead, userRunId);
+    await rosterService.saveDraftSelection(lead, {
+      runId: userRunId,
+      version: view.roster.version,
+      selections: [{ signupId: signupA, selectedRole: "TANK" }],
+    });
+    state = await board();
+    expect(state.ids.has(signupA)).toBe(false);
+    expect(state.ids.has(signupB)).toBe(false);
+    expect(state.ids.has(signupOther)).toBe(true);
+    expect(state.embed.members.picked.tanks.some((m) => m.signupId === signupA)).toBe(true);
+    expect(state.embed.uniqueSignupCount).toBe(2);
+    expect(await workMessageId()).toBe("user-msg");
+    await settle();
+
+    // 10: the web roster still offers B while A is picked.
+    view = await rosterService.getRosterManagementView(lead, userRunId);
+    expect(view.boosters.some((card) => card.id === signupB)).toBe(true);
+
+    // 8/9/11: repick A → B in one save — the User never reappears; no rows deleted.
+    await rosterService.saveDraftSelection(lead, {
+      runId: userRunId,
+      version: view.roster.version,
+      selections: [{ signupId: signupB, selectedRole: "RANGED_DPS" }],
+    });
+    state = await board();
+    expect(state.ids.has(signupA)).toBe(false);
+    expect(state.ids.has(signupB)).toBe(false);
+    expect(state.embed.members.picked.dps.some((m) => m.signupId === signupB)).toBe(true);
+    expect(state.embed.members.picked.tanks.some((m) => m.signupId === signupA)).toBe(false);
+    expect(state.embed.uniqueSignupCount).toBe(2);
+    expect(await signupRowCount()).toBe(rowsBefore);
+    await settle();
+
+    // 5/6: publish → B SELECTED, A NOT_SELECTED: User still fully hidden; the
+    // unpicked other User is NOT_SELECTED and stays visible (#230).
+    view = await rosterService.getRosterManagementView(lead, userRunId);
+    await rosterService.publishRoster(lead, { runId: userRunId, version: view.roster.version, acknowledgeWarnings: true });
+    const status = async (id: string) => ((await orm.RunSignup.where({ id }).first()) as { status: string }).status;
+    expect(await status(signupB)).toBe("SELECTED");
+    expect(await status(signupA)).toBe("NOT_SELECTED");
+    expect(await status(signupOther)).toBe("NOT_SELECTED");
+    state = await board();
+    expect(state.ids.has(signupA)).toBe(false);
+    expect(state.ids.has(signupB)).toBe(false);
+    expect(state.ids.has(signupOther)).toBe(true);
+    expect(state.embed.uniqueSignupCount).toBe(2);
+    await settle();
+
+    // 7: Update Roster picks only the other User → A and B reappear, the other User leaves.
+    view = await rosterService.getRosterManagementView(lead, userRunId);
+    await rosterService.saveDraftSelection(lead, {
+      runId: userRunId,
+      version: view.roster.version,
+      selections: [{ signupId: signupOther, selectedRole: "TANK" }],
+    });
+    view = await rosterService.getRosterManagementView(lead, userRunId);
+    await rosterService.publishRoster(lead, { runId: userRunId, version: view.roster.version, acknowledgeWarnings: true });
+    state = await board();
+    expect(state.ids.has(signupA)).toBe(true);
+    expect(state.ids.has(signupB)).toBe(true);
+    expect(state.ids.has(signupOther)).toBe(false);
+    expect(state.embed.uniqueSignupCount).toBe(2);
+    expect(await signupRowCount()).toBe(rowsBefore);
+
+    // 16/17: same message identity, one RunDiscordPost row.
+    expect(await workMessageId()).toBe("user-msg");
+    const posts = await orm.RunDiscordPost.where({ runId: userRunId }).all();
+    expect(posts).toHaveLength(1);
   });
 
   it("OPEN/ROSTERING: multi-role offers count in each signed role, but draft picked uses only selectedRole", async () => {

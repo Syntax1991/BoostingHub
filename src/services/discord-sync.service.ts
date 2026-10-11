@@ -634,8 +634,9 @@ function toSignupEmbedData(run: RunListRecord): SignupEmbedData {
  * OPEN / ROSTERING (and pre-publish): roster picks = saved draft selections.
  * PUBLISHED+: roster picks = live SELECTED signups + publishedRole (replacement drafts stay private).
  * Signups = the unpicked pool: PENDING / NOT_SELECTED offers that are not a
- * current roster pick. A pick leaves the pool as soon as it is a pick (draft
- * save before publication, SELECTED after) and returns when unpicked.
+ * current roster pick, minus every BOOSTER offer of a User who already holds a
+ * BOOSTER pick. A pick leaves the pool as soon as it is a pick (draft save
+ * before publication, SELECTED after) and returns when unpicked.
  * NOT_SELECTED after publication stays listed (#230).
  * Counts are length-derived from the same member lists rendered in the embeds.
  */
@@ -664,8 +665,18 @@ function buildSignupRoleProjection(run: RunListRecord): Pick<SignupEmbedData, "r
   }
 
   const pickedIds = new Set(pickedRows.map((signup) => signup.id));
+  // A User holds at most one BOOSTER slot: once any of their Characters is a
+  // pick, the whole User leaves the BOOSTER pool (all their offered
+  // Characters), so a repick A → B never makes them reappear publicly.
+  // LOOTBUDDY rows stay decided per signup row, as on the roster.
+  const pickedBoosterUserIds = new Set(
+    pickedRows.filter((signup) => signup.participationType === "BOOSTER").map((signup) => signup.userId),
+  );
   const listedSignups = run.signups.filter(
-    (signup) => isAvailableSignup(signup.status) && !pickedIds.has(signup.id),
+    (signup) =>
+      isAvailableSignup(signup.status) &&
+      !pickedIds.has(signup.id) &&
+      !(signup.participationType === "BOOSTER" && pickedBoosterUserIds.has(signup.userId)),
   );
 
   const externals = run.roster?.externalBoosters ?? [];
