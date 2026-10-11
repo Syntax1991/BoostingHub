@@ -249,10 +249,11 @@ describe("published-run signups", () => {
     );
     expect(lateBooster?.status).toBe("PENDING");
 
-    // Late PENDING + published SELECTED both appear on Discord Signups by role.
+    // Late PENDING joins Signups by role; the published SELECTED pick is on the
+    // roster, not in the unpicked pool — but both Users still count as signed.
     const afterLateEmbed = await discordSyncService.getSignupEmbedData(runId);
     expect(afterLateEmbed?.uniqueSignupCount).toBe(2);
-    expect(afterLateEmbed?.members.signed.dps.some((m) => m.signupId === earlySignupId)).toBe(true);
+    expect(afterLateEmbed?.members.signed.dps.some((m) => m.signupId === earlySignupId)).toBe(false);
     expect(afterLateEmbed?.members.signed.dps.some((m) => m.signupId === lateBooster!.id)).toBe(true);
 
     // M — Lootbuddy signup after publish

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   isActiveSignupOffer,
-  isListedSignup,
+  isAvailableSignup,
+  isSignedUpSignup,
   isPickedSignup,
   normalizeWithdrawReason,
   PICKED_WITHDRAW_RUN_STATUSES,
@@ -29,12 +30,21 @@ describe("isActiveSignupOffer", () => {
   });
 });
 
-describe("isListedSignup", () => {
-  it("includes NOT_SELECTED so published-unpicked signups stay on the public board", () => {
-    expect(isListedSignup("PENDING")).toBe(true);
-    expect(isListedSignup("SELECTED")).toBe(true);
-    expect(isListedSignup("NOT_SELECTED")).toBe(true);
-    expect(isListedSignup("WITHDRAWN")).toBe(false);
+describe("isSignedUpSignup", () => {
+  it("counts every non-withdrawn signup (Signed users)", () => {
+    expect(isSignedUpSignup("PENDING")).toBe(true);
+    expect(isSignedUpSignup("SELECTED")).toBe(true);
+    expect(isSignedUpSignup("NOT_SELECTED")).toBe(true);
+    expect(isSignedUpSignup("WITHDRAWN")).toBe(false);
+  });
+});
+
+describe("isAvailableSignup", () => {
+  it("is the unpicked pool: PENDING and NOT_SELECTED only", () => {
+    expect(isAvailableSignup("PENDING")).toBe(true);
+    expect(isAvailableSignup("NOT_SELECTED")).toBe(true);
+    expect(isAvailableSignup("SELECTED")).toBe(false);
+    expect(isAvailableSignup("WITHDRAWN")).toBe(false);
   });
 });
 
