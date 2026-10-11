@@ -423,9 +423,11 @@ describe("discordSyncService.getSignupEmbedData", () => {
     const embed = await discordSyncService.getSignupEmbedData(pubRunId);
     expect(embed?.runStatus).toBe("PUBLISHED");
     expect(embed?.signupWindowOpen).toBe(true);
-    // Unique users: tank + ranged + melee — never a projected role-row sum.
+    // Signed users: tank + ranged + melee — the SELECTED tank still counts.
     expect(embed?.uniqueSignupCount).toBe(3);
-    expect(embed?.members.signed.tanks.some((m) => m.signupId === tankSignupId)).toBe(true);
+    // SELECTED leaves the unpicked pool; NOT_SELECTED stays (#230).
+    expect(embed?.members.signed.tanks.some((m) => m.signupId === tankSignupId)).toBe(false);
+    expect(embed?.roleStatus.tank.signed).toBe(0);
     expect(embed?.members.signed.dps.some((m) => m.signupId === rangedSignupId)).toBe(true);
     expect(embed?.members.signed.dps.some((m) => m.signupId === meleeSignupId)).toBe(true);
     expect(embed?.roleStatus.dps.signed).toBe(2);
@@ -525,6 +527,191 @@ describe("discordSyncService.getSignupEmbedData", () => {
     expect(embed?.members.picked.dps).toHaveLength(1);
   });
 
+  it("Signups by role is the unpicked pool: picks leave it, unpicks return, Signed users and message stay", async () => {
+    const poolRunId = await runService
+      .createRun(
+        lead,
+        venomousCreateInput({
+          difficulty: "HEROIC",
+          lootType: "UNSAVED",
+          venomousPlannedBossCount: 8,
+          scheduledStartAt: futureIso(28),
+          desiredTankCount: 1,
+          desiredHealerCount: 0,
+          desiredDpsCount: 2,
+        }),
+      )
+      .then((run) => run.id);
+    createdRunIds.push(poolRunId);
+    await runService.openRun(lead, poolRunId);
+
+    await grantQualification(ids.extra);
+    const tankChar = await createCharacter(ids.extra, "PoolTankLab", "PALADIN", "Protection", "TANK");
+    const tankSignupId = await createSignup({
+      runId: poolRunId,
+      userId: ids.extra,
+      characterId: tankChar,
+      participationType: "BOOSTER",
+      role: "TANK",
+    });
+    const rangedChar = await createCharacter(ids.ranged, "PoolRangedLab", "HUNTER", "Marksmanship", "RANGED_DPS");
+    const rangedSignupId = await createSignup({
+      runId: poolRunId,
+      userId: ids.ranged,
+      characterId: rangedChar,
+      participationType: "BOOSTER",
+      role: "RANGED_DPS",
+    });
+    const meleeChar = await createCharacter(ids.melee, "PoolMeleeLab", "WARRIOR", "Fury", "MELEE_DPS");
+    const meleeSignupId = await createSignup({
+      runId: poolRunId,
+      userId: ids.melee,
+      characterId: meleeChar,
+      participationType: "BOOSTER",
+      role: "MELEE_DPS",
+    });
+
+    const inPool = async (signupId: string) => {
+      const embed = await discordSyncService.getSignupEmbedData(poolRunId);
+      const signed = embed!.members.signed;
+      return [...signed.tanks, ...signed.healers, ...signed.dps, ...signed.lootbuddies].some(
+        (member) => member.signupId === signupId,
+      );
+    };
+    const signupWork = async () =>
+      (await discordSyncService.listSyncWork()).signups.find((item) => item.runId === poolRunId);
+    const settle = () =>
+      discordSyncService.recordSignupPost({ runId: poolRunId, channelId: "pool-chan", messageId: "pool-msg" });
+
+    // PENDING -> visible; settle the existing Discord message.
+    expect(await inPool(tankSignupId)).toBe(true);
+    expect(await inPool(rangedSignupId)).toBe(true);
+    await settle();
+    expect(await signupWork()).toBeUndefined();
+
+    // Draft pick (status still PENDING) -> leaves the pool, message edited in place.
+    let view = await rosterService.getRosterManagementView(lead, poolRunId);
+    await rosterService.saveDraftSelection(lead, {
+      runId: poolRunId,
+      version: view.roster.version,
+      selections: [
+        { signupId: tankSignupId, selectedRole: "TANK" },
+        { signupId: meleeSignupId, selectedRole: "MELEE_DPS" },
+      ],
+    });
+    expect((await orm.RunSignup.where({ id: tankSignupId }).first())?.status).toBe("PENDING");
+    expect(await inPool(tankSignupId)).toBe(false);
+    expect(await inPool(meleeSignupId)).toBe(false);
+    expect(await inPool(rangedSignupId)).toBe(true);
+    let embed = await discordSyncService.getSignupEmbedData(poolRunId);
+    expect(embed?.uniqueSignupCount).toBe(3);
+    expect(embed?.roleStatus.tank.signed).toBe(0);
+    expect(embed?.roleStatus.dps.signed).toBe(1);
+    let work = await signupWork();
+    expect(work?.existingMessageId).toBe("pool-msg");
+    await settle();
+
+    // Draft unpick -> back in the pool.
+    view = await rosterService.getRosterManagementView(lead, poolRunId);
+    await rosterService.saveDraftSelection(lead, {
+      runId: poolRunId,
+      version: view.roster.version,
+      selections: [{ signupId: tankSignupId, selectedRole: "TANK" }],
+    });
+    expect(await inPool(meleeSignupId)).toBe(true);
+    expect((await signupWork())?.existingMessageId).toBe("pool-msg");
+    await settle();
+
+    // Publish: tank SELECTED (absent), ranged + melee NOT_SELECTED (visible under DPS).
+    view = await rosterService.getRosterManagementView(lead, poolRunId);
+    await rosterService.publishRoster(lead, { runId: poolRunId, version: view.roster.version, acknowledgeWarnings: true });
+    expect((await orm.RunSignup.where({ id: tankSignupId }).first())?.status).toBe("SELECTED");
+    expect((await orm.RunSignup.where({ id: rangedSignupId }).first())?.status).toBe("NOT_SELECTED");
+    embed = await discordSyncService.getSignupEmbedData(poolRunId);
+    expect(embed?.members.signed.tanks.some((m) => m.signupId === tankSignupId)).toBe(false);
+    expect(embed?.members.signed.dps.some((m) => m.signupId === rangedSignupId)).toBe(true);
+    expect(embed?.members.signed.dps.some((m) => m.signupId === meleeSignupId)).toBe(true);
+    expect(embed?.uniqueSignupCount).toBe(3);
+    await settle();
+
+    // Update Roster: NOT_SELECTED -> SELECTED leaves, SELECTED -> NOT_SELECTED returns.
+    view = await rosterService.getRosterManagementView(lead, poolRunId);
+    await rosterService.saveDraftSelection(lead, {
+      runId: poolRunId,
+      version: view.roster.version,
+      selections: [{ signupId: rangedSignupId, selectedRole: "RANGED_DPS" }],
+    });
+    // A replacement draft after publication stays private until Update Roster.
+    expect(await inPool(rangedSignupId)).toBe(true);
+    expect(await inPool(tankSignupId)).toBe(false);
+    view = await rosterService.getRosterManagementView(lead, poolRunId);
+    await rosterService.publishRoster(lead, { runId: poolRunId, version: view.roster.version, acknowledgeWarnings: true });
+    expect((await orm.RunSignup.where({ id: rangedSignupId }).first())?.status).toBe("SELECTED");
+    expect((await orm.RunSignup.where({ id: tankSignupId }).first())?.status).toBe("NOT_SELECTED");
+    expect(await inPool(rangedSignupId)).toBe(false);
+    expect(await inPool(tankSignupId)).toBe(true);
+    embed = await discordSyncService.getSignupEmbedData(poolRunId);
+    expect(embed?.uniqueSignupCount).toBe(3);
+    work = await signupWork();
+    expect(work?.existingMessageId).toBe("pool-msg");
+
+    // One RunDiscordPost row, same message identity throughout.
+    const posts = await orm.RunDiscordPost.where({ runId: poolRunId }).all();
+    expect(posts).toHaveLength(1);
+    expect((posts[0] as { signupMessageId: string }).signupMessageId).toBe("pool-msg");
+  });
+
+  it("Signed users counts distinct Users while several Characters of one User are picked", async () => {
+    const multiRunId = await runService
+      .createRun(
+        lead,
+        venomousCreateInput({
+          difficulty: "HEROIC",
+          lootType: "UNSAVED",
+          venomousPlannedBossCount: 8,
+          scheduledStartAt: futureIso(35),
+          desiredTankCount: 1,
+          desiredHealerCount: 1,
+          desiredDpsCount: 0,
+        }),
+      )
+      .then((run) => run.id);
+    createdRunIds.push(multiRunId);
+    await runService.openRun(lead, multiRunId);
+    await grantQualification(ids.healer);
+    const altTank = await createCharacter(ids.healer, "MultiTankLab", "PALADIN", "Protection", "TANK");
+    const altHeal = await createCharacter(ids.healer, "MultiHealLab", "PRIEST", "Holy", "HEALER");
+    const tankSignupId = await createSignup({
+      runId: multiRunId,
+      userId: ids.healer,
+      characterId: altTank,
+      participationType: "BOOSTER",
+      role: "TANK",
+    });
+    await createSignup({
+      runId: multiRunId,
+      userId: ids.healer,
+      characterId: altHeal,
+      participationType: "BOOSTER",
+      role: "HEALER",
+    });
+
+    let embed = await discordSyncService.getSignupEmbedData(multiRunId);
+    expect(embed?.uniqueSignupCount).toBe(1);
+
+    const view = await rosterService.getRosterManagementView(lead, multiRunId);
+    await rosterService.saveDraftSelection(lead, {
+      runId: multiRunId,
+      version: view.roster.version,
+      selections: [{ signupId: tankSignupId, selectedRole: "TANK" }],
+    });
+    embed = await discordSyncService.getSignupEmbedData(multiRunId);
+    // Still one signed User; the unpicked healer Character stays in the pool.
+    expect(embed?.uniqueSignupCount).toBe(1);
+    expect(embed?.members.signed.tanks).toHaveLength(0);
+    expect(embed?.members.signed.healers).toHaveLength(1);
+  });
+
   it("OPEN/ROSTERING: multi-role offers count in each signed role, but draft picked uses only selectedRole", async () => {
     const hybridRunId = await runService
       .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 2, desiredHealerCount: 2, desiredDpsCount: 2 }))
@@ -595,11 +782,11 @@ describe("discordSyncService.getSignupEmbedData", () => {
     expect(embed?.roleStatus.dps.picked).toBe(0);
     expect(embed?.members.picked.tanks.some((m) => m.signupId === hybridSignupId)).toBe(false);
     expect(embed?.members.picked.healers.filter((m) => m.signupId === hybridSignupId)).toHaveLength(1);
-    // Selected Users remain on Signups — Roster is a separate Discord message.
-    expect(embed?.members.signed.tanks.some((m) => m.signupId === hybridSignupId)).toBe(true);
-    expect(embed?.members.signed.healers.some((m) => m.signupId === hybridSignupId)).toBe(true);
-    expect(embed?.roleStatus.tank.signed).toBe(1);
-    expect(embed?.roleStatus.healer.signed).toBe(2);
+    // A draft pick leaves the unpicked pool in every offered role; Signed users unchanged.
+    expect(embed?.members.signed.tanks.some((m) => m.signupId === hybridSignupId)).toBe(false);
+    expect(embed?.members.signed.healers.some((m) => m.signupId === hybridSignupId)).toBe(false);
+    expect(embed?.roleStatus.tank.signed).toBe(0);
+    expect(embed?.roleStatus.healer.signed).toBe(1);
     expect(embed?.roleStatus.dps.signed).toBe(1);
 
     view = await rosterService.getRosterManagementView(lead, hybridRunId);
@@ -613,7 +800,7 @@ describe("discordSyncService.getSignupEmbedData", () => {
     expect(embed?.roleStatus.healer.picked).toBe(0);
     expect(embed?.members.picked.tanks.some((m) => m.signupId === hybridSignupId)).toBe(true);
     expect(embed?.members.picked.healers.some((m) => m.signupId === hybridSignupId)).toBe(false);
-    expect(embed?.members.signed.tanks.some((m) => m.signupId === hybridSignupId)).toBe(true);
+    expect(embed?.members.signed.tanks.some((m) => m.signupId === hybridSignupId)).toBe(false);
   });
 });
 

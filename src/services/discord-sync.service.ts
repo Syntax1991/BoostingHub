@@ -47,7 +47,7 @@ import {
 import { projectRunContentLockouts } from "@/lib/run-content-lockouts";
 import { lockoutService } from "@/services/lockout.service";
 import { isSignupWindowOpen, SIGNUP_WINDOW_STATUSES } from "@/services/run-state";
-import { isActiveSignupOffer, isListedSignup } from "@/services/signup-state";
+import { isActiveSignupOffer, isAvailableSignup, isSignedUpSignup } from "@/services/signup-state";
 import { parseRescheduleHrefTimestamps } from "@/services/notification-content";
 
 /**
@@ -596,11 +596,10 @@ export function shouldRetireDiscordChannel(run: { status?: string; archivedAt?: 
  * old hand-maintained signature field list).
  */
 function toSignupEmbedData(run: RunListRecord): SignupEmbedData {
-  // Public board = every non-withdrawn signup, including NOT_SELECTED after
-  // roster publish. Do not use isActiveSignupOffer here — that excludes
-  // unpicked published outcomes and incorrectly empties Discord role lists.
-  const listed = run.signups.filter((signup) => isListedSignup(signup.status));
-  const projection = buildSignupRoleProjection(run, listed);
+  // "Signed users" = every User still signed up (PENDING / SELECTED /
+  // NOT_SELECTED); the role lists are only the unpicked pool (see projection).
+  const signedUp = run.signups.filter((signup) => isSignedUpSignup(signup.status));
+  const projection = buildSignupRoleProjection(run);
 
   const productLabel = run.contentDisplay.productLabel;
   return {
@@ -617,7 +616,7 @@ function toSignupEmbedData(run: RunListRecord): SignupEmbedData {
     scheduledStartAt: run.scheduledStartAt,
     runStatus: run.status,
     signupWindowOpen: isSignupWindowOpen(run.status, run.signupsOpen),
-    uniqueSignupCount: new Set(listed.map((signup) => signup.userId)).size,
+    uniqueSignupCount: new Set(signedUp.map((signup) => signup.userId)).size,
     roleStatus: projection.roleStatus,
     members: projection.members,
     discordRolePing: run.discordRolePing,
@@ -627,15 +626,13 @@ function toSignupEmbedData(run: RunListRecord): SignupEmbedData {
 /**
  * OPEN / ROSTERING (and pre-publish): roster picks = saved draft selections.
  * PUBLISHED+: roster picks = live SELECTED signups + publishedRole (replacement drafts stay private).
- * Signups lists every non-withdrawn offer (PENDING / SELECTED / NOT_SELECTED),
- * including already-selected and published-unpicked Users — the separate Roster
- * Discord message owns the selected lineup.
+ * Signups = the unpicked pool: PENDING / NOT_SELECTED offers that are not a
+ * current roster pick. A pick leaves the pool as soon as it is a pick (draft
+ * save before publication, SELECTED after) and returns when unpicked.
+ * NOT_SELECTED after publication stays listed (#230).
  * Counts are length-derived from the same member lists rendered in the embeds.
  */
-function buildSignupRoleProjection(
-  run: RunListRecord,
-  listedSignups: RunListRecord["signups"],
-): Pick<SignupEmbedData, "roleStatus" | "members"> {
+function buildSignupRoleProjection(run: RunListRecord): Pick<SignupEmbedData, "roleStatus" | "members"> {
   const usePublishedPicks =
     run.status === "PUBLISHED" || run.status === "IN_PROGRESS" || run.status === "COMPLETED";
   const byId = new Map(run.signups.map((signup) => [signup.id, signup]));
@@ -658,6 +655,11 @@ function buildSignupRoleProjection(
       });
     }
   }
+
+  const pickedIds = new Set(pickedRows.map((signup) => signup.id));
+  const listedSignups = run.signups.filter(
+    (signup) => isAvailableSignup(signup.status) && !pickedIds.has(signup.id),
+  );
 
   const externals = run.roster?.externalBoosters ?? [];
   const pickedExternal = (role: CharacterRole) =>
