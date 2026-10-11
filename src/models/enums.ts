@@ -157,6 +157,7 @@ export const NOTIFICATION_TYPES = [
   "ROSTER_REMOVED",
   "ROSTER_WITHDRAWN",
   "RUN_REACTIVATED",
+  "RUN_SCOPE_CHANGED",
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -169,7 +170,12 @@ export const DISCORD_DELIVERY_STATUSES = [
 export type DiscordDeliveryStatus = (typeof DISCORD_DELIVERY_STATUSES)[number];
 
 /** Shared Run Discord channel lifecycle announcements (not User DMs). */
-export const RUN_DISCORD_ANNOUNCEMENT_TYPES = ["RUN_RESCHEDULED", "RUN_CANCELLED", "RUN_REACTIVATED"] as const;
+export const RUN_DISCORD_ANNOUNCEMENT_TYPES = [
+  "RUN_RESCHEDULED",
+  "RUN_CANCELLED",
+  "RUN_REACTIVATED",
+  "RUN_SCOPE_CHANGED",
+] as const;
 
 /** System Health / integration telemetry providers (IntegrationEvent.provider). */
 export const INTEGRATION_PROVIDERS = [

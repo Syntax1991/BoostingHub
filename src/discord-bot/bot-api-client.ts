@@ -1,3 +1,4 @@
+import type { RunScopeChange } from "@/lib/run-scope-change";
 import type { BotEnv } from "@/discord-bot/env";
 import type { RaidDifficulty, RunLootType } from "@/models/enums";
 
@@ -166,6 +167,7 @@ export class BotApiClient {
           | "RUN_CANCELLED"
           | "RUN_REACTIVATED"
           | "RUN_RESCHEDULED"
+          | "RUN_SCOPE_CHANGED"
           | "ROSTER_REMOVED"
           | "ROSTER_WITHDRAWN";
         discordUserId: string;
@@ -186,6 +188,8 @@ export class BotApiClient {
         productLabel: string;
         scheduledStartAt: string;
         previousScheduledStartAt: string | null;
+        /** RUN_SCOPE_CHANGED only; optional for an older API. */
+        scopeChanges?: RunScopeChange[];
         difficulty: RaidDifficulty;
         lootType: RunLootType;
         participationType: "BOOSTER" | "LOOTBUDDY" | null;
@@ -210,9 +214,11 @@ export class BotApiClient {
       runAnnouncements: Array<{
         announcementId: string;
         runId: string;
-        type: "RUN_RESCHEDULED" | "RUN_CANCELLED" | "RUN_REACTIVATED";
+        type: "RUN_RESCHEDULED" | "RUN_CANCELLED" | "RUN_REACTIVATED" | "RUN_SCOPE_CHANGED";
         runChannelId: string | null;
         previousScheduledStartAt: string | null;
+        /** RUN_SCOPE_CHANGED only; optional for an older API. */
+        scopeChanges?: RunScopeChange[];
         scheduledStartAt: string;
         productLabel: string;
         difficulty: RaidDifficulty;

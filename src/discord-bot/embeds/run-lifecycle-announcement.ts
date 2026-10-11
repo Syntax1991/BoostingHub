@@ -2,6 +2,7 @@ import { EmbedBuilder } from "discord.js";
 import { absoluteRunUrl } from "@/lib/app-url";
 import { discordTimestamp } from "@/lib/discord-timestamp";
 import { DIFFICULTY_LABELS } from "@/lib/labels";
+import { formatRunScopeChangeDetail, type RunScopeChange } from "@/lib/run-scope-change";
 import type { RaidDifficulty, RunLootType } from "@/models/enums";
 
 /**
@@ -40,6 +41,35 @@ export function buildRunRescheduledChannelEmbed(input: {
           `**New:** ${discordTimestamp(input.scheduledStartAt, "F")}`,
           "",
           "Please check the updated start time.",
+        ].join("\n"),
+      ),
+    input.runId,
+  );
+}
+
+/** Only the changed contents — never the unchanged Run state. */
+export function buildRunScopeChangedChannelEmbed(input: {
+  runId: string;
+  productLabel: string;
+  scheduledStartAt: string;
+  difficulty: RaidDifficulty;
+  lootType: RunLootType;
+  changes: readonly RunScopeChange[];
+}): EmbedBuilder {
+  const difficulty = DIFFICULTY_LABELS[input.difficulty].toUpperCase();
+  const when = discordTimestamp(input.scheduledStartAt, "F");
+  return withCanonicalRunUrl(
+    new EmbedBuilder()
+      .setColor(0xf0b429)
+      .setTitle("⚠️ Run Updated")
+      .setDescription(
+        [
+          "The planned raid scope has changed.",
+          "",
+          `${when} · ${difficulty} · ${input.lootType}`,
+          "",
+          ...input.changes.flatMap((change) => [`**${change.raidName}**`, formatRunScopeChangeDetail(change), ""]),
+          "Please check the updated Run details.",
         ].join("\n"),
       ),
     input.runId,

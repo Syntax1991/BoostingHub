@@ -149,7 +149,7 @@ Steps 3–4 of the first mechanism, and the whole of the second, are each indepe
 
 ### Run channel lifecycle announcements
 
-Durable `RunDiscordAnnouncement` rows (`RUN_RESCHEDULED` / `RUN_CANCELLED`) are created by `runService` on successful schedule change / cancel — never by calling Discord from the web process. The bot's existing sync poll includes a bounded `runAnnouncements` lane (createdAt ASC). Posts use embeds with Discord native timestamps (`<t:…:F>`); no `@everyone` / role / member pings. No channel is provisioned solely for a lifecycle message. User DM preferences never gate these channel posts.
+Durable `RunDiscordAnnouncement` rows (`RUN_RESCHEDULED` / `RUN_CANCELLED` / `RUN_SCOPE_CHANGED`) are created by `runService` on successful schedule change / cancel / material raid-scope change (`RUN_SCOPE_CHANGED` is written in the same transaction as the new `RunRaidContent` rows and posts "⚠️ Run Updated" with only the changed contents; the regular signup/roster embeds still refresh in place via their signatures) — never by calling Discord from the web process. The bot's existing sync poll includes a bounded `runAnnouncements` lane (createdAt ASC). Posts use embeds with Discord native timestamps (`<t:…:F>`); no `@everyone` / role / member pings. No channel is provisioned solely for a lifecycle message. User DM preferences never gate these channel posts.
 
 PAST/FUTURE schedule holding still uses the ARCHIVE category as a **silent move only** — live schedule-based name, no `closed-` rename, no log posts, no delete (`retireChannel: false`).
 

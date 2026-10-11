@@ -18,6 +18,7 @@ Settings sections:
 | `RAID_INVITE` | **Start Run** for each SELECTED signup | Always | — | Master + `dmRaidInviteEnabled` + Discord linked |
 | `RUN_CANCELLED` | Run → `CANCELLED` for Users with PENDING/SELECTED | Always | YES if dedicated channel exists (before retirement) | Master + `dmRunCancelledEnabled` + Discord linked |
 | `RUN_RESCHEDULED` | `scheduledStartAt` actually changes | Always | YES if dedicated channel exists | Master + `dmRunRescheduledEnabled` + Discord linked |
+| `RUN_SCOPE_CHANGED` | Edit Run materially changes the planned raid scope (`RunRaidContent` by raidId: boss count changed, content added/removed) on a non-DRAFT Run — for every User still signed up (PENDING / SELECTED / NOT_SELECTED, incl. draft picks; WITHDRAWN excluded). A reorder or same-count save is a no-op. | Always | YES if dedicated channel exists ("⚠️ Run Updated", changed contents only) | Master + `dmRunRescheduledEnabled` ("Run Rescheduled / Updated DMs") + Discord linked |
 | `ROSTER_WITHDRAWN` | To the Run's **Raid Lead** when a picked player withdraws (with their reason, links the Roster tab) | Always | — | Master + Discord linked (no per-event toggle) |
 | `ROSTER_REMOVED` | **Save Roster** or publish, for signups last told they are in that are no longer selected (not WITHDRAWN) | Always (except character-swap bookkeeping, below) | — | Master + `dmRosterRemovedEnabled` + Discord linked |
 
@@ -53,6 +54,7 @@ suppress the channel post). They use deterministic `sourceKey` values distinct f
 UserNotification keys:
 
 - Reschedule: `run-rescheduled:<runId>:<scheduleRevision>`
+- Scope change: `run-scope-changed:<runId>:<contentRevision>` — the row's `scopeChanges` JSON (before → after per changed content) is the single structured snapshot; that revision's `RUN_SCOPE_CHANGED` DMs (`run-scope-changed:<runId>:<contentRevision>:<userId>`) render from it. `Run.contentRevision` increments only on a material scope change.
 - Cancel: `run-cancelled:<runId>`
 
 No historical backfill — only lifecycle events after deployment create rows.

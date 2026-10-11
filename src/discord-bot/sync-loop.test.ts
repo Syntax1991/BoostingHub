@@ -1545,6 +1545,163 @@ describe("syncOnce — notification DM failure classification", () => {
   });
 });
 
+describe("syncOnce — Run scope change", () => {
+  const changes = [
+    {
+      raidId: "raid-venom",
+      raidName: "The Venomous Abyss",
+      totalBossCount: 9,
+      kind: "CHANGED" as const,
+      beforePlannedBossCount: 9,
+      afterPlannedBossCount: 7,
+    },
+    {
+      raidId: "raid-tide",
+      raidName: "The Tidebound Grotto",
+      totalBossCount: 1,
+      kind: "REMOVED" as const,
+      beforePlannedBossCount: 1,
+      afterPlannedBossCount: null,
+    },
+  ];
+
+  it("posts one explicit Run Updated embed with only the changed contents and marks SENT", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+      ["scope-chan", { id: "scope-chan", name: "fri-2000-hc-vip", parentId: CATEGORY_ID, position: 2, type: ChannelType.GuildText }],
+    ]);
+    const { client } = makeDiscordClient(children);
+    const api = makeApi({
+      channels: [],
+      signups: [],
+      roster: [],
+      runAnnouncements: [
+        {
+          announcementId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa41",
+          runId: "run-scope",
+          type: "RUN_SCOPE_CHANGED",
+          runChannelId: "scope-chan",
+          previousScheduledStartAt: null,
+          scheduledStartAt: "2026-10-16T18:00:00.000Z",
+          productLabel: "Season 2 Bundle",
+          difficulty: "HEROIC",
+          lootType: "VIP",
+          scopeChanges: changes,
+        },
+      ],
+    });
+
+    await syncOnce(client, botEnv(), api);
+
+    const runChannel = client.channels.cache.get("scope-chan") as { send: ReturnType<typeof vi.fn> };
+    expect(runChannel.send).toHaveBeenCalledTimes(1);
+    const payload = runChannel.send.mock.calls[0][0] as {
+      embeds: Array<{ data?: { title?: string; description?: string } }>;
+    };
+    const embed = payload.embeds[0].data!;
+    expect(embed.title).toBe("⚠️ Run Updated");
+    expect(embed.description).toContain("The planned raid scope has changed.");
+    expect(embed.description).toContain("**The Venomous Abyss**\n9/9 → 7/9 bosses");
+    expect(embed.description).toContain("**The Tidebound Grotto**\n1/1 → removed");
+    expect(api.recordDiscordState).toHaveBeenCalledWith("run-scope", {
+      kind: "run-announcement",
+      announcementId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa41",
+      result: "SENT",
+    });
+  });
+
+  it("without a Run channel marks the announcement SKIPPED and never creates a channel", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+    ]);
+    const { client, createdIds } = makeDiscordClient(children);
+    const api = makeApi({
+      channels: [],
+      signups: [],
+      roster: [],
+      runAnnouncements: [
+        {
+          announcementId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa42",
+          runId: "run-scope-nochan",
+          type: "RUN_SCOPE_CHANGED",
+          runChannelId: null,
+          previousScheduledStartAt: null,
+          scheduledStartAt: "2026-10-16T18:00:00.000Z",
+          productLabel: "Venomous Abyss",
+          difficulty: "HEROIC",
+          lootType: "VIP",
+          scopeChanges: changes.slice(0, 1),
+        },
+      ],
+    });
+
+    await syncOnce(client, botEnv(), api);
+
+    expect(api.recordDiscordState).toHaveBeenCalledWith("run-scope-nochan", {
+      kind: "run-announcement",
+      announcementId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa42",
+      result: "SKIPPED",
+    });
+    expect(createdIds).toHaveLength(0);
+  });
+
+  it("DMs the change and records SENT", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+    ]);
+    const sendDm = vi.fn().mockResolvedValue({ id: "dm-scope" });
+    const { client } = makeDiscordClient(children);
+    (client as { users: { fetch: ReturnType<typeof vi.fn> } }).users = {
+      fetch: vi.fn().mockResolvedValue({ id: "discord-user-7", send: sendDm }),
+    };
+    const api = makeApi({ channels: [], signups: [], roster: [] });
+    (api.listSyncWork as ReturnType<typeof vi.fn>).mockResolvedValue({
+      channels: [],
+      signups: [],
+      roster: [],
+      start: [],
+      raidInvites: [],
+      notificationDms: [
+        {
+          notificationId: "cccccccc-cccc-4ccc-8ccc-ccccccccccc7",
+          type: "RUN_SCOPE_CHANGED",
+          discordUserId: "discord-user-7",
+          runId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa7",
+          signupId: null,
+          runChannelId: null,
+          productLabel: "Venomous Abyss",
+          scheduledStartAt: "2026-10-16T18:00:00.000Z",
+          previousScheduledStartAt: null,
+          scopeChanges: changes.slice(0, 1),
+          difficulty: "HEROIC",
+          lootType: "VIP",
+          participationType: null,
+          selectedRole: null,
+          characterName: null,
+          wowClass: null,
+        },
+      ],
+    });
+
+    await syncOnce(client as never, botEnv(), api);
+
+    expect(sendDm).toHaveBeenCalledTimes(1);
+    const content = sendDm.mock.calls[0][0].content as string;
+    expect(content).toContain("⚠️ **Run Updated**");
+    expect(content).toContain("The planned raid scope changed:");
+    expect(content).toContain("The Venomous Abyss: 9/9 → 7/9 bosses");
+    expect(content).not.toContain("Tidebound");
+    expect(api.recordDiscordState).toHaveBeenCalledWith("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa7", {
+      kind: "notification-dm",
+      notificationId: "cccccccc-cccc-4ccc-8ccc-ccccccccccc7",
+      result: "SENT",
+    });
+  });
+});
+
 describe("syncOnce — Run lifecycle channel announcements", () => {
   it("posts reschedule then cancel in order before retirement; marks SENT", async () => {
     const children = new Map<string, Child>([

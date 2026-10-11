@@ -2,7 +2,9 @@ import { DEFAULT_TIME_ZONE, formatDateTime } from "@/lib/datetime";
 import { discordTimestamp } from "@/lib/discord-timestamp";
 import { isInQuietHours, nextQuietHoursEndUtc, type QuietHoursSnapshot } from "@/lib/quiet-hours";
 import { CHARACTER_ROLE_LABELS, CLASS_LABELS, DIFFICULTY_LABELS } from "@/lib/labels";
+import { absoluteRunUrl } from "@/lib/app-url";
 import { runDetailPath } from "@/lib/run-routes";
+import { formatRunScopeChangeLines, type RunScopeChange } from "@/lib/run-scope-change";
 import { escapeDiscordInlineText } from "@/lib/run-start-message";
 import type { CharacterRole, ParticipationType, RaidDifficulty, RunLootType, WowClass } from "@/models/enums";
 import type { DiscordDeliveryStatus } from "@/models/enums";
@@ -107,6 +109,23 @@ export function runCancelledWebNotification(input: {
   return {
     title: "Run cancelled",
     message: `${input.runTitle} was cancelled (${when}).`,
+    href: runDetailPath(input.runId),
+  };
+}
+
+export function runScopeChangedWebNotification(input: {
+  runId: string;
+  productLabel: string;
+  scheduledStartAt: string;
+  changes: readonly RunScopeChange[];
+  timeZone?: string;
+}): { title: string; message: string; href: string } {
+  const when = formatDateTime(input.scheduledStartAt, input.timeZone ?? DEFAULT_TIME_ZONE);
+  return {
+    title: "Run updated",
+    message: `The planned raid scope of ${input.productLabel} (${when}) changed: ${formatRunScopeChangeLines(
+      input.changes,
+    ).join("; ")}.`,
     href: runDetailPath(input.runId),
   };
 }
@@ -306,6 +325,30 @@ export function buildRunCancelledDmMessage(input: {
     `${when} · ${difficulty} · ${input.lootType}`,
     "",
     "This run has been cancelled.",
+  ].join("\n");
+}
+
+export function buildRunScopeChangedDmMessage(input: {
+  runId: string;
+  productLabel: string;
+  scheduledStartAt: string;
+  difficulty: RaidDifficulty;
+  lootType: RunLootType;
+  changes: readonly RunScopeChange[];
+}): string {
+  const when = discordTimestamp(input.scheduledStartAt, "F");
+  const difficulty = DIFFICULTY_LABELS[input.difficulty].toUpperCase();
+  const runUrl = absoluteRunUrl(input.runId);
+  return [
+    "⚠️ **Run Updated**",
+    "",
+    input.productLabel,
+    `${when} · ${difficulty} · ${input.lootType}`,
+    "",
+    "The planned raid scope changed:",
+    ...formatRunScopeChangeLines(input.changes),
+    "",
+    runUrl ? `Please review the updated Run: ${runUrl}` : "Please review the updated Run.",
   ].join("\n");
 }
 

@@ -5,6 +5,7 @@ import {
   runCancelledSourceKey,
   runReactivatedSourceKey,
   runRescheduledSourceKey,
+  runScopeChangedSourceKey,
   userNotificationRepository,
 } from "@/repositories/user-notification.repository";
 import {
@@ -12,7 +13,10 @@ import {
   runCancelledWebNotification,
   runReactivatedWebNotification,
   runRescheduledWebNotification,
+  runScopeChangedWebNotification,
 } from "@/services/notification-content";
+import type { RunScopeChange } from "@/lib/run-scope-change";
+import { isSignedUpSignup } from "@/services/signup-state";
 import { userRepository } from "@/repositories/user.repository";
 
 /**
@@ -182,6 +186,64 @@ export const runLifecycleNotificationService = {
         runId: input.runId,
         signupId: null,
         sourceKey: runRescheduledSourceKey(input.runId, input.scheduleRevision, userId),
+        title: copy.title,
+        message: copy.message,
+        href: copy.href,
+        discordDeliveryStatus: discordDmDelivery.status,
+        discordUserId: discordDmDelivery.discordUserId,
+        discordDeliverAfter: discordDmDelivery.discordDeliverAfter,
+      });
+    }
+  },
+
+  /**
+   * RUN_SCOPE_CHANGED for every User still signed up (`isSignedUpSignup`:
+   * PENDING | SELECTED | NOT_SELECTED) — wider than the cancel audience on
+   * purpose: an unpicked signup may still be picked for the new scope. Draft
+   * picks are PENDING signups and included; never derived from the Discord
+   * "Signups by role" pool. One notification per User per contentRevision.
+   * DMs follow the reschedule preference (`dmRunRescheduledEnabled`) as the
+   * same "the Run you signed up for changed" family.
+   */
+  async notifyRunScopeChanged(input: {
+    runId: string;
+    productLabel: string;
+    scheduledStartAt: string;
+    contentRevision: number;
+    changes: readonly RunScopeChange[];
+  }): Promise<void> {
+    if (input.changes.length === 0) return;
+    const signups = await signupRepository.listByRunId(input.runId);
+    const userIds = [
+      ...new Set(signups.filter((signup) => isSignedUpSignup(signup.status)).map((signup) => signup.userId)),
+    ];
+
+    for (const userId of userIds) {
+      const [prefs, user, timeZone] = await Promise.all([
+        settingsRepository.getNotificationDmPreferences(userId),
+        userRepository.findById(userId),
+        settingsRepository.getTimeZone(userId),
+      ]);
+      const copy = runScopeChangedWebNotification({
+        runId: input.runId,
+        productLabel: input.productLabel,
+        scheduledStartAt: input.scheduledStartAt,
+        changes: input.changes,
+        timeZone,
+      });
+      const discordDmDelivery = resolveDiscordDelivery({
+        discordDmEnabled: prefs.discordDmEnabled,
+        eventDmEnabled: prefs.dmRunRescheduledEnabled,
+        discordUserId: user?.discordUserId ?? null,
+        quietHours: prefs.quietHours,
+        timeZone,
+      });
+      await userNotificationRepository.createIgnoreDuplicate({
+        userId,
+        type: "RUN_SCOPE_CHANGED",
+        runId: input.runId,
+        signupId: null,
+        sourceKey: runScopeChangedSourceKey(input.runId, input.contentRevision, userId),
         title: copy.title,
         message: copy.message,
         href: copy.href,

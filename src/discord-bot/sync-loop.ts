@@ -62,6 +62,7 @@ import {
   buildRunCancelledChannelEmbed,
   buildRunReactivatedChannelEmbed,
   buildRunRescheduledChannelEmbed,
+  buildRunScopeChangedChannelEmbed,
 } from "@/discord-bot/embeds/run-lifecycle-announcement";
 import {
   buildRosterSelectedDmMessage,
@@ -70,6 +71,7 @@ import {
   buildRunCancelledDmMessage,
   buildRunReactivatedDmMessage,
   buildRunRescheduledDmMessage,
+  buildRunScopeChangedDmMessage,
 } from "@/services/notification-content";
 import { finalSetupAllowedMentions, renderRunStartMessageText } from "@/discord-bot/messages/run-start-message";
 import {
@@ -1287,6 +1289,16 @@ async function syncNotificationDm(
         lootType: item.lootType,
       });
       break;
+    case "RUN_SCOPE_CHANGED":
+      content = buildRunScopeChangedDmMessage({
+        runId: item.runId,
+        productLabel: item.productLabel,
+        scheduledStartAt: item.scheduledStartAt,
+        difficulty: item.difficulty,
+        lootType: item.lootType,
+        changes: item.scopeChanges ?? [],
+      });
+      break;
     case "RUN_RESCHEDULED":
       content = buildRunRescheduledDmMessage({
         productLabel: item.productLabel,
@@ -1399,6 +1411,15 @@ async function syncRunAnnouncement(
           difficulty: item.difficulty,
           lootType: item.lootType,
         })
+      : item.type === "RUN_SCOPE_CHANGED"
+        ? buildRunScopeChangedChannelEmbed({
+            runId: item.runId,
+            productLabel: item.productLabel,
+            scheduledStartAt: item.scheduledStartAt,
+            difficulty: item.difficulty,
+            lootType: item.lootType,
+            changes: item.scopeChanges ?? [],
+          })
       : item.type === "RUN_REACTIVATED"
         ? buildRunReactivatedChannelEmbed({
             runId: item.runId,

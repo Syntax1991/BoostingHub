@@ -28,8 +28,8 @@ const EVENT_TOGGLES: Array<{
   },
   {
     key: "dmRunRescheduledEnabled",
-    label: "Run Rescheduled DMs",
-    description: "Receive a Discord DM when a run you signed up for changes schedule.",
+    label: "Run Rescheduled / Updated DMs",
+    description: "Receive a Discord DM when a run you signed up for changes schedule or planned raid scope.",
   },
   {
     key: "dmRosterRemovedEnabled",

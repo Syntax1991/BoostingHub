@@ -1,0 +1,254 @@
+[
+  {
+    "id": "dropCheckConstraint.run_discord_announcement.run_discord_announcement_type_check_2be127eb",
+    "label": "Drop check constraint \"run_discord_announcement_type_check_2be127eb\" on \"run_discord_announcement\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_discord_announcement_type_check_2be127eb",
+        "table": "run_discord_announcement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_discord_announcement_type_check_2be127eb\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_discord_announcement_type_check_2be127eb",
+          "public",
+          "\"public\".\"run_discord_announcement\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"run_discord_announcement_type_check_2be127eb\"",
+        "sql": "ALTER TABLE \"public\".\"run_discord_announcement\" DROP CONSTRAINT \"run_discord_announcement_type_check_2be127eb\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_discord_announcement_type_check_2be127eb\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_discord_announcement_type_check_2be127eb",
+          "public",
+          "\"public\".\"run_discord_announcement\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropCheckConstraint.user_notification.user_notification_type_check_c6b92315",
+    "label": "Drop check constraint \"user_notification_type_check_c6b92315\" on \"user_notification\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "user_notification_type_check_c6b92315",
+        "table": "user_notification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"user_notification_type_check_c6b92315\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_notification_type_check_c6b92315",
+          "public",
+          "\"public\".\"user_notification\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"user_notification_type_check_c6b92315\"",
+        "sql": "ALTER TABLE \"public\".\"user_notification\" DROP CONSTRAINT \"user_notification_type_check_c6b92315\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"user_notification_type_check_c6b92315\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_notification_type_check_c6b92315",
+          "public",
+          "\"public\".\"user_notification\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.run.contentRevision",
+    "label": "Add column \"contentRevision\" to \"run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "contentRevision",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"contentRevision\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "contentRevision"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"contentRevision\"",
+        "sql": "ALTER TABLE \"public\".\"run\" ADD COLUMN \"contentRevision\" int4 DEFAULT 0 NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"contentRevision\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "contentRevision"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.run_discord_announcement.scopeChanges",
+    "label": "Add column \"scopeChanges\" to \"run_discord_announcement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "scopeChanges",
+        "table": "run_discord_announcement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"scopeChanges\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_discord_announcement",
+          "scopeChanges"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"scopeChanges\"",
+        "sql": "ALTER TABLE \"public\".\"run_discord_announcement\" ADD COLUMN \"scopeChanges\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"scopeChanges\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_discord_announcement",
+          "scopeChanges"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.run_discord_announcement.run_discord_announcement_type_check_93ddaaed",
+    "label": "Add check constraint \"run_discord_announcement_type_check_93ddaaed\" on \"run_discord_announcement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_discord_announcement_type_check_93ddaaed",
+        "table": "run_discord_announcement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_discord_announcement_type_check_93ddaaed\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_discord_announcement_type_check_93ddaaed",
+          "public",
+          "\"public\".\"run_discord_announcement\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"run_discord_announcement_type_check_93ddaaed\"",
+        "sql": "ALTER TABLE \"public\".\"run_discord_announcement\" ADD CONSTRAINT \"run_discord_announcement_type_check_93ddaaed\" CHECK (\"type\" IN ('RUN_RESCHEDULED', 'RUN_CANCELLED', 'RUN_REACTIVATED', 'RUN_SCOPE_CHANGED'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_discord_announcement_type_check_93ddaaed\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_discord_announcement_type_check_93ddaaed",
+          "public",
+          "\"public\".\"run_discord_announcement\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.user_notification.user_notification_type_check_586fff74",
+    "label": "Add check constraint \"user_notification_type_check_586fff74\" on \"user_notification\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "user_notification_type_check_586fff74",
+        "table": "user_notification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"user_notification_type_check_586fff74\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_notification_type_check_586fff74",
+          "public",
+          "\"public\".\"user_notification\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"user_notification_type_check_586fff74\"",
+        "sql": "ALTER TABLE \"public\".\"user_notification\" ADD CONSTRAINT \"user_notification_type_check_586fff74\" CHECK (\"type\" IN ('ROSTER_SELECTED', 'RAID_INVITE', 'RUN_CANCELLED', 'RUN_RESCHEDULED', 'ROSTER_REMOVED', 'ROSTER_WITHDRAWN', 'RUN_REACTIVATED', 'RUN_SCOPE_CHANGED'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"user_notification_type_check_586fff74\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_notification_type_check_586fff74",
+          "public",
+          "\"public\".\"user_notification\""
+        ]
+      }
+    ]
+  }
+]

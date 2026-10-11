@@ -604,6 +604,10 @@
               {
                 "name": "RUN_REACTIVATED",
                 "value": "RUN_REACTIVATED"
+              },
+              {
+                "name": "RUN_SCOPE_CHANGED",
+                "value": "RUN_SCOPE_CHANGED"
               }
             ]
           },
@@ -677,6 +681,10 @@
               {
                 "name": "RUN_REACTIVATED",
                 "value": "RUN_REACTIVATED"
+              },
+              {
+                "name": "RUN_SCOPE_CHANGED",
+                "value": "RUN_SCOPE_CHANGED"
               }
             ]
           },
@@ -3983,6 +3991,13 @@
                   "kind": "scalar"
                 }
               },
+              "contentRevision": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
               "createdAt": {
                 "nullable": false,
                 "type": {
@@ -4382,6 +4397,9 @@
                 },
                 "completedAt": {
                   "column": "completedAt"
+                },
+                "contentRevision": {
+                  "column": "contentRevision"
                 },
                 "createdAt": {
                   "column": "createdAt"
@@ -5552,6 +5570,13 @@
                   "kind": "scalar"
                 }
               },
+              "scopeChanges": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "sentAt": {
                 "nullable": true,
                 "type": {
@@ -5642,6 +5667,9 @@
                 },
                 "scheduledStartAt": {
                   "column": "scheduledStartAt"
+                },
+                "scopeChanges": {
+                  "column": "scopeChanges"
                 },
                 "sentAt": {
                   "column": "sentAt"
@@ -12233,6 +12261,15 @@
                   "nativeType": "timestamptz",
                   "nullable": true
                 },
+                "contentRevision": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
                 "createdAt": {
                   "codecId": "pg/timestamptz-string@1",
                   "default": {
@@ -13322,8 +13359,8 @@
                   "prefix": "run_discord_announcement_status_check"
                 },
                 {
-                  "expression": "\"type\" IN ('RUN_RESCHEDULED', 'RUN_CANCELLED', 'RUN_REACTIVATED')",
-                  "name": "run_discord_announcement_type_check_2be127eb",
+                  "expression": "\"type\" IN ('RUN_RESCHEDULED', 'RUN_CANCELLED', 'RUN_REACTIVATED', 'RUN_SCOPE_CHANGED')",
+                  "name": "run_discord_announcement_type_check_93ddaaed",
                   "prefix": "run_discord_announcement_type_check"
                 }
               ],
@@ -13383,6 +13420,11 @@
                   "codecId": "pg/timestamptz-string@1",
                   "nativeType": "timestamptz",
                   "nullable": false
+                },
+                "scopeChanges": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
                 },
                 "sentAt": {
                   "codecId": "pg/timestamptz-string@1",
@@ -16062,8 +16104,8 @@
                   "prefix": "user_notification_discordDeliveryStatus_check"
                 },
                 {
-                  "expression": "\"type\" IN ('ROSTER_SELECTED', 'RAID_INVITE', 'RUN_CANCELLED', 'RUN_RESCHEDULED', 'ROSTER_REMOVED', 'ROSTER_WITHDRAWN', 'RUN_REACTIVATED')",
-                  "name": "user_notification_type_check_c6b92315",
+                  "expression": "\"type\" IN ('ROSTER_SELECTED', 'RAID_INVITE', 'RUN_CANCELLED', 'RUN_RESCHEDULED', 'ROSTER_REMOVED', 'ROSTER_WITHDRAWN', 'RUN_REACTIVATED', 'RUN_SCOPE_CHANGED')",
+                  "name": "user_notification_type_check_586fff74",
                   "prefix": "user_notification_type_check"
                 }
               ],
@@ -16707,7 +16749,8 @@
                 "RUN_RESCHEDULED",
                 "ROSTER_REMOVED",
                 "ROSTER_WITHDRAWN",
-                "RUN_REACTIVATED"
+                "RUN_REACTIVATED",
+                "RUN_SCOPE_CHANGED"
               ]
             },
             "ParticipationType": {
@@ -16744,7 +16787,8 @@
               "values": [
                 "RUN_RESCHEDULED",
                 "RUN_CANCELLED",
-                "RUN_REACTIVATED"
+                "RUN_REACTIVATED",
+                "RUN_SCOPE_CHANGED"
               ]
             },
             "RunDomainEventActorKind": {
@@ -16853,7 +16897,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "7285120304500c3db5259df8a2e1b11f547ad54869b97c8767afdb8c3637973f"
+    "storageHash": "6ded3b0ad9f6ae304b15b27fe143363beed1ec34dbc4e4a35734562026b747c5"
   },
   "execution": {
     "executionHash": "b27b9239312d18e407528e2d06057d2da4f3e67bdff7bffe5f827471950c2fa6",
