@@ -98,6 +98,14 @@ When effective DM is `PENDING` and Quiet Hours are enabled, the current local ti
 converted to UTC; outside the window it stays `null` (immediately eligible).
 Quiet Hours never turn an intended DM into `SKIPPED`.
 
+`PENDING` means delivery is still expected. When the DM lane finds a `PENDING`
+notification whose Run is app-archived (or gone), it can never be delivered:
+the sync pass moves it `PENDING → SKIPPED` (compare-and-set, no Discord request,
+no ERROR log) for every Run notification type, instead of leaving it queued
+forever. The bot's pre-send delivery authority also refuses an archived Run's
+DM, so archival between listing and sending cannot deliver it. `SENT` /
+`FAILED_PERMANENT` / `SKIPPED` rows are never touched.
+
 ## Quiet Hours
 
 Personal Discord DMs only. In-app notifications, shared Run-channel messages,

@@ -324,6 +324,21 @@ export const userNotificationRepository = {
   },
 
   /**
+   * Compare-and-set PENDING → SKIPPED for one notification the DM lane will
+   * never deliver (e.g. its Run is archived). Never touches SENT /
+   * FAILED_PERMANENT / SKIPPED rows, so a concurrent pass can neither revert
+   * nor double-apply it. True when this call (or a racing one) left it SKIPPED.
+   */
+  async skipPendingDiscordDelivery(notificationId: string): Promise<boolean> {
+    await orm.UserNotification.where({ id: notificationId, discordDeliveryStatus: "PENDING" }).update({
+      discordDeliveryStatus: "SKIPPED",
+      updatedAt: new Date().toISOString(),
+    });
+    const after = await this.findById(notificationId);
+    return after?.discordDeliveryStatus === "SKIPPED";
+  },
+
+  /**
    * Marks still-PENDING Discord DM deliveries SKIPPED for the given source keys
    * (e.g. undelivered RUN_CANCELLED DMs when Reactivate commits). Does not
    * delete rows or rewrite SENT history.

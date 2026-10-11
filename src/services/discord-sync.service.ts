@@ -1010,7 +1010,13 @@ async function buildPendingNotificationDms(): Promise<NotificationDmWorkItem[]> 
     if (!notification.discordUserId || !notification.runId) continue;
 
     const run = await runRepository.findById(notification.runId);
-    if (!run || run.archivedAt) continue;
+    if (!run || run.archivedAt) {
+      // Never deliverable (archival retires the Run; a missing Run cannot be
+      // rendered) — leave PENDING instead of re-reading it every pass. Expected
+      // terminal skip for every Run notification type, not a failure; no DM.
+      await userNotificationRepository.skipPendingDiscordDelivery(notification.id);
+      continue;
+    }
 
     const post = await runDiscordPostRepository.findByRunId(run.id);
     const base = {
@@ -1902,6 +1908,12 @@ export const discordSyncService = {
     const notification = await userNotificationRepository.findById(notificationId);
     if (!notification || notification.discordDeliveryStatus !== "PENDING") {
       return { deliver: false };
+    }
+
+    // Archived after the bot listed it: never send; the next pass terminalizes it.
+    if (notification.runId) {
+      const run = await runRepository.findById(notification.runId);
+      if (!run || run.archivedAt) return { deliver: false };
     }
 
     if (notification.type === "RUN_CANCELLED") {
