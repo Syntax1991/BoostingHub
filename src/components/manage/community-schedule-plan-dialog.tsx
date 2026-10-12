@@ -1,6 +1,13 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import {
+  DEFAULT_SCHEDULE_START,
+  FirstOccurrenceSelect,
+  ScheduleStartField,
+  scheduleStartPayload,
+  type ScheduleStartState,
+} from "@/components/manage/community-schedule-start-fields";
 import { COMMUNITY_SCHEDULE_RUN_MODES, COMMUNITY_WEEKDAYS, RAID_DIFFICULTIES, RUN_LOOT_TYPES } from "@/models/enums";
 import type { CommunityScheduleRunMode, RaidDifficulty, RunLootType } from "@/models/enums";
 import { MAX_SLOTS_PER_PLAN } from "@/lib/community-schedule";
@@ -32,6 +39,8 @@ type SlotRow = {
   weekday: (typeof COMMUNITY_WEEKDAYS)[number];
   localStartTime: string;
   runMode: CommunityScheduleRunMode;
+  /** "Use existing Run" for the first occurrence (null = create per schedule). */
+  attachRunId: string | null;
 };
 
 function newSlotRow(
@@ -39,7 +48,7 @@ function newSlotRow(
   localStartTime = "19:45",
   runMode: CommunityScheduleRunMode = "INHOUSE",
 ): SlotRow {
-  return { key: crypto.randomUUID(), weekday, localStartTime, runMode };
+  return { key: crypto.randomUUID(), weekday, localStartTime, runMode, attachRunId: null };
 }
 
 export function CommunitySchedulePlanDialog({
@@ -62,6 +71,7 @@ export function CommunitySchedulePlanDialog({
   const [templateId, setTemplateId] = useState("");
   const [autoCreateRun, setAutoCreateRun] = useState(false);
   const [slots, setSlots] = useState<SlotRow[]>([newSlotRow()]);
+  const [start, setStart] = useState<ScheduleStartState>(DEFAULT_SCHEDULE_START);
   const [name, setName] = useState("");
   const initialProduct = (): ProductSelection => {
     const first = products[0];
@@ -97,6 +107,7 @@ export function CommunitySchedulePlanDialog({
     : "—";
 
   function resetForm() {
+    setStart(DEFAULT_SCHEDULE_START);
     setError(null);
     setRaidLeadId(defaultRaidLeadId ?? raidLeads[0]?.id ?? "");
     setSetupMode(templatesForLead.length > 0 ? "existing" : "create");
@@ -139,8 +150,10 @@ export function CommunitySchedulePlanDialog({
               weekday: slot.weekday,
               localStartTime: slot.localStartTime,
               runMode: slot.runMode,
+              attachRunId: slot.attachRunId,
             })),
             autoCreateRun,
+            start: scheduleStartPayload(start),
             notes: planNotes,
             ...composition,
           }
@@ -163,8 +176,10 @@ export function CommunitySchedulePlanDialog({
               weekday: slot.weekday,
               localStartTime: slot.localStartTime,
               runMode: slot.runMode,
+              attachRunId: slot.attachRunId,
             })),
             autoCreateRun,
+            start: scheduleStartPayload(start),
             notes: planNotes,
             ...composition,
           };
@@ -449,9 +464,23 @@ export function CommunitySchedulePlanDialog({
                     >
                       Remove
                     </button>
+                    <FirstOccurrenceSelect
+                      weekday={slot.weekday}
+                      localStartTime={slot.localStartTime}
+                      raidLeadId={raidLeadId}
+                      runTemplateId={setupMode === "existing" ? templateId || null : null}
+                      value={slot.attachRunId}
+                      onChange={(attachRunId) =>
+                        setSlots((current) =>
+                          current.map((row) => (row.key === slot.key ? { ...row, attachRunId } : row)),
+                        )
+                      }
+                    />
                   </div>
                 ))}
               </div>
+
+              <ScheduleStartField value={start} onChange={setStart} />
 
               <label className="flex items-center gap-2 text-sm">
                 <input

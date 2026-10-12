@@ -11,8 +11,12 @@ export type CommunityScheduleRunRecord = {
   runId: string;
   createdById: string | null;
   createdByKind: RunDomainEventActorKind;
+  /** MATERIALIZED = created for this occurrence; ATTACHED = existing Run adopted. */
+  origin: CommunityScheduleRunOrigin;
   createdAt: string;
 };
+
+export type CommunityScheduleRunOrigin = "MATERIALIZED" | "ATTACHED";
 
 type TxOrm = typeof orm;
 
@@ -26,6 +30,7 @@ function mapRow(row: Record<string, unknown>): CommunityScheduleRunRecord {
     runId: asString(row.runId),
     createdById: row.createdById == null ? null : asString(row.createdById),
     createdByKind: mapRunDomainEventActorKind(row.createdByKind),
+    origin: asString(row.origin) === "ATTACHED" ? "ATTACHED" : "MATERIALIZED",
     createdAt: asIsoTimestamp(row.createdAt),
   };
 }
@@ -101,6 +106,8 @@ export const communityScheduleRunRepository = {
       runId: string;
       createdById: string | null;
       createdByKind: RunDomainEventActorKind;
+      /** Default MATERIALIZED. */
+      origin?: CommunityScheduleRunOrigin;
     },
     txOrm?: TxOrm,
   ): Promise<CommunityScheduleRunRecord> {
@@ -115,6 +122,7 @@ export const communityScheduleRunRepository = {
       runId: input.runId,
       createdById: input.createdById,
       createdByKind: input.createdByKind,
+      origin: input.origin ?? "MATERIALIZED",
       createdAt: now,
     });
     const created = await client.CommunityScheduleRun.where({ id }).first();

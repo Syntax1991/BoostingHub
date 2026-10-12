@@ -368,6 +368,19 @@
               }
             ]
           },
+          "CommunityScheduleRunOrigin": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "MATERIALIZED",
+                "value": "MATERIALIZED"
+              },
+              {
+                "name": "ATTACHED",
+                "value": "ATTACHED"
+              }
+            ]
+          },
           "CommunityWeekday": {
             "codecId": "pg/text@1",
             "members": [
@@ -2695,6 +2708,19 @@
                   "kind": "scalar"
                 }
               },
+              "origin": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "CommunityScheduleRunOrigin",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
               "runId": {
                 "nullable": false,
                 "type": {
@@ -2781,6 +2807,9 @@
                 "occurrenceStartAt": {
                   "column": "occurrenceStartAt"
                 },
+                "origin": {
+                  "column": "origin"
+                },
                 "runId": {
                   "column": "runId"
                 },
@@ -2850,6 +2879,13 @@
                 "nullable": true,
                 "type": {
                   "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "firstWindowStartAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
                   "kind": "scalar"
                 }
               },
@@ -3045,6 +3081,9 @@
                 },
                 "desiredTankCountOverride": {
                   "column": "desiredTankCountOverride"
+                },
+                "firstWindowStartAt": {
+                  "column": "firstWindowStartAt"
                 },
                 "id": {
                   "column": "id"
@@ -11105,6 +11144,11 @@
                   "expression": "\"createdByKind\" IN ('USER', 'SYSTEM')",
                   "name": "community_schedule_run_createdByKind_check_49bae75c",
                   "prefix": "community_schedule_run_createdByKind_check"
+                },
+                {
+                  "expression": "\"origin\" IN ('MATERIALIZED', 'ATTACHED')",
+                  "name": "community_schedule_run_origin_check_ba8ca21e",
+                  "prefix": "community_schedule_run_origin_check"
                 }
               ],
               "columns": {
@@ -11142,6 +11186,21 @@
                   "codecId": "pg/timestamptz-string@1",
                   "nativeType": "timestamptz",
                   "nullable": false
+                },
+                "origin": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "MATERIALIZED"
+                  },
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "CommunityScheduleRunOrigin",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
                 },
                 "runId": {
                   "codecId": "pg/text@1",
@@ -11322,6 +11381,11 @@
                 "desiredTankCountOverride": {
                   "codecId": "pg/int4@1",
                   "nativeType": "int4",
+                  "nullable": true
+                },
+                "firstWindowStartAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
                   "nullable": true
                 },
                 "id": {
@@ -16651,6 +16715,13 @@
                 "TEAM_RUN"
               ]
             },
+            "CommunityScheduleRunOrigin": {
+              "kind": "valueSet",
+              "values": [
+                "MATERIALIZED",
+                "ATTACHED"
+              ]
+            },
             "CommunityWeekday": {
               "kind": "valueSet",
               "values": [
@@ -16897,7 +16968,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "6ded3b0ad9f6ae304b15b27fe143363beed1ec34dbc4e4a35734562026b747c5"
+    "storageHash": "694ae2b74bb3d73ff2a3730e8eafe50ea015fa8ed8ec51989f56391f79aaa99f"
   },
   "execution": {
     "executionHash": "b27b9239312d18e407528e2d06057d2da4f3e67bdff7bffe5f827471950c2fa6",

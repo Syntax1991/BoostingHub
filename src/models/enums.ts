@@ -214,6 +214,7 @@ export const RUN_DOMAIN_EVENT_TYPES = [
   "RUN_COMPLETED",
   "RUN_CANCELLED",
   "RUN_REACTIVATED",
+  "RUN_SCHEDULE_ATTACHED",
 ] as const;
 export type RunDomainEventType = (typeof RUN_DOMAIN_EVENT_TYPES)[number];
 

@@ -910,6 +910,11 @@ model CommunityScheduleSlot {
   autoCreateRun  Boolean          @default(false)
   /// Management Discord Share classification (Inhouse / Team Run). Independent of Run materialization.
   runMode        CommunityScheduleRunMode @default(INHOUSE)
+  /// Activation boundary: raid-ID window start (Wed 06:00 Europe/Berlin) of the
+  /// first occurrence the materializer may create. Null = active immediately
+  /// (legacy). Earlier occurrences are never auto-created; existing Runs are
+  /// never touched when it changes.
+  firstWindowStartAt TimestamptzString?
   /// When false, effective composition = RunTemplate defaults. When true, use
   /// the four override columns (all required together — complete override).
   compositionOverrideEnabled Boolean @default(false)
@@ -941,6 +946,13 @@ model CommunityScheduleSlot {
 /// so editing weekday/time cannot create a second Run in the same window.
 /// When the mutable Schedule slot is deleted, scheduleSlotId is SET NULL —
 /// the concrete Run and this provenance row remain (window + occurrence times).
+/// How a CommunityScheduleRun occurrence was fulfilled.
+enum CommunityScheduleRunOrigin {
+  @@type("pg/text@1")
+  MATERIALIZED = "MATERIALIZED"
+  ATTACHED     = "ATTACHED"
+}
+
 model CommunityScheduleRun {
   id                 String                  @id @default(uuid())
   /// Nullable so Admin may delete recurring planning without erasing Runs.
@@ -954,8 +966,12 @@ model CommunityScheduleRun {
   run                Run                     @relation(fields: [runId], references: [id], onDelete: Restrict)
   createdById        String?
   createdBy          User?                   @relation("CommunityScheduleRunCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  /// USER = manual Create Run; SYSTEM = auto-create reconciliation job.
+  /// USER = manual Create Run / attach; SYSTEM = auto-create reconciliation job.
   createdByKind      RunDomainEventActorKind
+  /// MATERIALIZED = Run created for this occurrence from the Run Setup;
+  /// ATTACHED = an existing, independently created Run adopted as this
+  /// occurrence (provenance only — never re-materialized or rewritten).
+  origin             CommunityScheduleRunOrigin @default(MATERIALIZED)
   createdAt          TimestamptzString       @default(now())
 
   @@unique([scheduleSlotId, windowStartAt])

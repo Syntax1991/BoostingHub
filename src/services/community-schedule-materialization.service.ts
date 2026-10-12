@@ -6,9 +6,11 @@ import {
 } from "@/auth/authorization";
 import {
   COMMUNITY_SCHEDULE_TIME_ZONE,
+  isBeforeScheduleStart,
   resolveScheduleSlotOccurrence,
   type RaidIdWindow,
 } from "@/lib/community-schedule";
+import { formatDate } from "@/lib/datetime";
 import { DomainError, isDomainError } from "@/lib/errors";
 import { communityScheduleRunRepository } from "@/repositories/community-schedule-run.repository";
 import {
@@ -39,6 +41,8 @@ export type MaterializePassResult =
       skippedInactive: number;
       skippedNoTemplate: number;
       skippedTemplateUnusable: number;
+      /** Occurrences before the slot's activation boundary (firstWindowStartAt). */
+      skippedBeforeStart: number;
       failed: number;
       durationMs: number;
     };
@@ -52,6 +56,7 @@ export type MaterializeSlotWindowsResult = {
   skippedInactive: number;
   skippedNoTemplate: number;
   skippedTemplateUnusable: number;
+  skippedBeforeStart: number;
   failed: number;
 };
 
@@ -117,7 +122,8 @@ async function recordMaterializePass(result: MaterializePassResult): Promise<voi
     result.skippedPast +
     result.skippedInactive +
     result.skippedNoTemplate +
-    result.skippedTemplateUnusable;
+    result.skippedTemplateUnusable +
+    result.skippedBeforeStart;
 
   try {
     await integrationEventService.record({
@@ -147,6 +153,7 @@ function emptySlotWindowCounters(): MaterializeSlotWindowsResult {
     skippedInactive: 0,
     skippedNoTemplate: 0,
     skippedTemplateUnusable: 0,
+    skippedBeforeStart: 0,
     failed: 0,
   };
 }
@@ -217,6 +224,11 @@ async function materializeSlotWindowsInternal(input: {
 
         if (window === "CURRENT" && Date.parse(occurrence.scheduledStartAt) < input.now.getTime()) {
           counters.skippedPast += 1;
+          continue;
+        }
+        // Activation boundary: earlier raid IDs are intentionally never auto-created.
+        if (isBeforeScheduleStart(slot.firstWindowStartAt, occurrence.windowStartAt)) {
+          counters.skippedBeforeStart += 1;
           continue;
         }
 
@@ -292,6 +304,13 @@ export const communityScheduleMaterializationService = {
         "COMMUNITY_SCHEDULE_OCCURRENCE_PAST",
         "This occurrence has already passed — choose Next Raid ID instead.",
         400,
+      );
+    }
+    if (isBeforeScheduleStart(slot.firstWindowStartAt, occurrence.windowStartAt)) {
+      throw new DomainError(
+        "COMMUNITY_SCHEDULE_NOT_STARTED",
+        `This schedule starts with the raid ID of ${formatDate(slot.firstWindowStartAt!)} — use an existing Run for this occurrence or change the start.`,
+        409,
       );
     }
 

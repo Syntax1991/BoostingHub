@@ -1,6 +1,13 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import {
+  DEFAULT_SCHEDULE_START,
+  ScheduleStartField,
+  scheduleStartPayload,
+  type ScheduleStartState,
+} from "@/components/manage/community-schedule-start-fields";
+import { formatDate } from "@/lib/datetime";
 import { COMMUNITY_SCHEDULE_RUN_MODES, COMMUNITY_WEEKDAYS } from "@/models/enums";
 import type { CommunityScheduleRunMode } from "@/models/enums";
 import { COMMUNITY_SCHEDULE_RUN_MODE_LABELS } from "@/lib/labels";
@@ -44,6 +51,8 @@ type EditProps = {
     runTemplateId: string | null;
     autoCreateRun: boolean;
     runMode: CommunityScheduleRunMode;
+    /** Current activation boundary (raid-ID window start); null = immediately. */
+    firstWindowStartAt?: string | null;
     compositionOverrideEnabled?: boolean;
     desiredTankCountOverride?: number | null;
     desiredHealerCountOverride?: number | null;
@@ -62,6 +71,9 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [start, setStart] = useState<ScheduleStartState>(
+    props.mode === "edit" ? { mode: "KEEP", date: "" } : DEFAULT_SCHEDULE_START,
+  );
   const [raidLeadId, setRaidLeadId] = useState(
     props.mode === "edit" ? props.initial.raidLeadId : (props.defaultRaidLeadId ?? props.raidLeads[0]?.id ?? ""),
   );
@@ -138,6 +150,7 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
       desiredHealerCountOverride: useDefaults ? null : healers,
       desiredDpsCountOverride: useDefaults ? null : dps,
       desiredLootbuddyCountOverride: useDefaults ? null : lootbuddies,
+      start: scheduleStartPayload(start),
     };
     startTransition(async () => {
       const result =
@@ -330,6 +343,17 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
                   </div>
                 )}
               </fieldset>
+              <ScheduleStartField
+                value={start}
+                onChange={setStart}
+                keepLabel={
+                  props.mode === "edit"
+                    ? props.initial.firstWindowStartAt
+                      ? `Keep: starts with the raid ID of ${formatDate(props.initial.firstWindowStartAt)}`
+                      : "Keep: started"
+                    : undefined
+                }
+              />
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"

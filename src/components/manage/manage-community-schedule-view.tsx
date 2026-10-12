@@ -94,6 +94,7 @@ function WindowSection({
                               runTemplateId: slot.runTemplateId,
                               autoCreateRun: slot.autoCreateRun,
                               runMode: slot.runMode,
+                              firstWindowStartAt: slot.firstWindowStartAt,
                               compositionOverrideEnabled: slot.compositionOverrideEnabled,
                               desiredTankCountOverride: slot.desiredTankCountOverride,
                               desiredHealerCountOverride: slot.desiredHealerCountOverride,

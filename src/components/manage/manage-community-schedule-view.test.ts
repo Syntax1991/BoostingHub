@@ -38,6 +38,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
     runTemplateId: "template-1",
     autoCreateRun: true,
     runMode: "INHOUSE" as const,
+    firstWindowStartAt: null,
     runTemplateName: "Default HC",
     compositionOverrideEnabled: false,
     desiredTankCountOverride: null,
@@ -73,6 +74,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
     templateLabel: "Default HC · HC UNS 8/8",
     autoCreateRun: true,
     canMaterialize: true,
+    canAttach: true,
   };
   const previewStaffing = {
     kind: "PREVIEW" as const,

@@ -1,6 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import {
+  DEFAULT_SCHEDULE_START,
+  FirstOccurrenceSelect,
+  ScheduleStartField,
+  scheduleStartPayload,
+  type ScheduleStartState,
+} from "@/components/manage/community-schedule-start-fields";
 import { COMMUNITY_SCHEDULE_RUN_MODES, COMMUNITY_WEEKDAYS } from "@/models/enums";
 import type { CommunityScheduleRunMode } from "@/models/enums";
 import { MAX_SLOTS_PER_PLAN } from "@/lib/community-schedule";
@@ -22,6 +29,8 @@ type SlotRow = {
   weekday: (typeof COMMUNITY_WEEKDAYS)[number];
   localStartTime: string;
   runMode: CommunityScheduleRunMode;
+  /** "Use existing Run" for the first occurrence (null = create per schedule). */
+  attachRunId: string | null;
 };
 
 function newSlotRow(
@@ -29,7 +38,7 @@ function newSlotRow(
   localStartTime = "19:45",
   runMode: CommunityScheduleRunMode = "INHOUSE",
 ): SlotRow {
-  return { key: crypto.randomUUID(), weekday, localStartTime, runMode };
+  return { key: crypto.randomUUID(), weekday, localStartTime, runMode, attachRunId: null };
 }
 
 export function CommunityScheduleAddTimesDialog({
@@ -46,12 +55,14 @@ export function CommunityScheduleAddTimesDialog({
   const [pending, startTransition] = useTransition();
   const [autoCreateRun, setAutoCreateRun] = useState(false);
   const [slots, setSlots] = useState<SlotRow[]>([newSlotRow()]);
+  const [start, setStart] = useState<ScheduleStartState>(DEFAULT_SCHEDULE_START);
   const [notes, setNotes] = useState("");
 
   function resetForm() {
     setError(null);
     setAutoCreateRun(false);
     setSlots([newSlotRow()]);
+    setStart(DEFAULT_SCHEDULE_START);
     setNotes("");
   }
 
@@ -66,8 +77,10 @@ export function CommunityScheduleAddTimesDialog({
           weekday: slot.weekday,
           localStartTime: slot.localStartTime,
           runMode: slot.runMode,
+          attachRunId: slot.attachRunId,
         })),
         autoCreateRun,
+        start: scheduleStartPayload(start),
         notes,
         compositionOverrideEnabled: false,
         desiredTankCountOverride: null,
@@ -185,9 +198,23 @@ export function CommunityScheduleAddTimesDialog({
                     >
                       Remove
                     </button>
+                    <FirstOccurrenceSelect
+                      weekday={slot.weekday}
+                      localStartTime={slot.localStartTime}
+                      raidLeadId={raidLeadId}
+                      runTemplateId={runTemplateId}
+                      value={slot.attachRunId}
+                      onChange={(attachRunId) =>
+                        setSlots((current) =>
+                          current.map((row) => (row.key === slot.key ? { ...row, attachRunId } : row)),
+                        )
+                      }
+                    />
                   </div>
                 ))}
               </div>
+
+              <ScheduleStartField value={start} onChange={setStart} />
 
               <label className="flex items-center gap-2 text-sm">
                 <input

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import {
   COMMUNITY_SCHEDULE_TIME_ZONE,
@@ -13,6 +13,9 @@ import { communityScheduleRunRepository } from "@/repositories/community-schedul
 import { runTemplateRepository } from "@/repositories/run-template.repository";
 import { communityScheduleMaterializationService } from "@/services/community-schedule-materialization.service";
 import { communityScheduleService } from "@/services/community-schedule.service";
+import { communityScheduleOccurrenceService } from "@/services/community-schedule-occurrence.service";
+import { runService } from "@/services/run.service";
+import { venomousCreateInput } from "@/lib/test-run-input";
 
 /** Distinct from character.service.test.ts (`cm…`) and community-schedule.service.test.ts (`cs…`). */
 const ids = {
@@ -1019,5 +1022,343 @@ describe("communityScheduleMaterializationService.runPass", () => {
       notes: null,
       updatedById: ids.admin,
     });
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Activation boundary (firstWindowStartAt) + attaching existing Runs.
+// Friday 15 Jan 2027 12:00Z: CURRENT raid ID Wed 13 Jan 06:00 CET (05:00Z) →
+// Fri 15 Jan 19:45 CET (18:45Z) still upcoming; NEXT is Fri 22 Jan.
+// ---------------------------------------------------------------------------
+const OCC_NOW = new Date("2027-01-15T12:00:00.000Z");
+const CURRENT_WINDOW = "2027-01-13T05:00:00.000Z";
+const NEXT_WINDOW = "2027-01-20T05:00:00.000Z";
+const manualRunIds: string[] = [];
+
+async function cleanupManualRuns() {
+  for (const runId of manualRunIds.splice(0)) {
+    await orm.CommunityScheduleRun.where({ runId }).delete().catch(() => {});
+    await orm.RunDomainEvent.where({ runId }).delete().catch(() => {});
+    await orm.RunRoster.where({ runId }).delete().catch(() => {});
+    await orm.RunRaidContent.where({ runId }).delete().catch(() => {});
+    await orm.RunDiscordAnnouncement.where({ runId }).delete().catch(() => {});
+    await orm.Run.where({ id: runId }).delete().catch(() => {});
+  }
+}
+
+/** An independently created (manual) Run, e.g. Fri 15 Jan 20:00 CET HC 7/8. */
+async function manualRun(scheduledStartAt: string, planned = 7): Promise<string> {
+  const created = await runService.createRun(
+    lead,
+    venomousCreateInput({ scheduledStartAt, venomousPlannedBossCount: planned }),
+  );
+  manualRunIds.push(created.id);
+  return created.id;
+}
+
+async function runSnapshot(runId: string) {
+  const run = (await orm.Run.where({ id: runId }).first()) as Record<string, unknown>;
+  const contents = (await orm.RunRaidContent.where({ runId }).all()) as Array<Record<string, unknown>>;
+  return {
+    title: run.title,
+    status: run.status,
+    scheduledStartAt: String(run.scheduledStartAt),
+    difficulty: run.difficulty,
+    desiredTankCount: run.desiredTankCount,
+    updatedAt: String(run.updatedAt),
+    contents: contents.map((row) => `${row.raidId}:${row.plannedBossCount}`).sort(),
+  };
+}
+
+async function linkFor(slotId: string, windowStartAt: string) {
+  return communityScheduleRunRepository.findBySlotAndWindow(slotId, windowStartAt);
+}
+
+function planInput(slot: Record<string, unknown>, extra: Record<string, unknown> = {}) {
+  return {
+    raidLeadId: ids.lead,
+    runSetup: { mode: "existing" as const, templateId },
+    slots: [{ weekday: "FRIDAY" as const, localStartTime: "19:45", runMode: "INHOUSE" as const, ...slot }],
+    autoCreateRun: true,
+    notes: null,
+    ...extra,
+  };
+}
+
+describe("Schedule activation boundary", () => {
+  afterAll(cleanupManualRuns);
+
+  it("Skip first: the upcoming occurrence is not created (NOT_STARTED, attachable); the next one is", async () => {
+    const plan = await communityScheduleService.createSchedulePlan(
+      admin,
+      planInput({}, { start: { mode: "SKIP_FIRST" } }),
+      OCC_NOW,
+    );
+    const slotId = plan.slotIds[0]!;
+    const slot = await communityScheduleRepository.findById(slotId);
+    expect(slot?.firstWindowStartAt).toBe(NEXT_WINDOW);
+    expect(plan.materialization.created).toBe(1);
+    expect(await linkFor(slotId, CURRENT_WINDOW)).toBeNull();
+    expect(await linkFor(slotId, NEXT_WINDOW)).toBeTruthy();
+
+    const page = await communityScheduleService.getPage(admin, OCC_NOW);
+    const current = page.current.days.flatMap((day) => day.slots).find((row) => row.slot.id === slotId);
+    expect(current?.materialization.state).toBe("NOT_STARTED");
+    expect(current?.materialization.canAttach).toBe(true);
+    expect(current?.materialization.startsWindowStartAt).toBe(NEXT_WINDOW);
+
+    // Repeated scheduler passes stay idempotent and keep skipping the boundary.
+    const again = await communityScheduleMaterializationService.materializeSlotWindows([slotId], { now: OCC_NOW });
+    expect(again.created).toBe(0);
+    expect(again.skippedBeforeStart).toBe(1);
+    expect(again.alreadyCreated).toBe(1);
+
+    // Manual Create Run respects the boundary too.
+    await expectCode(
+      communityScheduleMaterializationService.materializeOccurrence(
+        { kind: "USER", user: admin },
+        { scheduleSlotId: slotId, window: "CURRENT", now: OCC_NOW },
+      ),
+      "COMMUNITY_SCHEDULE_NOT_STARTED",
+    );
+  });
+
+  it("From date after both upcoming occurrences: nothing now, normal materialization once the boundary is reached", async () => {
+    const plan = await communityScheduleService.createSchedulePlan(
+      admin,
+      planInput({}, { start: { mode: "FROM_DATE", date: "2027-01-25" } }),
+      OCC_NOW,
+    );
+    const slotId = plan.slotIds[0]!;
+    expect((await communityScheduleRepository.findById(slotId))?.firstWindowStartAt).toBe("2027-01-27T05:00:00.000Z");
+    expect(plan.materialization.created).toBe(0);
+
+    // Wed 27 Jan 2027 12:00Z: the boundary raid ID is now CURRENT (Fri 29 Jan).
+    const later = new Date("2027-01-27T12:00:00.000Z");
+    const pass = await communityScheduleMaterializationService.materializeSlotWindows([slotId], { now: later });
+    expect(pass.created).toBe(2);
+    expect(pass.skippedBeforeStart).toBe(0);
+  });
+
+  it("legacy / Immediately: no boundary, both upcoming occurrences materialize", async () => {
+    const plan = await communityScheduleService.createSchedulePlan(admin, planInput({}), OCC_NOW);
+    expect((await communityScheduleRepository.findById(plan.slotIds[0]!))?.firstWindowStartAt).toBeNull();
+    expect(plan.materialization.created).toBe(2);
+  });
+
+  it("moving the boundary later or earlier never touches already materialized Runs", async () => {
+    const plan = await communityScheduleService.createSchedulePlan(admin, planInput({}), OCC_NOW);
+    const slotId = plan.slotIds[0]!;
+    const currentLink = (await linkFor(slotId, CURRENT_WINDOW))!;
+    const nextLink = (await linkFor(slotId, NEXT_WINDOW))!;
+    const before = [await runSnapshot(currentLink.runId), await runSnapshot(nextLink.runId)];
+
+    const slot = (await communityScheduleRepository.findById(slotId))!;
+    const base = {
+      slotId,
+      weekday: slot.weekday,
+      localStartTime: slot.localStartTime,
+      label: slot.label,
+      raidLeadId: slot.raidLeadId,
+      notes: null,
+      runTemplateId: templateId,
+      autoCreateRun: true,
+      runMode: "INHOUSE" as const,
+    };
+    await communityScheduleService.updateSlot(admin, { ...base, start: { mode: "FROM_DATE", date: "2027-03-01" } }, OCC_NOW);
+    expect((await communityScheduleRepository.findById(slotId))?.firstWindowStartAt).not.toBeNull();
+    await communityScheduleService.updateSlot(admin, { ...base, start: { mode: "IMMEDIATE" } }, OCC_NOW);
+    expect((await communityScheduleRepository.findById(slotId))?.firstWindowStartAt).toBeNull();
+    // An update without a start choice keeps the boundary.
+    await communityScheduleService.updateSlot(admin, { ...base, start: { mode: "SKIP_FIRST" } }, OCC_NOW);
+    const kept = (await communityScheduleRepository.findById(slotId))?.firstWindowStartAt;
+    await communityScheduleService.updateSlot(admin, base, OCC_NOW);
+    expect((await communityScheduleRepository.findById(slotId))?.firstWindowStartAt).toBe(kept);
+
+    expect([await runSnapshot(currentLink.runId), await runSnapshot(nextLink.runId)]).toEqual(before);
+    expect((await communityScheduleRunRepository.listBySlotIds([slotId])).map((link) => link.runId).sort()).toEqual(
+      [currentLink.runId, nextLink.runId].sort(),
+    );
+  });
+});
+
+describe("Attach existing Run to a Schedule occurrence", () => {
+  afterEach(cleanupManualRuns);
+
+  it("create with 'Use existing Run': occurrence satisfied by the untouched Run, no duplicate, next raid ID normal", async () => {
+    const existing = await manualRun("2027-01-15T19:00:00.000Z", 7);
+    const before = await runSnapshot(existing);
+
+    const plan = await communityScheduleService.createSchedulePlan(
+      admin,
+      planInput({ attachRunId: existing }),
+      OCC_NOW,
+    );
+    const slotId = plan.slotIds[0]!;
+    const current = await linkFor(slotId, CURRENT_WINDOW);
+    expect(current?.runId).toBe(existing);
+    expect(current?.origin).toBe("ATTACHED");
+    expect(current?.createdByKind).toBe("USER");
+    // Only NEXT was created by the immediate auto-create.
+    expect(plan.materialization.created).toBe(1);
+    expect((await linkFor(slotId, NEXT_WINDOW))?.origin).toBe("MATERIALIZED");
+
+    const pass = await communityScheduleMaterializationService.materializeSlotWindows([slotId], { now: OCC_NOW });
+    expect(pass.created).toBe(0);
+    expect(pass.alreadyCreated).toBe(2);
+
+    // The attached Run is never rewritten (7/8, own time, untouched updatedAt).
+    expect(await runSnapshot(existing)).toEqual(before);
+
+    const events = (await orm.RunDomainEvent.where({ runId: existing }).all()) as Array<{ type: string }>;
+    expect(events.some((event) => event.type === "RUN_SCHEDULE_ATTACHED")).toBe(true);
+
+    const page = await communityScheduleService.getPage(admin, OCC_NOW);
+    const row = page.current.days.flatMap((day) => day.slots).find((entry) => entry.slot.id === slotId);
+    expect(row?.materialization.state).toBe("RUN_CREATED");
+    expect(row?.materialization.origin).toBe("ATTACHED");
+    expect(row?.materialization.runId).toBe(existing);
+  });
+
+  it("Schedule-side picker lists the Run with warnings; attach links it; later Run Setup / composition edits leave it alone", async () => {
+    const plan = await communityScheduleService.createSchedulePlan(
+      admin,
+      planInput({}, { autoCreateRun: false }),
+      OCC_NOW,
+    );
+    const slotId = plan.slotIds[0]!;
+    const existing = await manualRun("2027-01-15T19:00:00.000Z", 7);
+
+    const slot = (await communityScheduleRepository.findById(slotId))!;
+    const candidates = await communityScheduleOccurrenceService.listAttachCandidates(admin, { slot, now: OCC_NOW });
+    const candidate = candidates.find((row) => row.runId === existing);
+    expect(candidate?.windowStartAt).toBe(CURRENT_WINDOW);
+    expect(candidate?.warnings.map((warning) => warning.code).sort()).toEqual(["CONTENT", "TIME"]);
+
+    const before = await runSnapshot(existing);
+    await communityScheduleOccurrenceService.attachExistingRun(admin, { scheduleSlotId: slotId, runId: existing, now: OCC_NOW });
+    expect((await linkFor(slotId, CURRENT_WINDOW))?.runId).toBe(existing);
+    expect(
+      (await communityScheduleOccurrenceService.listAttachCandidates(admin, { slot, now: OCC_NOW })).some(
+        (row) => row.runId === existing,
+      ),
+    ).toBe(false);
+
+    // Run Setup and Schedule composition edits never reach the attached Run.
+    await runTemplateRepository.update(templateId, {
+      name: "CSM Materialize Template",
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 6 }],
+      desiredTankCount: 3,
+      desiredHealerCount: 4,
+      desiredDpsCount: 13,
+      notes: null,
+      updatedById: ids.admin,
+    } as never);
+    await communityScheduleService.updateSlot(
+      admin,
+      {
+        slotId,
+        weekday: slot.weekday,
+        localStartTime: slot.localStartTime,
+        label: slot.label,
+        raidLeadId: slot.raidLeadId,
+        notes: null,
+        runTemplateId: templateId,
+        autoCreateRun: true,
+        runMode: "INHOUSE",
+        compositionOverrideEnabled: true,
+        desiredTankCountOverride: 1,
+        desiredHealerCountOverride: 1,
+        desiredDpsCountOverride: 1,
+        desiredLootbuddyCountOverride: 0,
+      },
+      OCC_NOW,
+    );
+    expect(await runSnapshot(existing)).toEqual(before);
+  });
+
+  it("blocks: Run already attached elsewhere, occurrence already fulfilled, CANCELLED Run, past raid ID", async () => {
+    const plan = await communityScheduleService.createSchedulePlan(admin, planInput({}, { autoCreateRun: false }), OCC_NOW);
+    const otherPlan = await communityScheduleService.createSchedulePlan(
+      admin,
+      {
+        ...planInput({ localStartTime: "21:00" }, { autoCreateRun: false }),
+      },
+      OCC_NOW,
+    );
+    const slotId = plan.slotIds[0]!;
+    const otherSlotId = otherPlan.slotIds[0]!;
+    const first = await manualRun("2027-01-15T19:00:00.000Z");
+    const second = await manualRun("2027-01-15T20:30:00.000Z");
+
+    await communityScheduleOccurrenceService.attachExistingRun(admin, { scheduleSlotId: slotId, runId: first, now: OCC_NOW });
+    await expectCode(
+      communityScheduleOccurrenceService.attachExistingRun(admin, { scheduleSlotId: otherSlotId, runId: first, now: OCC_NOW }),
+      "COMMUNITY_SCHEDULE_RUN_ALREADY_ATTACHED",
+    );
+    await expectCode(
+      communityScheduleOccurrenceService.attachExistingRun(admin, { scheduleSlotId: slotId, runId: second, now: OCC_NOW }),
+      "COMMUNITY_SCHEDULE_OCCURRENCE_FULFILLED",
+    );
+
+    const cancelled = await manualRun("2027-01-22T19:00:00.000Z");
+    await runService.cancelRun(lead, cancelled);
+    await expectCode(
+      communityScheduleOccurrenceService.attachExistingRun(admin, { scheduleSlotId: slotId, runId: cancelled, now: OCC_NOW }),
+      "COMMUNITY_SCHEDULE_RUN_NOT_ATTACHABLE",
+    );
+
+    // A week later the 15 Jan Run belongs to a past raid ID.
+    await expectCode(
+      communityScheduleOccurrenceService.attachExistingRun(admin, {
+        scheduleSlotId: otherSlotId,
+        runId: second,
+        now: new Date("2027-01-21T12:00:00.000Z"),
+      }),
+      "COMMUNITY_SCHEDULE_RUN_NOT_ATTACHABLE",
+    );
+    // Untouched: the 15 Jan occurrence of the first slot is still exactly one Run.
+    expect((await communityScheduleRunRepository.listBySlotIds([slotId])).map((link) => link.runId)).toEqual([first]);
+  });
+
+  it("attach racing the materializer for the same occurrence ends with exactly one fulfillment", async () => {
+    const plan = await communityScheduleService.createSchedulePlan(admin, planInput({}, { autoCreateRun: false }), OCC_NOW);
+    const slotId = plan.slotIds[0]!;
+    const existing = await manualRun("2027-01-15T19:00:00.000Z");
+    await communityScheduleRepository.update(slotId, {
+      weekday: "FRIDAY",
+      localStartTime: "19:45",
+      label: "Race",
+      notes: null,
+      raidLeadId: ids.lead,
+      runTemplateId: templateId,
+      autoCreateRun: true,
+      runMode: "INHOUSE",
+      updatedById: ids.admin,
+    });
+
+    const [attach, auto] = await Promise.allSettled([
+      communityScheduleOccurrenceService.attachExistingRun(admin, { scheduleSlotId: slotId, runId: existing, now: OCC_NOW }),
+      communityScheduleMaterializationService.materializeSlotWindows([slotId], { now: OCC_NOW, windows: ["CURRENT"] }),
+    ]);
+    const links = (await communityScheduleRunRepository.listBySlotIds([slotId])).filter(
+      (link) => link.windowStartAt === CURRENT_WINDOW,
+    );
+    expect(links).toHaveLength(1);
+    if (attach.status === "fulfilled") {
+      expect(links[0]!.runId).toBe(existing);
+    } else {
+      expect(links[0]!.origin).toBe("MATERIALIZED");
+      expect(await communityScheduleRunRepository.findByRunId(existing)).toBeNull();
+    }
+    expect(auto.status).toBe("fulfilled");
+    // No orphan materialized Run without a link.
+    const slotRuns = (await orm.CommunityScheduleRun.all()).filter(
+      (row) => (row as { scheduleSlotId: string }).scheduleSlotId === slotId,
+    );
+    expect(slotRuns).toHaveLength(1);
   });
 });
