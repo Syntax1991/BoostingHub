@@ -180,6 +180,13 @@ export async function attachExistingRunInTx(
   const run = await runRepository.findById(input.runId);
   assertRunAttachable(run, input.now);
   const occurrence = occurrenceForRun(input.slot, run);
+  if (isBeforeScheduleStart(input.slot.firstWindowStartAt, occurrence.windowStartAt)) {
+    throw new DomainError(
+      "COMMUNITY_SCHEDULE_NOT_STARTED",
+      "This Run falls before the schedule's start — it cannot be used as an occurrence.",
+      409,
+    );
+  }
 
   const runLink = await txOrm.CommunityScheduleRun.where({ runId: run.id }).first();
   if (runLink) {
@@ -244,7 +251,7 @@ export const communityScheduleOccurrenceService = {
     user: AuthenticatedUser,
     input: {
       slot: Pick<CommunityScheduleSlotRecord, "weekday" | "localStartTime" | "raidLeadId" | "runTemplateId"> &
-        Partial<Pick<CommunityScheduleSlotRecord, "id" | "raidLeadName">>;
+        Partial<Pick<CommunityScheduleSlotRecord, "id" | "raidLeadName" | "firstWindowStartAt">>;
       windows?: readonly RaidIdWindow[];
       now?: Date;
     },
@@ -270,7 +277,9 @@ export const communityScheduleOccurrenceService = {
           timeZone: COMMUNITY_SCHEDULE_TIME_ZONE,
         }),
       )
-      .filter((occurrence) => Date.parse(occurrence.windowEndAt) > now.getTime());
+      .filter((occurrence) => Date.parse(occurrence.windowEndAt) > now.getTime())
+      // Occurrences before the schedule's start boundary do not exist — nothing to attach.
+      .filter((occurrence) => !isBeforeScheduleStart(slot.firstWindowStartAt ?? null, occurrence.windowStartAt));
 
     const fulfilled = new Set(
       slot.id
@@ -319,27 +328,34 @@ export const communityScheduleOccurrenceService = {
     user: AuthenticatedUser,
     input: { scheduleSlotId: string; runId: string; now?: Date },
   ): Promise<CommunityScheduleRunRecord> {
-    const slot = await communityScheduleRepository.findById(input.scheduleSlotId);
-    if (!slot) {
+    const existing = await communityScheduleRepository.findById(input.scheduleSlotId);
+    if (!existing) {
       throw new DomainError("COMMUNITY_SCHEDULE_NOT_FOUND", "Schedule slot was not found.", 404);
     }
-    if (!canMaterializeCommunityScheduleOccurrence(user, slot)) {
+    if (!canMaterializeCommunityScheduleOccurrence(user, existing)) {
       throw new DomainError("NOT_AUTHORIZED", "You cannot manage this schedule.", 403);
     }
-    if (!slot.isActive) {
-      throw new DomainError("COMMUNITY_SCHEDULE_SLOT_INACTIVE", "This schedule slot is inactive.", 409);
-    }
     const now = input.now ?? new Date();
-    let link: CommunityScheduleRunRecord;
+    let attached: { slot: CommunityScheduleSlotRecord; link: CommunityScheduleRunRecord };
     try {
-      link = await db.transaction(async (handle) =>
-        attachExistingRunInTx(tx(handle), { slot, runId: input.runId, actor: user, now }),
-      );
+      attached = await db.transaction(async (handle) => {
+        const txOrm = tx(handle);
+        // Lock + re-read: serializes with Schedule edits (time / start / deactivation).
+        const slot = await communityScheduleRepository.lockInTx(input.scheduleSlotId, txOrm);
+        if (!slot) {
+          throw new DomainError("COMMUNITY_SCHEDULE_NOT_FOUND", "Schedule slot was not found.", 404);
+        }
+        if (!slot.isActive) {
+          throw new DomainError("COMMUNITY_SCHEDULE_SLOT_INACTIVE", "This schedule slot is inactive.", 409);
+        }
+        const link = await attachExistingRunInTx(txOrm, { slot, runId: input.runId, actor: user, now });
+        return { slot, link };
+      });
     } catch (error) {
       mapAttachUniqueViolation(error);
     }
-    await recordRunScheduleAttached({ actor: user, slot, link });
-    return link;
+    await recordRunScheduleAttached({ actor: user, slot: attached.slot, link: attached.link });
+    return attached.link;
   },
 };
 

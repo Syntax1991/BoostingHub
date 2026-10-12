@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   isBeforeScheduleStart,
+  nextScheduleDraftReleaseAt,
+  scheduleDraftRelease,
   resolveScheduleStartBoundary,
   scheduleOccurrenceInWindowOf,
 } from "@/lib/community-schedule";
@@ -109,5 +111,28 @@ describe("isBeforeScheduleStart / scheduleOccurrenceInWindowOf", () => {
     const occurrence = scheduleOccurrenceInWindowOf({ ...friday2000, instant: new Date("2026-10-20T10:00:00.000Z") });
     expect(occurrence.windowStartAt).toBe("2026-10-14T04:00:00.000Z");
     expect(occurrence.scheduledStartAt).toBe("2026-10-16T18:00:00.000Z");
+  });
+});
+
+describe("scheduleDraftRelease (Monday 12:00 Europe/Berlin → following Wednesday reset)", () => {
+  it.each([
+    // [now, releaseAt, targetWindowStartAt]
+    ["Mon 12 Oct 11:59 Berlin → previous release (5 Oct) still governs", "2026-10-12T09:59:00.000Z", "2026-10-05T10:00:00.000Z", "2026-10-07T04:00:00.000Z"],
+    ["Mon 12 Oct 12:00 Berlin exactly → releases Wed 14 Oct", "2026-10-12T10:00:00.000Z", "2026-10-12T10:00:00.000Z", "2026-10-14T04:00:00.000Z"],
+    ["Tue 13 Oct catch-up → same target", "2026-10-13T08:00:00.000Z", "2026-10-12T10:00:00.000Z", "2026-10-14T04:00:00.000Z"],
+    ["Thu 15 Oct (after Wed reset) catch-up → still the released raid ID", "2026-10-15T08:00:00.000Z", "2026-10-12T10:00:00.000Z", "2026-10-14T04:00:00.000Z"],
+    ["Sun 18 Oct → still last Monday's release", "2026-10-18T20:00:00.000Z", "2026-10-12T10:00:00.000Z", "2026-10-14T04:00:00.000Z"],
+    ["DST end week: Mon 26 Oct 12:00 CET = 11:00Z → Wed 28 Oct 06:00 CET", "2026-10-26T11:00:00.000Z", "2026-10-26T11:00:00.000Z", "2026-10-28T05:00:00.000Z"],
+    ["DST end week: Mon 26 Oct 11:30Z (12:30 CET) → released", "2026-10-26T11:30:00.000Z", "2026-10-26T11:00:00.000Z", "2026-10-28T05:00:00.000Z"],
+    ["DST end week: Mon 26 Oct 10:30Z (11:30 CET) → not yet", "2026-10-26T10:30:00.000Z", "2026-10-19T10:00:00.000Z", "2026-10-21T04:00:00.000Z"],
+    ["DST start week: Mon 29 Mar 2027 12:00 CEST = 10:00Z → Wed 31 Mar 06:00 CEST", "2027-03-29T10:00:00.000Z", "2027-03-29T10:00:00.000Z", "2027-03-31T04:00:00.000Z"],
+    ["Mon 22 Mar 2027 12:00 CET (before DST start Sun 28) → Wed 24 Mar 06:00 CET", "2027-03-22T11:00:00.000Z", "2027-03-22T11:00:00.000Z", "2027-03-24T05:00:00.000Z"],
+  ])("%s", (_label, now, releaseAt, target) => {
+    expect(scheduleDraftRelease(new Date(now))).toEqual({ releaseAt, targetWindowStartAt: target });
+  });
+
+  it("next release for display", () => {
+    expect(nextScheduleDraftReleaseAt(new Date("2026-10-12T10:00:00.000Z"))).toBe("2026-10-19T10:00:00.000Z");
+    expect(nextScheduleDraftReleaseAt(new Date("2026-10-20T08:00:00.000Z"))).toBe("2026-10-26T11:00:00.000Z");
   });
 });

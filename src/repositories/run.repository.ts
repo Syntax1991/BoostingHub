@@ -482,6 +482,26 @@ export const runRepository = {
     return rows.map((row) => asString((row as Record<string, unknown>).id));
   },
 
+  /** Lifecycle facts only (status / archive / start) for the given Run ids — one light query. */
+  async listLifecycleByIds(
+    ids: readonly string[],
+  ): Promise<Array<{ id: string; status: RunStatus; archivedAt: string | null; scheduledStartAt: string }>> {
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length === 0) return [];
+    const rows = await orm.Run.where((run) => run.id.in(uniqueIds))
+      .select("id", "status", "archivedAt", "scheduledStartAt")
+      .all();
+    return rows.map((row) => {
+      const record = row as Record<string, unknown>;
+      return {
+        id: asString(record.id),
+        status: mapRunStatus(record.status),
+        archivedAt: asStringOrNull(record.archivedAt),
+        scheduledStartAt: asString(record.scheduledStartAt),
+      };
+    });
+  },
+
   /** Same projection and ordering as listManaged, limited to the given Run ids (one query). */
   async listManagedByIds(ids: readonly string[]): Promise<RunListRecord[]> {
     const uniqueIds = [...new Set(ids)];
@@ -561,6 +581,8 @@ export const runRepository = {
       createdById: string | null;
       createdByKind: RunDomainEventActorKind;
     };
+    /** Runs first inside the transaction (e.g. lock + re-check the Schedule slot). */
+    guardInTx?: (txOrm: TxOrm) => Promise<void>;
   }): Promise<{ runId: string; linkId: string }> {
     const runId = crypto.randomUUID();
     const linkId = crypto.randomUUID();
@@ -569,6 +591,9 @@ export const runRepository = {
     try {
       await db.transaction(async (tx) => {
         const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+        if (input.guardInTx) {
+          await input.guardInTx(txOrm);
+        }
         await txOrm.Run.create({
           id: runId,
           title: input.draft.title,
@@ -1022,6 +1047,49 @@ export const runRepository = {
       archivedById,
       updatedAt: new Date().toISOString(),
     });
+  },
+
+  /**
+   * Retires a Schedule-owned Draft whose occurrence the Schedule no longer has:
+   * the same end state as Cancel + Archive (status CANCELLED from DRAFT,
+   * cancelRevision bumped, archived by the acting user). Locks the roster like
+   * Cancel, then re-checks authoritatively: only a still-DRAFT, unarchived Run
+   * starting after `notBefore` is retired — a Run that meanwhile left DRAFT
+   * (opened / published) is never touched. No announcement / notifications: a
+   * Draft was never public and has no signups. Returns whether it retired.
+   */
+  async retireScheduleDraftInTx(
+    txOrm: TxOrm,
+    input: { runId: string; actorId: string; notBefore: Date },
+  ): Promise<boolean> {
+    const rosterLookup = (await txOrm.RunRoster.where({ runId: input.runId }).select("id").first()) as Record<
+      string,
+      unknown
+    > | null;
+    if (rosterLookup) {
+      await lockRosterInTx(txOrm, asString(rosterLookup.id));
+    }
+    const current = (await txOrm.Run.where({ id: input.runId }).first()) as Record<string, unknown> | null;
+    if (
+      !current ||
+      mapRunStatus(current.status) !== "DRAFT" ||
+      asStringOrNull(current.archivedAt) != null ||
+      Date.parse(asString(current.scheduledStartAt)) <= input.notBefore.getTime()
+    ) {
+      return false;
+    }
+    const now = new Date().toISOString();
+    await txOrm.Run.where({ id: input.runId }).update({
+      status: "CANCELLED",
+      signupsOpen: false,
+      cancelledFromStatus: "DRAFT",
+      cancelledFromSignupsOpen: false,
+      cancelRevision: asNumber(current.cancelRevision, 0) + 1,
+      archivedAt: now,
+      archivedById: input.actorId,
+      updatedAt: now,
+    });
+    return true;
   },
 
   async restoreRun(id: string) {

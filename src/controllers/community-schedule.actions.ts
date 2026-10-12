@@ -12,6 +12,12 @@ import {
 import { communityScheduleRepository } from "@/repositories/community-schedule.repository";
 import { DomainError } from "@/lib/errors";
 import {
+  describeScheduleCleanupResult,
+  resolveScheduleStartBoundary,
+  SCHEDULE_DRAFT_RELEASE_LABEL,
+  type ScheduleRunCounts,
+} from "@/lib/community-schedule";
+import {
   addScheduleTimesSchema,
   attachScheduleRunSchema,
   communityScheduleSlotIdSchema,
@@ -29,9 +35,12 @@ function revalidateSchedule() {
   revalidatePath("/manage/templates");
 }
 
-function withMaterializationMessage(base: string, warning: string | null): string {
-  return warning ? `${base} ${warning}` : base;
+function withCleanupMessage(base: string, cleanup: ScheduleRunCounts): string {
+  const detail = describeScheduleCleanupResult(cleanup);
+  return detail ? `${base} ${detail}` : base;
 }
+
+const RELEASE_NOTE = `Drafts are created at the weekly release (${SCHEDULE_DRAFT_RELEASE_LABEL}) or via Create Run.`;
 
 export type CreateCommunityScheduleSlotActionResult =
   | { ok: true; message: string; slotId: string }
@@ -55,7 +64,7 @@ export async function createCommunityScheduleSlotAction(
     revalidateSchedule();
     return {
       ok: true,
-      message: withMaterializationMessage("Schedule slot created.", result.materialization.warning),
+      message: `Schedule slot created. ${RELEASE_NOTE}`,
       slotId: result.slot.id,
     };
   } catch (error) {
@@ -73,10 +82,7 @@ export async function createCommunitySchedulePlanAction(
     revalidateSchedule();
     return {
       ok: true,
-      message: withMaterializationMessage(
-        `Schedule created with ${result.slotIds.length} weekly time${result.slotIds.length === 1 ? "" : "s"}.`,
-        result.materialization.warning,
-      ),
+      message: `Schedule created with ${result.slotIds.length} weekly time${result.slotIds.length === 1 ? "" : "s"}. ${RELEASE_NOTE}`,
       templateId: result.templateId,
       slotIds: result.slotIds,
     };
@@ -95,10 +101,7 @@ export async function addCommunityScheduleTimesAction(
     revalidateSchedule();
     return {
       ok: true,
-      message: withMaterializationMessage(
-        `Added ${result.slotIds.length} weekly time${result.slotIds.length === 1 ? "" : "s"}.`,
-        result.materialization.warning,
-      ),
+      message: `Added ${result.slotIds.length} weekly time${result.slotIds.length === 1 ? "" : "s"}. ${RELEASE_NOTE}`,
       templateId: result.templateId,
       slotIds: result.slotIds,
     };
@@ -128,7 +131,7 @@ export async function updateCommunityScheduleSlotAction(input: unknown): Promise
     revalidateSchedule();
     return {
       ok: true,
-      message: withMaterializationMessage("Schedule slot updated.", result.materialization.warning),
+      message: withCleanupMessage("Schedule slot updated.", result.cleanup),
     };
   } catch (error) {
     return mapActionError(error);
@@ -139,9 +142,9 @@ export async function deactivateCommunityScheduleSlotAction(input: unknown): Pro
   try {
     const user = await requireUser();
     const parsed = communityScheduleSlotIdSchema.parse(input);
-    await communityScheduleService.deactivateSlot(user, parsed.slotId);
+    const result = await communityScheduleService.deactivateSlot(user, parsed.slotId);
     revalidateSchedule();
-    return { ok: true, message: "Schedule slot deactivated." };
+    return { ok: true, message: withCleanupMessage("Schedule slot deactivated.", result.cleanup) };
   } catch (error) {
     return mapActionError(error);
   }
@@ -151,12 +154,9 @@ export async function reactivateCommunityScheduleSlotAction(input: unknown): Pro
   try {
     const user = await requireUser();
     const parsed = communityScheduleSlotIdSchema.parse(input);
-    const result = await communityScheduleService.reactivateSlot(user, parsed.slotId);
+    await communityScheduleService.reactivateSlot(user, parsed.slotId);
     revalidateSchedule();
-    return {
-      ok: true,
-      message: withMaterializationMessage("Schedule slot reactivated.", result.materialization.warning),
-    };
+    return { ok: true, message: `Schedule slot reactivated. ${RELEASE_NOTE}` };
   } catch (error) {
     return mapActionError(error);
   }
@@ -166,9 +166,9 @@ export async function deleteCommunityScheduleSlotAction(input: unknown): Promise
   try {
     const user = await requireUser();
     const parsed = communityScheduleSlotIdSchema.parse(input);
-    await communityScheduleService.deleteSlot(user, parsed.slotId);
+    const result = await communityScheduleService.deleteSlot(user, parsed.slotId);
     revalidateSchedule();
-    return { ok: true, message: "Schedule time deleted. Existing Runs were not changed." };
+    return { ok: true, message: withCleanupMessage("Schedule time deleted.", result.cleanup) };
   } catch (error) {
     return mapActionError(error);
   }
@@ -189,10 +189,12 @@ export async function deleteCommunityScheduleRunSetupAction(
     revalidatePath("/profile/templates");
     return {
       ok: true,
-      message:
+      message: withCleanupMessage(
         result.deletedSlotCount === 0
-          ? "Run Setup deleted. Existing Runs were not changed."
-          : `Run Setup and ${result.deletedSlotCount} Schedule time${result.deletedSlotCount === 1 ? "" : "s"} deleted. Existing Runs were not changed.`,
+          ? "Run Setup deleted."
+          : `Run Setup and ${result.deletedSlotCount} Schedule time${result.deletedSlotCount === 1 ? "" : "s"} deleted.`,
+        result.cleanup,
+      ),
       deletedSlotCount: result.deletedSlotCount,
     };
   } catch (error) {
@@ -292,6 +294,13 @@ export async function listScheduleAttachCandidatesAction(
         localStartTime: parsed.localStartTime,
         raidLeadId: parsed.raidLeadId,
         runTemplateId: parsed.runTemplateId,
+        firstWindowStartAt: parsed.start
+          ? resolveScheduleStartBoundary({
+              weekday: parsed.weekday,
+              localStartTime: parsed.localStartTime,
+              start: parsed.start,
+            }).firstWindowStartAt
+          : null,
       },
     });
     return { ok: true, candidates };

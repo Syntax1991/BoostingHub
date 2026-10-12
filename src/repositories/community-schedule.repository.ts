@@ -145,6 +145,17 @@ export const communityScheduleRepository = {
     return rows.map((row) => mapSlot(row as Record<string, unknown>));
   },
 
+  /**
+   * Row-locks the slot for the rest of the caller's transaction (same
+   * update-to-lock pattern as lockRosterInTx) and returns its current state.
+   * Schedule mutations and Draft materialization both lock first, so a slot
+   * change and a materialization for that slot serialize.
+   */
+  async lockInTx(id: string, txOrm: TxOrm): Promise<CommunityScheduleSlotRecord | null> {
+    await txOrm.CommunityScheduleSlot.where({ id }).update({ updatedAt: new Date().toISOString() });
+    return this.findById(id, txOrm);
+  },
+
   async findById(id: string, txOrm?: TxOrm): Promise<CommunityScheduleSlotRecord | null> {
     const row = await baseSlotQuery(txOrm).where({ id }).first();
     return row ? mapSlot(row as Record<string, unknown>) : null;
@@ -243,9 +254,14 @@ export const communityScheduleRepository = {
     return created;
   },
 
-  async update(id: string, input: CommunityScheduleSlotUpdate): Promise<CommunityScheduleSlotRecord> {
+  async update(
+    id: string,
+    input: CommunityScheduleSlotUpdate,
+    txOrm?: TxOrm,
+  ): Promise<CommunityScheduleSlotRecord> {
+    const client = txOrm ?? orm;
     const composition = input.composition ?? INHERIT_COMPOSITION;
-    await orm.CommunityScheduleSlot.where({ id }).update({
+    await client.CommunityScheduleSlot.where({ id }).update({
       weekday: input.weekday,
       localStartTime: input.localStartTime,
       label: input.label,
@@ -263,7 +279,7 @@ export const communityScheduleRepository = {
       updatedById: input.updatedById,
       updatedAt: new Date().toISOString(),
     });
-    const updated = await this.findById(id);
+    const updated = await this.findById(id, client);
     if (!updated) {
       throw new Error("Community schedule slot update failed.");
     }
@@ -274,13 +290,15 @@ export const communityScheduleRepository = {
     id: string,
     isActive: boolean,
     updatedById: string,
+    txOrm?: TxOrm,
   ): Promise<CommunityScheduleSlotRecord> {
-    await orm.CommunityScheduleSlot.where({ id }).update({
+    const client = txOrm ?? orm;
+    await client.CommunityScheduleSlot.where({ id }).update({
       isActive,
       updatedById,
       updatedAt: new Date().toISOString(),
     });
-    const updated = await this.findById(id);
+    const updated = await this.findById(id, client);
     if (!updated) {
       throw new Error("Community schedule slot setActive failed.");
     }

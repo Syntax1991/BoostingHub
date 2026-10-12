@@ -8,7 +8,11 @@ import {
   deleteCommunityScheduleSlotAction,
   reactivateCommunityScheduleSlotAction,
 } from "@/controllers/community-schedule.actions";
-import { communityWeekdayShortLabel } from "@/lib/community-schedule";
+import {
+  communityWeekdayShortLabel,
+  describeScheduleCleanupPreview,
+  type ScheduleRunCounts,
+} from "@/lib/community-schedule";
 import { COMMUNITY_SCHEDULE_RUN_MODE_LABELS } from "@/lib/labels";
 import type { CommunityScheduleRunMode, CommunityWeekday } from "@/models/enums";
 
@@ -21,6 +25,7 @@ export function CommunityScheduleSlotActions({
   runMode,
   runSetupName,
   raidLeadName,
+  runCounts,
 }: {
   slotId: string;
   isActive: boolean;
@@ -31,6 +36,8 @@ export function CommunityScheduleSlotActions({
   runMode?: CommunityScheduleRunMode;
   runSetupName?: string;
   raidLeadName?: string;
+  /** Future Runs of this time (what deactivate / delete would do to them). */
+  runCounts?: ScheduleRunCounts;
 }) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -39,7 +46,18 @@ export function CommunityScheduleSlotActions({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  const consequences = describeScheduleCleanupPreview(
+    runCounts ?? { retiredDrafts: 0, protectedRuns: 0, attachedRuns: 0 },
+  );
+
   function runLifecycle() {
+    if (
+      isActive &&
+      (runCounts?.retiredDrafts ?? 0) > 0 &&
+      !window.confirm(["Deactivate this Schedule time?", ...consequences].join("\n"))
+    ) {
+      return;
+    }
     setError(null);
     startTransition(async () => {
       const result = isActive
@@ -113,7 +131,9 @@ export function CommunityScheduleSlotActions({
                 {runSetupName} · {raidLeadName}
               </p>
               <p>This permanently removes this recurring time.</p>
-              <p>Existing Runs already created from this time will NOT be changed.</p>
+              {consequences.map((line) => (
+                <p key={line}>{line}</p>
+              ))}
             </div>
             {error ? (
               <p

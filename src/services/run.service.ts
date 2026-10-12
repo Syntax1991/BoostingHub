@@ -32,6 +32,9 @@ import { activityRepository } from "@/repositories/activity.repository";
 import { attendanceRepository } from "@/repositories/attendance.repository";
 import { raidRepository } from "@/repositories/raid.repository";
 import { communityScheduleRunRepository } from "@/repositories/community-schedule-run.repository";
+import { communityScheduleRepository } from "@/repositories/community-schedule.repository";
+import { isBeforeScheduleStart } from "@/lib/community-schedule";
+import type { CommunityWeekday } from "@/models/enums";
 import {
   runRepository,
   type LifecycleAnnouncementTxHooks,
@@ -637,6 +640,8 @@ export const runService = {
       desiredLootbuddyCountOverride: number | null;
     };
     actor: { kind: "USER"; user: AuthenticatedUser } | { kind: "SYSTEM" };
+    /** Slot state this occurrence was computed from; re-checked under the slot lock. */
+    slotGuard?: { weekday: CommunityWeekday; localStartTime: string };
   }): Promise<{ runId: string; alreadyExisted: boolean }> {
     const draft = await this.prepareDraftFromTemplate({
       template: input.template,
@@ -659,6 +664,27 @@ export const runService = {
           createdById,
           createdByKind,
         },
+        // Serializes with Schedule edits / deactivation / deletion (they lock the
+        // same slot row): never create a Draft for an occurrence the slot no
+        // longer has, so cleanup can never leave an orphan Schedule Draft.
+        guardInTx: input.slotGuard
+          ? async (txOrm) => {
+              const slot = await communityScheduleRepository.lockInTx(input.scheduleSlotId, txOrm);
+              if (
+                !slot ||
+                !slot.isActive ||
+                slot.weekday !== input.slotGuard!.weekday ||
+                slot.localStartTime !== input.slotGuard!.localStartTime ||
+                isBeforeScheduleStart(slot.firstWindowStartAt, input.windowStartAt)
+              ) {
+                throw new DomainError(
+                  "COMMUNITY_SCHEDULE_SLOT_CHANGED",
+                  "The schedule time changed meanwhile — reload and try again.",
+                  409,
+                );
+              }
+            }
+          : undefined,
       });
 
       await runDomainEventService.record({

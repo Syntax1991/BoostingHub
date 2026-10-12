@@ -4,6 +4,7 @@ import { useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { deleteCommunityScheduleRunSetupAction } from "@/controllers/community-schedule.actions";
+import { describeScheduleCleanupPreview, type ScheduleRunCounts } from "@/lib/community-schedule";
 
 export function CommunityScheduleDeleteSetupButton({
   runTemplateId,
@@ -11,12 +12,15 @@ export function CommunityScheduleDeleteSetupButton({
   raidLeadName,
   slotCount,
   canDelete,
+  runCounts,
 }: {
   runTemplateId: string;
   runSetupName: string;
   raidLeadName: string;
   slotCount: number;
   canDelete: boolean;
+  /** Future Runs of its Schedule times (what the delete does to them). */
+  runCounts?: ScheduleRunCounts;
 }) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -76,7 +80,11 @@ export function CommunityScheduleDeleteSetupButton({
                 </li>
               ) : null}
             </ul>
-            <p>Existing Runs already created from this setup will NOT be changed.</p>
+            {describeScheduleCleanupPreview(
+              runCounts ?? { retiredDrafts: 0, protectedRuns: 0, attachedRuns: 0 },
+            ).map((line) => (
+              <p key={line}>{line}</p>
+            ))}
             {slotCount > 0 ? (
               <p>No future Runs will be created from these recurring times.</p>
             ) : null}

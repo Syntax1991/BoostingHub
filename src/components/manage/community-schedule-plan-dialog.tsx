@@ -215,8 +215,9 @@ export function CommunitySchedulePlanDialog({
           >
             <h2 className="text-base font-semibold">Create Schedule</h2>
             <p className="mt-1 text-xs text-muted">
-              Link a Run Setup to one or more weekly times (Europe/Berlin). When Auto-create is on, CURRENT (if still
-              future) and NEXT DRAFT Runs are created immediately after save; the hourly job remains a safety net.
+              Link a Run Setup to one or more weekly times (Europe/Berlin). Saving only plans the times. With
+              weekly Drafts on, each raid ID&apos;s Draft Runs are created on Monday 12:00 before its Wednesday reset;
+              use Create Run for an earlier one.
             </p>
 
             <div className="mt-4 grid gap-3">
@@ -469,6 +470,7 @@ export function CommunitySchedulePlanDialog({
                       localStartTime={slot.localStartTime}
                       raidLeadId={raidLeadId}
                       runTemplateId={setupMode === "existing" ? templateId || null : null}
+                      start={start}
                       value={slot.attachRunId}
                       onChange={(attachRunId) =>
                         setSlots((current) =>
@@ -489,7 +491,7 @@ export function CommunitySchedulePlanDialog({
                   disabled={setupMode === "existing" && !templateId}
                   onChange={(event) => setAutoCreateRun(event.target.checked)}
                 />
-                <span>Auto-create DRAFT runs immediately (hourly job is a safety net)</span>
+                <span>Automatically create weekly Draft — Draft release: Monday 12:00 (Europe/Berlin)</span>
               </label>
 
               <fieldset className="grid gap-2 rounded-md border border-border p-3">

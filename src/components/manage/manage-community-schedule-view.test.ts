@@ -141,6 +141,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
         canDelete: canEdit,
       },
     ],
+    runCountsBySlotId: {},
     runSetups: [
       {
         key: "template-1:lead-1",
@@ -152,6 +153,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
         canEdit,
         slotCount: 3,
         canDelete: canEdit,
+        runCounts: { retiredDrafts: 0, protectedRuns: 0, attachedRuns: 0 },
         slots: [
           {
             id: "slot-1",
@@ -163,6 +165,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
             label: "Default HC",
             notes: null,
             canDelete: canEdit,
+            runCounts: { retiredDrafts: 0, protectedRuns: 0, attachedRuns: 0 },
             ...setupSlotExtras,
           },
           {
@@ -175,6 +178,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
             label: "Default HC",
             notes: null,
             canDelete: canEdit,
+            runCounts: { retiredDrafts: 0, protectedRuns: 0, attachedRuns: 0 },
             ...setupSlotExtras,
           },
           {
@@ -187,6 +191,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
             label: "Default HC",
             notes: null,
             canDelete: canEdit,
+            runCounts: { retiredDrafts: 0, protectedRuns: 0, attachedRuns: 0 },
             ...setupSlotExtras,
           },
         ],
@@ -309,7 +314,8 @@ describe("ManageCommunityScheduleView", () => {
     expect(html).toContain("Duplicate");
     expect(html).toContain("Inhouse");
     expect(html).toContain("Team Run");
-    expect(html).toContain("Auto-create: MIXED");
+    expect(html).toContain("Weekly Draft: MIXED");
+    expect(html).toContain("Monday 12:00 (Europe/Berlin)");
     expect(html).toContain("Add times");
     expect(html).toContain("Delete");
     expect(html).toContain("Deactivate");

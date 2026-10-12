@@ -263,3 +263,89 @@ export function resolveScheduleStartBoundary(input: {
 export function isBeforeScheduleStart(firstWindowStartAt: string | null | undefined, windowStartAt: string): boolean {
   return Boolean(firstWindowStartAt) && Date.parse(windowStartAt) < Date.parse(firstWindowStartAt!);
 }
+
+/** Weekly Draft release: Monday 12:00 Europe/Berlin (wall clock, DST-safe). */
+export const SCHEDULE_DRAFT_RELEASE_LOCAL_TIME = "12:00";
+export const SCHEDULE_DRAFT_RELEASE_LABEL = "Monday 12:00 (Europe/Berlin)";
+
+const WEEKDAY_INDEX: Record<string, number> = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+
+/**
+ * The weekly Draft release that governs automatic materialization at `now`:
+ * the latest Monday 12:00 Europe/Berlin at or before `now`, and the raid ID it
+ * releases — the one starting the FOLLOWING Wednesday 06:00 (never the raid ID
+ * that began the previous Wednesday, although Monday belongs to it).
+ * A pass after the release (catch-up, e.g. Tuesday or after downtime) targets
+ * the same raid ID until the next Monday 12:00.
+ */
+export function scheduleDraftRelease(
+  now: Date = new Date(),
+  timeZone: string = COMMUNITY_SCHEDULE_TIME_ZONE,
+): { releaseAt: string; targetWindowStartAt: string } {
+  const parts = zonedParts(now, timeZone);
+  let monday = addLocalDays({ year: parts.year, month: parts.month, day: parts.day }, -WEEKDAY_INDEX[parts.weekday]!);
+  let releaseAt = localInstant(monday, SCHEDULE_DRAFT_RELEASE_LOCAL_TIME, timeZone);
+  if (releaseAt.getTime() > now.getTime()) {
+    monday = addLocalDays(monday, -7);
+    releaseAt = localInstant(monday, SCHEDULE_DRAFT_RELEASE_LOCAL_TIME, timeZone);
+  }
+  const targetWindowStart = localInstant(addLocalDays(monday, 2), "06:00", timeZone);
+  return { releaseAt: releaseAt.toISOString(), targetWindowStartAt: targetWindowStart.toISOString() };
+}
+
+/** The next Monday 12:00 Europe/Berlin strictly after `now` (for display). */
+export function nextScheduleDraftReleaseAt(now: Date = new Date(), timeZone: string = COMMUNITY_SCHEDULE_TIME_ZONE): string {
+  const { releaseAt } = scheduleDraftRelease(now, timeZone);
+  const parts = zonedParts(new Date(releaseAt), timeZone);
+  return localInstant(
+    addLocalDays({ year: parts.year, month: parts.month, day: parts.day }, 7),
+    SCHEDULE_DRAFT_RELEASE_LOCAL_TIME,
+    timeZone,
+  ).toISOString();
+}
+
+/** Counts of the Runs a Schedule time had produced or been linked to (future occurrences only). */
+export type ScheduleRunCounts = {
+  /** Schedule-created Runs still in Draft — archived when their occurrence goes away. */
+  retiredDrafts: number;
+  /** Schedule-created Runs that already left Draft — never changed by Schedule edits. */
+  protectedRuns: number;
+  /** Existing Runs linked via "Use existing Run" — never changed by Schedule edits. */
+  attachedRuns: number;
+};
+
+function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : pluralForm}`;
+}
+
+/** Result message after a Schedule edit / deactivation / deletion. */
+export function describeScheduleCleanupResult(counts: ScheduleRunCounts): string {
+  const parts: string[] = [];
+  if (counts.retiredDrafts > 0) {
+    parts.push(`${plural(counts.retiredDrafts, "scheduled Draft Run")} archived.`);
+  }
+  if (counts.protectedRuns > 0) {
+    parts.push(`${plural(counts.protectedRuns, "active Run")} unchanged.`);
+  }
+  if (counts.attachedRuns > 0) {
+    parts.push(`${plural(counts.attachedRuns, "linked existing Run")} unchanged.`);
+  }
+  return parts.join(" ");
+}
+
+/** Confirmation lines before a Schedule time is deleted / deactivated / moved. */
+export function describeScheduleCleanupPreview(counts: ScheduleRunCounts): string[] {
+  const lines: string[] = [];
+  if (counts.retiredDrafts > 0) {
+    lines.push(
+      `${plural(counts.retiredDrafts, "scheduled Draft Run")} will be archived.`,
+    );
+  }
+  if (counts.protectedRuns > 0) {
+    lines.push(
+      `${plural(counts.protectedRuns, "active Run")} will remain unchanged.`,
+    );
+  }
+  lines.push("Linked existing Runs will remain unchanged.");
+  return lines;
+}

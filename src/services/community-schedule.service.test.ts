@@ -12,6 +12,7 @@ import { communityScheduleRunRepository } from "@/repositories/community-schedul
 import { raidRepository } from "@/repositories/raid.repository";
 import { runTemplateRepository } from "@/repositories/run-template.repository";
 import { communityScheduleMaterializationService } from "@/services/community-schedule-materialization.service";
+import { runService } from "@/services/run.service";
 import { communityScheduleService } from "@/services/community-schedule.service";
 
 const ids = {
@@ -207,7 +208,7 @@ describe("communityScheduleService authorization", () => {
     expect(updated.localStartTime).toBe("20:00");
     expect(updated.label).toBe("HC VIP Late");
 
-    const inactive = await communityScheduleService.deactivateSlot(admin, created.id);
+    const { slot: inactive } = await communityScheduleService.deactivateSlot(admin, created.id);
     expect(inactive.isActive).toBe(false);
     const { slot: active } = await communityScheduleService.reactivateSlot(owner, created.id);
     expect(active.isActive).toBe(true);
@@ -637,7 +638,9 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
       },
       now,
     );
-    expect(result.materialization.created).toBeGreaterThan(0);
+    // Saving only plans; the Monday 18 Jan 12:00 CET release creates the Wed 20 Jan raid ID's Draft.
+    expect(await orm.CommunityScheduleRun.where({ scheduleSlotId: result.slotIds[0]! }).all()).toHaveLength(0);
+    await communityScheduleMaterializationService.runPass(new Date("2027-01-18T11:00:00.000Z"));
     const template = await runTemplateRepository.findById(result.templateId);
     expect(template?.contents).toHaveLength(2);
     expect(template?.contents.map((row) => row.raidId).sort()).toEqual(
@@ -664,7 +667,7 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
     expect(nextProjected?.materialization.runId).toBeTruthy();
   });
 
-  it("Wed 00:30 auto-create at 00:33 skips CURRENT past and creates NEXT; page shows Open Run", async () => {
+  it("Wed 00:30 slot: release pass at Wed 00:33 creates NEXT (released raid ID); page shows Open Run", async () => {
     await raidRepository.ensureReferenceRaids();
     // Wed 07 Oct 2026 00:33 Europe/Berlin
     const now = new Date("2026-10-06T22:33:00.000Z");
@@ -690,8 +693,9 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
       },
       now,
     );
-    expect(result.materialization.created).toBe(1);
-    expect(result.materialization.failed).toBe(0);
+    const pass = await communityScheduleMaterializationService.runPass(now);
+    expect(pass.status === "COMPLETED" && pass.created).toBe(1);
+    expect(pass.status === "COMPLETED" && pass.failed).toBe(0);
 
     const slotId = result.slotIds[0]!;
     const page = await communityScheduleService.getPage(admin, now);
@@ -735,7 +739,7 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
 });
 
 describe("communityScheduleService mutable planning delete", () => {
-  it("ADMIN/OWNER delete unused and historical slots; Runs and provenance survive", async () => {
+  it("ADMIN/OWNER delete slots; the future Schedule Draft is archived (not deleted), provenance survives", async () => {
     await expectCode(
       communityScheduleService.deleteSlot(admin, "00000000-0000-4000-8000-000000000099"),
       "COMMUNITY_SCHEDULE_NOT_FOUND",
@@ -768,7 +772,8 @@ describe("communityScheduleService mutable planning delete", () => {
     } | null;
     const contentBefore = await orm.RunRaidContent.where({ runId }).all();
 
-    await communityScheduleService.deleteSlot(admin, materializedId!);
+    const deletedSlot = await communityScheduleService.deleteSlot(admin, materializedId!, now);
+    expect(deletedSlot.cleanup.retiredDrafts).toBe(1);
     expect(await communityScheduleRepository.findById(materializedId!)).toBeNull();
     expect(await communityScheduleRepository.findById(siblingId!)).toBeTruthy();
 
@@ -777,8 +782,10 @@ describe("communityScheduleService mutable planning delete", () => {
       status: string;
       title: string;
     } | null;
+    // Retired (Cancel + Archive end state); the Run itself and its snapshot stay.
+    expect(runBefore?.status).toBe("DRAFT");
+    expect(runAfter?.status).toBe("CANCELLED");
     expect(runAfter?.scheduledStartAt).toBe(runBefore?.scheduledStartAt);
-    expect(runAfter?.status).toBe(runBefore?.status);
     expect(runAfter?.title).toBe(runBefore?.title);
     expect(await orm.RunRaidContent.where({ runId }).all()).toHaveLength(contentBefore.length);
 
@@ -793,7 +800,7 @@ describe("communityScheduleService mutable planning delete", () => {
     expect(await runTemplateRepository.findById(plan.templateId)).toBeTruthy();
   });
 
-  it("deletes Run Setup after materialization; slots gone, Runs unchanged", async () => {
+  it("deletes Run Setup after materialization; slots gone, an opened Run unchanged", async () => {
     const emptyTemplateId = await runTemplateRepository.create({
       ...repoTemplateFields,
       name: "Orphan Setup",
@@ -824,11 +831,14 @@ describe("communityScheduleService mutable planning delete", () => {
       },
       now,
     );
+    // Weekly release (Mon 18 Jan 12:00 CET) creates the Drafts; the Thursday one is then opened.
+    await communityScheduleMaterializationService.runPass(new Date("2027-01-18T11:00:00.000Z"));
     const links = await orm.CommunityScheduleRun.where({
       scheduleSlotId: plan.slotIds[0]!,
     }).all();
     expect(links.length).toBeGreaterThan(0);
     const runId = String((links[0] as { runId: string }).runId);
+    await runService.openRun(admin, runId);
     const runBefore = (await orm.Run.where({ id: runId }).first()) as {
       scheduledStartAt: string;
       status: string;
@@ -848,8 +858,10 @@ describe("communityScheduleService mutable planning delete", () => {
       true,
     );
 
-    const deleted = await communityScheduleService.deleteRunSetup(admin, plan.templateId);
+    const deleted = await communityScheduleService.deleteRunSetup(admin, plan.templateId, now);
     expect(deleted.deletedSlotCount).toBe(2);
+    // The opened Thursday Run is protected; the Friday Draft is archived.
+    expect(deleted.cleanup).toEqual({ retiredDrafts: 1, protectedRuns: 1, attachedRuns: 0 });
     expect(await runTemplateRepository.findById(plan.templateId)).toBeNull();
     expect(
       await orm.RunTemplateRaidContent.where({ runTemplateId: plan.templateId }).all(),

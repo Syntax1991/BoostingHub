@@ -14,6 +14,8 @@ import {
   type ScheduleOccurrence,
   resolveScheduleStartBoundary,
   isBeforeScheduleStart,
+  scheduleDraftRelease,
+  type ScheduleRunCounts,
   type ScheduleStart,
 } from "@/lib/community-schedule";
 import {
@@ -64,12 +66,10 @@ import {
 } from "@/repositories/community-schedule.repository";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runRepository } from "@/repositories/run.repository";
+import { runDomainEventService } from "@/services/run-domain-event.service";
 import { runTemplateRepository, type RunTemplateRecord } from "@/repositories/run-template.repository";
 import { userRepository } from "@/repositories/user.repository";
 import {
-  COMMUNITY_SCHEDULE_MATERIALIZE_WARNING,
-  communityScheduleMaterializationService,
-  type MaterializeSlotWindowsResult,
 } from "@/services/community-schedule-materialization.service";
 import {
   computeUsability,
@@ -85,15 +85,16 @@ import type {
 } from "@/validators/community-schedule";
 import type { CreateRunTemplateInput, UpdateRunTemplateInput } from "@/validators/run-template";
 
-export type ScheduleMutationMaterialization = {
-  created: number;
-  failed: number;
-  warning: string | null;
-};
+/**
+ * What a Schedule mutation did to Runs it had created. Only MATERIALIZED +
+ * still-DRAFT future Runs are Schedule-owned and get retired (archived);
+ * everything else is reported as unchanged.
+ */
+export type ScheduleDraftCleanup = ScheduleRunCounts;
 
-type ScheduleMutationResult<T> = T & {
-  materialization: ScheduleMutationMaterialization;
-};
+type ScheduleMutationResult<T> = T & { cleanup: ScheduleDraftCleanup };
+
+const NO_CLEANUP: ScheduleDraftCleanup = { retiredDrafts: 0, protectedRuns: 0, attachedRuns: 0 };
 
 type TxOrm = typeof orm;
 
@@ -116,8 +117,15 @@ export type CommunityScheduleOccurrenceView = {
   origin?: "MATERIALIZED" | "ATTACHED";
   /** For NOT_STARTED: raid-ID window start of the slot's first eligible occurrence. */
   startsWindowStartAt?: string;
-  /** "Use existing Run" is offered (unfulfilled, not past, manageable). */
+  /** "Use existing Run" is offered (unfulfilled, not past, started, manageable). */
   canAttach: boolean;
+  /**
+   * Weekly Draft release for this occurrence's raid ID (the Monday 12:00
+   * Europe/Berlin before its Wednesday reset). AUTO_WAITING: still ahead.
+   */
+  draftReleaseAt?: string;
+  /** Neutral explanation (e.g. the release already passed before this time was planned). */
+  note?: string;
   blockedReason?: string;
   templateLabel?: string;
   autoCreateRun: boolean;
@@ -196,6 +204,8 @@ export type CommunityScheduleRunSetupSlot = {
   effectiveComposition: EffectiveRunComposition | null;
   /** ADMIN/OWNER may hard-delete planning regardless of materialization history. */
   canDelete: boolean;
+  /** Future Runs of this time — what a delete / deactivate / time change would do to them. */
+  runCounts: ScheduleRunCounts;
 };
 
 export type CommunityScheduleRunSetupGroup = {
@@ -210,6 +220,7 @@ export type CommunityScheduleRunSetupGroup = {
   canEdit: boolean;
   /** ADMIN/OWNER may delete the setup + its slots; concrete Runs remain. */
   canDelete: boolean;
+  runCounts: ScheduleRunCounts;
 };
 
 /** Reusable Run Setup inventory (includes zero-slot presets). */
@@ -243,6 +254,8 @@ export type CommunitySchedulePage = {
   slots: CommunityScheduleSlotRecord[];
   /** Weekly Plan groups (slots only — zero-slot setups are not listed here). */
   runSetups: CommunityScheduleRunSetupGroup[];
+  /** Future Runs per slot id (managers only) — for delete / deactivate / edit consequences. */
+  runCountsBySlotId: Record<string, ScheduleRunCounts>;
   /** Full reusable preset inventory including zero-slot setups. */
   runSetupInventory: CommunityScheduleRunSetupInventoryItem[];
   eligibleRaidLeads: Array<{ id: string; name: string }>;
@@ -481,6 +494,7 @@ function groupRunSetups(
   slots: CommunityScheduleSlotRecord[],
   canEdit: boolean,
   templatesById: Map<string, RunTemplateRecord>,
+  runCountsBySlot: Map<string, ScheduleRunCounts>,
 ): CommunityScheduleRunSetupGroup[] {
   const groups = new Map<string, CommunityScheduleRunSetupGroup>();
   for (const slot of slots) {
@@ -502,6 +516,7 @@ function groupRunSetups(
         autoCreateSummary: "OFF",
         canEdit,
         canDelete: Boolean(canEdit && slot.runTemplateId),
+        runCounts: { ...NO_CLEANUP },
       };
       groups.set(key, group);
     }
@@ -518,7 +533,9 @@ function groupRunSetups(
       compositionOverrideEnabled: slot.compositionOverrideEnabled,
       effectiveComposition: slotEffectiveComposition(slot, template),
       canDelete: canEdit,
+      runCounts: runCountsBySlot.get(slot.id) ?? { ...NO_CLEANUP },
     });
+    group.runCounts = sumCleanup(group.runCounts, runCountsBySlot.get(slot.id) ?? NO_CLEANUP);
   }
 
   const result = [...groups.values()];
@@ -581,6 +598,11 @@ function buildRunSetupInventory(
   return items;
 }
 
+/** The Monday 12:00 (Europe/Berlin) release that targets the raid ID starting at `windowStartAt`. */
+function draftReleaseFor(windowStartAt: string): string {
+  return scheduleDraftRelease(new Date(Date.parse(windowStartAt) - 1), COMMUNITY_SCHEDULE_TIME_ZONE).releaseAt;
+}
+
 function buildMaterializationView(input: {
   user: AuthenticatedUser;
   slot: CommunityScheduleSlotRecord;
@@ -618,19 +640,21 @@ function buildMaterializationView(input: {
     };
   }
 
-  // Unfulfilled and upcoming from here on: an existing Run may always satisfy it.
-  const canAttach = canManage;
-
   if (isBeforeScheduleStart(slot.firstWindowStartAt, occurrence.windowStartAt)) {
+    // Before the start boundary the occurrence does not exist: nothing to create or attach.
     return {
       state: "NOT_STARTED",
       startsWindowStartAt: slot.firstWindowStartAt!,
       templateLabel: input.templateLabel ?? undefined,
       autoCreateRun,
       canMaterialize: false,
-      canAttach,
+      canAttach: false,
     };
   }
+
+  // Unfulfilled, upcoming and started from here on: an existing Run may satisfy it.
+  const canAttach = canManage;
+  const draftReleaseAt = draftReleaseFor(occurrence.windowStartAt);
 
   if (!slot.runTemplateId) {
     return {
@@ -643,8 +667,21 @@ function buildMaterializationView(input: {
 
   if (autoCreateRun) {
     if (input.templateUsable) {
+      if (Date.parse(draftReleaseAt) > now.getTime()) {
+        return {
+          state: "AUTO_WAITING",
+          draftReleaseAt,
+          templateLabel: input.templateLabel ?? undefined,
+          autoCreateRun,
+          canMaterialize,
+          canAttach,
+        };
+      }
+      // The weekly release already passed (e.g. time planned mid-week): no catch-up on save.
       return {
-        state: "AUTO_WAITING",
+        state: "NO_RUN_YET",
+        draftReleaseAt,
+        note: "This raid ID's Draft release already passed — use Create Run if it should take place.",
         templateLabel: input.templateLabel ?? undefined,
         autoCreateRun,
         canMaterialize,
@@ -874,33 +911,93 @@ async function auditAttached(actor: AuthenticatedUser, attached: readonly Attach
   }
 }
 
-async function maybeImmediateMaterialize(
-  slotIds: ReadonlyArray<string>,
-  autoCreateRun: boolean,
-  now?: Date,
-): Promise<ScheduleMutationMaterialization> {
-  if (!autoCreateRun || slotIds.length === 0) {
-    return { created: 0, failed: 0, warning: null };
-  }
-  try {
-    const result = await communityScheduleMaterializationService.materializeSlotWindows(slotIds, {
-      now,
+/**
+ * Retires the slot's Schedule-owned Drafts (origin MATERIALIZED, still DRAFT,
+ * unarchived, starting after `now`) for which `affects(link)` is true, and
+ * frees their occurrence. Runs inside the caller's transaction, after the
+ * slot row is locked (so a concurrent materialization either committed
+ * before — and is cleaned up here — or re-checks the changed slot and aborts).
+ * Non-DRAFT and ATTACHED Runs are only counted, never touched.
+ */
+async function retireOwnedDraftsInTx(
+  txOrm: TxOrm,
+  input: {
+    slotId: string;
+    actor: AuthenticatedUser;
+    now: Date;
+    affects: (link: CommunityScheduleRunRecord) => boolean;
+  },
+): Promise<{ cleanup: ScheduleDraftCleanup; retiredRunIds: string[] }> {
+  const cleanup: ScheduleDraftCleanup = { retiredDrafts: 0, protectedRuns: 0, attachedRuns: 0 };
+  const retiredRunIds: string[] = [];
+  const links = await communityScheduleRunRepository.listBySlotIds([input.slotId], txOrm);
+  for (const link of links) {
+    if (!input.affects(link)) continue;
+    if (link.origin === "ATTACHED") {
+      if (Date.parse(link.occurrenceStartAt) > input.now.getTime()) cleanup.attachedRuns += 1;
+      continue;
+    }
+    const retired = await runRepository.retireScheduleDraftInTx(txOrm, {
+      runId: link.runId,
+      actorId: input.actor.id,
+      notBefore: input.now,
     });
-    return summarizeMaterialization(result);
-  } catch {
-    return {
-      created: 0,
-      failed: slotIds.length,
-      warning: COMMUNITY_SCHEDULE_MATERIALIZE_WARNING,
-    };
+    if (retired) {
+      await communityScheduleRunRepository.releaseFromSlotInTx(link.id, txOrm);
+      cleanup.retiredDrafts += 1;
+      retiredRunIds.push(link.runId);
+    } else if (Date.parse(link.occurrenceStartAt) > input.now.getTime()) {
+      cleanup.protectedRuns += 1;
+    }
+  }
+  return { cleanup, retiredRunIds };
+}
+
+async function auditRetiredDrafts(actor: AuthenticatedUser, runIds: readonly string[], reason: string): Promise<void> {
+  for (const runId of runIds) {
+    await runDomainEventService.record({
+      runId,
+      actorUser: actor,
+      type: "RUN_SCHEDULE_DRAFT_RETIRED",
+      summary: `Schedule Draft archived: ${reason}.`,
+      payload: { reason },
+    });
   }
 }
 
-function summarizeMaterialization(result: MaterializeSlotWindowsResult): ScheduleMutationMaterialization {
+/**
+ * Per slot: future Runs it created that are still Drafts (a delete / deactivate
+ * / time change archives them), created Runs that left Draft, and linked
+ * existing Runs (both never changed). Same ownership rule as the cleanup.
+ */
+async function futureRunCountsBySlot(
+  links: readonly CommunityScheduleRunRecord[],
+  now: Date,
+): Promise<Map<string, ScheduleRunCounts>> {
+  const relevant = links.filter(
+    (link) => link.scheduleSlotId != null && Date.parse(link.occurrenceStartAt) > now.getTime(),
+  );
+  const runs = new Map(
+    (await runRepository.listLifecycleByIds(relevant.map((link) => link.runId))).map((run) => [run.id, run]),
+  );
+  const result = new Map<string, ScheduleRunCounts>();
+  for (const link of relevant) {
+    const run = runs.get(link.runId);
+    if (!run || run.archivedAt != null || run.status === "CANCELLED") continue;
+    const counts = result.get(link.scheduleSlotId!) ?? { ...NO_CLEANUP };
+    if (link.origin === "ATTACHED") counts.attachedRuns += 1;
+    else if (run.status === "DRAFT" && Date.parse(run.scheduledStartAt) > now.getTime()) counts.retiredDrafts += 1;
+    else counts.protectedRuns += 1;
+    result.set(link.scheduleSlotId!, counts);
+  }
+  return result;
+}
+
+function sumCleanup(a: ScheduleDraftCleanup, b: ScheduleDraftCleanup): ScheduleDraftCleanup {
   return {
-    created: result.created,
-    failed: result.failed,
-    warning: result.failed > 0 ? COMMUNITY_SCHEDULE_MATERIALIZE_WARNING : null,
+    retiredDrafts: a.retiredDrafts + b.retiredDrafts,
+    protectedRuns: a.protectedRuns + b.protectedRuns,
+    attachedRuns: a.attachedRuns + b.attachedRuns,
   };
 }
 
@@ -986,6 +1083,7 @@ export const communityScheduleService = {
     }
 
     const visibleSlots = canEdit ? slots : slots.filter((slot) => slot.isActive);
+    const runCountsBySlot = canEdit ? await futureRunCountsBySlot(links, now) : new Map<string, ScheduleRunCounts>();
     const allTemplates = [...templatesById.values()];
 
     const current = projectWindow(user, slots, "CURRENT", now, linksByKey, templateMetaById);
@@ -998,7 +1096,8 @@ export const communityScheduleService = {
       current,
       next,
       slots: visibleSlots,
-      runSetups: groupRunSetups(visibleSlots, canEdit, templatesById),
+      runSetups: groupRunSetups(visibleSlots, canEdit, templatesById, runCountsBySlot),
+      runCountsBySlotId: Object.fromEntries(runCountsBySlot),
       runSetupInventory: buildRunSetupInventory(allTemplates, visibleSlots, canEdit, activeProducts),
       eligibleRaidLeads: eligibleRaidLeads.map((lead) => ({ id: lead.id, name: lead.name })),
       templates: canEdit ? templates : templates.filter((row) => row.usable),
@@ -1024,7 +1123,7 @@ export const communityScheduleService = {
     user: AuthenticatedUser,
     input: CreateSchedulePlanInput,
     now?: Date,
-  ): Promise<ScheduleMutationResult<{ templateId: string; slotIds: string[] }>> {
+  ): Promise<{ templateId: string; slotIds: string[] }> {
     requireManage(user);
     assertBatchSlotLimits(input.slots);
     await requireEligibleRaidLead(input.raidLeadId);
@@ -1087,15 +1186,15 @@ export const communityScheduleService = {
     }).catch(mapAttachUniqueViolation);
 
     await auditAttached(user, result.attached);
-    const materialization = await maybeImmediateMaterialize(result.slotIds, input.autoCreateRun, now);
-    return { templateId: result.templateId, slotIds: result.slotIds, materialization };
+    // Planning only: Drafts are released Monday 12:00 (or via manual Create Run).
+    return { templateId: result.templateId, slotIds: result.slotIds };
   },
 
   async addTimesToSetup(
     user: AuthenticatedUser,
     input: AddScheduleTimesInput,
     now?: Date,
-  ): Promise<ScheduleMutationResult<{ templateId: string; slotIds: string[] }>> {
+  ): Promise<{ templateId: string; slotIds: string[] }> {
     requireManage(user);
     assertBatchSlotLimits(input.slots);
     await requireEligibleRaidLead(input.raidLeadId);
@@ -1135,15 +1234,14 @@ export const communityScheduleService = {
       .catch(mapAttachUniqueViolation);
 
     await auditAttached(user, attached);
-    const materialization = await maybeImmediateMaterialize(slotIds, input.autoCreateRun, now);
-    return { templateId: template.id, slotIds, materialization };
+    return { templateId: template.id, slotIds };
   },
 
   async createSlot(
     user: AuthenticatedUser,
     input: CreateCommunityScheduleSlotInput,
     now?: Date,
-  ): Promise<ScheduleMutationResult<{ slot: CommunityScheduleSlotRecord }>> {
+  ): Promise<{ slot: CommunityScheduleSlotRecord }> {
     requireManage(user);
     await requireEligibleRaidLead(input.raidLeadId);
     await validateTemplateLink({
@@ -1170,8 +1268,7 @@ export const communityScheduleService = {
       createdById: user.id,
       updatedById: user.id,
     });
-    const materialization = await maybeImmediateMaterialize([slot.id], slot.autoCreateRun, now);
-    return { slot, materialization };
+    return { slot };
   },
 
   async updateSlot(
@@ -1196,45 +1293,90 @@ export const communityScheduleService = {
       excludeId: input.slotId,
     });
     const composition = normalizeScheduleCompositionWrite(input);
-    const slot = await communityScheduleRepository.update(input.slotId, {
-      weekday: input.weekday,
-      localStartTime: input.localStartTime,
-      label: input.label,
-      notes: input.notes,
-      raidLeadId: input.raidLeadId,
-      runTemplateId: input.runTemplateId,
-      autoCreateRun: input.autoCreateRun,
-      runMode: input.runMode,
-      // Only an explicit start choice moves the boundary. It gates future,
-      // not-yet-fulfilled occurrences only — existing Runs are never touched.
-      ...(input.start ? { firstWindowStartAt: resolveStartBoundary(input, input.start, now ?? new Date()) } : {}),
-      composition,
-      updatedById: user.id,
+    const at = now ?? new Date();
+    const result = await db.transaction(async (tx) => {
+      const txOrm = resolveTxOrm(tx);
+      // Lock first: a concurrent Draft materialization for this slot serializes with this edit.
+      const locked = await communityScheduleRepository.lockInTx(input.slotId, txOrm);
+      if (!locked) {
+        throw new DomainError("COMMUNITY_SCHEDULE_NOT_FOUND", "Schedule slot was not found.", 404);
+      }
+      const nextBoundary = input.start ? resolveStartBoundary(input, input.start, at) : locked.firstWindowStartAt;
+      const timeChanged = locked.weekday !== input.weekday || locked.localStartTime !== input.localStartTime;
+      const boundaryLater =
+        nextBoundary != null &&
+        (locked.firstWindowStartAt == null || Date.parse(nextBoundary) > Date.parse(locked.firstWindowStartAt));
+
+      const slot = await communityScheduleRepository.update(
+        input.slotId,
+        {
+          weekday: input.weekday,
+          localStartTime: input.localStartTime,
+          label: input.label,
+          notes: input.notes,
+          raidLeadId: input.raidLeadId,
+          runTemplateId: input.runTemplateId,
+          autoCreateRun: input.autoCreateRun,
+          runMode: input.runMode,
+          // Only an explicit start choice moves the boundary.
+          ...(input.start ? { firstWindowStartAt: nextBoundary } : {}),
+          composition,
+          updatedById: user.id,
+        },
+        txOrm,
+      );
+      // A moved weekday / time, or a later start, removes occurrences: their
+      // Schedule-owned Drafts are archived and the occurrence freed. No
+      // replacement is created here — that is the Monday release (or Create Run).
+      const { cleanup, retiredRunIds } = await retireOwnedDraftsInTx(txOrm, {
+        slotId: input.slotId,
+        actor: user,
+        now: at,
+        affects: (link) =>
+          timeChanged || (boundaryLater && isBeforeScheduleStart(nextBoundary, link.windowStartAt)),
+      });
+      return { slot, cleanup, retiredRunIds };
     });
-    const materialization = await maybeImmediateMaterialize([slot.id], slot.autoCreateRun, now);
-    return { slot, materialization };
+    await auditRetiredDrafts(user, result.retiredRunIds, "the schedule time or start changed");
+    return { slot: result.slot, cleanup: result.cleanup };
   },
 
-  async deactivateSlot(user: AuthenticatedUser, slotId: string): Promise<CommunityScheduleSlotRecord> {
+  async deactivateSlot(
+    user: AuthenticatedUser,
+    slotId: string,
+    now: Date = new Date(),
+  ): Promise<ScheduleMutationResult<{ slot: CommunityScheduleSlotRecord }>> {
     requireManage(user);
-    const existing = await communityScheduleRepository.findById(slotId);
-    if (!existing) {
-      throw new DomainError("COMMUNITY_SCHEDULE_NOT_FOUND", "Schedule slot was not found.", 404);
-    }
-    if (!existing.isActive) {
-      throw new DomainError(
-        "COMMUNITY_SCHEDULE_ALREADY_INACTIVE",
-        "This schedule slot is already inactive.",
-        409,
-      );
-    }
-    return communityScheduleRepository.setActive(slotId, false, user.id);
+    const result = await db.transaction(async (tx) => {
+      const txOrm = resolveTxOrm(tx);
+      const existing = await communityScheduleRepository.lockInTx(slotId, txOrm);
+      if (!existing) {
+        throw new DomainError("COMMUNITY_SCHEDULE_NOT_FOUND", "Schedule slot was not found.", 404);
+      }
+      if (!existing.isActive) {
+        throw new DomainError(
+          "COMMUNITY_SCHEDULE_ALREADY_INACTIVE",
+          "This schedule slot is already inactive.",
+          409,
+        );
+      }
+      const slot = await communityScheduleRepository.setActive(slotId, false, user.id, txOrm);
+      const { cleanup, retiredRunIds } = await retireOwnedDraftsInTx(txOrm, {
+        slotId,
+        actor: user,
+        now,
+        affects: () => true,
+      });
+      return { slot, cleanup, retiredRunIds };
+    });
+    await auditRetiredDrafts(user, result.retiredRunIds, "the schedule time was deactivated");
+    return { slot: result.slot, cleanup: result.cleanup };
   },
 
   async reactivateSlot(
     user: AuthenticatedUser,
     slotId: string,
-  ): Promise<ScheduleMutationResult<{ slot: CommunityScheduleSlotRecord }>> {
+  ): Promise<{ slot: CommunityScheduleSlotRecord }> {
     requireManage(user);
     const existing = await communityScheduleRepository.findById(slotId);
     if (!existing) {
@@ -1254,26 +1396,33 @@ export const communityScheduleService = {
       localStartTime: existing.localStartTime,
       excludeId: existing.id,
     });
+    // No Draft on reactivation — the next Monday release (or Create Run) creates it.
     const slot = await communityScheduleRepository.setActive(slotId, true, user.id);
-    const materialization = await maybeImmediateMaterialize([slot.id], slot.autoCreateRun);
-    return { slot, materialization };
+    return { slot };
   },
 
   /**
    * Permanently remove a recurring Schedule time.
    * CommunityScheduleRun.scheduleSlotId is SET NULL; concrete Runs stay.
    */
-  async deleteSlot(user: AuthenticatedUser, slotId: string): Promise<{ id: string }> {
+  async deleteSlot(
+    user: AuthenticatedUser,
+    slotId: string,
+    now: Date = new Date(),
+  ): Promise<ScheduleMutationResult<{ id: string }>> {
     requireManage(user);
-    await db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
       const txOrm = resolveTxOrm(tx);
-      const existing = await communityScheduleRepository.findById(slotId, txOrm);
+      const existing = await communityScheduleRepository.lockInTx(slotId, txOrm);
       if (!existing) {
         throw new DomainError("COMMUNITY_SCHEDULE_NOT_FOUND", "Schedule slot was not found.", 404);
       }
+      const retired = await retireOwnedDraftsInTx(txOrm, { slotId, actor: user, now, affects: () => true });
       await communityScheduleRepository.deleteById(slotId, txOrm);
+      return retired;
     });
-    return { id: slotId };
+    await auditRetiredDrafts(user, result.retiredRunIds, "the schedule time was deleted");
+    return { id: slotId, cleanup: result.cleanup };
   },
 
   /**
@@ -1284,9 +1433,12 @@ export const communityScheduleService = {
   async deleteRunSetup(
     user: AuthenticatedUser,
     runTemplateId: string,
-  ): Promise<{ id: string; deletedSlotCount: number }> {
+    now: Date = new Date(),
+  ): Promise<{ id: string; deletedSlotCount: number; cleanup: ScheduleDraftCleanup }> {
     requireManage(user);
     let deletedSlotCount = 0;
+    let cleanup = NO_CLEANUP;
+    const retiredRunIds: string[] = [];
     await db.transaction(async (tx) => {
       const txOrm = resolveTxOrm(tx);
       const template = await runTemplateRepository.findById(runTemplateId, txOrm);
@@ -1296,12 +1448,17 @@ export const communityScheduleService = {
 
       const slots = await communityScheduleRepository.listByTemplateId(runTemplateId, txOrm);
       for (const slot of slots) {
+        await communityScheduleRepository.lockInTx(slot.id, txOrm);
+        const retired = await retireOwnedDraftsInTx(txOrm, { slotId: slot.id, actor: user, now, affects: () => true });
+        cleanup = sumCleanup(cleanup, retired.cleanup);
+        retiredRunIds.push(...retired.retiredRunIds);
         await communityScheduleRepository.deleteById(slot.id, txOrm);
       }
       deletedSlotCount = slots.length;
       await runTemplateRepository.deleteById(runTemplateId, txOrm);
     });
-    return { id: runTemplateId, deletedSlotCount };
+    await auditRetiredDrafts(user, retiredRunIds, "its Run Setup and schedule times were deleted");
+    return { id: runTemplateId, deletedSlotCount, cleanup };
   },
 
   /** Create a reusable Run Setup without Schedule times (ADMIN/OWNER). */

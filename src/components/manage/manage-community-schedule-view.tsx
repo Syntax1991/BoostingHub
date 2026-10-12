@@ -1,6 +1,10 @@
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { formatDate, formatTime } from "@/lib/datetime";
-import { communityWeekdayShortLabel } from "@/lib/community-schedule";
+import {
+  communityWeekdayShortLabel,
+  SCHEDULE_DRAFT_RELEASE_LABEL,
+  type ScheduleRunCounts,
+} from "@/lib/community-schedule";
 import {
   COMMUNITY_SCHEDULE_RUN_MODE_LABELS,
   DIFFICULTY_ABBREVIATIONS,
@@ -22,18 +26,32 @@ import {
 } from "@/controllers/community-schedule.actions";
 import type { CommunitySchedulePage } from "@/services/community-schedule.service";
 
+function sumRunCounts(slotIds: readonly string[], bySlot: Record<string, ScheduleRunCounts>): ScheduleRunCounts {
+  const total: ScheduleRunCounts = { retiredDrafts: 0, protectedRuns: 0, attachedRuns: 0 };
+  for (const id of slotIds) {
+    const counts = bySlot[id];
+    if (!counts) continue;
+    total.retiredDrafts += counts.retiredDrafts;
+    total.protectedRuns += counts.protectedRuns;
+    total.attachedRuns += counts.attachedRuns;
+  }
+  return total;
+}
+
 function WindowSection({
   title,
   window,
   canEdit,
   raidLeads,
   templates,
+  runCountsBySlotId,
 }: {
   title: string;
   window: CommunitySchedulePage["current"];
   canEdit: boolean;
   raidLeads: CommunitySchedulePage["eligibleRaidLeads"];
   templates: CommunitySchedulePage["templates"];
+  runCountsBySlotId: CommunitySchedulePage["runCountsBySlotId"];
 }) {
   return (
     <Card className="overflow-hidden">
@@ -95,6 +113,7 @@ function WindowSection({
                               autoCreateRun: slot.autoCreateRun,
                               runMode: slot.runMode,
                               firstWindowStartAt: slot.firstWindowStartAt,
+                              runCounts: runCountsBySlotId[slot.id],
                               compositionOverrideEnabled: slot.compositionOverrideEnabled,
                               desiredTankCountOverride: slot.desiredTankCountOverride,
                               desiredHealerCountOverride: slot.desiredHealerCountOverride,
@@ -102,7 +121,11 @@ function WindowSection({
                               desiredLootbuddyCountOverride: slot.desiredLootbuddyCountOverride,
                             }}
                           />
-                          <CommunityScheduleSlotActions slotId={slot.id} isActive={slot.isActive} />
+                          <CommunityScheduleSlotActions
+                            slotId={slot.id}
+                            isActive={slot.isActive}
+                            runCounts={runCountsBySlotId[slot.id]}
+                          />
                         </>
                       ) : null}
                     </div>
@@ -204,6 +227,10 @@ function RunSetupInventorySection({ page }: { page: CommunitySchedulePage }) {
                     raidLeadName="Global"
                     slotCount={setup.slotCount}
                     canDelete={setup.canDelete}
+                    runCounts={sumRunCounts(
+                      page.slots.filter((slot) => slot.runTemplateId === setup.id).map((slot) => slot.id),
+                      page.runCountsBySlotId,
+                    )}
                   />
                 </div>
               ) : null}
@@ -250,7 +277,7 @@ function WeeklyPlanSection({ page }: { page: CommunitySchedulePage }) {
                   {group.runSetupName} · {group.raidLeadName}
                 </p>
                 <p className="mt-0.5 text-xs text-muted">
-                  Auto-create: {group.autoCreateSummary}
+                  Weekly Draft: {group.autoCreateSummary} (release {SCHEDULE_DRAFT_RELEASE_LABEL})
                   {group.runTemplateId ? "" : " · No Run Setup linked"}
                 </p>
               </div>
@@ -272,6 +299,10 @@ function WeeklyPlanSection({ page }: { page: CommunitySchedulePage }) {
                     raidLeadName={group.raidLeadName}
                     slotCount={group.slotCount}
                     canDelete={group.canDelete}
+                    runCounts={sumRunCounts(
+                      page.slots.filter((slot) => slot.runTemplateId === group.runTemplateId).map((slot) => slot.id),
+                      page.runCountsBySlotId,
+                    )}
                   />
                 </div>
               ) : null}
@@ -290,7 +321,7 @@ function WeeklyPlanSection({ page }: { page: CommunitySchedulePage }) {
                       {!slot.isActive ? " · Inactive" : ""}
                     </span>
                     <span className="ml-2 text-xs text-muted">
-                      Auto {slot.autoCreateRun ? "✓" : "✗"}
+                      Weekly Draft {slot.autoCreateRun ? "✓" : "✗"}
                     </span>
                     {slot.notes ? <p className="mt-0.5 text-xs text-muted">{slot.notes}</p> : null}
                   </div>
@@ -304,6 +335,7 @@ function WeeklyPlanSection({ page }: { page: CommunitySchedulePage }) {
                       runMode={slot.runMode}
                       runSetupName={group.runSetupName}
                       raidLeadName={group.raidLeadName}
+                      runCounts={slot.runCounts}
                     />
                   ) : null}
                 </li>
@@ -321,7 +353,7 @@ export function ManageCommunityScheduleView({ page }: { page: CommunityScheduleP
     <div>
       <PageHeader
         title="Community Schedule"
-        description="Reusable Run Setups and recurring community times with optional DRAFT run materialization. Does not open Runs or post to Discord Schedule automatically."
+        description={`Reusable Run Setups and recurring community times. Weekly Drafts are released ${SCHEDULE_DRAFT_RELEASE_LABEL} for the raid ID starting that Wednesday. Does not open Runs or post to Discord Schedule automatically.`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {page.canEdit ? (
@@ -358,6 +390,7 @@ export function ManageCommunityScheduleView({ page }: { page: CommunityScheduleP
           canEdit={page.canEdit}
           raidLeads={page.eligibleRaidLeads}
           templates={page.templates}
+          runCountsBySlotId={page.runCountsBySlotId}
         />
         <WindowSection
           title="Next Raid ID"
@@ -365,6 +398,7 @@ export function ManageCommunityScheduleView({ page }: { page: CommunityScheduleP
           canEdit={page.canEdit}
           raidLeads={page.eligibleRaidLeads}
           templates={page.templates}
+          runCountsBySlotId={page.runCountsBySlotId}
         />
       </div>
     </div>
