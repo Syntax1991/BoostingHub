@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import {
   DEFAULT_SCHEDULE_START,
+  ExistingRunAdoptSelect,
   FirstOccurrenceSelect,
   ScheduleStartField,
   scheduleStartPayload,
@@ -13,6 +14,7 @@ import type { CommunityScheduleRunMode } from "@/models/enums";
 import { MAX_SLOTS_PER_PLAN } from "@/lib/community-schedule";
 import { COMMUNITY_SCHEDULE_RUN_MODE_LABELS } from "@/lib/labels";
 import { addCommunityScheduleTimesAction } from "@/controllers/community-schedule.actions";
+import type { AdoptionCandidate } from "@/services/community-schedule-occurrence.service";
 
 const WEEKDAY_LABELS: Record<(typeof COMMUNITY_WEEKDAYS)[number], string> = {
   MONDAY: "Monday",
@@ -57,11 +59,35 @@ export function CommunityScheduleAddTimesDialog({
   const [slots, setSlots] = useState<SlotRow[]>([newSlotRow()]);
   const [start, setStart] = useState<ScheduleStartState>(DEFAULT_SCHEDULE_START);
   const [notes, setNotes] = useState("");
+  const [adopted, setAdopted] = useState<AdoptionCandidate | null>(null);
+
+  /** Adds the existing Run's weekday / time as a new time, with the Run as its first occurrence. */
+  function adopt(candidate: AdoptionCandidate | null) {
+    const previous = adopted;
+    setAdopted(candidate);
+    setSlots((current) => {
+      const cleared = current.map((row) =>
+        previous && row.attachRunId === previous.runId ? { ...row, attachRunId: null } : row,
+      );
+      if (!candidate) return cleared;
+      const [first, ...rest] = cleared;
+      return [
+        {
+          ...(first ?? newSlotRow()),
+          weekday: candidate.weekday,
+          localStartTime: candidate.localStartTime,
+          attachRunId: candidate.runId,
+        },
+        ...rest,
+      ];
+    });
+  }
 
   function resetForm() {
     setError(null);
     setAutoCreateRun(false);
     setSlots([newSlotRow()]);
+    setAdopted(null);
     setStart(DEFAULT_SCHEDULE_START);
     setNotes("");
   }
@@ -122,6 +148,19 @@ export function CommunityScheduleAddTimesDialog({
             </p>
 
             <div className="mt-4 grid gap-3">
+              <ExistingRunAdoptSelect
+                start={start}
+                value={adopted?.runId ?? null}
+                onChange={adopt}
+                label="Add a time from an existing Run (optional)"
+              />
+              {adopted ? (
+                <p className="rounded-md border border-border px-3 py-2 text-xs text-muted">
+                  First time set to {WEEKDAY_LABELS[adopted.weekday]} {adopted.localStartTime} (Europe/Berlin) with
+                  this Run as its first occurrence. Run Setup and Raid Lead stay those of {runSetupName}; the Run itself
+                  is never changed.
+                </p>
+              ) : null}
               <div className="grid gap-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted">Weekly times</span>

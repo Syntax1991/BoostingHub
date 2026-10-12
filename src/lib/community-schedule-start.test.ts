@@ -5,6 +5,7 @@ import {
   scheduleDraftRelease,
   resolveScheduleStartBoundary,
   scheduleOccurrenceInWindowOf,
+  scheduleTimeOfInstant,
 } from "@/lib/community-schedule";
 
 // Monday 12 Oct 2026 14:00 Berlin (CEST). Current raid ID: Wed 7 Oct 06:00 → Wed 14 Oct 06:00.
@@ -134,5 +135,16 @@ describe("scheduleDraftRelease (Monday 12:00 Europe/Berlin → following Wednesd
   it("next release for display", () => {
     expect(nextScheduleDraftReleaseAt(new Date("2026-10-12T10:00:00.000Z"))).toBe("2026-10-19T10:00:00.000Z");
     expect(nextScheduleDraftReleaseAt(new Date("2026-10-20T08:00:00.000Z"))).toBe("2026-10-26T11:00:00.000Z");
+  });
+});
+
+describe("scheduleTimeOfInstant (Europe/Berlin)", () => {
+  it.each([
+    ["CEST Friday evening", "2026-10-16T18:00:00.000Z", "FRIDAY", "20:00"],
+    ["CET Friday evening (after DST end)", "2026-10-30T19:00:00.000Z", "FRIDAY", "20:00"],
+    ["UTC Saturday late → Berlin Sunday 00:30", "2026-10-17T22:30:00.000Z", "SUNDAY", "00:30"],
+    ["DST start week (CEST)", "2027-04-02T18:15:00.000Z", "FRIDAY", "20:15"],
+  ])("%s", (_label, instant, weekday, localStartTime) => {
+    expect(scheduleTimeOfInstant(instant)).toEqual({ weekday, localStartTime });
   });
 });

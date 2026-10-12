@@ -24,12 +24,15 @@ export function CommunityScheduleAttachRunDialog({
   const titleId = useId();
   const [candidates, setCandidates] = useState<AttachCandidate[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  /** Explicit only: future occurrences switch to this Run's Run Setup. */
+  const [adoptSetup, setAdoptSetup] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   function open() {
     setError(null);
     setSelected(null);
+    setAdoptSetup(false);
     setCandidates(null);
     dialogRef.current?.showModal();
     startTransition(async () => {
@@ -48,7 +51,7 @@ export function CommunityScheduleAttachRunDialog({
     if (!selected) return;
     setError(null);
     startTransition(async () => {
-      const result = await attachScheduleRunAction({ scheduleSlotId, runId: selected });
+      const result = await attachScheduleRunAction({ scheduleSlotId, runId: selected, adoptSetup });
       if (!result.ok) {
         setError(result.message);
         return;
@@ -109,6 +112,19 @@ export function CommunityScheduleAttachRunDialog({
               ))}
             </ul>
           )}
+          {candidates && candidates.length > 0 ? (
+            <label className="flex items-start gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={adoptSetup}
+                onChange={(event) => setAdoptSetup(event.target.checked)}
+              />
+              <span>
+                Also use this Run&apos;s setup for future occurrences (switches this Schedule time&apos;s Run Setup to
+                a matching or newly copied setup; Raid Lead and time stay unchanged).
+              </span>
+            </label>
+          ) : null}
           {error ? (
             <p role="alert" className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-xs">
               {error}

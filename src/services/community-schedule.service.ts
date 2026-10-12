@@ -56,6 +56,7 @@ import {
   type CommunityScheduleRunRecord,
 } from "@/repositories/community-schedule-run.repository";
 import {
+  adoptRunSetupInTx,
   attachExistingRunInTx,
   mapAttachUniqueViolation,
   recordRunScheduleAttached,
@@ -1134,6 +1135,15 @@ export const communityScheduleService = {
 
     const composition = normalizeScheduleCompositionWrite(input);
 
+    const adoptFromRunId = input.runSetup.mode === "fromRun" ? input.runSetup.runId : null;
+    if (adoptFromRunId && !input.slots.some((slot) => slot.attachRunId === adoptFromRunId)) {
+      throw new DomainError(
+        "VALIDATION_FAILED",
+        "The Run Setup can only be adopted from the existing Run used as a first occurrence.",
+        400,
+      );
+    }
+
     if (input.runSetup.mode === "existing") {
       const template = await validateTemplateLink({
         runTemplateId: input.runSetup.templateId,
@@ -1150,7 +1160,7 @@ export const communityScheduleService = {
       templateName = template.name;
     } else {
       templateId = "";
-      templateName = input.runSetup.name.trim();
+      templateName = input.runSetup.mode === "create" ? input.runSetup.name.trim() : "";
     }
 
     const result = await db.transaction(async (tx) => {
@@ -1166,6 +1176,12 @@ export const communityScheduleService = {
         );
         resolvedTemplateId = created.id;
         resolvedName = input.runSetup.name.trim();
+      }
+      if (adoptFromRunId) {
+        // Same transaction as the slots + attachment: all or nothing.
+        const adopted = await adoptRunSetupInTx(txOrm, { runId: adoptFromRunId, actor: user });
+        resolvedTemplateId = adopted.templateId;
+        resolvedName = adopted.templateName;
       }
 
       const created = await createSlotsInTx({

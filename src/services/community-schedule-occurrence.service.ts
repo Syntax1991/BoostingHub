@@ -1,16 +1,22 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { canMaterializeCommunityScheduleOccurrence } from "@/auth/authorization";
+import {
+  canManageCommunitySchedule,
+  canMaterializeCommunityScheduleOccurrence,
+} from "@/auth/authorization";
 import {
   COMMUNITY_SCHEDULE_TIME_ZONE,
   isBeforeScheduleStart,
   resolveScheduleSlotOccurrence,
+  resolveScheduleStartBoundary,
   scheduleOccurrenceInWindowOf,
+  scheduleTimeOfInstant,
   type RaidIdWindow,
   type ScheduleOccurrence,
+  type ScheduleStart,
 } from "@/lib/community-schedule";
 import { formatDate, formatDateTime, formatTime } from "@/lib/datetime";
 import { DomainError } from "@/lib/errors";
-import { DIFFICULTY_ABBREVIATIONS } from "@/lib/labels";
+import { DIFFICULTY_ABBREVIATIONS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
 import { db, orm } from "@/lib/prisma";
 import type { RunStatus } from "@/models/enums";
 import {
@@ -25,7 +31,11 @@ import {
 import { runRepository, type RunListRecord } from "@/repositories/run.repository";
 import { runTemplateRepository, type RunTemplateRecord } from "@/repositories/run-template.repository";
 import { classifyRunWeek } from "@/lib/wow-run-week";
+import type { CommunityWeekday } from "@/models/enums";
+import { userRepository } from "@/repositories/user.repository";
+import { productPlanningService } from "@/services/product-planning.service";
 import { runDomainEventService } from "@/services/run-domain-event.service";
+import { computeUsability } from "@/services/run-template.service";
 
 type TxOrm = typeof orm;
 
@@ -222,6 +232,140 @@ export async function attachExistingRunInTx(
   );
 }
 
+// ---------------------------------------------------------------------------
+// Adopting an existing Run as the source of a Schedule's configuration.
+//
+// A Run carries no Run Setup reference (no RunTemplate FK; Schedule-created
+// Runs are linked via CommunityScheduleRun and therefore never attachable
+// again). So the Run Setup is resolved from the Run's own planning snapshot:
+// an active, usable Run Setup with exactly the same planning fields
+// (difficulty, loot, ordered RunRaidContent incl. boss counts, composition) is
+// reused; otherwise one new Run Setup is snapshotted from the Run. One-time
+// copy — no live coupling in either direction. Never Product-key matching,
+// never derived from roster / signups.
+// ---------------------------------------------------------------------------
+
+export type RunSetupAdoption =
+  | { mode: "existing"; templateId: string; templateName: string }
+  | { mode: "fromRun"; templateName: string };
+
+export type AdoptionCandidate = {
+  runId: string;
+  label: string;
+  scheduledStartAt: string;
+  /** Raid-ID window the Run fulfils (its first Schedule occurrence). */
+  windowStartAt: string;
+  weekday: CommunityWeekday;
+  localStartTime: string;
+  /** The Run's Raid Lead when still eligible; null → the user must choose one. */
+  raidLeadId: string | null;
+  raidLeadName: string;
+  runSetup: RunSetupAdoption;
+};
+
+type RunPlanningSnapshot = {
+  difficulty: RunListRecord["difficulty"];
+  lootType: RunListRecord["lootType"];
+  contents: Array<{ raidId: string; sortOrder: number; plannedBossCount: number }>;
+  desiredTankCount: number;
+  desiredHealerCount: number;
+  desiredDpsCount: number;
+  desiredLootbuddyCount: number;
+};
+
+/** Reusable planning fields of a concrete Run — RunRaidContent + planned composition only. */
+function runPlanningSnapshot(run: RunListRecord): RunPlanningSnapshot {
+  return {
+    difficulty: run.difficulty,
+    lootType: run.lootType,
+    contents: [...run.contents]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((content, index) => ({
+        raidId: content.raidId,
+        sortOrder: index + 1,
+        plannedBossCount: content.plannedBossCount,
+      })),
+    desiredTankCount: run.desiredTankCount,
+    desiredHealerCount: run.desiredHealerCount,
+    desiredDpsCount: run.desiredDpsCount,
+    desiredLootbuddyCount: run.desiredLootbuddyCount,
+  };
+}
+
+function setupEquals(template: RunTemplateRecord, snapshot: RunPlanningSnapshot): boolean {
+  const contents = [...template.contents].sort((a, b) => a.sortOrder - b.sortOrder);
+  return (
+    template.difficulty === snapshot.difficulty &&
+    template.lootType === snapshot.lootType &&
+    template.desiredTankCount === snapshot.desiredTankCount &&
+    template.desiredHealerCount === snapshot.desiredHealerCount &&
+    template.desiredDpsCount === snapshot.desiredDpsCount &&
+    template.desiredLootbuddyCount === snapshot.desiredLootbuddyCount &&
+    contents.length === snapshot.contents.length &&
+    contents.every(
+      (content, index) =>
+        content.raidId === snapshot.contents[index]!.raidId &&
+        content.plannedBossCount === snapshot.contents[index]!.plannedBossCount,
+    )
+  );
+}
+
+function adoptedSetupName(run: RunListRecord): string {
+  const scope = run.contentDisplay.summary || run.contentDisplay.productLabel;
+  return `${DIFFICULTY_ABBREVIATIONS[run.difficulty]} ${RUN_LOOT_TYPE_LABELS[run.lootType]} · ${scope}`.slice(0, 80);
+}
+
+/** Active, usable Run Setup with the same planning fields (most recently updated first), or null. */
+async function findEquivalentSetup(run: RunListRecord): Promise<RunTemplateRecord | null> {
+  const snapshot = runPlanningSnapshot(run);
+  const activeProducts = await productPlanningService.listActive();
+  const matches = (await runTemplateRepository.listAll())
+    .filter((template) => template.isActive && setupEquals(template, snapshot))
+    .filter((template) => computeUsability(template, activeProducts).usable)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id));
+  return matches[0] ?? null;
+}
+
+async function resolveRunSetupAdoption(run: RunListRecord): Promise<RunSetupAdoption> {
+  const equivalent = await findEquivalentSetup(run);
+  return equivalent
+    ? { mode: "existing", templateId: equivalent.id, templateName: equivalent.name }
+    : { mode: "fromRun", templateName: adoptedSetupName(run) };
+}
+
+/**
+ * Resolves the Run Setup a new Schedule adopts from `runId` inside the
+ * caller's transaction: the equivalent existing setup, or one new setup
+ * snapshotted from the Run (RunRaidContent → RunTemplateRaidContent, planned
+ * composition). The Run itself is only read.
+ */
+export async function adoptRunSetupInTx(
+  txOrm: TxOrm,
+  input: { runId: string; actor: AuthenticatedUser },
+): Promise<{ templateId: string; templateName: string; created: boolean }> {
+  const run = await runRepository.findById(input.runId);
+  if (!run) {
+    throw new DomainError("NOT_FOUND", "Run was not found.", 404);
+  }
+  const equivalent = await findEquivalentSetup(run);
+  if (equivalent) {
+    return { templateId: equivalent.id, templateName: equivalent.name, created: false };
+  }
+  const snapshot = runPlanningSnapshot(run);
+  const templateName = adoptedSetupName(run);
+  const templateId = await runTemplateRepository.create(
+    {
+      name: templateName,
+      ...snapshot,
+      notes: `Created from the existing Run "${run.title}".`,
+      createdById: input.actor.id,
+      updatedById: input.actor.id,
+    },
+    txOrm,
+  );
+  return { templateId, templateName, created: true };
+}
+
 /** Audit after commit — same RunDomainEvent history as other Run lifecycle facts. */
 export async function recordRunScheduleAttached(input: {
   actor: AuthenticatedUser;
@@ -323,10 +467,72 @@ export const communityScheduleOccurrenceService = {
     return candidates;
   },
 
-  /** Schedule-side "Use existing Run" for an existing slot. */
+  /**
+   * Existing Runs a NEW Schedule time can start from ("Use existing Run" in
+   * Create Schedule / Add times), each with the configuration it would adopt:
+   * weekday / time (Europe/Berlin), Raid Lead (when still eligible) and Run
+   * Setup. Same hard eligibility as attach, upcoming only, and never before the
+   * chosen start boundary.
+   */
+  async listAdoptionCandidates(
+    user: AuthenticatedUser,
+    input: { start?: ScheduleStart; now?: Date } = {},
+  ): Promise<AdoptionCandidate[]> {
+    if (!canManageCommunitySchedule(user.accountRole)) {
+      throw new DomainError("NOT_AUTHORIZED", "You cannot manage this schedule.", 403);
+    }
+    const now = input.now ?? new Date();
+    const { currentStart } = classifyRunWeek({
+      scheduledStartAt: now.toISOString(),
+      now,
+      timeZone: COMMUNITY_SCHEDULE_TIME_ZONE,
+    });
+    const nextEnd = resolveScheduleSlotOccurrence({
+      weekday: "WEDNESDAY",
+      localStartTime: "12:00",
+      window: "NEXT",
+      now,
+      timeZone: COMMUNITY_SCHEDULE_TIME_ZONE,
+    }).windowEndAt;
+    const ids = await runRepository.listIdsStartingBetween(currentStart, nextEnd, ATTACHABLE_RUN_STATUSES);
+    const runs = await runRepository.listManagedByIds(ids);
+    // Only still-eligible Raid Leads are adopted; otherwise the user must choose one.
+    const leads = new Map((await userRepository.listEligibleRaidLeads()).map((lead) => [lead.id, lead]));
+
+    const candidates: AdoptionCandidate[] = [];
+    for (const run of runs) {
+      if (Date.parse(run.scheduledStartAt) <= now.getTime()) continue;
+      if (await communityScheduleRunRepository.findByRunId(run.id)) continue;
+      const time = scheduleTimeOfInstant(run.scheduledStartAt);
+      const occurrence = scheduleOccurrenceInWindowOf({ ...time, instant: new Date(run.scheduledStartAt) });
+      const boundary = input.start
+        ? resolveScheduleStartBoundary({ ...time, start: input.start, now }).firstWindowStartAt
+        : null;
+      if (isBeforeScheduleStart(boundary, occurrence.windowStartAt)) continue;
+      const lead = leads.get(run.raidLeadId);
+      candidates.push({
+        runId: run.id,
+        label: `${runLabel(run)} · ${run.raidLeadName}`,
+        scheduledStartAt: run.scheduledStartAt,
+        windowStartAt: occurrence.windowStartAt,
+        ...time,
+        raidLeadId: lead ? lead.id : null,
+        raidLeadName: run.raidLeadName,
+        runSetup: await resolveRunSetupAdoption(run),
+      });
+    }
+    candidates.sort((a, b) => a.scheduledStartAt.localeCompare(b.scheduledStartAt));
+    return candidates;
+  },
+
+  /**
+   * Schedule-side "Use existing Run" for an existing slot. Attaches only; the
+   * Schedule's configuration changes solely with the explicit `adoptSetup`
+   * (then future occurrences use the Run's Run Setup — equivalent or snapshot).
+   */
   async attachExistingRun(
     user: AuthenticatedUser,
-    input: { scheduleSlotId: string; runId: string; now?: Date },
+    input: { scheduleSlotId: string; runId: string; adoptSetup?: boolean; now?: Date },
   ): Promise<CommunityScheduleRunRecord> {
     const existing = await communityScheduleRepository.findById(input.scheduleSlotId);
     if (!existing) {
@@ -349,6 +555,10 @@ export const communityScheduleOccurrenceService = {
           throw new DomainError("COMMUNITY_SCHEDULE_SLOT_INACTIVE", "This schedule slot is inactive.", 409);
         }
         const link = await attachExistingRunInTx(txOrm, { slot, runId: input.runId, actor: user, now });
+        if (input.adoptSetup) {
+          const adopted = await adoptRunSetupInTx(txOrm, { runId: input.runId, actor: user });
+          await communityScheduleRepository.setRunTemplateInTx(slot.id, adopted.templateId, user.id, txOrm);
+        }
         return { slot, link };
       });
     } catch (error) {

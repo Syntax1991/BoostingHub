@@ -169,6 +169,13 @@ export const listScheduleAttachCandidatesSchema = z.union([
 export const attachScheduleRunSchema = z.object({
   scheduleSlotId: z.string().uuid(),
   runId: z.string().uuid("Choose a valid Run."),
+  /** Explicit: future occurrences use this Run's Run Setup (never implicit). */
+  adoptSetup: z.boolean().optional(),
+});
+
+/** Existing Runs a new Schedule time can start from (Create Schedule / Add times). */
+export const listScheduleAdoptionCandidatesSchema = z.object({
+  start: scheduleStartSchema.optional(),
 });
 
 export const communityScheduleSlotIdSchema = z.object({
@@ -196,6 +203,11 @@ export const createSchedulePlanSchema = refineUniquePlanSlots(
         z.object({
           mode: z.literal("create"),
           ...createRunSetupFieldsSchema.shape,
+        }),
+        /** Adopt the Run Setup from the existing Run used as a first occurrence (reuse or snapshot). */
+        z.object({
+          mode: z.literal("fromRun"),
+          runId: z.string().uuid("Choose a valid Run."),
         }),
       ]),
       slots: z

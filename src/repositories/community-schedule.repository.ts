@@ -156,6 +156,15 @@ export const communityScheduleRepository = {
     return this.findById(id, txOrm);
   },
 
+  /** Points the slot's future occurrences at another Run Setup (explicit adoption only). */
+  async setRunTemplateInTx(id: string, runTemplateId: string, updatedById: string, txOrm: TxOrm): Promise<void> {
+    await txOrm.CommunityScheduleSlot.where({ id }).update({
+      runTemplateId,
+      updatedById,
+      updatedAt: new Date().toISOString(),
+    });
+  },
+
   async findById(id: string, txOrm?: TxOrm): Promise<CommunityScheduleSlotRecord | null> {
     const row = await baseSlotQuery(txOrm).where({ id }).first();
     return row ? mapSlot(row as Record<string, unknown>) : null;
