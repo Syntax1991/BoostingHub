@@ -5,15 +5,15 @@ import { useTransition, useState } from "react";
 import { materializeCommunityScheduleOccurrenceAction } from "@/controllers/community-schedule.actions";
 import type { CommunityScheduleOccurrenceView } from "@/services/community-schedule.service";
 import type { RaidIdWindow } from "@/lib/community-schedule";
-import { formatDate } from "@/lib/datetime";
+import { formatDate, formatDateTime } from "@/lib/datetime";
 import { CommunityScheduleAttachRunDialog } from "@/components/manage/community-schedule-attach-run-dialog";
 
 const STATE_LABELS: Record<CommunityScheduleOccurrenceView["state"], string> = {
   RUN_CREATED: "Run created",
   NO_RUN_YET: "No run yet",
-  AUTO_WAITING: "Auto-create waiting",
-  AUTO_BLOCKED: "Auto-create blocked",
-  NOT_STARTED: "Not started yet",
+  AUTO_WAITING: "Draft planned",
+  AUTO_BLOCKED: "Weekly Draft blocked",
+  NOT_STARTED: "Before schedule start",
   PAST: "Past",
 };
 
@@ -51,8 +51,16 @@ export function CommunityScheduleOccurrenceActions({
         <p className="text-[10px] text-muted">Run Setup: {materialization.templateLabel}</p>
       ) : null}
       <p className="text-[10px] text-muted">
-        Auto-create: {materialization.autoCreateRun ? "ON" : "OFF"}
+        Weekly Draft: {materialization.autoCreateRun ? "ON" : "OFF"}
       </p>
+      {materialization.state === "AUTO_WAITING" && materialization.draftReleaseAt ? (
+        <p className="max-w-xs text-right text-[10px] text-muted">
+          Draft release: {formatDateTime(materialization.draftReleaseAt, "Europe/Berlin")}
+        </p>
+      ) : null}
+      {materialization.note ? (
+        <p className="max-w-xs text-right text-[10px] text-muted">{materialization.note}</p>
+      ) : null}
       {materialization.state === "RUN_CREATED" && materialization.origin === "ATTACHED" ? (
         <p className="text-[10px] text-muted">Existing Run linked (not created from the Run Setup)</p>
       ) : null}

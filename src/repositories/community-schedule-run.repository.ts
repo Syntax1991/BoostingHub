@@ -64,15 +64,26 @@ export const communityScheduleRunRepository = {
     return row ? mapRow(row as Record<string, unknown>) : null;
   },
 
+  /**
+   * Frees the occurrence a retired Schedule Draft held: the provenance row
+   * (window, Run) stays, but it no longer belongs to the slot — exactly the
+   * existing SET NULL semantics of a slot deletion — so UNIQUE(slot, window)
+   * no longer blocks a later materialization of that occurrence.
+   */
+  async releaseFromSlotInTx(id: string, txOrm: TxOrm): Promise<void> {
+    await txOrm.CommunityScheduleRun.where({ id }).update({ scheduleSlotId: null });
+  },
+
   async findByRunId(runId: string): Promise<CommunityScheduleRunRecord | null> {
     const row = await orm.CommunityScheduleRun.where({ runId }).first();
     return row ? mapRow(row as Record<string, unknown>) : null;
   },
 
-  async listBySlotIds(slotIds: readonly string[]): Promise<CommunityScheduleRunRecord[]> {
+  async listBySlotIds(slotIds: readonly string[], txOrm?: TxOrm): Promise<CommunityScheduleRunRecord[]> {
     const unique = [...new Set(slotIds)];
     if (unique.length === 0) return [];
-    const rows = await orm.CommunityScheduleRun.where((link) => link.scheduleSlotId.in(unique)).all();
+    const client = txOrm ?? orm;
+    const rows = await client.CommunityScheduleRun.where((link) => link.scheduleSlotId.in(unique)).all();
     return rows.map((row) => mapRow(row as Record<string, unknown>));
   },
 

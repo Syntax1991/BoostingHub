@@ -117,8 +117,8 @@ export function CommunityScheduleAddTimesDialog({
           >
             <h2 className="text-base font-semibold">Add times</h2>
             <p className="mt-1 text-xs text-muted">
-              Add weekly times to <span className="font-medium text-foreground">{runSetupName}</span>. Auto-create
-              materializes CURRENT/NEXT immediately when enabled.
+              Add weekly times to <span className="font-medium text-foreground">{runSetupName}</span>. Saving only
+              plans the times — weekly Drafts are created at the Monday 12:00 release (or via Create Run).
             </p>
 
             <div className="mt-4 grid gap-3">
@@ -203,6 +203,7 @@ export function CommunityScheduleAddTimesDialog({
                       localStartTime={slot.localStartTime}
                       raidLeadId={raidLeadId}
                       runTemplateId={runTemplateId}
+                      start={start}
                       value={slot.attachRunId}
                       onChange={(attachRunId) =>
                         setSlots((current) =>
@@ -222,7 +223,7 @@ export function CommunityScheduleAddTimesDialog({
                   checked={autoCreateRun}
                   onChange={(event) => setAutoCreateRun(event.target.checked)}
                 />
-                <span>Auto-create DRAFT runs immediately (hourly job is a safety net)</span>
+                <span>Automatically create weekly Draft — Draft release: Monday 12:00 (Europe/Berlin)</span>
               </label>
 
               <label className="grid gap-1 text-sm">

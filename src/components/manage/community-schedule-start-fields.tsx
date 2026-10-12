@@ -73,6 +73,7 @@ export function FirstOccurrenceSelect({
   localStartTime,
   raidLeadId,
   runTemplateId,
+  start,
   value,
   onChange,
 }: {
@@ -80,6 +81,8 @@ export function FirstOccurrenceSelect({
   localStartTime: string;
   raidLeadId: string;
   runTemplateId: string | null;
+  /** The dialog's Starts choice: occurrences before it are not offered. */
+  start: ScheduleStartState;
   value: string | null;
   onChange: (runId: string | null) => void;
 }) {
@@ -94,11 +97,24 @@ export function FirstOccurrenceSelect({
     onChangeRef.current = onChange;
   });
 
+  const startMode = start.mode;
+  const startDate = start.date;
+
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
     const timer = setTimeout(async () => {
-      const result = await listScheduleAttachCandidatesAction({ weekday, localStartTime, raidLeadId, runTemplateId });
+      const startPayload =
+        startMode === "FROM_DATE" && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)
+          ? undefined
+          : scheduleStartPayload({ mode: startMode, date: startDate });
+      const result = await listScheduleAttachCandidatesAction({
+        weekday,
+        localStartTime,
+        raidLeadId,
+        runTemplateId,
+        start: startPayload,
+      });
       if (cancelled) return;
       const next = result.ok ? result.candidates : [];
       setLoadError(result.ok ? null : result.message);
@@ -113,7 +129,7 @@ export function FirstOccurrenceSelect({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [enabled, weekday, localStartTime, raidLeadId, runTemplateId]);
+  }, [enabled, weekday, localStartTime, raidLeadId, runTemplateId, startMode, startDate]);
 
   const visible = enabled ? candidates : [];
   const selected = visible.find((candidate) => candidate.runId === value) ?? null;

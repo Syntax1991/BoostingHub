@@ -8,6 +8,7 @@ import {
   type ScheduleStartState,
 } from "@/components/manage/community-schedule-start-fields";
 import { formatDate } from "@/lib/datetime";
+import type { ScheduleRunCounts } from "@/lib/community-schedule";
 import { COMMUNITY_SCHEDULE_RUN_MODES, COMMUNITY_WEEKDAYS } from "@/models/enums";
 import type { CommunityScheduleRunMode } from "@/models/enums";
 import { COMMUNITY_SCHEDULE_RUN_MODE_LABELS } from "@/lib/labels";
@@ -53,6 +54,8 @@ type EditProps = {
     runMode: CommunityScheduleRunMode;
     /** Current activation boundary (raid-ID window start); null = immediately. */
     firstWindowStartAt?: string | null;
+    /** Future Runs of this time — shown as the consequence of a time / start change. */
+    runCounts?: ScheduleRunCounts;
     compositionOverrideEnabled?: boolean;
     desiredTankCountOverride?: number | null;
     desiredHealerCountOverride?: number | null;
@@ -191,6 +194,14 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
               Recurring wall-clock time in Europe/Berlin. Composition can inherit Run Setup defaults or use a custom
               override for this slot only.
             </p>
+            {props.mode === "edit" && (props.initial.runCounts?.retiredDrafts ?? 0) > 0 ? (
+              <p className="mt-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
+                Changing weekday / time (or moving Starts later) archives the affected scheduled Draft Run
+                {props.initial.runCounts!.retiredDrafts === 1 ? "" : "s"} ({props.initial.runCounts!.retiredDrafts}).
+                Active and linked existing Runs remain unchanged. No replacement Draft is created before the next
+                Monday 12:00 release (or Create Run).
+              </p>
+            ) : null}
             <div className="mt-4 grid gap-3">
               <label className="grid gap-1 text-sm">
                 <span className="text-xs text-muted">Weekday</span>
@@ -361,7 +372,7 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
                   disabled={!runTemplateId}
                   onChange={(event) => setAutoCreateRun(event.target.checked)}
                 />
-                <span>Auto-create DRAFT runs immediately (hourly job is a safety net)</span>
+                <span>Automatically create weekly Draft — Draft release: Monday 12:00 (Europe/Berlin)</span>
               </label>
               <label className="grid gap-1 text-sm">
                 <span className="text-xs text-muted">Notes (optional)</span>

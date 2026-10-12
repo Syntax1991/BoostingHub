@@ -161,6 +161,8 @@ export const listScheduleAttachCandidatesSchema = z.union([
     localStartTime: localStartTimeSchema,
     raidLeadId: z.string().uuid("Choose an eligible raid lead."),
     runTemplateId: runTemplateIdSchema,
+    /** The dialog's chosen Starts — occurrences before it are not offered. */
+    start: scheduleStartSchema.optional(),
   }),
 ]);
 

@@ -25,8 +25,9 @@ PostgreSQL 17 (host package)           postgresql.service
 Character sync (oneshot, every 15 min) boostinghub-character-sync.timer → .service
   → npm run sync:characters (overlap guarded by a PostgreSQL advisory lock)
 
-Community schedule materialization (oneshot, hourly) boostinghub-community-schedule.timer → .service
+Community schedule Draft release (oneshot, Mon 12:00 Europe/Berlin, Persistent) boostinghub-community-schedule.timer → .service
   → npm run materialize:community-schedule (overlap guarded by advisory lock 837462/4)
+  → creates the Drafts of the raid ID starting the following Wednesday 06:00 (missed release: once on next start)
 
 Database backup (oneshot, daily 03:15)  boostinghub-backup.timer → .service
   → /usr/local/libexec/boostinghub/backup-db.sh → /var/backups/boostinghub/*.dump

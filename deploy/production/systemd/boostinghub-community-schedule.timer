@@ -1,12 +1,24 @@
-# Timer for boostinghub-community-schedule.service (hourly).
+# Timer for boostinghub-community-schedule.service — weekly Draft release.
+#
+# Fires every Monday 12:00 Europe/Berlin (10:00Z in CEST, 11:00Z in CET — systemd
+# evaluates the calendar in the given zone, so DST weeks stay at 12:00 local)
+# and materializes the Drafts of the raid ID starting the following Wednesday
+# 06:00. Persistent=true: a release missed while the host was down (or while a
+# deploy paused this timer) runs once on the next start; the pass is idempotent
+# (one Run per occurrence), so a catch-up never duplicates.
+#
+# Install manually on the host as root (not part of the normal deploy):
+#   install -o root -g root -m 0644 deploy/production/systemd/boostinghub-community-schedule.timer /etc/systemd/system/
+#   systemctl daemon-reload
+#   systemctl restart boostinghub-community-schedule.timer
+#   systemctl list-timers boostinghub-community-schedule.timer
 
 [Unit]
-Description=BoostingHub community schedule materialization hourly
+Description=BoostingHub weekly community schedule Draft release (Monday 12:00 Europe/Berlin)
 
 [Timer]
-OnBootSec=5min
-OnUnitActiveSec=1h
-AccuracySec=5min
+OnCalendar=Mon *-*-* 12:00:00 Europe/Berlin
+AccuracySec=1min
 Persistent=true
 Unit=boostinghub-community-schedule.service
 

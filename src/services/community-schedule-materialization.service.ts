@@ -8,8 +8,10 @@ import {
   COMMUNITY_SCHEDULE_TIME_ZONE,
   isBeforeScheduleStart,
   resolveScheduleSlotOccurrence,
+  scheduleDraftRelease,
   type RaidIdWindow,
 } from "@/lib/community-schedule";
+import { classifyRunWeek } from "@/lib/wow-run-week";
 import { formatDate } from "@/lib/datetime";
 import { DomainError, isDomainError } from "@/lib/errors";
 import { communityScheduleRunRepository } from "@/repositories/community-schedule-run.repository";
@@ -25,9 +27,6 @@ import { integrationEventService } from "@/services/integration-event.service";
 import { runService } from "@/services/run.service";
 
 export const COMMUNITY_SCHEDULE_MATERIALIZE_LOCK_KEY = { classId: 837462, objectId: 4 } as const;
-
-export const COMMUNITY_SCHEDULE_MATERIALIZE_WARNING =
-  "Schedule saved, but one or more Runs could not be created yet. The hourly scheduler will retry automatically.";
 
 export type MaterializePassResult =
   | { status: "SKIPPED_ALREADY_RUNNING"; durationMs: number }
@@ -60,7 +59,23 @@ export type MaterializeSlotWindowsResult = {
   failed: number;
 };
 
-const DEFAULT_WINDOWS: readonly RaidIdWindow[] = ["CURRENT", "NEXT"];
+
+/**
+ * Weekly Draft release: automatic materialization only ever targets the raid
+ * ID released by the latest Monday 12:00 Europe/Berlin (the one starting the
+ * following Wednesday 06:00). Before that Monday's release it is still last
+ * week's target (already materialized → idempotent); a late / catch-up pass
+ * targets the same released raid ID — never the one after it.
+ */
+export function releasedWindow(now: Date): RaidIdWindow {
+  const { targetWindowStartAt } = scheduleDraftRelease(now, COMMUNITY_SCHEDULE_TIME_ZONE);
+  const { currentStart } = classifyRunWeek({
+    scheduledStartAt: now.toISOString(),
+    now,
+    timeZone: COMMUNITY_SCHEDULE_TIME_ZONE,
+  });
+  return Date.parse(targetWindowStartAt) <= Date.parse(currentStart) ? "CURRENT" : "NEXT";
+}
 
 async function loadTemplateForSlot(
   slot: CommunityScheduleSlotRecord,
@@ -159,16 +174,16 @@ function emptySlotWindowCounters(): MaterializeSlotWindowsResult {
 }
 
 /**
- * Targeted CURRENT/NEXT materialization for specific slots (SYSTEM actor).
- * Shared by post-save auto-create and the hourly reconciliation pass body.
- * No advisory lock — races resolve via UNIQUE(scheduleSlotId, windowStartAt).
+ * Materializes the given slots' occurrences in `windows` (SYSTEM actor) — the
+ * body of the weekly release pass. Races resolve via the slot lock re-check
+ * and UNIQUE(scheduleSlotId, windowStartAt).
  */
 async function materializeSlotWindowsInternal(input: {
   slots: ReadonlyArray<CommunityScheduleSlotRecord>;
-  windows?: ReadonlyArray<RaidIdWindow>;
+  windows: ReadonlyArray<RaidIdWindow>;
   now: Date;
 }): Promise<MaterializeSlotWindowsResult> {
-  const windows = input.windows ?? DEFAULT_WINDOWS;
+  const windows = input.windows;
   const counters = emptySlotWindowCounters();
   counters.slots = input.slots.length;
 
@@ -247,6 +262,7 @@ async function materializeSlotWindowsInternal(input: {
           scheduleSlotId: slot.id,
           windowStartAt: occurrence.windowStartAt,
           raidLeadId: slot.raidLeadId,
+          slotGuard: { weekday: slot.weekday, localStartTime: slot.localStartTime },
           scheduleSlot: {
             compositionOverrideEnabled: slot.compositionOverrideEnabled,
             desiredTankCountOverride: slot.desiredTankCountOverride,
@@ -261,7 +277,12 @@ async function materializeSlotWindowsInternal(input: {
         } else {
           counters.created += 1;
         }
-      } catch {
+      } catch (error) {
+        // Slot edited / deactivated / deleted between listing and the locked insert.
+        if (isDomainError(error) && error.code === "COMMUNITY_SCHEDULE_SLOT_CHANGED") {
+          counters.skippedInactive += 1;
+          continue;
+        }
         // Per-window failure: count and continue so NEXT still evaluates after CURRENT.
         counters.failed += 1;
       }
@@ -320,6 +341,7 @@ export const communityScheduleMaterializationService = {
       scheduleSlotId: slot.id,
       windowStartAt: occurrence.windowStartAt,
       raidLeadId: slot.raidLeadId,
+      slotGuard: { weekday: slot.weekday, localStartTime: slot.localStartTime },
       scheduleSlot: {
         compositionOverrideEnabled: slot.compositionOverrideEnabled,
         desiredTankCountOverride: slot.desiredTankCountOverride,
@@ -332,28 +354,10 @@ export const communityScheduleMaterializationService = {
   },
 
   /**
-   * Immediate targeted auto-create for specific slots after Schedule configuration
-   * commits. Always SYSTEM actor. Does not acquire the hourly advisory lock.
+   * The weekly Draft release (timer: Monday 12:00 Europe/Berlin, Persistent).
+   * Only ever targets the released raid ID — a late / catch-up / manual pass
+   * is idempotent and never materializes the raid ID after it.
    */
-  async materializeSlotWindows(
-    slotIds: ReadonlyArray<string>,
-    input: { now?: Date; windows?: ReadonlyArray<RaidIdWindow> } = {},
-  ): Promise<MaterializeSlotWindowsResult> {
-    if (slotIds.length === 0) {
-      return emptySlotWindowCounters();
-    }
-    const slots: CommunityScheduleSlotRecord[] = [];
-    for (const id of slotIds) {
-      const slot = await communityScheduleRepository.findById(id);
-      if (slot) slots.push(slot);
-    }
-    return materializeSlotWindowsInternal({
-      slots,
-      windows: input.windows,
-      now: input.now ?? new Date(),
-    });
-  },
-
   async runPass(now: Date = new Date()): Promise<MaterializePassResult> {
     const started = Date.now();
     const handle = await scheduledJobLockRepository.tryAcquireLock(
@@ -368,7 +372,11 @@ export const communityScheduleMaterializationService = {
 
     try {
       const slots = await communityScheduleRepository.listActiveAutoCreateSlots();
-      const counters = await materializeSlotWindowsInternal({ slots, now });
+      const counters = await materializeSlotWindowsInternal({
+        slots,
+        now,
+        windows: [releasedWindow(now)],
+      });
       const completed: MaterializePassResult = {
         status: "COMPLETED",
         ...counters,
