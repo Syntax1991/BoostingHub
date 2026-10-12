@@ -47,6 +47,7 @@ Database backup (oneshot, daily 03:15)  boostinghub-backup.timer → .service
 | Path | Purpose |
 | --- | --- |
 | `deploy/update-server.sh` | **The** release helper for normal updates (see below) |
+| `deploy/update-server.test.sh` | Offline tests for the release helper (systemd / git / npm stubbed): timer pause/restore, failure paths, lock, self-update |
 | `deploy/production/systemd/*.service`, `*.timer` | Reference copies of the eight live units |
 | `deploy/production/backup-db.sh` | Backup script; production runs a root-owned installed copy |
 | `deploy/production/env-status.py` | Read-only `.env` check that never prints secret values. Database URLs show only scheme/user/host/port/database; the password and every query-parameter value are hidden. |
@@ -74,7 +75,8 @@ step is skipped.
 
 Safety contract, in order:
 
-1. Must run as root.
+1. Must run as root. Only one deploy at a time (`flock` on
+   `/run/lock/boostinghub-deploy.lock`; a second deploy aborts untouched).
 2. The web, bot and backup units must exist.
 3. `boostinghub-backup.service` must be `Type=oneshot` with
    `RemainAfterExit=no`. Only then does `systemctl start` block until the dump
@@ -83,6 +85,12 @@ Safety contract, in order:
    operational files are preserved (no `reset --hard`, no `git clean`, no forced
    checkout).
 5. Records the full pre-deploy SHA.
+5a. **Pause scheduled app jobs**: `boostinghub-character-sync.timer` and
+    `boostinghub-community-schedule.timer` (their services run `npm run …` /
+    `tsx` from the checkout) are stopped if active; enablement is untouched. An
+    already-running job service is waited for (bounded, never killed); if it is
+    still running after 15 min the deploy aborts before any change. The backup
+    timer is not paused (it runs a root-owned installed copy).
 6. **Database backup first**: `systemctl start boostinghub-backup.service` and
    require `Result=success` before any Git, dependency or schema change.
 7. `git fetch origin --prune`, `git checkout <branch>`, `git pull --ff-only`.
@@ -94,9 +102,27 @@ Safety contract, in order:
 11. `npm run db:migrate` (never `migrate reset`). A failure aborts before any restart.
 12. Restart `boostinghub-web.service`, then `boostinghub-discord-bot.service`.
 13. Both must be `active`.
+13a. The job runtime must be complete (`node_modules/.bin/tsx` runs and the
+     `sync:characters` / `materialize:community-schedule` npm scripts exist);
+     only then the timers paused in 5a are started again. A monotonic timer whose
+     interval elapsed during the deploy fires once on start (its regular
+     catch-up run) — nothing is started manually.
 14. `https://manawyrm-boosting.com/` must answer HTTP 200 (with a short startup retry window).
 
-Timers are not touched. Git operations and npm run as `boostinghub`.
+Git operations and npm run as `boostinghub`.
+
+**Failure path (EXIT trap, original exit code preserved).** If the deploy fails
+before any code or dependency change (while pausing / waiting, backup), the
+paused timers are restarted. If it fails after the checkout changed (npm ci,
+emit, typecheck, build, migrate, restart, runtime check), the timers stay
+**stopped** — jobs must not run new code against a partial install or an
+unmigrated schema — and the output ends with
+`after fixing the release run: systemctl start <timers>`. After a failure past
+migrate with a complete runtime they are restarted.
+
+**Self-update.** The script's body is one `main()` function and the last line is
+`main "$@"; exit $?`, so the `git pull` that rewrites this file during a deploy
+cannot corrupt the running deploy. Offline tests: `bash deploy/update-server.test.sh`.
 
 After a deploy, run the [production smoke checklist](#production-smoke-checklist).
 
