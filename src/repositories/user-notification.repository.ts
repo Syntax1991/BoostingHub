@@ -340,23 +340,18 @@ export const userNotificationRepository = {
 
   /**
    * Marks still-PENDING Discord DM deliveries SKIPPED for the given source keys
-   * (e.g. undelivered RUN_CANCELLED DMs when Reactivate commits). Does not
-   * delete rows or rewrite SENT history.
+   * (e.g. undelivered RUN_CANCELLED DMs when Reactivate commits), on the
+   * caller's transaction client. Compare-and-set on PENDING; never deletes
+   * rows or rewrites SENT history.
    */
-  async skipPendingDiscordDeliveryForSourceKeys(sourceKeys: readonly string[]): Promise<number> {
-    if (sourceKeys.length === 0) return 0;
+  async skipPendingDiscordDeliveryForSourceKeysInTx(txOrm: typeof orm, sourceKeys: readonly string[]): Promise<void> {
+    if (sourceKeys.length === 0) return;
     const now = new Date().toISOString();
-    let skipped = 0;
     for (const sourceKey of sourceKeys) {
-      const row = (await orm.UserNotification.where({ sourceKey }).first()) as Record<string, unknown> | null;
-      if (!row) continue;
-      if (asString(row.discordDeliveryStatus) !== "PENDING") continue;
-      await orm.UserNotification.where({ id: asString(row.id) }).update({
+      await txOrm.UserNotification.where({ sourceKey, discordDeliveryStatus: "PENDING" }).update({
         discordDeliveryStatus: "SKIPPED",
         updatedAt: now,
       });
-      skipped += 1;
     }
-    return skipped;
   },
 };

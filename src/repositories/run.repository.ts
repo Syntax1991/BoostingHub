@@ -674,6 +674,8 @@ export const runRepository = {
       lootType: RunLootType;
     },
     hooks: LifecycleAnnouncementTxHooks = {},
+    /** Durable notification work that must commit with the cancellation (same tx client). */
+    writeInTx?: (txOrm: TxOrm, context: { cancelRevision: number }) => Promise<void>,
   ): Promise<{ cancelRevision: number }> {
     return db.transaction(async (tx) => {
       const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
@@ -751,6 +753,12 @@ export const runRepository = {
         return { cancelRevision: nextCancelRevision };
       }
       await insertAnnouncementIgnoreDuplicateTx(txOrm, cancelAnnouncement);
+      if (writeInTx) {
+        await writeInTx(txOrm, { cancelRevision: nextCancelRevision });
+      }
+      if (hooks.failBeforeCommit) {
+        throw new Error("TEST_HOOK_FAIL_BEFORE_COMMIT");
+      }
       return { cancelRevision: nextCancelRevision };
     });
   },
@@ -772,6 +780,8 @@ export const runRepository = {
       lootType: RunLootType;
     },
     hooks: LifecycleAnnouncementTxHooks = {},
+    /** Durable notification work that must commit with the reactivation (same tx client). */
+    writeInTx?: (txOrm: TxOrm, context: { cancelRevision: number }) => Promise<void>,
   ): Promise<{ cancelRevision: number; restoredStatus: RunStatus }> {
     return db.transaction(async (tx) => {
       const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
@@ -886,6 +896,12 @@ export const runRepository = {
         return { cancelRevision, restoredStatus: fromStatus };
       }
       await insertAnnouncementIgnoreDuplicateTx(txOrm, reactivateAnnouncement);
+      if (writeInTx) {
+        await writeInTx(txOrm, { cancelRevision });
+      }
+      if (hooks.failBeforeCommit) {
+        throw new Error("TEST_HOOK_FAIL_BEFORE_COMMIT");
+      }
       return { cancelRevision, restoredStatus: fromStatus };
     });
   },
