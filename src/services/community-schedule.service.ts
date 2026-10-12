@@ -12,6 +12,9 @@ import {
   resolveScheduleSlotOccurrence,
   type RaidIdWindow,
   type ScheduleOccurrence,
+  resolveScheduleStartBoundary,
+  isBeforeScheduleStart,
+  type ScheduleStart,
 } from "@/lib/community-schedule";
 import {
   normalizeScheduleCompositionWrite,
@@ -46,7 +49,15 @@ import {
   type RunLootType,
   type RunStatus,
 } from "@/models/enums";
-import { communityScheduleRunRepository } from "@/repositories/community-schedule-run.repository";
+import {
+  communityScheduleRunRepository,
+  type CommunityScheduleRunRecord,
+} from "@/repositories/community-schedule-run.repository";
+import {
+  attachExistingRunInTx,
+  mapAttachUniqueViolation,
+  recordRunScheduleAttached,
+} from "@/services/community-schedule-occurrence.service";
 import {
   communityScheduleRepository,
   type CommunityScheduleSlotRecord,
@@ -91,11 +102,22 @@ export type ScheduleOccurrenceMaterializationState =
   | "NO_RUN_YET"
   | "AUTO_WAITING"
   | "AUTO_BLOCKED"
+  /** Before the slot's activation boundary: intentionally no Run is created. */
+  | "NOT_STARTED"
   | "PAST";
+
+/** A persisted occurrence (CommunityScheduleRun) as the Schedule view needs it. */
+type OccurrenceLink = { runId: string; origin: "MATERIALIZED" | "ATTACHED" };
 
 export type CommunityScheduleOccurrenceView = {
   state: ScheduleOccurrenceMaterializationState;
   runId?: string;
+  /** For RUN_CREATED: materialized from the Run Setup, or an existing Run attached. */
+  origin?: "MATERIALIZED" | "ATTACHED";
+  /** For NOT_STARTED: raid-ID window start of the slot's first eligible occurrence. */
+  startsWindowStartAt?: string;
+  /** "Use existing Run" is offered (unfulfilled, not past, manageable). */
+  canAttach: boolean;
   blockedReason?: string;
   templateLabel?: string;
   autoCreateRun: boolean;
@@ -563,7 +585,7 @@ function buildMaterializationView(input: {
   user: AuthenticatedUser;
   slot: CommunityScheduleSlotRecord;
   occurrence: ScheduleOccurrence;
-  linkRunId: string | null;
+  link: OccurrenceLink | null;
   templateLabel: string | null;
   templateUsable: boolean | null;
   templateUnusableReason: string | null;
@@ -571,37 +593,42 @@ function buildMaterializationView(input: {
 }): CommunityScheduleOccurrenceView {
   const { slot, occurrence, user, now } = input;
   const autoCreateRun = slot.autoCreateRun;
-  const canMaterialize =
-    slot.isActive &&
-    slot.runTemplateId != null &&
-    canMaterializeCommunityScheduleOccurrence(user, slot) &&
-    (input.templateUsable ?? false);
+  const canManage = slot.isActive && canMaterializeCommunityScheduleOccurrence(user, slot);
+  const canMaterialize = canManage && slot.runTemplateId != null && (input.templateUsable ?? false);
+
+  if (input.link) {
+    return {
+      state: "RUN_CREATED",
+      runId: input.link.runId,
+      origin: input.link.origin,
+      templateLabel: input.templateLabel ?? undefined,
+      autoCreateRun,
+      canMaterialize: false,
+      canAttach: false,
+    };
+  }
 
   if (Date.parse(occurrence.scheduledStartAt) < now.getTime()) {
-    if (input.linkRunId) {
-      return {
-        state: "RUN_CREATED",
-        runId: input.linkRunId,
-        templateLabel: input.templateLabel ?? undefined,
-        autoCreateRun,
-        canMaterialize: false,
-      };
-    }
     return {
       state: "PAST",
       templateLabel: input.templateLabel ?? undefined,
       autoCreateRun,
       canMaterialize: false,
+      canAttach: false,
     };
   }
 
-  if (input.linkRunId) {
+  // Unfulfilled and upcoming from here on: an existing Run may always satisfy it.
+  const canAttach = canManage;
+
+  if (isBeforeScheduleStart(slot.firstWindowStartAt, occurrence.windowStartAt)) {
     return {
-      state: "RUN_CREATED",
-      runId: input.linkRunId,
+      state: "NOT_STARTED",
+      startsWindowStartAt: slot.firstWindowStartAt!,
       templateLabel: input.templateLabel ?? undefined,
       autoCreateRun,
       canMaterialize: false,
+      canAttach,
     };
   }
 
@@ -610,6 +637,7 @@ function buildMaterializationView(input: {
       state: "NO_RUN_YET",
       autoCreateRun,
       canMaterialize: false,
+      canAttach,
     };
   }
 
@@ -620,6 +648,7 @@ function buildMaterializationView(input: {
         templateLabel: input.templateLabel ?? undefined,
         autoCreateRun,
         canMaterialize,
+        canAttach,
       };
     }
     return {
@@ -628,6 +657,7 @@ function buildMaterializationView(input: {
       templateLabel: input.templateLabel ?? undefined,
       autoCreateRun,
       canMaterialize: false,
+      canAttach,
     };
   }
 
@@ -636,6 +666,7 @@ function buildMaterializationView(input: {
     templateLabel: input.templateLabel ?? undefined,
     autoCreateRun,
     canMaterialize,
+    canAttach,
   };
 }
 
@@ -644,7 +675,7 @@ function projectWindow(
   slots: CommunityScheduleSlotRecord[],
   window: RaidIdWindow,
   now: Date,
-  linksByKey: Map<string, string>,
+  linksByKey: Map<string, OccurrenceLink>,
   templateMetaById: Map<
     string,
     { label: string; usable: boolean; unusableReason: string | null }
@@ -669,7 +700,7 @@ function projectWindow(
       timeZone: COMMUNITY_SCHEDULE_TIME_ZONE,
     });
     const linkKey = `${slot.id}\0${occurrence.windowStartAt}`;
-    const linkRunId = linksByKey.get(linkKey) ?? null;
+    const link = linksByKey.get(linkKey) ?? null;
     const templateMeta = slot.runTemplateId ? templateMetaById.get(slot.runTemplateId) : null;
 
     projected.push({
@@ -679,7 +710,7 @@ function projectWindow(
         user,
         slot,
         occurrence,
-        linkRunId,
+        link,
         templateLabel: templateMeta?.label ?? slot.runTemplateName,
         templateUsable: templateMeta?.usable ?? null,
         templateUnusableReason: templateMeta?.unusableReason ?? null,
@@ -768,6 +799,7 @@ async function createSlotsInTx(input: {
     weekday: CommunityWeekday;
     localStartTime: string;
     runMode: CommunityScheduleRunMode;
+    attachRunId?: string | null;
   }>;
   label: string;
   notes: string | null;
@@ -775,9 +807,12 @@ async function createSlotsInTx(input: {
   runTemplateId: string;
   autoCreateRun: boolean;
   composition: ReturnType<typeof normalizeScheduleCompositionWrite>;
-  actorId: string;
-}): Promise<string[]> {
+  start: ScheduleStart | undefined;
+  actor: AuthenticatedUser;
+  now: Date;
+}): Promise<{ slotIds: string[]; attached: AttachedOccurrence[] }> {
   const slotIds: string[] = [];
+  const attached: AttachedOccurrence[] = [];
   for (const slot of input.slots) {
     const created = await communityScheduleRepository.create(
       {
@@ -789,15 +824,54 @@ async function createSlotsInTx(input: {
         runTemplateId: input.runTemplateId,
         autoCreateRun: input.autoCreateRun,
         runMode: slot.runMode,
+        firstWindowStartAt: resolveStartBoundary(slot, input.start, input.now),
         composition: input.composition,
-        createdById: input.actorId,
-        updatedById: input.actorId,
+        createdById: input.actor.id,
+        updatedById: input.actor.id,
       },
       input.txOrm,
     );
     slotIds.push(created.id);
+    // Committed with the slot, before any immediate auto-create can claim the occurrence.
+    if (slot.attachRunId) {
+      const link = await attachExistingRunInTx(input.txOrm, {
+        slot: created,
+        runId: slot.attachRunId,
+        actor: input.actor,
+        now: input.now,
+      });
+      attached.push({ slot: created, link });
+    }
   }
-  return slotIds;
+  return { slotIds, attached };
+}
+
+type AttachedOccurrence = { slot: CommunityScheduleSlotRecord; link: CommunityScheduleRunRecord };
+
+/** Activation boundary for a start choice; omitted / IMMEDIATE → null (legacy behavior). */
+function resolveStartBoundary(
+  slot: { weekday: CommunityWeekday; localStartTime: string },
+  start: ScheduleStart | undefined,
+  now: Date,
+): string | null {
+  if (!start || start.mode === "IMMEDIATE") return null;
+  try {
+    return resolveScheduleStartBoundary({
+      weekday: slot.weekday,
+      localStartTime: slot.localStartTime,
+      start,
+      now,
+      timeZone: COMMUNITY_SCHEDULE_TIME_ZONE,
+    }).firstWindowStartAt;
+  } catch {
+    throw new DomainError("VALIDATION_FAILED", "Choose a valid start date.", 400);
+  }
+}
+
+async function auditAttached(actor: AuthenticatedUser, attached: readonly AttachedOccurrence[]): Promise<void> {
+  for (const row of attached) {
+    await recordRunScheduleAttached({ actor, slot: row.slot, link: row.link });
+  }
 }
 
 async function maybeImmediateMaterialize(
@@ -905,10 +979,10 @@ export const communityScheduleService = {
 
     const slotIds = slots.map((slot) => slot.id);
     const links = await communityScheduleRunRepository.listBySlotIds(slotIds);
-    const linksByKey = new Map<string, string>();
+    const linksByKey = new Map<string, OccurrenceLink>();
     for (const link of links) {
       if (link.scheduleSlotId == null) continue;
-      linksByKey.set(`${link.scheduleSlotId}\0${link.windowStartAt}`, link.runId);
+      linksByKey.set(`${link.scheduleSlotId}\0${link.windowStartAt}`, { runId: link.runId, origin: link.origin });
     }
 
     const visibleSlots = canEdit ? slots : slots.filter((slot) => slot.isActive);
@@ -995,7 +1069,7 @@ export const communityScheduleService = {
         resolvedName = input.runSetup.name.trim();
       }
 
-      const slotIds = await createSlotsInTx({
+      const created = await createSlotsInTx({
         txOrm,
         slots: input.slots,
         label: resolvedName,
@@ -1004,14 +1078,17 @@ export const communityScheduleService = {
         runTemplateId: resolvedTemplateId,
         autoCreateRun: input.autoCreateRun,
         composition,
-        actorId: user.id,
+        start: input.start,
+        actor: user,
+        now: now ?? new Date(),
       });
 
-      return { templateId: resolvedTemplateId, slotIds };
-    });
+      return { templateId: resolvedTemplateId, slotIds: created.slotIds, attached: created.attached };
+    }).catch(mapAttachUniqueViolation);
 
+    await auditAttached(user, result.attached);
     const materialization = await maybeImmediateMaterialize(result.slotIds, input.autoCreateRun, now);
-    return { ...result, materialization };
+    return { templateId: result.templateId, slotIds: result.slotIds, materialization };
   },
 
   async addTimesToSetup(
@@ -1038,21 +1115,26 @@ export const communityScheduleService = {
     await assertNoConflictsForLead(input.raidLeadId, input.slots);
     const composition = normalizeScheduleCompositionWrite(input);
 
-    const slotIds = await db.transaction(async (tx) => {
-      const txOrm = resolveTxOrm(tx);
-      return createSlotsInTx({
-        txOrm,
-        slots: input.slots,
-        label: template.name,
-        notes: input.notes,
-        raidLeadId: input.raidLeadId,
-        runTemplateId: template.id,
-        autoCreateRun: input.autoCreateRun,
-        composition,
-        actorId: user.id,
-      });
-    });
+    const { slotIds, attached } = await db
+      .transaction(async (tx) => {
+        const txOrm = resolveTxOrm(tx);
+        return createSlotsInTx({
+          txOrm,
+          slots: input.slots,
+          label: template.name,
+          notes: input.notes,
+          raidLeadId: input.raidLeadId,
+          runTemplateId: template.id,
+          autoCreateRun: input.autoCreateRun,
+          composition,
+          start: input.start,
+          actor: user,
+          now: now ?? new Date(),
+        });
+      })
+      .catch(mapAttachUniqueViolation);
 
+    await auditAttached(user, attached);
     const materialization = await maybeImmediateMaterialize(slotIds, input.autoCreateRun, now);
     return { templateId: template.id, slotIds, materialization };
   },
@@ -1083,6 +1165,7 @@ export const communityScheduleService = {
       runTemplateId: input.runTemplateId,
       autoCreateRun: input.autoCreateRun,
       runMode: input.runMode,
+      firstWindowStartAt: resolveStartBoundary(input, input.start, now ?? new Date()),
       composition,
       createdById: user.id,
       updatedById: user.id,
@@ -1122,6 +1205,9 @@ export const communityScheduleService = {
       runTemplateId: input.runTemplateId,
       autoCreateRun: input.autoCreateRun,
       runMode: input.runMode,
+      // Only an explicit start choice moves the boundary. It gates future,
+      // not-yet-fulfilled occurrences only — existing Runs are never touched.
+      ...(input.start ? { firstWindowStartAt: resolveStartBoundary(input, input.start, now ?? new Date()) } : {}),
       composition,
       updatedById: user.id,
     });

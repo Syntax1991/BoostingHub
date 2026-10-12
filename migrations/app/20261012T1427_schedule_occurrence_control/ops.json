@@ -1,0 +1,128 @@
+[
+  {
+    "id": "column.public.community_schedule_run.origin",
+    "label": "Add column \"origin\" to \"community_schedule_run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "origin",
+        "table": "community_schedule_run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"origin\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "community_schedule_run",
+          "origin"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"origin\"",
+        "sql": "ALTER TABLE \"public\".\"community_schedule_run\" ADD COLUMN \"origin\" text DEFAULT 'MATERIALIZED' NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"origin\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "community_schedule_run",
+          "origin"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.community_schedule_slot.firstWindowStartAt",
+    "label": "Add column \"firstWindowStartAt\" to \"community_schedule_slot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "firstWindowStartAt",
+        "table": "community_schedule_slot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"firstWindowStartAt\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "community_schedule_slot",
+          "firstWindowStartAt"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"firstWindowStartAt\"",
+        "sql": "ALTER TABLE \"public\".\"community_schedule_slot\" ADD COLUMN \"firstWindowStartAt\" timestamptz"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"firstWindowStartAt\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "community_schedule_slot",
+          "firstWindowStartAt"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.community_schedule_run.community_schedule_run_origin_check_ba8ca21e",
+    "label": "Add check constraint \"community_schedule_run_origin_check_ba8ca21e\" on \"community_schedule_run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "community_schedule_run_origin_check_ba8ca21e",
+        "table": "community_schedule_run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"community_schedule_run_origin_check_ba8ca21e\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "community_schedule_run_origin_check_ba8ca21e",
+          "public",
+          "\"public\".\"community_schedule_run\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"community_schedule_run_origin_check_ba8ca21e\"",
+        "sql": "ALTER TABLE \"public\".\"community_schedule_run\" ADD CONSTRAINT \"community_schedule_run_origin_check_ba8ca21e\" CHECK (\"origin\" IN ('MATERIALIZED', 'ATTACHED'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"community_schedule_run_origin_check_ba8ca21e\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "community_schedule_run_origin_check_ba8ca21e",
+          "public",
+          "\"public\".\"community_schedule_run\""
+        ]
+      }
+    ]
+  }
+]

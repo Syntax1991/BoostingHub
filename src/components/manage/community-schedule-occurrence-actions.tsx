@@ -5,12 +5,15 @@ import { useTransition, useState } from "react";
 import { materializeCommunityScheduleOccurrenceAction } from "@/controllers/community-schedule.actions";
 import type { CommunityScheduleOccurrenceView } from "@/services/community-schedule.service";
 import type { RaidIdWindow } from "@/lib/community-schedule";
+import { formatDate } from "@/lib/datetime";
+import { CommunityScheduleAttachRunDialog } from "@/components/manage/community-schedule-attach-run-dialog";
 
 const STATE_LABELS: Record<CommunityScheduleOccurrenceView["state"], string> = {
   RUN_CREATED: "Run created",
   NO_RUN_YET: "No run yet",
   AUTO_WAITING: "Auto-create waiting",
   AUTO_BLOCKED: "Auto-create blocked",
+  NOT_STARTED: "Not started yet",
   PAST: "Past",
 };
 
@@ -50,6 +53,15 @@ export function CommunityScheduleOccurrenceActions({
       <p className="text-[10px] text-muted">
         Auto-create: {materialization.autoCreateRun ? "ON" : "OFF"}
       </p>
+      {materialization.state === "RUN_CREATED" && materialization.origin === "ATTACHED" ? (
+        <p className="text-[10px] text-muted">Existing Run linked (not created from the Run Setup)</p>
+      ) : null}
+      {materialization.state === "NOT_STARTED" && materialization.startsWindowStartAt ? (
+        <p className="max-w-xs text-right text-[10px] text-muted">
+          Schedule starts with the raid ID of {formatDate(materialization.startsWindowStartAt)} — no Run is created
+          for this one.
+        </p>
+      ) : null}
       {materialization.blockedReason ? (
         <p className="max-w-xs text-right text-[10px] text-danger">{materialization.blockedReason}</p>
       ) : null}
@@ -70,6 +82,9 @@ export function CommunityScheduleOccurrenceActions({
         >
           {pending ? "Creating…" : "Create Run"}
         </button>
+      ) : null}
+      {materialization.canAttach ? (
+        <CommunityScheduleAttachRunDialog scheduleSlotId={scheduleSlotId} window={window} />
       ) : null}
       {error ? <p className="max-w-xs text-right text-[10px] text-danger">{error}</p> : null}
     </div>

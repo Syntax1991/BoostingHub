@@ -2,6 +2,7 @@ import { isEligibleRaidLead } from "@/auth/authorization";
 import { orm } from "@/lib/prisma";
 import {
   asBoolean,
+  asIsoTimestamp,
   asNumberOrNull,
   asString,
   asStringOrNull,
@@ -23,6 +24,8 @@ export type CommunityScheduleSlotRecord = {
   runTemplateId: string | null;
   autoCreateRun: boolean;
   runMode: CommunityScheduleRunMode;
+  /** Activation boundary (raid-ID window start); null = active immediately. */
+  firstWindowStartAt: string | null;
   compositionOverrideEnabled: boolean;
   desiredTankCountOverride: number | null;
   desiredHealerCountOverride: number | null;
@@ -61,6 +64,8 @@ export type CommunityScheduleSlotWrite = {
   runTemplateId: string | null;
   autoCreateRun: boolean;
   runMode: CommunityScheduleRunMode;
+  /** Activation boundary; omitted / null = active immediately. */
+  firstWindowStartAt?: string | null;
   /** Omitted → inherit RunTemplate defaults. */
   composition?: CommunityScheduleCompositionWrite;
   createdById: string;
@@ -76,6 +81,8 @@ export type CommunityScheduleSlotUpdate = {
   runTemplateId: string | null;
   autoCreateRun: boolean;
   runMode: CommunityScheduleRunMode;
+  /** Omitted → keep the current boundary; null → active immediately. */
+  firstWindowStartAt?: string | null;
   /** Omitted → inherit RunTemplate defaults. */
   composition?: CommunityScheduleCompositionWrite;
   updatedById: string;
@@ -109,6 +116,7 @@ function mapSlot(row: Record<string, unknown>): CommunityScheduleSlotRecord {
     runTemplateId: asStringOrNull(row.runTemplateId),
     autoCreateRun: asBoolean(row.autoCreateRun, false),
     runMode: mapRunMode(row.runMode),
+    firstWindowStartAt: row.firstWindowStartAt == null ? null : asIsoTimestamp(row.firstWindowStartAt),
     compositionOverrideEnabled: asBoolean(row.compositionOverrideEnabled, false),
     desiredTankCountOverride: asNumberOrNull(row.desiredTankCountOverride),
     desiredHealerCountOverride: asNumberOrNull(row.desiredHealerCountOverride),
@@ -216,6 +224,7 @@ export const communityScheduleRepository = {
       runTemplateId: input.runTemplateId,
       autoCreateRun: input.autoCreateRun,
       runMode: input.runMode,
+      firstWindowStartAt: input.firstWindowStartAt ?? null,
       compositionOverrideEnabled: composition.compositionOverrideEnabled,
       desiredTankCountOverride: composition.desiredTankCountOverride,
       desiredHealerCountOverride: composition.desiredHealerCountOverride,
@@ -245,6 +254,7 @@ export const communityScheduleRepository = {
       runTemplateId: input.runTemplateId,
       autoCreateRun: input.autoCreateRun,
       runMode: input.runMode,
+      ...(input.firstWindowStartAt !== undefined ? { firstWindowStartAt: input.firstWindowStartAt } : {}),
       compositionOverrideEnabled: composition.compositionOverrideEnabled,
       desiredTankCountOverride: composition.desiredTankCountOverride,
       desiredHealerCountOverride: composition.desiredHealerCountOverride,

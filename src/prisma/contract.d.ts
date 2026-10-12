@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'6ded3b0ad9f6ae304b15b27fe143363beed1ec34dbc4e4a35734562026b747c5'>;
+  StorageHashBase<'694ae2b74bb3d73ff2a3730e8eafe50ea015fa8ed8ec51989f56391f79aaa99f'>;
 export type ExecutionHash =
   ExecutionHashBase<'b27b9239312d18e407528e2d06057d2da4f3e67bdff7bffe5f827471950c2fa6'>;
 export type ProfileHash =
@@ -420,6 +420,7 @@ export type FieldOutputTypes = {
       readonly runId: CodecTypes['pg/text@1']['output'];
       readonly createdById: CodecTypes['pg/text@1']['output'] | null;
       readonly createdByKind: 'USER' | 'SYSTEM';
+      readonly origin: 'MATERIALIZED' | 'ATTACHED';
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
     };
     readonly CommunityScheduleSlot: {
@@ -433,6 +434,7 @@ export type FieldOutputTypes = {
       readonly runTemplateId: CodecTypes['pg/text@1']['output'] | null;
       readonly autoCreateRun: CodecTypes['pg/bool@1']['output'];
       readonly runMode: 'INHOUSE' | 'TEAM_RUN';
+      readonly firstWindowStartAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly compositionOverrideEnabled: CodecTypes['pg/bool@1']['output'];
       readonly desiredTankCountOverride: CodecTypes['pg/int4@1']['output'] | null;
       readonly desiredHealerCountOverride: CodecTypes['pg/int4@1']['output'] | null;
@@ -1156,6 +1158,7 @@ export type FieldInputTypes = {
       readonly runId: CodecTypes['pg/text@1']['input'];
       readonly createdById: CodecTypes['pg/text@1']['input'] | null;
       readonly createdByKind: 'USER' | 'SYSTEM';
+      readonly origin: 'MATERIALIZED' | 'ATTACHED';
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
     };
     readonly CommunityScheduleSlot: {
@@ -1169,6 +1172,7 @@ export type FieldInputTypes = {
       readonly runTemplateId: CodecTypes['pg/text@1']['input'] | null;
       readonly autoCreateRun: CodecTypes['pg/bool@1']['input'];
       readonly runMode: 'INHOUSE' | 'TEAM_RUN';
+      readonly firstWindowStartAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly compositionOverrideEnabled: CodecTypes['pg/bool@1']['input'];
       readonly desiredTankCountOverride: CodecTypes['pg/int4@1']['input'] | null;
       readonly desiredHealerCountOverride: CodecTypes['pg/int4@1']['input'] | null;
@@ -1890,6 +1894,7 @@ export type StorageColumnTypes = {
       readonly createdByKind: 'USER' | 'SYSTEM';
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly occurrenceStartAt: CodecTypes['pg/timestamptz-string@1']['output'];
+      readonly origin: 'MATERIALIZED' | 'ATTACHED';
       readonly runId: CodecTypes['pg/text@1']['output'];
       readonly scheduleSlotId: CodecTypes['pg/text@1']['output'] | null;
       readonly windowStartAt: CodecTypes['pg/timestamptz-string@1']['output'];
@@ -1903,6 +1908,7 @@ export type StorageColumnTypes = {
       readonly desiredHealerCountOverride: CodecTypes['pg/int4@1']['output'] | null;
       readonly desiredLootbuddyCountOverride: CodecTypes['pg/int4@1']['output'] | null;
       readonly desiredTankCountOverride: CodecTypes['pg/int4@1']['output'] | null;
+      readonly firstWindowStartAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly isActive: CodecTypes['pg/bool@1']['output'];
       readonly label: CodecTypes['pg/text@1']['output'];
@@ -2626,6 +2632,7 @@ export type StorageColumnInputTypes = {
       readonly createdByKind: 'USER' | 'SYSTEM';
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly occurrenceStartAt: CodecTypes['pg/timestamptz-string@1']['input'];
+      readonly origin: 'MATERIALIZED' | 'ATTACHED';
       readonly runId: CodecTypes['pg/text@1']['input'];
       readonly scheduleSlotId: CodecTypes['pg/text@1']['input'] | null;
       readonly windowStartAt: CodecTypes['pg/timestamptz-string@1']['input'];
@@ -2639,6 +2646,7 @@ export type StorageColumnInputTypes = {
       readonly desiredHealerCountOverride: CodecTypes['pg/int4@1']['input'] | null;
       readonly desiredLootbuddyCountOverride: CodecTypes['pg/int4@1']['input'] | null;
       readonly desiredTankCountOverride: CodecTypes['pg/int4@1']['input'] | null;
+      readonly firstWindowStartAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly isActive: CodecTypes['pg/bool@1']['input'];
       readonly label: CodecTypes['pg/text@1']['input'];
@@ -4306,6 +4314,15 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                 };
+                readonly origin: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/text@1', 'MATERIALIZED'>;
+                  };
+                };
                 readonly createdAt: {
                   readonly nativeType: 'timestamptz';
                   readonly codecId: 'pg/timestamptz-string@1';
@@ -4431,6 +4448,11 @@ type ContractBase = Omit<
                     readonly kind: 'literal';
                     readonly value: DefaultLiteralValue<'pg/text@1', 'INHOUSE'>;
                   };
+                };
+                readonly firstWindowStartAt: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                  readonly nullable: true;
                 };
                 readonly compositionOverrideEnabled: {
                   readonly nativeType: 'bool';
@@ -8331,6 +8353,10 @@ type ContractBase = Omit<
               readonly kind: 'valueSet';
               readonly values: readonly ['INHOUSE', 'TEAM_RUN'];
             };
+            readonly CommunityScheduleRunOrigin: {
+              readonly kind: 'valueSet';
+              readonly values: readonly ['MATERIALIZED', 'ATTACHED'];
+            };
             readonly CommunityWeekday: {
               readonly kind: 'valueSet';
               readonly values: readonly [
@@ -9776,6 +9802,10 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
+              readonly origin: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
               readonly createdAt: {
                 readonly nullable: false;
                 readonly type: {
@@ -9824,6 +9854,7 @@ type ContractBase = Omit<
                 readonly runId: { readonly column: 'runId' };
                 readonly createdById: { readonly column: 'createdById' };
                 readonly createdByKind: { readonly column: 'createdByKind' };
+                readonly origin: { readonly column: 'origin' };
                 readonly createdAt: { readonly column: 'createdAt' };
               };
             };
@@ -9865,6 +9896,13 @@ type ContractBase = Omit<
               readonly runMode: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly firstWindowStartAt: {
+                readonly nullable: true;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                };
               };
               readonly compositionOverrideEnabled: {
                 readonly nullable: false;
@@ -9974,6 +10012,7 @@ type ContractBase = Omit<
                 readonly runTemplateId: { readonly column: 'runTemplateId' };
                 readonly autoCreateRun: { readonly column: 'autoCreateRun' };
                 readonly runMode: { readonly column: 'runMode' };
+                readonly firstWindowStartAt: { readonly column: 'firstWindowStartAt' };
                 readonly compositionOverrideEnabled: {
                   readonly column: 'compositionOverrideEnabled';
                 };
@@ -14151,6 +14190,13 @@ type ContractBase = Omit<
             readonly members: readonly [
               { readonly name: 'INHOUSE'; readonly value: 'INHOUSE' },
               { readonly name: 'TEAM_RUN'; readonly value: 'TEAM_RUN' },
+            ];
+          };
+          readonly CommunityScheduleRunOrigin: {
+            readonly codecId: 'pg/text@1';
+            readonly members: readonly [
+              { readonly name: 'MATERIALIZED'; readonly value: 'MATERIALIZED' },
+              { readonly name: 'ATTACHED'; readonly value: 'ATTACHED' },
             ];
           };
           readonly DiscordScheduleBucket: {

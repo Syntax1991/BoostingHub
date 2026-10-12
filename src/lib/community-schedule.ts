@@ -172,3 +172,94 @@ export function compareScheduleOccurrences(
   if (byTime !== 0) return byTime;
   return a.slotId.localeCompare(b.slotId);
 }
+
+/**
+ * The occurrence of a slot inside the raid-ID window that contains `instant`
+ * (Wed 06:00 Europe/Berlin boundaries; DST-safe via resolveScheduleSlotOccurrence).
+ */
+export function scheduleOccurrenceInWindowOf(input: {
+  weekday: CommunityWeekday;
+  localStartTime: string;
+  instant: Date;
+  timeZone?: string;
+}): ScheduleOccurrence {
+  return resolveScheduleSlotOccurrence({
+    weekday: input.weekday,
+    localStartTime: input.localStartTime,
+    window: "CURRENT",
+    now: input.instant,
+    timeZone: input.timeZone,
+  });
+}
+
+/** How a Schedule slot starts: the materializer's activation boundary choice. */
+export type ScheduleStart =
+  | { mode: "IMMEDIATE" }
+  /** First occurrence is the one in the next raid ID (the current raid ID is skipped). */
+  | { mode: "NEXT_RAID_ID" }
+  /** Skip the first upcoming occurrence; start with the one after it. */
+  | { mode: "SKIP_FIRST" }
+  /** First occurrence starting on or after this Europe/Berlin calendar date (YYYY-MM-DD). */
+  | { mode: "FROM_DATE"; date: string };
+
+export const SCHEDULE_START_MODES = ["IMMEDIATE", "NEXT_RAID_ID", "SKIP_FIRST", "FROM_DATE"] as const;
+
+/**
+ * Resolves a start choice into the persisted boundary (`firstWindowStartAt`:
+ * raid-ID window start of the first eligible occurrence; null = immediately)
+ * plus that first eligible occurrence, deterministically from `now`.
+ * A boundary at or before the first upcoming occurrence's window is null.
+ */
+export function resolveScheduleStartBoundary(input: {
+  weekday: CommunityWeekday;
+  localStartTime: string;
+  start: ScheduleStart;
+  now?: Date;
+  timeZone?: string;
+}): { firstWindowStartAt: string | null; firstOccurrence: ScheduleOccurrence } {
+  const timeZone = input.timeZone ?? COMMUNITY_SCHEDULE_TIME_ZONE;
+  const now = input.now ?? new Date();
+  const base = { weekday: input.weekday, localStartTime: input.localStartTime, timeZone };
+  const current = resolveScheduleSlotOccurrence({ ...base, window: "CURRENT", now });
+  const upcoming =
+    Date.parse(current.scheduledStartAt) >= now.getTime()
+      ? current
+      : resolveScheduleSlotOccurrence({ ...base, window: "NEXT", now });
+  const after = (occurrence: ScheduleOccurrence) =>
+    scheduleOccurrenceInWindowOf({ ...base, instant: new Date(occurrence.windowEndAt) });
+
+  let first: ScheduleOccurrence;
+  switch (input.start.mode) {
+    case "IMMEDIATE":
+      return { firstWindowStartAt: null, firstOccurrence: upcoming };
+    case "NEXT_RAID_ID":
+      first = resolveScheduleSlotOccurrence({ ...base, window: "NEXT", now });
+      break;
+    case "SKIP_FIRST":
+      first = after(upcoming);
+      break;
+    case "FROM_DATE": {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(input.start.date)) {
+        throw new RangeError("Use a YYYY-MM-DD date.");
+      }
+      const dayStart = new Date(fromDatetimeLocalValue(`${input.start.date}T00:00`, timeZone));
+      if (Number.isNaN(dayStart.getTime())) {
+        throw new RangeError("Use a valid date.");
+      }
+      first = scheduleOccurrenceInWindowOf({ ...base, instant: dayStart });
+      if (Date.parse(first.scheduledStartAt) < dayStart.getTime()) {
+        first = after(first);
+      }
+      break;
+    }
+  }
+  if (Date.parse(first.windowStartAt) <= Date.parse(upcoming.windowStartAt)) {
+    return { firstWindowStartAt: null, firstOccurrence: upcoming };
+  }
+  return { firstWindowStartAt: first.windowStartAt, firstOccurrence: first };
+}
+
+/** True when an occurrence's raid-ID window lies before the slot's activation boundary. */
+export function isBeforeScheduleStart(firstWindowStartAt: string | null | undefined, windowStartAt: string): boolean {
+  return Boolean(firstWindowStartAt) && Date.parse(windowStartAt) < Date.parse(firstWindowStartAt!);
+}

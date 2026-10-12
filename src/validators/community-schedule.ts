@@ -50,10 +50,23 @@ const runTemplateIdSchema = z
 
 const runModeSchema = z.enum(COMMUNITY_SCHEDULE_RUN_MODES).optional().default("INHOUSE");
 
+/** When the slot starts: the materializer's activation boundary (resolved server-side). */
+export const scheduleStartSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("IMMEDIATE") }),
+  z.object({ mode: z.literal("NEXT_RAID_ID") }),
+  z.object({ mode: z.literal("SKIP_FIRST") }),
+  z.object({
+    mode: z.literal("FROM_DATE"),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a start date."),
+  }),
+]);
+
 const planSlotSchema = z.object({
   weekday: weekdaySchema,
   localStartTime: localStartTimeSchema,
   runMode: runModeSchema,
+  /** Use this existing Run as the slot's occurrence in its raid ID (attach, never rewritten). */
+  attachRunId: z.string().uuid("Choose a valid Run.").optional().nullable(),
 });
 
 /** Complete composition override (inherit when enabled is falsy / omitted). */
@@ -130,6 +143,8 @@ export const createCommunityScheduleSlotSchema = z
     runTemplateId: runTemplateIdSchema,
     autoCreateRun: z.boolean().optional().default(false),
     runMode: runModeSchema,
+    /** Omitted → active immediately (create) / keep the current boundary (update). */
+    start: scheduleStartSchema.optional(),
   })
   .and(scheduleCompositionSchema);
 
@@ -138,6 +153,21 @@ export const updateCommunityScheduleSlotSchema = createCommunityScheduleSlotSche
     slotId: z.string().uuid(),
   }),
 );
+
+export const listScheduleAttachCandidatesSchema = z.union([
+  z.object({ scheduleSlotId: z.string().uuid(), window: z.enum(["CURRENT", "NEXT"]).optional() }),
+  z.object({
+    weekday: weekdaySchema,
+    localStartTime: localStartTimeSchema,
+    raidLeadId: z.string().uuid("Choose an eligible raid lead."),
+    runTemplateId: runTemplateIdSchema,
+  }),
+]);
+
+export const attachScheduleRunSchema = z.object({
+  scheduleSlotId: z.string().uuid(),
+  runId: z.string().uuid("Choose a valid Run."),
+});
 
 export const communityScheduleSlotIdSchema = z.object({
   slotId: z.string().uuid(),
@@ -171,6 +201,7 @@ export const createSchedulePlanSchema = refineUniquePlanSlots(
         .min(1, "Add at least one weekly time.")
         .max(MAX_SLOTS_PER_PLAN, `At most ${MAX_SLOTS_PER_PLAN} times per plan.`),
       autoCreateRun: z.boolean(),
+      start: scheduleStartSchema.optional(),
       notes: notesSchema,
     })
     .and(scheduleCompositionSchema),
@@ -186,6 +217,7 @@ export const addScheduleTimesSchema = refineUniquePlanSlots(
         .min(1, "Add at least one weekly time.")
         .max(MAX_SLOTS_PER_PLAN, `At most ${MAX_SLOTS_PER_PLAN} times per plan.`),
       autoCreateRun: z.boolean(),
+      start: scheduleStartSchema.optional(),
       notes: notesSchema,
     })
     .and(scheduleCompositionSchema),
