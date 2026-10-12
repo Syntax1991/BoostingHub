@@ -7,11 +7,14 @@ import { ACTIVE_SIGNUP_STATUSES } from "@/models/enums";
 import { raidRepository } from "@/repositories/raid.repository";
 import {
   runCancelledSourceKey,
+  runReactivatedSourceKey,
   runRescheduledSourceKey,
   runScopeChangedSourceKey,
   userNotificationRepository,
 } from "@/repositories/user-notification.repository";
 import {
+  runCancelledChannelSourceKey,
+  runReactivatedChannelSourceKey,
   runRescheduledChannelSourceKey,
   runScopeChangedChannelSourceKey,
 } from "@/repositories/run-discord-announcement.repository";
@@ -785,6 +788,165 @@ describe("Run edit notification atomicity", () => {
         discordDmQuietHoursEnd: null,
       });
     }
+  });
+});
+
+describe("Cancel / Reactivate notification atomicity", () => {
+  /**
+   * Published Run: lead tank + player healer SELECTED, multi's two healers
+   * NOT_SELECTED (excluded from the cancel audience, as before).
+   */
+  async function publishedRun(daysAhead: number) {
+    const created = await runService.createRun(
+      lead,
+      venomousCreateInput({
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        scheduledStartAt: futureIso(daysAhead),
+        desiredTankCount: 1,
+        desiredHealerCount: 2,
+        desiredDpsCount: 1,
+      }),
+    );
+    createdRunIds.push(created.id);
+    const runId = created.id;
+    await runService.openRun(lead, runId);
+    const tank = await signupService.createBoosterSignup(lead, { runId, characterId: charLeadTank, role: "TANK", isBackup: false });
+    const heal = await signupService.createBoosterSignup(player, { runId, characterId: charPlayer, role: "HEALER", isBackup: false });
+    await signupService.createBoosterSignup(multi, { runId, characterId: charMultiA, role: "HEALER", isBackup: false });
+    await signupService.createBoosterSignup(multi, { runId, characterId: charMultiB, role: "HEALER", isBackup: false });
+    let view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.saveDraftSelection(lead, {
+      runId,
+      version: view.roster.version,
+      selections: [
+        { signupId: tank.id, selectedRole: "TANK" },
+        { signupId: heal.id, selectedRole: "HEALER" },
+      ],
+    });
+    view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.publishRoster(lead, { runId, version: view.roster.version, acknowledgeWarnings: true });
+    return runId;
+  }
+
+  async function notes(runId: string, type: "RUN_CANCELLED" | "RUN_REACTIVATED") {
+    return (await orm.UserNotification.where({ runId, type }).all()) as Array<{
+      userId: string;
+      sourceKey: string;
+      discordDeliveryStatus: string;
+      discordDeliverAfter: string | null;
+    }>;
+  }
+  async function announcements(runId: string, type: "RUN_CANCELLED" | "RUN_REACTIVATED") {
+    return (await orm.RunDiscordAnnouncement.where({ runId, type }).all()) as Array<{ sourceKey: string; status: string }>;
+  }
+
+  it("cancel: a failing UserNotification write rolls back the cancellation (status, revision, announcement, rows)", async () => {
+    const runId = await publishedRun(110);
+    const spy = vi.spyOn(userNotificationRepository, "createInTx").mockRejectedValueOnce(new Error("NOTIFICATION_WRITE_FAILED"));
+    try {
+      await expect(runService.cancelRun(lead, runId)).rejects.toThrow(/NOTIFICATION_WRITE_FAILED/);
+    } finally {
+      spy.mockRestore();
+    }
+    const run = await runRepository.findById(runId);
+    expect(run?.status).toBe("PUBLISHED");
+    expect(run?.cancelRevision).toBe(0);
+    expect(run?.cancelledFromStatus).toBeNull();
+    expect(await announcements(runId, "RUN_CANCELLED")).toHaveLength(0);
+    expect(await notes(runId, "RUN_CANCELLED")).toHaveLength(0);
+
+    await expect(runService.cancelRun(lead, runId, { failBeforeCommit: true })).rejects.toThrow(/TEST_HOOK_FAIL_BEFORE_COMMIT/);
+    expect((await runRepository.findById(runId))?.status).toBe("PUBLISHED");
+    expect(await announcements(runId, "RUN_CANCELLED")).toHaveLength(0);
+    expect(await notes(runId, "RUN_CANCELLED")).toHaveLength(0);
+  });
+
+  it("cancel success commits CANCELLED + announcement + one RUN_CANCELLED per active User; preferences / Quiet Hours unchanged", async () => {
+    await orm.User.where({ id: ids.player }).update({
+      discordDmQuietHoursEnabled: true,
+      discordDmQuietHoursStart: "00:00",
+      discordDmQuietHoursEnd: "23:59",
+    });
+    try {
+      const runId = await publishedRun(120);
+      await runService.cancelRun(lead, runId);
+      const run = await runRepository.findById(runId);
+      expect(run?.status).toBe("CANCELLED");
+      expect(run?.cancelRevision).toBe(1);
+      expect((await announcements(runId, "RUN_CANCELLED")).map((row) => row.sourceKey)).toEqual([
+        runCancelledChannelSourceKey(runId, 1),
+      ]);
+      const rows = await notes(runId, "RUN_CANCELLED");
+      // SELECTED lead + player; multi is NOT_SELECTED → not in the cancel audience (unchanged).
+      expect(rows.map((row) => row.userId).sort()).toEqual([ids.lead, ids.player].sort());
+      expect(rows.map((row) => row.sourceKey).sort()).toEqual(
+        [runCancelledSourceKey(runId, 1, ids.lead), runCancelledSourceKey(runId, 1, ids.player)].sort(),
+      );
+      const playerRow = rows.find((row) => row.userId === ids.player)!;
+      expect(playerRow.discordDeliveryStatus).toBe("PENDING");
+      expect(playerRow.discordDeliverAfter).not.toBeNull();
+      // Lead has no Discord identity → SKIPPED, as before.
+      expect(rows.find((row) => row.userId === ids.lead)?.discordDeliveryStatus).toBe("SKIPPED");
+    } finally {
+      await orm.User.where({ id: ids.player }).update({
+        discordDmQuietHoursEnabled: false,
+        discordDmQuietHoursStart: null,
+        discordDmQuietHoursEnd: null,
+      });
+    }
+  });
+
+  it("reactivate: a failing write rolls back status, announcement, rows AND the retirement of pending cancel DMs", async () => {
+    const runId = await publishedRun(130);
+    await runService.cancelRun(lead, runId);
+    const cancelBefore = await notes(runId, "RUN_CANCELLED");
+    expect(cancelBefore.find((row) => row.userId === ids.player)?.discordDeliveryStatus).toBe("PENDING");
+
+    const spy = vi.spyOn(userNotificationRepository, "createInTx").mockRejectedValueOnce(new Error("NOTIFICATION_WRITE_FAILED"));
+    try {
+      await expect(runService.reactivateRun(lead, runId)).rejects.toThrow(/NOTIFICATION_WRITE_FAILED/);
+    } finally {
+      spy.mockRestore();
+    }
+    const run = await runRepository.findById(runId);
+    expect(run?.status).toBe("CANCELLED");
+    expect(run?.cancelledFromStatus).toBe("PUBLISHED");
+    expect(await announcements(runId, "RUN_REACTIVATED")).toHaveLength(0);
+    expect(await notes(runId, "RUN_REACTIVATED")).toHaveLength(0);
+    expect((await announcements(runId, "RUN_CANCELLED"))[0]?.status).toBe("PENDING");
+    expect((await notes(runId, "RUN_CANCELLED")).find((row) => row.userId === ids.player)?.discordDeliveryStatus).toBe(
+      "PENDING",
+    );
+  });
+
+  it("reactivate success commits the restored status + announcement + RUN_REACTIVATED rows and retires undelivered cancel DMs; a second cancel retires undelivered reactivate DMs", async () => {
+    const runId = await publishedRun(140);
+    await runService.cancelRun(lead, runId);
+    await runService.reactivateRun(lead, runId);
+
+    const run = await runRepository.findById(runId);
+    expect(run?.status).toBe("PUBLISHED");
+    expect((await announcements(runId, "RUN_REACTIVATED")).map((row) => row.sourceKey)).toEqual([
+      runReactivatedChannelSourceKey(runId, 1),
+    ]);
+    const reactivated = await notes(runId, "RUN_REACTIVATED");
+    expect(reactivated.map((row) => row.userId).sort()).toEqual([ids.lead, ids.player].sort());
+    expect(reactivated.find((row) => row.userId === ids.player)?.sourceKey).toBe(
+      runReactivatedSourceKey(runId, 1, ids.player),
+    );
+    expect((await notes(runId, "RUN_CANCELLED")).find((row) => row.userId === ids.player)?.discordDeliveryStatus).toBe(
+      "SKIPPED",
+    );
+
+    // Cancel again (revision 2): the still-PENDING reactivate DM is retired, new cancel rows use revision 2.
+    await runService.cancelRun(lead, runId);
+    expect((await notes(runId, "RUN_REACTIVATED")).find((row) => row.userId === ids.player)?.discordDeliveryStatus).toBe(
+      "SKIPPED",
+    );
+    const cancelled = await notes(runId, "RUN_CANCELLED");
+    expect(cancelled.filter((row) => row.sourceKey.startsWith(`run-cancelled:${runId}:2:`))).toHaveLength(2);
+    expect(cancelled).toHaveLength(4);
   });
 });
 

@@ -47,9 +47,10 @@ import {
   runScopeChangedChannelSourceKey,
 } from "@/repositories/run-discord-announcement.repository";
 import {
+  createRunCancelledNotificationsInTx,
+  createRunReactivatedNotificationsInTx,
   createRunRescheduledNotificationsInTx,
   createRunScopeChangedNotificationsInTx,
-  runLifecycleNotificationService,
 } from "@/services/run-lifecycle-notifications.service";
 import { runDomainEventService } from "@/services/run-domain-event.service";
 import { runTemplateService } from "@/services/run-template.service";
@@ -1241,7 +1242,8 @@ export const runService = {
     return { id: run.id };
   },
 
-  async cancelRun(user: AuthenticatedUser, runId: string) {
+  /** `txHooks` is test-only fault injection for the cancel transaction. */
+  async cancelRun(user: AuthenticatedUser, runId: string, txHooks: LifecycleAnnouncementTxHooks = {}) {
     const run = await loadManagedRun(user, runId);
     if (!getRunLifecycleCapabilities({
       status: run.status,
@@ -1253,27 +1255,29 @@ export const runService = {
       throw new DomainError("RUN_CANNOT_CANCEL", "This run cannot be cancelled.");
     }
 
-    // Channel lifecycle announcement is authoritative and atomic with CANCELLED.
+    // CANCELLED, the cancelRevision bump, the RUN_CANCELLED channel announcement
+    // and the personal RUN_CANCELLED UserNotifications commit in ONE transaction.
     // The repository re-reads Run state, derives cancelRevision, snapshots
-    // pre-cancel fields, and skips any still-PENDING prior RUN_REACTIVATED
-    // channel announcement inside the same transaction.
-    // Personal UserNotifications are separate (notifyRunCancelled) and must not
-    // be mixed into this transaction — bot retirement waits on RunDiscordAnnouncement
-    // terminal status before transcript/archive and channel deletion.
-    const { cancelRevision } = await runRepository.cancelWithDiscordAnnouncement(run.id, {
-      scheduledStartAt: run.scheduledStartAt,
-      productLabel: run.contentDisplay.productLabel || run.title,
-      difficulty: run.difficulty,
-      lootType: run.lootType,
-    });
-    await runLifecycleNotificationService.notifyRunCancelled({
-      runId: run.id,
-      cancelRevision,
-      runTitle: run.title,
-      scheduledStartAt: run.scheduledStartAt,
-      difficulty: run.difficulty,
-      lootType: run.lootType,
-    });
+    // pre-cancel fields and skips any still-PENDING prior RUN_REACTIVATED
+    // announcement. Bot retirement still waits only on the announcement's
+    // terminal status; UserNotifications never gate it.
+    const { cancelRevision } = await runRepository.cancelWithDiscordAnnouncement(
+      run.id,
+      {
+        scheduledStartAt: run.scheduledStartAt,
+        productLabel: run.contentDisplay.productLabel || run.title,
+        difficulty: run.difficulty,
+        lootType: run.lootType,
+      },
+      txHooks,
+      (txOrm, context) =>
+        createRunCancelledNotificationsInTx(txOrm, {
+          runId: run.id,
+          cancelRevision: context.cancelRevision,
+          runTitle: run.title,
+          scheduledStartAt: run.scheduledStartAt,
+        }),
+    );
     await activityRepository.create({
       userId: user.id,
       type: "RUN_CANCELLED",
@@ -1289,7 +1293,8 @@ export const runService = {
     return { id: run.id };
   },
 
-  async reactivateRun(user: AuthenticatedUser, runId: string) {
+  /** `txHooks` is test-only fault injection for the reactivate transaction. */
+  async reactivateRun(user: AuthenticatedUser, runId: string, txHooks: LifecycleAnnouncementTxHooks = {}) {
     const run = await loadManagedRun(user, runId);
     if (!getRunLifecycleCapabilities({
       status: run.status,
@@ -1321,25 +1326,32 @@ export const runService = {
     // re-validates under lock and rejects ABA (rev1 intent against rev2).
     const expectedCancelRevision = run.cancelRevision;
 
-    await runRepository.reactivateWithDiscordAnnouncement(run.id, expectedCancelRevision, {
-      scheduledStartAt: run.scheduledStartAt,
-      productLabel: run.contentDisplay.productLabel || run.title,
-      difficulty: run.difficulty,
-      lootType: run.lootType,
-    });
+    // Restored status, the RUN_REACTIVATED announcement and the personal
+    // RUN_REACTIVATED UserNotifications (plus retiring this cycle's undelivered
+    // cancel DMs) commit in ONE transaction.
+    await runRepository.reactivateWithDiscordAnnouncement(
+      run.id,
+      expectedCancelRevision,
+      {
+        scheduledStartAt: run.scheduledStartAt,
+        productLabel: run.contentDisplay.productLabel || run.title,
+        difficulty: run.difficulty,
+        lootType: run.lootType,
+      },
+      txHooks,
+      (txOrm, context) =>
+        createRunReactivatedNotificationsInTx(txOrm, {
+          runId: run.id,
+          cancelRevision: context.cancelRevision,
+          runTitle: run.title,
+          scheduledStartAt: run.scheduledStartAt,
+        }),
+    );
 
     // Historical archive pointers describe the cancelled channel's retirement,
     // not the currently active Run — clear so a later retirement can post again.
     await discordSyncService.clearArchiveArtifacts(run.id);
 
-    await runLifecycleNotificationService.notifyRunReactivated({
-      runId: run.id,
-      cancelRevision: expectedCancelRevision,
-      runTitle: run.title,
-      scheduledStartAt: run.scheduledStartAt,
-      difficulty: run.difficulty,
-      lootType: run.lootType,
-    });
     await activityRepository.create({
       userId: user.id,
       type: "RUN_REACTIVATED",
