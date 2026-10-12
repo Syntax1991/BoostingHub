@@ -7,6 +7,7 @@ import { communityScheduleMaterializationService } from "@/services/community-sc
 import { communityScheduleService } from "@/services/community-schedule.service";
 import {
   communityScheduleOccurrenceService,
+  type AdoptionCandidate,
   type AttachCandidate,
 } from "@/services/community-schedule-occurrence.service";
 import { communityScheduleRepository } from "@/repositories/community-schedule.repository";
@@ -21,6 +22,7 @@ import {
   addScheduleTimesSchema,
   attachScheduleRunSchema,
   communityScheduleSlotIdSchema,
+  listScheduleAdoptionCandidatesSchema,
   listScheduleAttachCandidatesSchema,
   createCommunityScheduleSlotSchema,
   createSchedulePlanSchema,
@@ -309,6 +311,26 @@ export async function listScheduleAttachCandidatesAction(
   }
 }
 
+export type ListScheduleAdoptionCandidatesActionResult =
+  | { ok: true; candidates: AdoptionCandidate[] }
+  | { ok: false; code: string; message: string };
+
+/** Existing Runs a new Schedule time can start from, with the configuration each would adopt. */
+export async function listScheduleAdoptionCandidatesAction(
+  input: unknown,
+): Promise<ListScheduleAdoptionCandidatesActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = listScheduleAdoptionCandidatesSchema.parse(input);
+    const candidates = await communityScheduleOccurrenceService.listAdoptionCandidates(user, {
+      start: parsed.start,
+    });
+    return { ok: true, candidates };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
 export type AttachScheduleRunActionResult =
   | { ok: true; message: string; runId: string }
   | { ok: false; code: string; message: string };
@@ -322,7 +344,13 @@ export async function attachScheduleRunAction(input: unknown): Promise<AttachSch
     revalidateSchedule();
     revalidatePath("/manage/runs");
     revalidatePath(`/runs/${link.runId}`);
-    return { ok: true, message: "Existing Run linked to this schedule occurrence.", runId: link.runId };
+    return {
+      ok: true,
+      message: parsed.adoptSetup
+        ? "Existing Run linked; future occurrences now use its Run Setup."
+        : "Existing Run linked to this schedule occurrence.",
+      runId: link.runId,
+    };
   } catch (error) {
     return mapActionError(error);
   }

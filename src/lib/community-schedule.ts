@@ -349,3 +349,16 @@ export function describeScheduleCleanupPreview(counts: ScheduleRunCounts): strin
   lines.push("Linked existing Runs will remain unchanged.");
   return lines;
 }
+
+/** Schedule weekday + wall-clock start (Europe/Berlin) of a concrete instant, e.g. an existing Run's start. */
+export function scheduleTimeOfInstant(
+  instant: Date | string,
+  timeZone: string = COMMUNITY_SCHEDULE_TIME_ZONE,
+): { weekday: CommunityWeekday; localStartTime: string } {
+  const parts = zonedParts(new Date(instant), timeZone);
+  const weekday = SHORT_TO_WEEKDAY[parts.weekday];
+  if (!weekday) {
+    throw new RangeError(`Unexpected weekday ${parts.weekday}`);
+  }
+  return { weekday, localStartTime: `${pad(Number(parts.hour))}:${pad(Number(parts.minute))}` };
+}

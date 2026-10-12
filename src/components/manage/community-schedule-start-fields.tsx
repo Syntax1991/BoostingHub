@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { listScheduleAttachCandidatesAction } from "@/controllers/community-schedule.actions";
+import {
+  listScheduleAdoptionCandidatesAction,
+  listScheduleAttachCandidatesAction,
+} from "@/controllers/community-schedule.actions";
 import type { CommunityWeekday } from "@/models/enums";
-import type { AttachCandidate } from "@/services/community-schedule-occurrence.service";
+import type { AdoptionCandidate, AttachCandidate } from "@/services/community-schedule-occurrence.service";
 
 export type ScheduleStartMode = "KEEP" | "IMMEDIATE" | "NEXT_RAID_ID" | "SKIP_FIRST" | "FROM_DATE";
 export type ScheduleStartState = { mode: ScheduleStartMode; date: string };
@@ -153,6 +156,80 @@ export function FirstOccurrenceSelect({
           {warning.message}
         </span>
       ))}
+      {loadError ? <span className="text-[11px] text-danger">{loadError}</span> : null}
+    </label>
+  );
+}
+
+/**
+ * "Use existing Run" as the starting point of NEW Schedule times: lists
+ * upcoming, unlinked Runs (after the chosen Starts) with the configuration each
+ * would adopt — weekday / time (Europe/Berlin), Raid Lead and Run Setup. The
+ * caller applies the adoption; the Run itself is never changed.
+ */
+export function ExistingRunAdoptSelect({
+  start,
+  value,
+  onChange,
+  label = "Start from an existing Run (optional)",
+}: {
+  start: ScheduleStartState;
+  value: string | null;
+  onChange: (candidate: AdoptionCandidate | null) => void;
+  label?: string;
+}) {
+  const [candidates, setCandidates] = useState<AdoptionCandidate[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const valueRef = useRef(value);
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    valueRef.current = value;
+    onChangeRef.current = onChange;
+  });
+
+  const startMode = start.mode;
+  const startDate = start.date;
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const startPayload =
+        startMode === "FROM_DATE" && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)
+          ? undefined
+          : scheduleStartPayload({ mode: startMode, date: startDate });
+      const result = await listScheduleAdoptionCandidatesAction({ start: startPayload });
+      if (cancelled) return;
+      const next = result.ok ? result.candidates : [];
+      setLoadError(result.ok ? null : result.message);
+      setCandidates(next);
+      // A Run that no longer qualifies (e.g. before a later Starts) is dropped.
+      if (valueRef.current && !next.some((candidate) => candidate.runId === valueRef.current)) {
+        onChangeRef.current(null);
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [startMode, startDate]);
+
+  return (
+    <label className="grid w-full gap-1 text-sm">
+      <span className="text-xs text-muted">{label}</span>
+      <select
+        value={value ?? ""}
+        onChange={(event) =>
+          onChange(candidates.find((candidate) => candidate.runId === event.target.value) ?? null)
+        }
+        className="h-9 rounded-md border border-border bg-surface-raised px-2"
+      >
+        <option value="">— None —</option>
+        {candidates.map((candidate) => (
+          <option key={candidate.runId} value={candidate.runId}>
+            {candidate.label}
+          </option>
+        ))}
+      </select>
       {loadError ? <span className="text-[11px] text-danger">{loadError}</span> : null}
     </label>
   );
