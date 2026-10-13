@@ -406,8 +406,10 @@ export const communityScheduleOccurrenceService = {
     const now = input.now ?? new Date();
     const slot = {
       id: "",
-      raidLeadName: "",
       ...input.slot,
+      // A draft slot (create dialogs) carries only the lead id — the Raid Lead warning needs the name.
+      raidLeadName:
+        input.slot.raidLeadName ?? (await userRepository.findById(input.slot.raidLeadId))?.name ?? "the selected Raid Lead",
     } as CommunityScheduleSlotRecord;
     const template = slot.runTemplateId ? await runTemplateRepository.findById(slot.runTemplateId) : null;
 
