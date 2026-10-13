@@ -73,18 +73,23 @@ Schedule view shows them as **Before schedule start** with the start date.
 A boundary at or before the first upcoming occurrence is stored as `null`. Changing the start (Edit → Starts; default
 **Keep**) only affects future, not-yet-fulfilled occurrences; existing Runs and links are never touched.
 
-## Start a Schedule from an existing Run (adoption)
+## Schedule source: Run Setup or existing Run (basis Run)
 
-**Create Schedule → First occurrence → Use existing Run** is the one workflow: picking an upcoming, unlinked Run
-(eligible as for attach, on/after the chosen **Starts**) for a weekly time sets that time's weekday / time from the
-Run's start (Europe/Berlin, `scheduleTimeOfInstant`) and attaches the Run as its first occurrence (`ATTACHED`). The
-**first** time that uses an existing Run is the new Schedule's configuration source:
+Two different intents — kept apart on purpose:
 
-| field | adopted from the source Run |
+- **Basis Run** (Create Schedule → *Schedule source: Existing Run*): an existing Run **defines** the new Schedule.
+- **Existing Run for one occurrence** (an additional time, Add times, the Schedule view): the Run only **satisfies**
+  that occurrence and never redefines the Schedule.
+
+With source *Existing Run* the request carries `basisRunId`, and the server derives everything from it, in one
+transaction with the slots, start boundary and attachment:
+
+| field | derived from the basis Run |
 | --- | --- |
-| Run Setup | see below — no Run Setup selection needed |
-| Raid Lead | the Run's Raid Lead — only if still eligible, otherwise the user must choose (the only manual step) |
-| weekday / time | the Run's start in Europe/Berlin |
+| first weekly time | weekday / time of its start in Europe/Berlin (`scheduleTimeOfInstant`) |
+| first occurrence | the basis Run itself (`ATTACHED`) |
+| Run Setup | see below — no Run Setup selection |
+| Raid Lead | its Raid Lead — only if still eligible, otherwise the user must choose (the only manual step) |
 
 Run Setup: a Run has no Run Setup reference (no `RunTemplate` FK; Schedule-created Runs are linked through
 `CommunityScheduleRun` and are therefore never attachable again), so there is no provenance to follow. The Run's own
@@ -93,15 +98,17 @@ ordered `RunRaidContent` incl. boss counts, planned composition) is reused; othe
 from that snapshot (`RunRaidContent` → `RunTemplateRaidContent`, `desired*Count`; never roster / signups, never a
 Product guess). One-time copy, no live coupling in either direction.
 
-Server authority: `createSchedulePlan` without `runSetup` adopts the Run Setup from the first slot with `attachRunId`,
-and without `raidLeadId` that Run's (eligible) Raid Lead — in the same transaction as the slots, start boundary and
-attachment. Neither given nor an existing Run → refused. An explicit `runSetup` / `raidLeadId` ("Use a different Run
-Setup for future occurrences", a changed Raid Lead) overrides the adoption for **future** occurrences only; the
-attached Run keeps its own time, Raid Lead, scope and roster. No Run is created on save (Monday release unchanged).
+`basisWeekday` / `basisLocalStartTime`, `raidLeadId` and `runSetup` are optional **future** overrides (the dialog only
+sends values the user changed); the basis Run keeps its own time, Raid Lead, scope and roster. Further weekly times are
+optional and use the Schedule's Run Setup / Raid Lead. With source *Run Setup*, `runSetup` and `raidLeadId` are
+required; an existing Run on a time is attach-only. Basis candidates are all upcoming, unarchived, attachable,
+unlinked Runs (no raid-ID window limit) on/after the chosen **Starts**; the list is reloaded on every dialog opening.
+No Run is created on save (Monday release unchanged).
 
-**Add times** uses the same first-occurrence control, but only weekday / time follow the Run — the group's Run Setup
-and Raid Lead stay authoritative. On an **existing** Schedule, **Use existing Run** attaches only; the Run's Run Setup
-is used for future occurrences only with the explicit option *Also use this Run's setup for future occurrences*.
+**Add times** has no basis semantics: an existing Run takes over that time's weekday / time and is attached; the
+group's Run Setup and Raid Lead stay authoritative. On an **existing** Schedule, **Use existing Run** attaches only;
+the Run's Run Setup is used for future occurrences only with the explicit option *Also use this Run's setup for future
+occurrences*.
 
 ## Use existing Run
 

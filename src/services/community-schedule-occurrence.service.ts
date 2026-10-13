@@ -484,19 +484,9 @@ export const communityScheduleOccurrenceService = {
       throw new DomainError("NOT_AUTHORIZED", "You cannot manage this schedule.", 403);
     }
     const now = input.now ?? new Date();
-    const { currentStart } = classifyRunWeek({
-      scheduledStartAt: now.toISOString(),
-      now,
-      timeZone: COMMUNITY_SCHEDULE_TIME_ZONE,
-    });
-    const nextEnd = resolveScheduleSlotOccurrence({
-      weekday: "WEDNESDAY",
-      localStartTime: "12:00",
-      window: "NEXT",
-      now,
-      timeZone: COMMUNITY_SCHEDULE_TIME_ZONE,
-    }).windowEndAt;
-    const ids = await runRepository.listIdsStartingBetween(currentStart, nextEnd, ATTACHABLE_RUN_STATUSES);
+    // Every upcoming Run is a candidate — no raid-ID window limit (a basis Run
+    // may be several raid IDs ahead). There is no other planning horizon.
+    const ids = await runRepository.listIdsStartingFrom(now.toISOString(), ATTACHABLE_RUN_STATUSES);
     const runs = await runRepository.listManagedByIds(ids);
     // Only still-eligible Raid Leads are adopted; otherwise the user must choose one.
     const leads = new Map((await userRepository.listEligibleRaidLeads()).map((lead) => [lead.id, lead]));

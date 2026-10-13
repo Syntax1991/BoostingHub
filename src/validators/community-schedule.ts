@@ -189,15 +189,19 @@ export const createSchedulePlanSchema = refineUniquePlanSlots(
   z
     .object({
       /**
-       * Omitted → the Raid Lead of the configuration-source Run (the first slot
-       * using an existing Run), when still eligible.
+       * Schedule source "Existing Run": the basis Run defines the new Schedule —
+       * Run Setup (matching or snapshot), initial Raid Lead, the first weekly
+       * time (weekday / time from its start, Europe/Berlin) and is attached as
+       * that time's first occurrence. All derived on the server.
        */
+      basisRunId: z.string().uuid("Choose a valid Run.").optional(),
+      /** Future-occurrence overrides of the basis time (default: the basis Run's weekday / time). */
+      basisWeekday: weekdaySchema.optional(),
+      basisLocalStartTime: localStartTimeSchema.optional(),
+      basisRunMode: z.enum(COMMUNITY_SCHEDULE_RUN_MODES).optional(),
+      /** Required for source "Run Setup"; with a basis Run an explicit future override of its Raid Lead. */
       raidLeadId: z.string().uuid("Choose an eligible raid lead.").optional(),
-      /**
-       * Omitted → adopted from the configuration-source Run (the first slot
-       * using an existing Run): matching Run Setup, else a snapshot. Given →
-       * an explicit choice that overrides the adoption.
-       */
+      /** Required for source "Run Setup"; with a basis Run an explicit future override of the adopted setup. */
       runSetup: z
         .discriminatedUnion("mode", [
           z.object({
@@ -210,9 +214,9 @@ export const createSchedulePlanSchema = refineUniquePlanSlots(
           }),
         ])
         .optional(),
+      /** Weekly times — with a basis Run, the times in addition to the basis time (may be empty). */
       slots: z
         .array(planSlotSchema)
-        .min(1, "Add at least one weekly time.")
         .max(MAX_SLOTS_PER_PLAN, `At most ${MAX_SLOTS_PER_PLAN} times per plan.`),
       autoCreateRun: z.boolean(),
       start: scheduleStartSchema.optional(),
