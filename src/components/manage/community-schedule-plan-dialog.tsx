@@ -78,23 +78,40 @@ export function CommunitySchedulePlanDialog({
   const [autoCreateRun, setAutoCreateRun] = useState(false);
   const [slots, setSlots] = useState<SlotRow[]>([newSlotRow()]);
   const [start, setStart] = useState<ScheduleStartState>(DEFAULT_SCHEDULE_START);
-  // One source of truth: slot.attachRunId. Everything shown about the adoption is derived from it.
-  const { candidates, loadError } = useAdoptionCandidates(start, (available) =>
-    setSlots((current) =>
-      current.some((row) => row.attachRunId && !available.has(row.attachRunId))
-        ? current.map((row) =>
-            row.attachRunId && !available.has(row.attachRunId) ? { ...row, attachRunId: null } : row,
-          )
-        : current,
-    ),
+  /**
+   * Schedule source. "run": a basis Run defines the new Schedule (Run Setup,
+   * initial Raid Lead, first weekly time, first occurrence) — derived on the
+   * server from basisRunId. "setup": the normal Run Setup workflow.
+   */
+  const [scheduleSource, setScheduleSource] = useState<"setup" | "run">("setup");
+  const [basisRunId, setBasisRunId] = useState<string | null>(null);
+  /** Future-occurrence values of the basis time (start as the basis Run's weekday / time). */
+  const [basisWeekday, setBasisWeekday] = useState<(typeof COMMUNITY_WEEKDAYS)[number]>("FRIDAY");
+  const [basisTime, setBasisTime] = useState("20:00");
+  const [basisRunMode, setBasisRunMode] = useState<CommunityScheduleRunMode>("INHOUSE");
+  const { candidates, loadError } = useAdoptionCandidates(
+    start,
+    (available) => {
+      // Drop choices that no longer qualify (e.g. a later Starts, attached meanwhile).
+      setBasisRunId((current) => (current && !available.has(current) ? null : current));
+      setSlots((current) =>
+        current.some((row) => row.attachRunId && !available.has(row.attachRunId))
+          ? current.map((row) =>
+              row.attachRunId && !available.has(row.attachRunId) ? { ...row, attachRunId: null } : row,
+            )
+          : current,
+      );
+    },
     open ? openKey : null,
   );
-  /** Configuration source of the new Schedule: the first time that uses an existing Run. */
-  const sourceRunId = slots.find((row) => row.attachRunId)?.attachRunId ?? null;
-  const source = sourceRunId ? (candidates.find((candidate) => candidate.runId === sourceRunId) ?? null) : null;
-  /** Run Setup comes from the existing Run (resolved by the server) unless explicitly overridden. */
-  const adoptSetup = sourceRunId != null && !overrideAdoptedSetup;
-  const chosenRunIds = new Set(slots.flatMap((row) => (row.attachRunId ? [row.attachRunId] : [])));
+  const byBasis = scheduleSource === "run";
+  const basis = byBasis && basisRunId ? (candidates.find((candidate) => candidate.runId === basisRunId) ?? null) : null;
+  /** Run Setup comes from the basis Run (resolved by the server) unless explicitly overridden. */
+  const adoptSetup = byBasis && !overrideAdoptedSetup;
+  const chosenRunIds = new Set([
+    ...(byBasis && basisRunId ? [basisRunId] : []),
+    ...slots.flatMap((row) => (row.attachRunId ? [row.attachRunId] : [])),
+  ]);
   const [name, setName] = useState("");
   const initialProduct = (): ProductSelection => {
     const first = products[0];
@@ -130,16 +147,34 @@ export function CommunitySchedulePlanDialog({
     : "—";
 
   /**
-   * First occurrence of one weekly time. Picking an existing Run sets that
-   * time's weekday / time from the Run (Europe/Berlin). For the first such time
-   * — the configuration source — its Raid Lead is adopted too (empty when no
-   * longer eligible) and the Run Setup follows it. All of it stays editable for
-   * FUTURE occurrences; the Run itself is never changed.
+   * The basis Run of a new Schedule: its eligible Raid Lead and weekday / time
+   * (Europe/Berlin) become the initial values; the Run Setup follows it on the
+   * server. All stay editable for FUTURE occurrences — the Run itself is never
+   * changed.
+   */
+  function chooseBasis(candidate: AdoptionCandidate | null) {
+    setBasisRunId(candidate?.runId ?? null);
+    if (!candidate) return;
+    setRaidLeadId(candidate.raidLeadId ?? "");
+    setBasisWeekday(candidate.weekday);
+    setBasisTime(candidate.localStartTime);
+    setOverrideAdoptedSetup(false);
+  }
+
+  function chooseSource(next: "setup" | "run") {
+    setScheduleSource(next);
+    setBasisRunId(null);
+    setOverrideAdoptedSetup(false);
+    // A basis Run brings its own first time; further times are optional.
+    setSlots(next === "run" ? [] : [newSlotRow()]);
+  }
+
+  /**
+   * First occurrence of one additional weekly time: an existing Run only
+   * satisfies that occurrence (its weekday / time are taken over) — it never
+   * redefines the Schedule.
    */
   function chooseFirstOccurrence(rowKey: string, candidate: AdoptionCandidate | null) {
-    const index = slots.findIndex((row) => row.key === rowKey);
-    const becomesSource =
-      candidate != null && !slots.some((row, other) => other < index && row.attachRunId);
     setSlots((current) =>
       current.map((row) =>
         row.key !== rowKey
@@ -154,14 +189,13 @@ export function CommunitySchedulePlanDialog({
             : { ...row, attachRunId: null },
       ),
     );
-    if (candidate && becomesSource) {
-      setRaidLeadId(candidate.raidLeadId ?? "");
-      setOverrideAdoptedSetup(false);
-    }
   }
 
   function resetForm() {
     setOverrideAdoptedSetup(false);
+    setScheduleSource("setup");
+    setBasisRunId(null);
+    setBasisRunMode("INHOUSE");
     setStart(DEFAULT_SCHEDULE_START);
     setError(null);
     setRaidLeadId(defaultRaidLeadId ?? raidLeads[0]?.id ?? "");
@@ -202,57 +236,43 @@ export function CommunitySchedulePlanDialog({
       runMode: slot.runMode,
       attachRunId: slot.attachRunId,
     }));
-    const payload = adoptSetup
-      ? // No runSetup: the server adopts it from the first existing-Run occurrence.
-        {
-            raidLeadId,
-            slots: slotPayload,
-            autoCreateRun,
-            start: scheduleStartPayload(start),
-            notes: planNotes,
-            ...composition,
-          }
-        : setupMode === "existing"
-        ? {
-            raidLeadId,
-            runSetup: { mode: "existing" as const, templateId },
-            slots: slots.map((slot) => ({
-              weekday: slot.weekday,
-              localStartTime: slot.localStartTime,
-              runMode: slot.runMode,
-              attachRunId: slot.attachRunId,
-            })),
-            autoCreateRun,
-            start: scheduleStartPayload(start),
-            notes: planNotes,
-            ...composition,
-          }
+    const runSetupPayload =
+      setupMode === "existing"
+        ? { mode: "existing" as const, templateId }
         : {
-            raidLeadId,
-            runSetup: {
-              mode: "create" as const,
-              name,
-              productId: product.productId,
-              contentBossCounts: product.contentBossCounts,
-              difficulty,
-              lootType,
-              desiredTankCount,
-              desiredHealerCount,
-              desiredDpsCount,
-              desiredLootbuddyCount,
-              notes: templateNotes,
-            },
-            slots: slots.map((slot) => ({
-              weekday: slot.weekday,
-              localStartTime: slot.localStartTime,
-              runMode: slot.runMode,
-              attachRunId: slot.attachRunId,
-            })),
-            autoCreateRun,
-            start: scheduleStartPayload(start),
-            notes: planNotes,
-            ...composition,
+            mode: "create" as const,
+            name,
+            productId: product.productId,
+            contentBossCounts: product.contentBossCounts,
+            difficulty,
+            lootType,
+            desiredTankCount,
+            desiredHealerCount,
+            desiredDpsCount,
+            desiredLootbuddyCount,
+            notes: templateNotes,
           };
+    const common = {
+      slots: slotPayload,
+      autoCreateRun,
+      start: scheduleStartPayload(start),
+      notes: planNotes,
+      ...composition,
+    };
+    const payload = byBasis
+      ? {
+          // basisRunId is authoritative: the server derives the Run Setup, Raid
+          // Lead and first weekly time. Only values the user changed are sent,
+          // as overrides for FUTURE occurrences.
+          basisRunId,
+          basisWeekday: !basis || basisWeekday !== basis.weekday ? basisWeekday : undefined,
+          basisLocalStartTime: !basis || basisTime !== basis.localStartTime ? basisTime : undefined,
+          basisRunMode,
+          raidLeadId: raidLeadId && raidLeadId !== basis?.raidLeadId ? raidLeadId : undefined,
+          runSetup: adoptSetup ? undefined : runSetupPayload,
+          ...common,
+        }
+      : { raidLeadId, runSetup: runSetupPayload, ...common };
 
     startTransition(async () => {
       const result = await createCommunitySchedulePlanAction(payload);
@@ -286,12 +306,125 @@ export function CommunitySchedulePlanDialog({
           >
             <h2 className="text-base font-semibold">Create Schedule</h2>
             <p className="mt-1 text-xs text-muted">
-              Link a Run Setup to one or more weekly times (Europe/Berlin). Saving only plans the times. With
+              Base a Schedule on a Run Setup or on an existing Run, with one or more weekly times (Europe/Berlin).
+              Saving only plans the times. With
               weekly Drafts on, each raid ID&apos;s Draft Runs are created on Monday 12:00 before its Wednesday reset;
               use Create Run for an earlier one.
             </p>
 
             <div className="mt-4 grid gap-3">
+              <fieldset className="grid gap-1">
+                <legend className="text-xs text-muted">Schedule source</legend>
+                <div className="flex flex-wrap gap-4 text-sm">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="scheduleSource"
+                      checked={scheduleSource === "setup"}
+                      onChange={() => chooseSource("setup")}
+                    />
+                    Run Setup
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="scheduleSource"
+                      checked={scheduleSource === "run"}
+                      onChange={() => chooseSource("run")}
+                    />
+                    Existing Run
+                  </label>
+                </div>
+              </fieldset>
+
+              {byBasis ? (
+                <div className="grid gap-2 rounded-md border border-border p-3">
+                  <label className="grid gap-1 text-sm">
+                    <span className="text-xs text-muted">Existing Run</span>
+                    <select
+                      required
+                      aria-label="Basis Run"
+                      value={basisRunId ?? ""}
+                      onChange={(event) =>
+                        chooseBasis(candidates.find((candidate) => candidate.runId === event.target.value) ?? null)
+                      }
+                      className="h-9 rounded-md border border-border bg-surface-raised px-2"
+                    >
+                      <option value="">Select a Run…</option>
+                      {candidates
+                        .filter((candidate) => candidate.runId === basisRunId || !chosenRunIds.has(candidate.runId))
+                        .map((candidate) => (
+                          <option key={candidate.runId} value={candidate.runId}>
+                            {candidate.label}
+                          </option>
+                        ))}
+                    </select>
+                    {loadError ? <span className="text-[11px] text-danger">{loadError}</span> : null}
+                    {!loadError && candidates.length === 0 ? (
+                      <span className="text-[11px] text-muted">
+                        No eligible Run (upcoming, not linked to a schedule, on/after the chosen start).
+                      </span>
+                    ) : null}
+                  </label>
+                  {basisRunId ? (
+                    <>
+                      <div className="flex flex-wrap items-end gap-2">
+                        <label className="grid min-w-[8rem] flex-1 gap-1 text-sm">
+                          <span className="text-xs text-muted">Weekly time</span>
+                          <select
+                            aria-label="Basis weekday"
+                            value={basisWeekday}
+                            onChange={(event) =>
+                              setBasisWeekday(event.target.value as (typeof COMMUNITY_WEEKDAYS)[number])
+                            }
+                            className="h-9 rounded-md border border-border bg-surface-raised px-2"
+                          >
+                            {COMMUNITY_WEEKDAYS.map((day) => (
+                              <option key={day} value={day}>
+                                {WEEKDAY_LABELS[day]}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="grid min-w-[7rem] flex-1 gap-1 text-sm">
+                          <span className="text-xs text-muted">Time</span>
+                          <input
+                            type="time"
+                            required
+                            aria-label="Basis time"
+                            value={basisTime}
+                            onChange={(event) => setBasisTime(event.target.value)}
+                            className="h-9 rounded-md border border-border bg-surface-raised px-2"
+                          />
+                        </label>
+                        <label className="grid min-w-[7rem] flex-1 gap-1 text-sm">
+                          <span className="text-xs text-muted">Mode</span>
+                          <select
+                            value={basisRunMode}
+                            onChange={(event) => setBasisRunMode(event.target.value as CommunityScheduleRunMode)}
+                            className="h-9 rounded-md border border-border bg-surface-raised px-2"
+                          >
+                            {COMMUNITY_SCHEDULE_RUN_MODES.map((mode) => (
+                              <option key={mode} value={mode}>
+                                {COMMUNITY_SCHEDULE_RUN_MODE_LABELS[mode]}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                      <p className="text-xs">
+                        <span className="text-muted">First occurrence:</span> Existing Run
+                        {basis ? ` · ${basis.label}` : ""}
+                      </p>
+                      <p className="text-[11px] text-muted">
+                        The Run defines this Schedule and is its first occurrence. It is never changed — it keeps its
+                        own time, Raid Lead, content and roster; the values here apply to future occurrences.
+                      </p>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+
               <label className="grid gap-1 text-sm">
                 <span className="text-xs text-muted">Raid Lead</span>
                 <select
@@ -310,12 +443,12 @@ export function CommunitySchedulePlanDialog({
                     </option>
                   ))}
                 </select>
-                {source && !source.raidLeadId && !raidLeadId ? (
+                {basis && !basis.raidLeadId && !raidLeadId ? (
                   <span className="text-[11px] text-warning">
-                    The existing Run&apos;s Raid Lead {source.raidLeadName} is no longer eligible — choose one.
+                    The basis Run&apos;s Raid Lead {basis.raidLeadName} is no longer eligible — choose one.
                   </span>
-                ) : source?.raidLeadId && raidLeadId === source.raidLeadId ? (
-                  <span className="text-[11px] text-muted">From the existing Run.</span>
+                ) : basis?.raidLeadId && raidLeadId === basis.raidLeadId ? (
+                  <span className="text-[11px] text-muted">From the basis Run.</span>
                 ) : null}
               </label>
 
@@ -323,18 +456,18 @@ export function CommunitySchedulePlanDialog({
                 <div className="grid gap-1 rounded-md border border-accent/40 bg-accent/5 px-3 py-2 text-sm">
                   <span className="text-xs text-muted">Run Setup</span>
                   <span className="font-medium">
-                    {source
-                      ? source.runSetup.mode === "existing"
-                        ? source.runSetup.templateName
+                    {basis
+                      ? basis.runSetup.mode === "existing"
+                        ? basis.runSetup.templateName
                         : "New setup from existing Run"
-                      : "From the existing Run"}
+                      : "From the basis Run"}
                   </span>
                   <span className="text-[11px] text-muted">
-                    {source?.runSetup.mode === "existing"
-                      ? "Automatically matched from the existing Run (same content, difficulty, loot and planned composition)."
-                      : source
-                        ? `Will be created when the Schedule is saved ("${source.runSetup.templateName}", copied once from the Run's content, difficulty, loot and planned composition).`
-                        : "Resolved from the existing Run when the Schedule is saved."}
+                    {basis?.runSetup.mode === "existing"
+                      ? "Automatically matched from the basis Run (same content, difficulty, loot and planned composition)."
+                      : basis
+                        ? `Will be created when the Schedule is saved ("${basis.runSetup.templateName}", copied once from the Run's content, difficulty, loot and planned composition).`
+                        : "Select a Run — its Run Setup is used automatically."}
                   </span>
                   <button
                     type="button"
@@ -347,13 +480,13 @@ export function CommunitySchedulePlanDialog({
               ) : (
               <fieldset className="grid gap-2">
                 <legend className="text-xs text-muted">Run Setup</legend>
-                {sourceRunId ? (
+                {byBasis ? (
                   <button
                     type="button"
                     onClick={() => setOverrideAdoptedSetup(false)}
                     className="justify-self-start text-xs font-medium text-accent hover:underline"
                   >
-                    Use the setup from the existing Run
+                    Use the setup from the basis Run
                   </button>
                 ) : null}
                 <label className="flex items-center gap-2 text-sm">
@@ -506,14 +639,14 @@ export function CommunitySchedulePlanDialog({
 
               <div className="grid gap-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted">Weekly times</span>
+                  <span className="text-xs text-muted">{byBasis ? "Additional weekly times (optional)" : "Weekly times"}</span>
                   <button
                     type="button"
-                    disabled={slots.length >= MAX_SLOTS_PER_PLAN}
+                    disabled={slots.length + (byBasis ? 1 : 0) >= MAX_SLOTS_PER_PLAN}
                     onClick={() => setSlots((current) => [...current, newSlotRow()])}
                     className="text-xs font-medium text-accent hover:underline disabled:opacity-50"
                   >
-                    Add slot
+                    {byBasis ? "Add another time" : "Add slot"}
                   </button>
                 </div>
                 {slots.map((slot, index) => (
@@ -573,7 +706,7 @@ export function CommunitySchedulePlanDialog({
                     </label>
                     <button
                       type="button"
-                      disabled={slots.length <= 1}
+                      disabled={!byBasis && slots.length <= 1}
                       onClick={() => setSlots((current) => current.filter((row) => row.key !== slot.key))}
                       className="mb-0.5 inline-flex h-9 items-center rounded-md border border-border px-2 text-xs disabled:opacity-40"
                       aria-label={`Remove slot ${index + 1}`}
@@ -589,10 +722,10 @@ export function CommunitySchedulePlanDialog({
                     />
                   </div>
                 ))}
-                {sourceRunId ? (
+                {slots.some((row) => row.attachRunId) ? (
                   <p className="text-[11px] text-muted">
-                    The existing Run is the first occurrence and is never changed — it keeps its own time, Raid Lead,
-                    content and roster. Raid Lead, day / time and Run Setup above apply to future occurrences.
+                    An existing Run used for a time only satisfies that occurrence — it is never changed and does not
+                    change this Schedule&apos;s Run Setup or Raid Lead.
                   </p>
                 ) : null}
               </div>
@@ -603,7 +736,7 @@ export function CommunitySchedulePlanDialog({
                 <input
                   type="checkbox"
                   checked={autoCreateRun}
-                  disabled={!adoptSetup && setupMode === "existing" && !templateId}
+                  disabled={(byBasis && !basisRunId) || (!adoptSetup && setupMode === "existing" && !templateId)}
                   onChange={(event) => setAutoCreateRun(event.target.checked)}
                 />
                 <span>Automatically create weekly Draft — Draft release: Monday 12:00 (Europe/Berlin)</span>
@@ -699,7 +832,12 @@ export function CommunitySchedulePlanDialog({
               </button>
               <button
                 type="submit"
-                disabled={pending || !raidLeadId || (!adoptSetup && setupMode === "existing" && !templateId)}
+                disabled={
+                  pending ||
+                  !raidLeadId ||
+                  (byBasis && !basisRunId) ||
+                  (!adoptSetup && setupMode === "existing" && !templateId)
+                }
                 className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-black disabled:opacity-60"
               >
                 {pending ? "Saving…" : "Create Schedule"}

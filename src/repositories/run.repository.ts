@@ -482,6 +482,16 @@ export const runRepository = {
     return rows.map((row) => asString((row as Record<string, unknown>).id));
   },
 
+  /** Unarchived Runs in `statuses` starting at or after `fromIso` (no upper bound). */
+  async listIdsStartingFrom(fromIso: string, statuses: readonly RunStatus[]): Promise<string[]> {
+    const rows = await orm.Run.where((run) =>
+      and(run.status.in([...statuses]), run.archivedAt.isNull(), run.scheduledStartAt.gte(fromIso)),
+    )
+      .select("id")
+      .all();
+    return rows.map((row) => asString((row as Record<string, unknown>).id));
+  },
+
   /** Lifecycle facts only (status / archive / start) for the given Run ids — one light query. */
   async listLifecycleByIds(
     ids: readonly string[],

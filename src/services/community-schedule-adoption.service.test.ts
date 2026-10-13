@@ -169,12 +169,19 @@ async function candidateFor(runId: string, start?: { mode: "SKIP_FIRST" | "IMMED
   return candidates.find((row) => row.runId === runId) ?? null;
 }
 
-function planFromRun(runId: string, slot: { weekday: "FRIDAY"; localStartTime: string }, extra: Record<string, unknown> = {}) {
+/**
+ * Schedule source "Existing Run": only basisRunId — the server derives the Run
+ * Setup, Raid Lead and first weekly time. `time` values are future overrides
+ * (equal to the Run's own weekday / time they change nothing).
+ */
+function planFromRun(runId: string, time: { weekday?: "FRIDAY"; localStartTime?: string } = {}, extra: Record<string, unknown> = {}) {
   return communityScheduleService.createSchedulePlan(
     admin,
     {
-      // No runSetup / raidLeadId: the server adopts both from the first existing-Run occurrence.
-      slots: [{ ...slot, runMode: "INHOUSE", attachRunId: runId }],
+      basisRunId: runId,
+      basisWeekday: time.weekday,
+      basisLocalStartTime: time.localStartTime,
+      slots: [],
       autoCreateRun: true,
       notes: null,
       ...extra,
@@ -362,8 +369,9 @@ describe("Create Schedule from an existing Run (adoption)", () => {
       communityScheduleService.createSchedulePlan(
         admin,
         {
+          basisRunId: runId,
           raidLeadId: ids.otherLead,
-          slots: [{ weekday: "FRIDAY", localStartTime: "20:00", runMode: "INHOUSE", attachRunId: runId }],
+          slots: [],
           autoCreateRun: false,
           notes: null,
         } as never,
@@ -454,33 +462,88 @@ describe("Create Schedule from an existing Run (adoption)", () => {
     expect((await communityScheduleRunRepository.findByRunId(runId))?.origin).toBe("ATTACHED");
   });
 
-  it("the first time using an existing Run is the configuration source", async () => {
+  it("the basis Run defines the Schedule; an existing Run on an additional time is attach-only", async () => {
     await setupA();
-    const first = await manualRun({ scheduledStartAt: NEXT_FRIDAY_2000, bosses: 6, composition: [2, 3, 13, 1] });
-    const second = await manualRun({
+    const basisRun = await manualRun({ scheduledStartAt: NEXT_FRIDAY_2000, bosses: 6, composition: [2, 3, 13, 1] });
+    const other = await manualRun({
       scheduledStartAt: "2027-01-23T19:00:00.000Z",
       bosses: 5,
       composition: [3, 3, 12, 2],
       raidLead: otherLead,
     });
+    const otherBefore = await runSnapshot(other);
     const plan = await communityScheduleService.createSchedulePlan(
       admin,
       {
+        basisRunId: basisRun,
         slots: [
           { weekday: "THURSDAY", localStartTime: "20:00", runMode: "INHOUSE" },
-          { weekday: "FRIDAY", localStartTime: "20:00", runMode: "INHOUSE", attachRunId: first },
-          { weekday: "SATURDAY", localStartTime: "20:00", runMode: "INHOUSE", attachRunId: second },
+          { weekday: "SATURDAY", localStartTime: "20:00", runMode: "INHOUSE", attachRunId: other },
         ],
         autoCreateRun: false,
         notes: null,
       } as never,
       OCC_NOW,
     );
+    expect(plan.slotIds).toHaveLength(3);
     const slots = await Promise.all(plan.slotIds.map((id) => communityScheduleRepository.findById(id)));
+    // Basis time first, derived from the Run (Fri 20:00 Berlin).
+    expect(slots[0]).toMatchObject({ weekday: "FRIDAY", localStartTime: "20:00" });
     expect(new Set(slots.map((slot) => slot!.runTemplateId))).toEqual(new Set([plan.templateId]));
     expect((await runTemplateRepository.findById(plan.templateId))?.name).toBe("CSA Setup A");
     expect(new Set(slots.map((slot) => slot!.raidLeadId))).toEqual(new Set([ids.lead]));
-    expect((await communityScheduleRunRepository.findByRunId(second))?.origin).toBe("ATTACHED");
+    expect((await communityScheduleRunRepository.findByRunId(basisRun))?.scheduleSlotId).toBe(slots[0]!.id);
+    expect((await communityScheduleRunRepository.findByRunId(other))).toMatchObject({ origin: "ATTACHED", scheduleSlotId: slots[2]!.id });
+    expect(await runSnapshot(other)).toEqual(otherBefore);
+    expect(await testTemplates()).toHaveLength(1);
+  });
+
+  it("an existing Run on a time without a basis Run never defines the Run Setup", async () => {
+    const runId = await manualRun({ scheduledStartAt: NEXT_FRIDAY_2000, bosses: 5, composition: [3, 3, 12, 2] });
+    await expectCode(
+      communityScheduleService.createSchedulePlan(
+        admin,
+        {
+          raidLeadId: ids.lead,
+          slots: [{ weekday: "FRIDAY", localStartTime: "20:00", runMode: "INHOUSE", attachRunId: runId }],
+          autoCreateRun: false,
+          notes: null,
+        } as never,
+        OCC_NOW,
+      ),
+      "VALIDATION_FAILED",
+    );
+    expect(await communityScheduleRunRepository.findByRunId(runId)).toBeNull();
+  });
+
+  it("a basis Run several raid IDs ahead is offered and usable", async () => {
+    // Fri 12 Feb 2027 20:00 CET — four raid IDs after OCC_NOW.
+    const runId = await manualRun({ scheduledStartAt: "2027-02-12T19:00:00.000Z", bosses: 5, composition: [3, 3, 12, 2] });
+    const candidate = (await candidateFor(runId))!;
+    expect(candidate).toMatchObject({ weekday: "FRIDAY", localStartTime: "20:00", windowStartAt: "2027-02-10T05:00:00.000Z" });
+    const plan = await planFromRun(runId);
+    expect((await communityScheduleRunRepository.findByRunId(runId))).toMatchObject({
+      origin: "ATTACHED",
+      scheduleSlotId: plan.slotIds[0],
+      windowStartAt: "2027-02-10T05:00:00.000Z",
+    });
+  });
+
+  it("the basis Run cannot also be an additional time's first occurrence", async () => {
+    const runId = await manualRun({ scheduledStartAt: NEXT_FRIDAY_2000, bosses: 5, composition: [3, 3, 12, 2] });
+    await expectCode(
+      communityScheduleService.createSchedulePlan(
+        admin,
+        {
+          basisRunId: runId,
+          slots: [{ weekday: "SATURDAY", localStartTime: "20:00", runMode: "INHOUSE", attachRunId: runId }],
+          autoCreateRun: false,
+          notes: null,
+        } as never,
+        OCC_NOW,
+      ),
+      "VALIDATION_FAILED",
+    );
   });
 
   it("a Raid Lead who is no longer eligible is not adopted (user must choose)", async () => {

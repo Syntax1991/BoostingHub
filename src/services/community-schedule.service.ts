@@ -14,6 +14,7 @@ import {
   type ScheduleOccurrence,
   resolveScheduleStartBoundary,
   isBeforeScheduleStart,
+  scheduleTimeOfInstant,
   scheduleDraftRelease,
   type ScheduleRunCounts,
   type ScheduleStart,
@@ -282,15 +283,14 @@ function requireManage(user: AuthenticatedUser): void {
   }
 }
 
-/** Raid Lead of the configuration-source Run — only while still eligible; otherwise the user must choose. */
-async function adoptedRaidLeadId(sourceRunId: string | null): Promise<string> {
-  const run = sourceRunId ? await runRepository.findById(sourceRunId) : null;
+/** Raid Lead of the basis Run — only while still eligible; otherwise the user must choose. */
+async function adoptedRaidLeadId(run: { raidLeadId: string } | null): Promise<string> {
   const lead = run ? await userRepository.findById(run.raidLeadId) : null;
   if (!lead || !isEligibleRaidLead(lead)) {
     throw new DomainError(
       "COMMUNITY_SCHEDULE_RAID_LEAD_INVALID",
       run
-        ? "The existing Run's Raid Lead is no longer eligible — choose a Raid Lead."
+        ? "The basis Run's Raid Lead is no longer eligible — choose a Raid Lead."
         : "Choose an eligible raid lead.",
       400,
     );
@@ -1142,23 +1142,44 @@ export const communityScheduleService = {
     now?: Date,
   ): Promise<{ templateId: string; slotIds: string[] }> {
     requireManage(user);
-    assertBatchSlotLimits(input.slots);
 
-    // Configuration source of a NEW Schedule: the first slot that uses an
-    // existing Run. Whatever the request omits (Run Setup, Raid Lead) is
-    // derived from that Run on the server — never from client-side state.
-    const sourceRunId = input.slots.find((slot) => slot.attachRunId)?.attachRunId ?? null;
-    const adoptFromRunId = input.runSetup ? null : sourceRunId;
-    if (!input.runSetup && !adoptFromRunId) {
+    // Schedule source: a Run Setup (explicit), or a basis Run. The basis Run is
+    // authoritative — the server derives the first weekly time (its weekday /
+    // time in Europe/Berlin, attached as that time's first occurrence), the
+    // Run Setup (matching or snapshot) and the initial Raid Lead. Explicit
+    // runSetup / raidLeadId / basis time are FUTURE overrides only.
+    const basisRun = input.basisRunId ? await runRepository.findById(input.basisRunId) : null;
+    if (input.basisRunId && !basisRun) {
+      throw new DomainError("NOT_FOUND", "Run was not found.", 404);
+    }
+    if (!basisRun && !input.runSetup) {
       throw new DomainError(
         "VALIDATION_FAILED",
-        "Choose a Run Setup, or use an existing Run as the first occurrence.",
+        "Choose a Run Setup or an existing Run as the Schedule source.",
         400,
       );
     }
-    const raidLeadId = input.raidLeadId ?? (await adoptedRaidLeadId(sourceRunId));
+    let slots = input.slots;
+    if (basisRun) {
+      if (slots.some((slot) => slot.attachRunId === basisRun.id)) {
+        throw new DomainError("VALIDATION_FAILED", "The basis Run is already the first occurrence.", 400);
+      }
+      const basisTime = scheduleTimeOfInstant(basisRun.scheduledStartAt);
+      slots = [
+        {
+          weekday: input.basisWeekday ?? basisTime.weekday,
+          localStartTime: input.basisLocalStartTime ?? basisTime.localStartTime,
+          runMode: input.basisRunMode ?? "INHOUSE",
+          attachRunId: basisRun.id,
+        },
+        ...slots,
+      ];
+    }
+    assertBatchSlotLimits(slots);
+    const adoptFromRunId = basisRun && !input.runSetup ? basisRun.id : null;
+    const raidLeadId = input.raidLeadId ?? (await adoptedRaidLeadId(basisRun));
     await requireEligibleRaidLead(raidLeadId);
-    await assertNoConflictsForLead(raidLeadId, input.slots);
+    await assertNoConflictsForLead(raidLeadId, slots);
 
     let templateId: string;
     let templateName: string;
@@ -1207,7 +1228,7 @@ export const communityScheduleService = {
 
       const created = await createSlotsInTx({
         txOrm,
-        slots: input.slots,
+        slots,
         label: resolvedName,
         notes: input.notes,
         raidLeadId,
