@@ -436,6 +436,18 @@ describe("Create Schedule from an existing Run (adoption)", () => {
   });
 });
 
+describe("draft-slot picker (create dialogs)", () => {
+  it("names the selected Raid Lead in the Raid Lead warning", async () => {
+    const runId = await manualRun({ scheduledStartAt: NEXT_FRIDAY_2000, bosses: 5, composition: [3, 3, 12, 2] });
+    const candidates = await communityScheduleOccurrenceService.listAttachCandidates(admin, {
+      slot: { weekday: "FRIDAY", localStartTime: "20:00", raidLeadId: ids.otherLead, runTemplateId: null },
+      now: OCC_NOW,
+    });
+    const warning = candidates.find((row) => row.runId === runId)?.warnings.find((row) => row.code === "RAID_LEAD");
+    expect(warning?.message).toBe("Raid Lead CSA Lead differs from the schedule's CSA Other Lead.");
+  });
+});
+
 describe("Use existing Run on an existing Schedule", () => {
   async function scheduleWithOtherSetup() {
     const other = await runTemplateRepository.create({
