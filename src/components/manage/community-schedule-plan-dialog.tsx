@@ -3,10 +3,10 @@
 import { useMemo, useState, useTransition } from "react";
 import {
   DEFAULT_SCHEDULE_START,
-  ExistingRunAdoptSelect,
-  FirstOccurrenceSelect,
+  FirstOccurrenceField,
   ScheduleStartField,
   scheduleStartPayload,
+  useAdoptionCandidates,
   type ScheduleStartState,
 } from "@/components/manage/community-schedule-start-fields";
 import { COMMUNITY_SCHEDULE_RUN_MODES, COMMUNITY_WEEKDAYS, RAID_DIFFICULTIES, RUN_LOOT_TYPES } from "@/models/enums";
@@ -66,17 +66,35 @@ export function CommunitySchedulePlanDialog({
   defaultRaidLeadId?: string | null;
 }) {
   const [open, setOpen] = useState(false);
+  /** Increments per opening, so the existing-Run list is always loaded fresh. */
+  const [openKey, setOpenKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [raidLeadId, setRaidLeadId] = useState(defaultRaidLeadId ?? raidLeads[0]?.id ?? "");
-  /** fromRun: one new Run Setup snapshotted from the adopted Run (server-side, same transaction). */
-  const [setupMode, setSetupMode] = useState<"existing" | "create" | "fromRun">("existing");
-  /** Existing Run the Schedule starts from (first occurrence + adopted configuration). */
-  const [adopted, setAdopted] = useState<AdoptionCandidate | null>(null);
+  const [setupMode, setSetupMode] = useState<"existing" | "create">("existing");
+  /** Explicit choice of a different Run Setup than the one adopted from the existing first-occurrence Run. */
+  const [overrideAdoptedSetup, setOverrideAdoptedSetup] = useState(false);
   const [templateId, setTemplateId] = useState("");
   const [autoCreateRun, setAutoCreateRun] = useState(false);
   const [slots, setSlots] = useState<SlotRow[]>([newSlotRow()]);
   const [start, setStart] = useState<ScheduleStartState>(DEFAULT_SCHEDULE_START);
+  // One source of truth: slot.attachRunId. Everything shown about the adoption is derived from it.
+  const { candidates, loadError } = useAdoptionCandidates(start, (available) =>
+    setSlots((current) =>
+      current.some((row) => row.attachRunId && !available.has(row.attachRunId))
+        ? current.map((row) =>
+            row.attachRunId && !available.has(row.attachRunId) ? { ...row, attachRunId: null } : row,
+          )
+        : current,
+    ),
+    open ? openKey : null,
+  );
+  /** Configuration source of the new Schedule: the first time that uses an existing Run. */
+  const sourceRunId = slots.find((row) => row.attachRunId)?.attachRunId ?? null;
+  const source = sourceRunId ? (candidates.find((candidate) => candidate.runId === sourceRunId) ?? null) : null;
+  /** Run Setup comes from the existing Run (resolved by the server) unless explicitly overridden. */
+  const adoptSetup = sourceRunId != null && !overrideAdoptedSetup;
+  const chosenRunIds = new Set(slots.flatMap((row) => (row.attachRunId ? [row.attachRunId] : [])));
   const [name, setName] = useState("");
   const initialProduct = (): ProductSelection => {
     const first = products[0];
@@ -112,41 +130,38 @@ export function CommunitySchedulePlanDialog({
     : "—";
 
   /**
-   * Applies the existing Run's configuration: Run Setup, Raid Lead and the
-   * first weekly time (weekday / time in Europe/Berlin, attached as its first
-   * occurrence). Everything stays editable for FUTURE occurrences; the Run
-   * itself is never changed.
+   * First occurrence of one weekly time. Picking an existing Run sets that
+   * time's weekday / time from the Run (Europe/Berlin). For the first such time
+   * — the configuration source — its Raid Lead is adopted too (empty when no
+   * longer eligible) and the Run Setup follows it. All of it stays editable for
+   * FUTURE occurrences; the Run itself is never changed.
    */
-  function adopt(candidate: AdoptionCandidate | null) {
-    const previous = adopted;
-    setAdopted(candidate);
-    if (!candidate) {
-      if (setupMode === "fromRun") setSetupMode(templatesForLead.length > 0 ? "existing" : "create");
-      if (previous) {
-        setSlots((current) =>
-          current.map((row) => (row.attachRunId === previous.runId ? { ...row, attachRunId: null } : row)),
-        );
-      }
-      return;
+  function chooseFirstOccurrence(rowKey: string, candidate: AdoptionCandidate | null) {
+    const index = slots.findIndex((row) => row.key === rowKey);
+    const becomesSource =
+      candidate != null && !slots.some((row, other) => other < index && row.attachRunId);
+    setSlots((current) =>
+      current.map((row) =>
+        row.key !== rowKey
+          ? row
+          : candidate
+            ? {
+                ...row,
+                weekday: candidate.weekday,
+                localStartTime: candidate.localStartTime,
+                attachRunId: candidate.runId,
+              }
+            : { ...row, attachRunId: null },
+      ),
+    );
+    if (candidate && becomesSource) {
+      setRaidLeadId(candidate.raidLeadId ?? "");
+      setOverrideAdoptedSetup(false);
     }
-    setRaidLeadId(candidate.raidLeadId ?? "");
-    if (
-      candidate.runSetup.mode === "existing" &&
-      templatesForLead.some((template) => template.id === (candidate.runSetup as { templateId: string }).templateId)
-    ) {
-      setSetupMode("existing");
-      setTemplateId(candidate.runSetup.templateId);
-    } else {
-      setSetupMode("fromRun");
-    }
-    setSlots((current) => [
-      { ...(current[0] ?? newSlotRow()), weekday: candidate.weekday, localStartTime: candidate.localStartTime, attachRunId: candidate.runId },
-      ...current.slice(1).map((row) => (row.attachRunId === candidate.runId ? { ...row, attachRunId: null } : row)),
-    ]);
   }
 
   function resetForm() {
-    setAdopted(null);
+    setOverrideAdoptedSetup(false);
     setStart(DEFAULT_SCHEDULE_START);
     setError(null);
     setRaidLeadId(defaultRaidLeadId ?? raidLeads[0]?.id ?? "");
@@ -187,11 +202,10 @@ export function CommunitySchedulePlanDialog({
       runMode: slot.runMode,
       attachRunId: slot.attachRunId,
     }));
-    const payload =
-      setupMode === "fromRun" && adopted
-        ? {
+    const payload = adoptSetup
+      ? // No runSetup: the server adopts it from the first existing-Run occurrence.
+        {
             raidLeadId,
-            runSetup: { mode: "fromRun" as const, runId: adopted.runId },
             slots: slotPayload,
             autoCreateRun,
             start: scheduleStartPayload(start),
@@ -257,6 +271,7 @@ export function CommunitySchedulePlanDialog({
         type="button"
         onClick={() => {
           resetForm();
+          setOpenKey((key) => key + 1);
           setOpen(true);
         }}
         className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-black hover:bg-[#d8b436]"
@@ -277,30 +292,6 @@ export function CommunitySchedulePlanDialog({
             </p>
 
             <div className="mt-4 grid gap-3">
-              <ExistingRunAdoptSelect start={start} value={adopted?.runId ?? null} onChange={adopt} />
-              {adopted ? (
-                <div className="grid gap-1 rounded-md border border-accent/40 bg-accent/5 px-3 py-2 text-xs">
-                  <p className="font-medium text-foreground">Adopted from the existing Run</p>
-                  <p>
-                    Run Setup:{" "}
-                    {adopted.runSetup.mode === "existing"
-                      ? adopted.runSetup.templateName
-                      : `New setup from existing Run (${adopted.runSetup.templateName})`}
-                  </p>
-                  <p>
-                    Raid Lead:{" "}
-                    {adopted.raidLeadId ? adopted.raidLeadName : `${adopted.raidLeadName} is not an eligible Raid Lead — choose one below`}
-                  </p>
-                  <p>
-                    Day / time: {WEEKDAY_LABELS[adopted.weekday]} {adopted.localStartTime} (Europe/Berlin) — this Run is
-                    the first occurrence.
-                  </p>
-                  <p className="text-muted">
-                    You can change these for future occurrences. The selected Run keeps its own time, Raid Lead, content
-                    and roster — it is never changed.
-                  </p>
-                </div>
-              ) : null}
               <label className="grid gap-1 text-sm">
                 <span className="text-xs text-muted">Raid Lead</span>
                 <select
@@ -308,7 +299,7 @@ export function CommunitySchedulePlanDialog({
                   value={raidLeadId}
                   onChange={(event) => {
                     setRaidLeadId(event.target.value);
-                    if (setupMode === "existing" && !adopted) setTemplateId("");
+                    if (setupMode === "existing" && !adoptSetup) setTemplateId("");
                   }}
                   className="h-9 rounded-md border border-border bg-surface-raised px-2"
                 >
@@ -319,10 +310,52 @@ export function CommunitySchedulePlanDialog({
                     </option>
                   ))}
                 </select>
+                {source && !source.raidLeadId && !raidLeadId ? (
+                  <span className="text-[11px] text-warning">
+                    The existing Run&apos;s Raid Lead {source.raidLeadName} is no longer eligible — choose one.
+                  </span>
+                ) : source?.raidLeadId && raidLeadId === source.raidLeadId ? (
+                  <span className="text-[11px] text-muted">From the existing Run.</span>
+                ) : null}
               </label>
 
+              {adoptSetup ? (
+                <div className="grid gap-1 rounded-md border border-accent/40 bg-accent/5 px-3 py-2 text-sm">
+                  <span className="text-xs text-muted">Run Setup</span>
+                  <span className="font-medium">
+                    {source
+                      ? source.runSetup.mode === "existing"
+                        ? source.runSetup.templateName
+                        : "New setup from existing Run"
+                      : "From the existing Run"}
+                  </span>
+                  <span className="text-[11px] text-muted">
+                    {source?.runSetup.mode === "existing"
+                      ? "Automatically matched from the existing Run (same content, difficulty, loot and planned composition)."
+                      : source
+                        ? `Will be created when the Schedule is saved ("${source.runSetup.templateName}", copied once from the Run's content, difficulty, loot and planned composition).`
+                        : "Resolved from the existing Run when the Schedule is saved."}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setOverrideAdoptedSetup(true)}
+                    className="justify-self-start text-xs font-medium text-accent hover:underline"
+                  >
+                    Use a different Run Setup for future occurrences
+                  </button>
+                </div>
+              ) : (
               <fieldset className="grid gap-2">
                 <legend className="text-xs text-muted">Run Setup</legend>
+                {sourceRunId ? (
+                  <button
+                    type="button"
+                    onClick={() => setOverrideAdoptedSetup(false)}
+                    className="justify-self-start text-xs font-medium text-accent hover:underline"
+                  >
+                    Use the setup from the existing Run
+                  </button>
+                ) : null}
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="radio"
@@ -341,26 +374,10 @@ export function CommunitySchedulePlanDialog({
                   />
                   Create new
                 </label>
-                {adopted ? (
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="radio"
-                      name="setupMode"
-                      checked={setupMode === "fromRun"}
-                      onChange={() => setSetupMode("fromRun")}
-                    />
-                    From the existing Run
-                  </label>
-                ) : null}
               </fieldset>
+              )}
 
-              {setupMode === "fromRun" && adopted ? (
-                <p className="rounded-md border border-border px-3 py-2 text-xs text-muted">
-                  {adopted.runSetup.mode === "existing"
-                    ? `Uses the matching Run Setup "${adopted.runSetup.templateName}".`
-                    : `Creates the Run Setup "${adopted.runSetup.templateName}" from the Run's raid content, difficulty, loot and planned composition (one-time copy — later Run edits do not change it).`}
-                </p>
-              ) : setupMode === "existing" ? (
+              {adoptSetup ? null : setupMode === "existing" ? (
                 <label className="grid gap-1 text-sm">
                   <span className="text-xs text-muted">Existing Run Setup</span>
                   <select
@@ -563,21 +580,21 @@ export function CommunitySchedulePlanDialog({
                     >
                       Remove
                     </button>
-                    <FirstOccurrenceSelect
-                      weekday={slot.weekday}
-                      localStartTime={slot.localStartTime}
-                      raidLeadId={raidLeadId}
-                      runTemplateId={setupMode === "existing" ? templateId || null : null}
-                      start={start}
+                    <FirstOccurrenceField
+                      candidates={candidates}
+                      unavailableRunIds={chosenRunIds}
                       value={slot.attachRunId}
-                      onChange={(attachRunId) =>
-                        setSlots((current) =>
-                          current.map((row) => (row.key === slot.key ? { ...row, attachRunId } : row)),
-                        )
-                      }
+                      onChange={(candidate) => chooseFirstOccurrence(slot.key, candidate)}
+                      loadError={loadError}
                     />
                   </div>
                 ))}
+                {sourceRunId ? (
+                  <p className="text-[11px] text-muted">
+                    The existing Run is the first occurrence and is never changed — it keeps its own time, Raid Lead,
+                    content and roster. Raid Lead, day / time and Run Setup above apply to future occurrences.
+                  </p>
+                ) : null}
               </div>
 
               <ScheduleStartField value={start} onChange={setStart} />
@@ -586,7 +603,7 @@ export function CommunitySchedulePlanDialog({
                 <input
                   type="checkbox"
                   checked={autoCreateRun}
-                  disabled={setupMode === "existing" && !templateId}
+                  disabled={!adoptSetup && setupMode === "existing" && !templateId}
                   onChange={(event) => setAutoCreateRun(event.target.checked)}
                 />
                 <span>Automatically create weekly Draft — Draft release: Monday 12:00 (Europe/Berlin)</span>
@@ -604,13 +621,13 @@ export function CommunitySchedulePlanDialog({
                 </label>
                 {useDefaults ? (
                   <p className="text-xs text-muted">
-                    {setupMode === "existing" && selectedExisting
+                    {adoptSetup
+                      ? "The adopted Run Setup's composition (the Run's planned composition — never its roster)."
+                      : setupMode === "existing" && selectedExisting
                       ? `${selectedExisting.desiredTankCount} Tanks · ${selectedExisting.desiredHealerCount} Healers · ${selectedExisting.desiredDpsCount} DPS · ${selectedExisting.desiredLootbuddyCount} Lootbuddy`
                       : setupMode === "create"
                         ? `${desiredTankCount} Tanks · ${desiredHealerCount} Healers · ${desiredDpsCount} DPS · ${desiredLootbuddyCount} Lootbuddy`
-                        : setupMode === "fromRun"
-                          ? "The adopted Run Setup's composition (the Run's planned composition — never its roster)."
-                          : "Select a Run Setup to see defaults."}
+                        : "Select a Run Setup to see defaults."}
                   </p>
                 ) : (
                   <div className="grid grid-cols-2 gap-2">
@@ -682,7 +699,7 @@ export function CommunitySchedulePlanDialog({
               </button>
               <button
                 type="submit"
-                disabled={pending || !raidLeadId || (setupMode === "existing" && !templateId)}
+                disabled={pending || !raidLeadId || (!adoptSetup && setupMode === "existing" && !templateId)}
                 className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-black disabled:opacity-60"
               >
                 {pending ? "Saving…" : "Create Schedule"}

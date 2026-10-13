@@ -282,6 +282,22 @@ function requireManage(user: AuthenticatedUser): void {
   }
 }
 
+/** Raid Lead of the configuration-source Run — only while still eligible; otherwise the user must choose. */
+async function adoptedRaidLeadId(sourceRunId: string | null): Promise<string> {
+  const run = sourceRunId ? await runRepository.findById(sourceRunId) : null;
+  const lead = run ? await userRepository.findById(run.raidLeadId) : null;
+  if (!lead || !isEligibleRaidLead(lead)) {
+    throw new DomainError(
+      "COMMUNITY_SCHEDULE_RAID_LEAD_INVALID",
+      run
+        ? "The existing Run's Raid Lead is no longer eligible — choose a Raid Lead."
+        : "Choose an eligible raid lead.",
+      400,
+    );
+  }
+  return lead.id;
+}
+
 async function requireEligibleRaidLead(raidLeadId: string): Promise<void> {
   const lead = await userRepository.findById(raidLeadId);
   if (!lead || !isEligibleRaidLead(lead)) {
@@ -1127,24 +1143,29 @@ export const communityScheduleService = {
   ): Promise<{ templateId: string; slotIds: string[] }> {
     requireManage(user);
     assertBatchSlotLimits(input.slots);
-    await requireEligibleRaidLead(input.raidLeadId);
-    await assertNoConflictsForLead(input.raidLeadId, input.slots);
+
+    // Configuration source of a NEW Schedule: the first slot that uses an
+    // existing Run. Whatever the request omits (Run Setup, Raid Lead) is
+    // derived from that Run on the server — never from client-side state.
+    const sourceRunId = input.slots.find((slot) => slot.attachRunId)?.attachRunId ?? null;
+    const adoptFromRunId = input.runSetup ? null : sourceRunId;
+    if (!input.runSetup && !adoptFromRunId) {
+      throw new DomainError(
+        "VALIDATION_FAILED",
+        "Choose a Run Setup, or use an existing Run as the first occurrence.",
+        400,
+      );
+    }
+    const raidLeadId = input.raidLeadId ?? (await adoptedRaidLeadId(sourceRunId));
+    await requireEligibleRaidLead(raidLeadId);
+    await assertNoConflictsForLead(raidLeadId, input.slots);
 
     let templateId: string;
     let templateName: string;
 
     const composition = normalizeScheduleCompositionWrite(input);
 
-    const adoptFromRunId = input.runSetup.mode === "fromRun" ? input.runSetup.runId : null;
-    if (adoptFromRunId && !input.slots.some((slot) => slot.attachRunId === adoptFromRunId)) {
-      throw new DomainError(
-        "VALIDATION_FAILED",
-        "The Run Setup can only be adopted from the existing Run used as a first occurrence.",
-        400,
-      );
-    }
-
-    if (input.runSetup.mode === "existing") {
+    if (input.runSetup?.mode === "existing") {
       const template = await validateTemplateLink({
         runTemplateId: input.runSetup.templateId,
         autoCreateRun: input.autoCreateRun,
@@ -1160,7 +1181,7 @@ export const communityScheduleService = {
       templateName = template.name;
     } else {
       templateId = "";
-      templateName = input.runSetup.mode === "create" ? input.runSetup.name.trim() : "";
+      templateName = input.runSetup?.mode === "create" ? input.runSetup.name.trim() : "";
     }
 
     const result = await db.transaction(async (tx) => {
@@ -1168,7 +1189,7 @@ export const communityScheduleService = {
       let resolvedTemplateId = templateId;
       let resolvedName = templateName;
 
-      if (input.runSetup.mode === "create") {
+      if (input.runSetup?.mode === "create") {
         const created = await runTemplateService.createTemplateInTx(
           user,
           { ...input.runSetup },
@@ -1189,7 +1210,7 @@ export const communityScheduleService = {
         slots: input.slots,
         label: resolvedName,
         notes: input.notes,
-        raidLeadId: input.raidLeadId,
+        raidLeadId,
         runTemplateId: resolvedTemplateId,
         autoCreateRun: input.autoCreateRun,
         composition,

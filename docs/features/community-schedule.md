@@ -75,35 +75,38 @@ A boundary at or before the first upcoming occurrence is stored as `null`. Chang
 
 ## Start a Schedule from an existing Run (adoption)
 
-**Create Schedule → Start from an existing Run**: picking an upcoming, unlinked Run (eligible as for attach, on/after
-the chosen **Starts**) fills the new Schedule from it and attaches it as the first occurrence (`ATTACHED`):
+**Create Schedule → First occurrence → Use existing Run** is the one workflow: picking an upcoming, unlinked Run
+(eligible as for attach, on/after the chosen **Starts**) for a weekly time sets that time's weekday / time from the
+Run's start (Europe/Berlin, `scheduleTimeOfInstant`) and attaches the Run as its first occurrence (`ATTACHED`). The
+**first** time that uses an existing Run is the new Schedule's configuration source:
 
-| field | adopted from |
+| field | adopted from the source Run |
 | --- | --- |
-| weekday / time | the Run's start in Europe/Berlin (`scheduleTimeOfInstant`) |
-| Raid Lead | the Run's Raid Lead — only if still eligible, otherwise the user must choose |
-| Run Setup | see below |
+| Run Setup | see below — no Run Setup selection needed |
+| Raid Lead | the Run's Raid Lead — only if still eligible, otherwise the user must choose (the only manual step) |
+| weekday / time | the Run's start in Europe/Berlin |
 
 Run Setup: a Run has no Run Setup reference (no `RunTemplate` FK; Schedule-created Runs are linked through
 `CommunityScheduleRun` and are therefore never attachable again), so there is no provenance to follow. The Run's own
 planning snapshot decides: an active, usable Run Setup with **exactly** the same planning fields (difficulty, loot,
 ordered `RunRaidContent` incl. boss counts, planned composition) is reused; otherwise **one** new Run Setup is created
 from that snapshot (`RunRaidContent` → `RunTemplateRaidContent`, `desired*Count`; never roster / signups, never a
-Product guess). One-time copy, no live coupling: later Run edits never change the Setup or Schedule, and Schedule /
-Setup edits never change the Run. Run Setup, slot, start boundary and attachment commit in **one transaction**
-(`runSetup.mode = "fromRun"`).
+Product guess). One-time copy, no live coupling in either direction.
 
-Everything stays editable for **future** occurrences (Raid Lead, day / time, Run Setup) — the attached Run keeps its
-own time, Raid Lead, scope and roster. **Add times** can take a new time's weekday / time from an existing Run the same
-way (Setup and Raid Lead stay those of the group). No Run is created on save (Monday release unchanged).
+Server authority: `createSchedulePlan` without `runSetup` adopts the Run Setup from the first slot with `attachRunId`,
+and without `raidLeadId` that Run's (eligible) Raid Lead — in the same transaction as the slots, start boundary and
+attachment. Neither given nor an existing Run → refused. An explicit `runSetup` / `raidLeadId` ("Use a different Run
+Setup for future occurrences", a changed Raid Lead) overrides the adoption for **future** occurrences only; the
+attached Run keeps its own time, Raid Lead, scope and roster. No Run is created on save (Monday release unchanged).
 
-On an **existing** Schedule, **Use existing Run** attaches only. The Run's Run Setup is used for future occurrences
-only with the explicit option *Also use this Run's setup for future occurrences* (Raid Lead and time stay).
+**Add times** uses the same first-occurrence control, but only weekday / time follow the Run — the group's Run Setup
+and Raid Lead stay authoritative. On an **existing** Schedule, **Use existing Run** attaches only; the Run's Run Setup
+is used for future occurrences only with the explicit option *Also use this Run's setup for future occurrences*.
 
 ## Use existing Run
 
-- **Create Schedule / Add times**: per weekly time, **First occurrence** = *Per schedule* or *Use existing Run · …*.
-  The link is written in the same transaction as the slot. The picker only offers occurrences on/after the chosen
+- **Create Schedule / Add times**: per weekly time, **First occurrence** = *Create normally* or *Use existing Run* (see
+  above). The link is written in the same transaction as the slot. The picker only offers Runs on/after the chosen
   **Starts**.
 - **Schedule view**: **Use existing Run** on any upcoming, unfulfilled occurrence on/after the start boundary.
   An occurrence before the boundary is refused with `COMMUNITY_SCHEDULE_NOT_STARTED`.

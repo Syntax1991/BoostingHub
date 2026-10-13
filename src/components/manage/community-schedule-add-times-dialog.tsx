@@ -3,10 +3,10 @@
 import { useState, useTransition } from "react";
 import {
   DEFAULT_SCHEDULE_START,
-  ExistingRunAdoptSelect,
-  FirstOccurrenceSelect,
+  FirstOccurrenceField,
   ScheduleStartField,
   scheduleStartPayload,
+  useAdoptionCandidates,
   type ScheduleStartState,
 } from "@/components/manage/community-schedule-start-fields";
 import { COMMUNITY_SCHEDULE_RUN_MODES, COMMUNITY_WEEKDAYS } from "@/models/enums";
@@ -53,41 +53,52 @@ export function CommunityScheduleAddTimesDialog({
   runSetupName: string;
 }) {
   const [open, setOpen] = useState(false);
+  /** Increments per opening, so the existing-Run list is always loaded fresh. */
+  const [openKey, setOpenKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [autoCreateRun, setAutoCreateRun] = useState(false);
   const [slots, setSlots] = useState<SlotRow[]>([newSlotRow()]);
   const [start, setStart] = useState<ScheduleStartState>(DEFAULT_SCHEDULE_START);
   const [notes, setNotes] = useState("");
-  const [adopted, setAdopted] = useState<AdoptionCandidate | null>(null);
+  // One source of truth: slot.attachRunId (picking a Run sets that time's weekday / time).
+  const { candidates, loadError } = useAdoptionCandidates(start, (available) =>
+    setSlots((current) =>
+      current.some((row) => row.attachRunId && !available.has(row.attachRunId))
+        ? current.map((row) =>
+            row.attachRunId && !available.has(row.attachRunId) ? { ...row, attachRunId: null } : row,
+          )
+        : current,
+    ),
+    open ? openKey : null,
+  );
+  const chosenRunIds = new Set(slots.flatMap((row) => (row.attachRunId ? [row.attachRunId] : [])));
 
-  /** Adds the existing Run's weekday / time as a new time, with the Run as its first occurrence. */
-  function adopt(candidate: AdoptionCandidate | null) {
-    const previous = adopted;
-    setAdopted(candidate);
-    setSlots((current) => {
-      const cleared = current.map((row) =>
-        previous && row.attachRunId === previous.runId ? { ...row, attachRunId: null } : row,
-      );
-      if (!candidate) return cleared;
-      const [first, ...rest] = cleared;
-      return [
-        {
-          ...(first ?? newSlotRow()),
-          weekday: candidate.weekday,
-          localStartTime: candidate.localStartTime,
-          attachRunId: candidate.runId,
-        },
-        ...rest,
-      ];
-    });
+  /**
+   * An existing Run as this time's first occurrence: weekday / time follow the
+   * Run. The group's Run Setup and Raid Lead stay authoritative.
+   */
+  function chooseFirstOccurrence(rowKey: string, candidate: AdoptionCandidate | null) {
+    setSlots((current) =>
+      current.map((row) =>
+        row.key !== rowKey
+          ? row
+          : candidate
+            ? {
+                ...row,
+                weekday: candidate.weekday,
+                localStartTime: candidate.localStartTime,
+                attachRunId: candidate.runId,
+              }
+            : { ...row, attachRunId: null },
+      ),
+    );
   }
 
   function resetForm() {
     setError(null);
     setAutoCreateRun(false);
     setSlots([newSlotRow()]);
-    setAdopted(null);
     setStart(DEFAULT_SCHEDULE_START);
     setNotes("");
   }
@@ -129,6 +140,7 @@ export function CommunityScheduleAddTimesDialog({
         type="button"
         onClick={() => {
           resetForm();
+          setOpenKey((key) => key + 1);
           setOpen(true);
         }}
         className="inline-flex h-8 items-center rounded-md border border-border bg-surface-raised px-2 text-xs font-medium hover:bg-[#222a3b]"
@@ -148,19 +160,6 @@ export function CommunityScheduleAddTimesDialog({
             </p>
 
             <div className="mt-4 grid gap-3">
-              <ExistingRunAdoptSelect
-                start={start}
-                value={adopted?.runId ?? null}
-                onChange={adopt}
-                label="Add a time from an existing Run (optional)"
-              />
-              {adopted ? (
-                <p className="rounded-md border border-border px-3 py-2 text-xs text-muted">
-                  First time set to {WEEKDAY_LABELS[adopted.weekday]} {adopted.localStartTime} (Europe/Berlin) with
-                  this Run as its first occurrence. Run Setup and Raid Lead stay those of {runSetupName}; the Run itself
-                  is never changed.
-                </p>
-              ) : null}
               <div className="grid gap-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted">Weekly times</span>
@@ -237,21 +236,21 @@ export function CommunityScheduleAddTimesDialog({
                     >
                       Remove
                     </button>
-                    <FirstOccurrenceSelect
-                      weekday={slot.weekday}
-                      localStartTime={slot.localStartTime}
-                      raidLeadId={raidLeadId}
-                      runTemplateId={runTemplateId}
-                      start={start}
+                    <FirstOccurrenceField
+                      candidates={candidates}
+                      unavailableRunIds={chosenRunIds}
                       value={slot.attachRunId}
-                      onChange={(attachRunId) =>
-                        setSlots((current) =>
-                          current.map((row) => (row.key === slot.key ? { ...row, attachRunId } : row)),
-                        )
-                      }
+                      onChange={(candidate) => chooseFirstOccurrence(slot.key, candidate)}
+                      loadError={loadError}
                     />
                   </div>
                 ))}
+                {chosenRunIds.size > 0 ? (
+                  <p className="text-[11px] text-muted">
+                    Existing Runs are used as first occurrences only — they are never changed. Run Setup and Raid Lead
+                    stay those of {runSetupName}.
+                  </p>
+                ) : null}
               </div>
 
               <ScheduleStartField value={start} onChange={setStart} />

@@ -14,7 +14,6 @@ import { communityScheduleRepository } from "@/repositories/community-schedule.r
 import { DomainError } from "@/lib/errors";
 import {
   describeScheduleCleanupResult,
-  resolveScheduleStartBoundary,
   SCHEDULE_DRAFT_RELEASE_LABEL,
   type ScheduleRunCounts,
 } from "@/lib/community-schedule";
@@ -270,8 +269,8 @@ export type ListScheduleAttachCandidatesActionResult =
   | { ok: false; code: string; message: string };
 
 /**
- * Existing Runs that may satisfy an occurrence — for an existing slot
- * (Schedule view) or a draft weekday / time / lead (create dialogs).
+ * Existing Runs that may satisfy an existing slot's occurrence (Schedule view).
+ * Create dialogs use listScheduleAdoptionCandidatesAction instead.
  */
 export async function listScheduleAttachCandidatesAction(
   input: unknown,
@@ -279,31 +278,13 @@ export async function listScheduleAttachCandidatesAction(
   try {
     const user = await requireUser();
     const parsed = listScheduleAttachCandidatesSchema.parse(input);
-    if ("scheduleSlotId" in parsed) {
-      const slot = await communityScheduleRepository.findById(parsed.scheduleSlotId);
-      if (!slot) {
-        throw new DomainError("COMMUNITY_SCHEDULE_NOT_FOUND", "Schedule slot was not found.", 404);
-      }
-      const candidates = await communityScheduleOccurrenceService.listAttachCandidates(user, {
-        slot,
-        windows: parsed.window ? [parsed.window] : undefined,
-      });
-      return { ok: true, candidates };
+    const slot = await communityScheduleRepository.findById(parsed.scheduleSlotId);
+    if (!slot) {
+      throw new DomainError("COMMUNITY_SCHEDULE_NOT_FOUND", "Schedule slot was not found.", 404);
     }
     const candidates = await communityScheduleOccurrenceService.listAttachCandidates(user, {
-      slot: {
-        weekday: parsed.weekday,
-        localStartTime: parsed.localStartTime,
-        raidLeadId: parsed.raidLeadId,
-        runTemplateId: parsed.runTemplateId,
-        firstWindowStartAt: parsed.start
-          ? resolveScheduleStartBoundary({
-              weekday: parsed.weekday,
-              localStartTime: parsed.localStartTime,
-              start: parsed.start,
-            }).firstWindowStartAt
-          : null,
-      },
+      slot,
+      windows: parsed.window ? [parsed.window] : undefined,
     });
     return { ok: true, candidates };
   } catch (error) {
