@@ -154,17 +154,11 @@ export const updateCommunityScheduleSlotSchema = createCommunityScheduleSlotSche
   }),
 );
 
-export const listScheduleAttachCandidatesSchema = z.union([
-  z.object({ scheduleSlotId: z.string().uuid(), window: z.enum(["CURRENT", "NEXT"]).optional() }),
-  z.object({
-    weekday: weekdaySchema,
-    localStartTime: localStartTimeSchema,
-    raidLeadId: z.string().uuid("Choose an eligible raid lead."),
-    runTemplateId: runTemplateIdSchema,
-    /** The dialog's chosen Starts — occurrences before it are not offered. */
-    start: scheduleStartSchema.optional(),
-  }),
-]);
+/** Existing Runs for an existing slot's occurrence (Schedule view "Use existing Run"). */
+export const listScheduleAttachCandidatesSchema = z.object({
+  scheduleSlotId: z.string().uuid(),
+  window: z.enum(["CURRENT", "NEXT"]).optional(),
+});
 
 export const attachScheduleRunSchema = z.object({
   scheduleSlotId: z.string().uuid(),
@@ -194,22 +188,28 @@ export const materializeCommunityScheduleOccurrenceSchema = z.object({
 export const createSchedulePlanSchema = refineUniquePlanSlots(
   z
     .object({
-      raidLeadId: z.string().uuid("Choose an eligible raid lead."),
-      runSetup: z.discriminatedUnion("mode", [
-        z.object({
-          mode: z.literal("existing"),
-          templateId: z.string().uuid("Choose a valid run setup."),
-        }),
-        z.object({
-          mode: z.literal("create"),
-          ...createRunSetupFieldsSchema.shape,
-        }),
-        /** Adopt the Run Setup from the existing Run used as a first occurrence (reuse or snapshot). */
-        z.object({
-          mode: z.literal("fromRun"),
-          runId: z.string().uuid("Choose a valid Run."),
-        }),
-      ]),
+      /**
+       * Omitted → the Raid Lead of the configuration-source Run (the first slot
+       * using an existing Run), when still eligible.
+       */
+      raidLeadId: z.string().uuid("Choose an eligible raid lead.").optional(),
+      /**
+       * Omitted → adopted from the configuration-source Run (the first slot
+       * using an existing Run): matching Run Setup, else a snapshot. Given →
+       * an explicit choice that overrides the adoption.
+       */
+      runSetup: z
+        .discriminatedUnion("mode", [
+          z.object({
+            mode: z.literal("existing"),
+            templateId: z.string().uuid("Choose a valid run setup."),
+          }),
+          z.object({
+            mode: z.literal("create"),
+            ...createRunSetupFieldsSchema.shape,
+          }),
+        ])
+        .optional(),
       slots: z
         .array(planSlotSchema)
         .min(1, "Add at least one weekly time.")

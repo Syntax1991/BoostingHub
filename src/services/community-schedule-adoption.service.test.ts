@@ -173,8 +173,7 @@ function planFromRun(runId: string, slot: { weekday: "FRIDAY"; localStartTime: s
   return communityScheduleService.createSchedulePlan(
     admin,
     {
-      raidLeadId: ids.lead,
-      runSetup: { mode: "fromRun", runId },
+      // No runSetup / raidLeadId: the server adopts both from the first existing-Run occurrence.
       slots: [{ ...slot, runMode: "INHOUSE", attachRunId: runId }],
       autoCreateRun: true,
       notes: null,
@@ -364,7 +363,6 @@ describe("Create Schedule from an existing Run (adoption)", () => {
         admin,
         {
           raidLeadId: ids.otherLead,
-          runSetup: { mode: "fromRun", runId },
           slots: [{ weekday: "FRIDAY", localStartTime: "20:00", runMode: "INHOUSE", attachRunId: runId }],
           autoCreateRun: false,
           notes: null,
@@ -400,14 +398,12 @@ describe("Create Schedule from an existing Run (adoption)", () => {
     expect(await communityScheduleRunRepository.findByRunId(runId)).toBeNull();
   });
 
-  it("fromRun must name the Run used as a first occurrence", async () => {
-    const runId = await manualRun({ scheduledStartAt: NEXT_FRIDAY_2000, bosses: 5, composition: [3, 3, 12, 2] });
+  it("without a Run Setup or an existing first-occurrence Run the plan is refused", async () => {
     await expectCode(
       communityScheduleService.createSchedulePlan(
         admin,
         {
           raidLeadId: ids.lead,
-          runSetup: { mode: "fromRun", runId },
           slots: [{ weekday: "FRIDAY", localStartTime: "20:00", runMode: "INHOUSE" }],
           autoCreateRun: false,
           notes: null,
@@ -416,6 +412,75 @@ describe("Create Schedule from an existing Run (adoption)", () => {
       ),
       "VALIDATION_FAILED",
     );
+  });
+
+  it("future Raid Lead / time chosen before save win; the Run stays as it is", async () => {
+    await setupA();
+    const runId = await manualRun({ scheduledStartAt: NEXT_FRIDAY_2000, bosses: 6, composition: [2, 3, 13, 1] });
+    const before = await runSnapshot(runId);
+    const plan = await planFromRun(runId, { weekday: "FRIDAY", localStartTime: "20:30" }, { raidLeadId: ids.otherLead });
+    const slot = (await communityScheduleRepository.findById(plan.slotIds[0]!))!;
+    expect(slot).toMatchObject({ raidLeadId: ids.otherLead, localStartTime: "20:30" });
+    expect((await communityScheduleRunRepository.findByRunId(runId))?.windowStartAt).toBe(NEXT_WINDOW);
+    expect(await runSnapshot(runId)).toEqual(before);
+
+    const release = await communityScheduleMaterializationService.runPass(RELEASE_27_JAN);
+    expect(release.status === "COMPLETED" && release.created).toBe(1);
+    const next = (await communityScheduleRunRepository.listBySlotIds([slot.id])).find((link) => link.origin === "MATERIALIZED")!;
+    const nextRun = (await runRepository.findById(next.runId))!;
+    expect(nextRun.raidLeadId).toBe(ids.otherLead);
+    expect(Date.parse(nextRun.scheduledStartAt)).toBe(Date.parse("2027-01-29T19:30:00.000Z"));
+  });
+
+  it("an explicit Run Setup overrides the adoption; the Run is still attached", async () => {
+    await setupA();
+    const runId = await manualRun({ scheduledStartAt: NEXT_FRIDAY_2000, bosses: 6, composition: [2, 3, 13, 1] });
+    const other = await runTemplateRepository.create({
+      name: "CSA Explicit Setup",
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 8 }],
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+      notes: null,
+      createdById: ids.admin,
+      updatedById: ids.admin,
+    });
+    const plan = await planFromRun(runId, { weekday: "FRIDAY", localStartTime: "20:00" }, {
+      runSetup: { mode: "existing", templateId: other },
+    });
+    expect(plan.templateId).toBe(other);
+    expect((await communityScheduleRunRepository.findByRunId(runId))?.origin).toBe("ATTACHED");
+  });
+
+  it("the first time using an existing Run is the configuration source", async () => {
+    await setupA();
+    const first = await manualRun({ scheduledStartAt: NEXT_FRIDAY_2000, bosses: 6, composition: [2, 3, 13, 1] });
+    const second = await manualRun({
+      scheduledStartAt: "2027-01-23T19:00:00.000Z",
+      bosses: 5,
+      composition: [3, 3, 12, 2],
+      raidLead: otherLead,
+    });
+    const plan = await communityScheduleService.createSchedulePlan(
+      admin,
+      {
+        slots: [
+          { weekday: "THURSDAY", localStartTime: "20:00", runMode: "INHOUSE" },
+          { weekday: "FRIDAY", localStartTime: "20:00", runMode: "INHOUSE", attachRunId: first },
+          { weekday: "SATURDAY", localStartTime: "20:00", runMode: "INHOUSE", attachRunId: second },
+        ],
+        autoCreateRun: false,
+        notes: null,
+      } as never,
+      OCC_NOW,
+    );
+    const slots = await Promise.all(plan.slotIds.map((id) => communityScheduleRepository.findById(id)));
+    expect(new Set(slots.map((slot) => slot!.runTemplateId))).toEqual(new Set([plan.templateId]));
+    expect((await runTemplateRepository.findById(plan.templateId))?.name).toBe("CSA Setup A");
+    expect(new Set(slots.map((slot) => slot!.raidLeadId))).toEqual(new Set([ids.lead]));
+    expect((await communityScheduleRunRepository.findByRunId(second))?.origin).toBe("ATTACHED");
   });
 
   it("a Raid Lead who is no longer eligible is not adopted (user must choose)", async () => {
@@ -430,6 +495,14 @@ describe("Create Schedule from an existing Run (adoption)", () => {
       const candidate = (await candidateFor(runId))!;
       expect(candidate.raidLeadId).toBeNull();
       expect(candidate.raidLeadName).toBe("CSA Other Lead");
+      expect(candidate.runSetup.mode).toBe("fromRun");
+
+      // Without a chosen Raid Lead the server refuses; the Setup is still adopted once one is chosen.
+      await expectCode(planFromRun(runId, { weekday: "FRIDAY", localStartTime: "20:00" }), "COMMUNITY_SCHEDULE_RAID_LEAD_INVALID");
+      expect(await testTemplates()).toHaveLength(0);
+      const plan = await planFromRun(runId, { weekday: "FRIDAY", localStartTime: "20:00" }, { raidLeadId: ids.lead });
+      expect((await runTemplateRepository.findById(plan.templateId))?.contents.map((row) => row.plannedBossCount)).toEqual([5]);
+      expect((await communityScheduleRepository.findById(plan.slotIds[0]!))?.raidLeadId).toBe(ids.lead);
     } finally {
       await orm.User.where({ id: ids.otherLead }).update({ accountRole: "RAID_LEAD" });
     }
@@ -445,6 +518,35 @@ describe("draft-slot picker (create dialogs)", () => {
     });
     const warning = candidates.find((row) => row.runId === runId)?.warnings.find((row) => row.code === "RAID_LEAD");
     expect(warning?.message).toBe("Raid Lead CSA Lead differs from the schedule's CSA Other Lead.");
+  });
+});
+
+describe("Add times with an existing Run", () => {
+  it("adopts weekday / time only — the group's Run Setup and Raid Lead stay authoritative", async () => {
+    const templateA = await setupA();
+    const runId = await manualRun({
+      scheduledStartAt: NEXT_FRIDAY_2000,
+      bosses: 5,
+      composition: [3, 3, 12, 2],
+      raidLead: otherLead,
+    });
+    const before = await runSnapshot(runId);
+    const added = await communityScheduleService.addTimesToSetup(
+      admin,
+      {
+        raidLeadId: ids.lead,
+        runTemplateId: templateA,
+        slots: [{ weekday: "FRIDAY", localStartTime: "20:00", runMode: "INHOUSE", attachRunId: runId }],
+        autoCreateRun: false,
+        notes: null,
+      },
+      OCC_NOW,
+    );
+    const slot = (await communityScheduleRepository.findById(added.slotIds[0]!))!;
+    expect(slot).toMatchObject({ runTemplateId: templateA, raidLeadId: ids.lead });
+    expect((await communityScheduleRunRepository.findByRunId(runId))?.origin).toBe("ATTACHED");
+    expect((await testTemplates()).map((row) => row.id)).toEqual([templateA]);
+    expect(await runSnapshot(runId)).toEqual(before);
   });
 });
 
