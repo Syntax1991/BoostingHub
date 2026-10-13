@@ -23,6 +23,7 @@ import { ProductContentPicker } from "@/components/runs/product-content-picker";
 import { createCommunitySchedulePlanAction } from "@/controllers/community-schedule.actions";
 import type { CommunityScheduleTemplateOption } from "@/services/community-schedule.service";
 import type { AdoptionCandidate } from "@/services/community-schedule-occurrence.service";
+import { pruneUnavailableRuns } from "@/lib/community-schedule-form";
 
 const WEEKDAY_LABELS: Record<(typeof COMMUNITY_WEEKDAYS)[number], string> = {
   MONDAY: "Monday",
@@ -92,15 +93,10 @@ export function CommunitySchedulePlanDialog({
   const { candidates, loadError } = useAdoptionCandidates(
     start,
     (available) => {
-      // Drop choices that no longer qualify (e.g. a later Starts, attached meanwhile).
-      setBasisRunId((current) => (current && !available.has(current) ? null : current));
-      setSlots((current) =>
-        current.some((row) => row.attachRunId && !available.has(row.attachRunId))
-          ? current.map((row) =>
-              row.attachRunId && !available.has(row.attachRunId) ? { ...row, attachRunId: null } : row,
-            )
-          : current,
-      );
+      // Drop only choices the server no longer lists (e.g. a later Starts, attached
+      // meanwhile) — the basis and each time's Run independently.
+      setBasisRunId((current) => pruneUnavailableRuns({ basisRunId: current, slots: [] }, available).basisRunId);
+      setSlots((current) => pruneUnavailableRuns({ basisRunId: null, slots: current }, available).slots as SlotRow[]);
     },
     open ? openKey : null,
   );
@@ -153,6 +149,7 @@ export function CommunitySchedulePlanDialog({
    * changed.
    */
   function chooseBasis(candidate: AdoptionCandidate | null) {
+    setError(null);
     setBasisRunId(candidate?.runId ?? null);
     if (!candidate) return;
     setRaidLeadId(candidate.raidLeadId ?? "");
@@ -162,6 +159,7 @@ export function CommunitySchedulePlanDialog({
   }
 
   function chooseSource(next: "setup" | "run") {
+    setError(null);
     setScheduleSource(next);
     setBasisRunId(null);
     setOverrideAdoptedSetup(false);
@@ -223,6 +221,10 @@ export function CommunitySchedulePlanDialog({
   function submit(event: { preventDefault(): void }) {
     event.preventDefault();
     setError(null);
+    if (byBasis && !basisRunId) {
+      setError("Choose an existing Run as the Schedule source.");
+      return;
+    }
     const composition = {
       compositionOverrideEnabled: !useDefaults,
       desiredTankCountOverride: useDefaults ? null : overrideTanks,
@@ -264,6 +266,7 @@ export function CommunitySchedulePlanDialog({
           // basisRunId is authoritative: the server derives the Run Setup, Raid
           // Lead and first weekly time. Only values the user changed are sent,
           // as overrides for FUTURE occurrences.
+          scheduleSource: "run" as const,
           basisRunId,
           basisWeekday: !basis || basisWeekday !== basis.weekday ? basisWeekday : undefined,
           basisLocalStartTime: !basis || basisTime !== basis.localStartTime ? basisTime : undefined,
@@ -272,7 +275,7 @@ export function CommunitySchedulePlanDialog({
           runSetup: adoptSetup ? undefined : runSetupPayload,
           ...common,
         }
-      : { raidLeadId, runSetup: runSetupPayload, ...common };
+      : { scheduleSource: "setup" as const, raidLeadId, runSetup: runSetupPayload, ...common };
 
     startTransition(async () => {
       const result = await createCommunitySchedulePlanAction(payload);
@@ -431,6 +434,7 @@ export function CommunitySchedulePlanDialog({
                   required
                   value={raidLeadId}
                   onChange={(event) => {
+                    setError(null);
                     setRaidLeadId(event.target.value);
                     if (setupMode === "existing" && !adoptSetup) setTemplateId("");
                   }}
@@ -471,7 +475,10 @@ export function CommunitySchedulePlanDialog({
                   </span>
                   <button
                     type="button"
-                    onClick={() => setOverrideAdoptedSetup(true)}
+                    onClick={() => {
+                      setError(null);
+                      setOverrideAdoptedSetup(true);
+                    }}
                     className="justify-self-start text-xs font-medium text-accent hover:underline"
                   >
                     Use a different Run Setup for future occurrences
@@ -483,7 +490,10 @@ export function CommunitySchedulePlanDialog({
                 {byBasis ? (
                   <button
                     type="button"
-                    onClick={() => setOverrideAdoptedSetup(false)}
+                    onClick={() => {
+                      setError(null);
+                      setOverrideAdoptedSetup(false);
+                    }}
                     className="justify-self-start text-xs font-medium text-accent hover:underline"
                   >
                     Use the setup from the basis Run
@@ -494,7 +504,10 @@ export function CommunitySchedulePlanDialog({
                     type="radio"
                     name="setupMode"
                     checked={setupMode === "existing"}
-                    onChange={() => setSetupMode("existing")}
+                    onChange={() => {
+                      setError(null);
+                      setSetupMode("existing");
+                    }}
                   />
                   Use existing
                 </label>
@@ -503,7 +516,10 @@ export function CommunitySchedulePlanDialog({
                     type="radio"
                     name="setupMode"
                     checked={setupMode === "create"}
-                    onChange={() => setSetupMode("create")}
+                    onChange={() => {
+                      setError(null);
+                      setSetupMode("create");
+                    }}
                   />
                   Create new
                 </label>
@@ -516,7 +532,10 @@ export function CommunitySchedulePlanDialog({
                   <select
                     required
                     value={templateId}
-                    onChange={(event) => setTemplateId(event.target.value)}
+                    onChange={(event) => {
+                      setError(null);
+                      setTemplateId(event.target.value);
+                    }}
                     className="h-9 rounded-md border border-border bg-surface-raised px-2"
                   >
                     <option value="">Select…</option>

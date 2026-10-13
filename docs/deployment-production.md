@@ -100,6 +100,10 @@ Safety contract, in order:
 9. `npm run db:emit`
 10. `npm run typecheck`, then `npm run build`. Both must pass **before** the live
     schema is touched.
+    The build's Next.js `deploymentId` is the deployed commit (`next.config.ts`;
+    `NEXT_DEPLOYMENT_ID` overrides): a browser tab still running the previous
+    build is hard-reloaded on its next navigation instead of calling the new
+    server with old client code (server action IDs are stable across builds).
 11. `npm run db:migrate` (never `migrate reset`). A failure aborts before any restart.
 12. Restart `boostinghub-web.service`, then `boostinghub-discord-bot.service`.
 13. Both must be `active`.
