@@ -12,6 +12,8 @@ import { runTemplateRepository } from "@/repositories/run-template.repository";
 import { communityScheduleMaterializationService } from "@/services/community-schedule-materialization.service";
 import { communityScheduleOccurrenceService } from "@/services/community-schedule-occurrence.service";
 import { communityScheduleService } from "@/services/community-schedule.service";
+import { createSchedulePlanSchema } from "@/validators/community-schedule";
+import { SCHEDULE_FORM_OUTDATED_MESSAGE } from "@/lib/community-schedule-form";
 import { runService } from "@/services/run.service";
 
 /** Distinct prefix from the other schedule suites (`cs…`, `csm…`). */
@@ -581,6 +583,80 @@ describe("draft-slot picker (create dialogs)", () => {
     });
     const warning = candidates.find((row) => row.runId === runId)?.warnings.find((row) => row.code === "RAID_LEAD");
     expect(warning?.message).toBe("Raid Lead CSA Lead differs from the schedule's CSA Other Lead.");
+  });
+});
+
+describe("Create Schedule request shape (basis-Run submit regression)", () => {
+  it("screenshot state: source run + basis + no runSetup + additional times with existing Runs → succeeds", async () => {
+    const basisRun = await manualRun({ scheduledStartAt: NEXT_FRIDAY_2000, bosses: 7, composition: [2, 4, 14, 0], lootType: "VIP" });
+    const extraA = await manualRun({ scheduledStartAt: "2027-01-23T19:00:00.000Z", bosses: 5, composition: [3, 3, 12, 2] });
+    const extraB = await manualRun({ scheduledStartAt: "2027-01-24T19:00:00.000Z", bosses: 5, composition: [3, 3, 12, 2] });
+    const before = [await runSnapshot(basisRun), await runSnapshot(extraA), await runSnapshot(extraB)];
+    // Exactly what the dialog sends, through the request validator.
+    const input = createSchedulePlanSchema.parse({
+      scheduleSource: "run",
+      basisRunId: basisRun,
+      basisRunMode: "INHOUSE",
+      slots: [
+        { weekday: "SATURDAY", localStartTime: "20:00", runMode: "INHOUSE", attachRunId: extraA },
+        { weekday: "SUNDAY", localStartTime: "20:00", runMode: "INHOUSE", attachRunId: extraB },
+      ],
+      autoCreateRun: true,
+      start: { mode: "IMMEDIATE" },
+      notes: "",
+      compositionOverrideEnabled: false,
+      desiredTankCountOverride: null,
+      desiredHealerCountOverride: null,
+      desiredDpsCountOverride: null,
+      desiredLootbuddyCountOverride: null,
+    });
+    expect(input.basisRunId).toBe(basisRun);
+    const plan = await communityScheduleService.createSchedulePlan(admin, input, OCC_NOW);
+    expect(plan.slotIds).toHaveLength(3);
+    const setup = (await runTemplateRepository.findById(plan.templateId))!;
+    expect(setup.lootType).toBe("VIP");
+    expect(setup.contents.map((row) => row.plannedBossCount)).toEqual([7]);
+    for (const runId of [basisRun, extraA, extraB]) {
+      expect((await communityScheduleRunRepository.findByRunId(runId))?.origin).toBe("ATTACHED");
+    }
+    expect((await communityScheduleRunRepository.findByRunId(basisRun))?.scheduleSlotId).toBe(plan.slotIds[0]);
+    expect(await orm.Run.where({ raidLeadId: ids.lead, status: "DRAFT" }).all()).toHaveLength(3);
+    expect([await runSnapshot(basisRun), await runSnapshot(extraA), await runSnapshot(extraB)]).toEqual(before);
+  });
+
+  it("an outdated client's payload (no scheduleSource, #248 shape) is refused with a reload hint", () => {
+    const result = createSchedulePlanSchema.safeParse({
+      raidLeadId: ids.lead,
+      slots: [{ weekday: "FRIDAY", localStartTime: "20:00", runMode: "INHOUSE", attachRunId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }],
+      autoCreateRun: true,
+      notes: "",
+    });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toBe(SCHEDULE_FORM_OUTDATED_MESSAGE);
+  });
+
+  it("no hybrid states: run without basis, setup with basis, neither source", async () => {
+    const runId = await manualRun({ scheduledStartAt: NEXT_FRIDAY_2000, bosses: 5, composition: [3, 3, 12, 2] });
+    const base = { slots: [{ weekday: "FRIDAY", localStartTime: "20:00", runMode: "INHOUSE" }], autoCreateRun: false, notes: null };
+    await expectCode(
+      communityScheduleService.createSchedulePlan(admin, { ...base, scheduleSource: "run", raidLeadId: ids.lead } as never, OCC_NOW),
+      "VALIDATION_FAILED",
+    );
+    await expectCode(
+      communityScheduleService.createSchedulePlan(
+        admin,
+        { ...base, scheduleSource: "setup", basisRunId: runId, raidLeadId: ids.lead, runSetup: { mode: "existing", templateId: await setupA() } } as never,
+        OCC_NOW,
+      ),
+      "VALIDATION_FAILED",
+    );
+    try {
+      await communityScheduleService.createSchedulePlan(admin, { ...base, scheduleSource: "setup", raidLeadId: ids.lead } as never, OCC_NOW);
+      throw new Error("expected refusal");
+    } catch (error) {
+      expect(isDomainError(error) && error.message).toBe("Choose a Run Setup or an existing Run as the Schedule source.");
+    }
+    expect(await communityScheduleRunRepository.findByRunId(runId)).toBeNull();
   });
 });
 

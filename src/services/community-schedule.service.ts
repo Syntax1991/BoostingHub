@@ -1138,7 +1138,11 @@ export const communityScheduleService = {
 
   async createSchedulePlan(
     user: AuthenticatedUser,
-    input: CreateSchedulePlanInput,
+    // scheduleSource is required at the request boundary (outdated clients);
+    // internal callers may omit it — then a basisRunId means "run".
+    input: Omit<CreateSchedulePlanInput, "scheduleSource"> & {
+      scheduleSource?: CreateSchedulePlanInput["scheduleSource"];
+    },
     now?: Date,
   ): Promise<{ templateId: string; slotIds: string[] }> {
     requireManage(user);
@@ -1148,6 +1152,19 @@ export const communityScheduleService = {
     // time in Europe/Berlin, attached as that time's first occurrence), the
     // Run Setup (matching or snapshot) and the initial Raid Lead. Explicit
     // runSetup / raidLeadId / basis time are FUTURE overrides only.
+    // One explicit mode, never a hybrid: "run" needs basisRunId, "setup" needs
+    // runSetup and must not carry a basis Run.
+    const source = input.scheduleSource ?? (input.basisRunId ? "run" : "setup");
+    if (source === "run" && !input.basisRunId) {
+      throw new DomainError("VALIDATION_FAILED", "Choose an existing Run as the Schedule source.", 400);
+    }
+    if (source === "setup" && input.basisRunId) {
+      throw new DomainError(
+        "VALIDATION_FAILED",
+        "A basis Run is only used with the Schedule source Existing Run.",
+        400,
+      );
+    }
     const basisRun = input.basisRunId ? await runRepository.findById(input.basisRunId) : null;
     if (input.basisRunId && !basisRun) {
       throw new DomainError("NOT_FOUND", "Run was not found.", 404);

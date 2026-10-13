@@ -9,6 +9,7 @@ import {
 import { COMMUNITY_SCHEDULE_RUN_MODES, COMMUNITY_WEEKDAYS } from "@/models/enums";
 import { compositionSchema } from "@/validators/run";
 import { createRunTemplateSchema } from "@/validators/run-template";
+import { SCHEDULE_FORM_OUTDATED_MESSAGE } from "@/lib/community-schedule-form";
 
 const weekdaySchema = z
   .string()
@@ -188,6 +189,12 @@ export const materializeCommunityScheduleOccurrenceSchema = z.object({
 export const createSchedulePlanSchema = refineUniquePlanSlots(
   z
     .object({
+      /**
+       * Explicit Schedule source of the dialog. Required: a request without it
+       * comes from a page loaded before this field existed (an outdated
+       * client) and must not be interpreted.
+       */
+      scheduleSource: z.enum(["setup", "run"], { error: SCHEDULE_FORM_OUTDATED_MESSAGE }),
       /**
        * Schedule source "Existing Run": the basis Run defines the new Schedule —
        * Run Setup (matching or snapshot), initial Raid Lead, the first weekly
