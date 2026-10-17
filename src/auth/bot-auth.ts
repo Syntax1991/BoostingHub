@@ -1,5 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import type { AuthenticatedUser } from "@/auth/authorization";
+import { resolveBetterAuthBaseURL } from "@/auth/better-auth-base-url";
+import { APP_BRAND_NAME } from "@/lib/branding";
 import { DomainError } from "@/lib/errors";
 import { userRepository } from "@/repositories/user.repository";
 
@@ -41,13 +43,20 @@ function constantTimeEquals(a: string, b: string): boolean {
  * before the bot ever saw the interaction — this call only maps identity,
  * it does not re-verify Discord's own signature.
  */
+/** "You haven't logged in yet" copy with the website's dashboard link. */
+export function notLinkedMessage(env: NodeJS.ProcessEnv = process.env): string {
+  const dashboardUrl = `${resolveBetterAuthBaseURL(env).replace(/\/+$/, "")}/dashboard`;
+  return `You haven't logged in to ${APP_BRAND_NAME} yet. Please go to ${dashboardUrl} and log in with Discord, then try again.`;
+}
+
 export async function resolveActingDiscordUser(discordUserId: string | null): Promise<AuthenticatedUser> {
   if (!discordUserId) {
     throw new DomainError("NOT_AUTHENTICATED", "Missing Discord user identity.", 401);
   }
   const user = await userRepository.findByDiscordUserId(discordUserId);
   if (!user) {
-    throw new DomainError("NOT_FOUND", "No Manawyrm Hub account is linked to this Discord user.", 404);
+    // Shown to the member as-is in Discord: they only need to log in once on the website.
+    throw new DomainError("DISCORD_ACCOUNT_NOT_LINKED", notLinkedMessage(), 404);
   }
   if (user.accountStatus !== "ACTIVE") {
     throw new DomainError("ACCOUNT_DISABLED", "This account is disabled.", 403);
