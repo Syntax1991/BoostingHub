@@ -723,8 +723,9 @@ describe("communityScheduleMaterializationService.runPass", () => {
   });
 
   it("released raid ID only: past CURRENT is not even considered, NEXT is created (pass + page)", async () => {
-    // Wed 07 Oct 2026 00:33 Europe/Berlin — CURRENT Wed 00:30 is past; NEXT is +1 week.
-    const now = new Date("2026-10-06T22:33:00.000Z");
+    // Wed 06 Jan 2027 00:33 Europe/Berlin (CET) — CURRENT Wed 00:30 is past; NEXT is +1 week.
+    // (Fixed future date: creating a Run checks the real clock.)
+    const now = new Date("2027-01-05T23:33:00.000Z");
     const plan = await communityScheduleService.createSchedulePlan(admin, {
       raidLeadId: ids.lead,
       runSetup: { mode: "existing", templateId },
@@ -748,7 +749,7 @@ describe("communityScheduleMaterializationService.runPass", () => {
     const pass = await communityScheduleMaterializationService.runPass(now);
     expect(pass.status).toBe("COMPLETED");
     if (pass.status === "COMPLETED") {
-      // Mon 5 Oct 12:00 released the raid ID starting Wed 7 Oct 06:00 = NEXT here.
+      // Mon 4 Jan 12:00 released the raid ID starting Wed 6 Jan 06:00 = NEXT here.
       expect(pass.skippedPast).toBe(0);
       expect(pass.created).toBe(1);
       expect(pass.failed).toBe(0);
@@ -761,7 +762,7 @@ describe("communityScheduleMaterializationService.runPass", () => {
       now,
       timeZone: COMMUNITY_SCHEDULE_TIME_ZONE,
     });
-    expect(nextOccurrence.scheduledStartAt).toBe("2026-10-13T22:30:00.000Z");
+    expect(nextOccurrence.scheduledStartAt).toBe("2027-01-12T23:30:00.000Z");
 
     const nextLink = await communityScheduleRunRepository.findBySlotAndWindow(
       slotId,

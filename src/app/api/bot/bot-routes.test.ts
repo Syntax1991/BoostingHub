@@ -322,7 +322,7 @@ describe("bot API acting-user resolution", () => {
     expect(res.status).toBe(401);
   });
 
-  it("rejects an unknown Discord user id", async () => {
+  it("rejects an unknown Discord user id with a log-in-on-the-website hint", async () => {
     const res = await signupOptionsGet(
       req(`/api/bot/runs/${runId}/signup-options`, {
         headers: { authorization: `Bearer ${TOKEN}`, "x-discord-user-id": "0000000000000000000" },
@@ -330,6 +330,10 @@ describe("bot API acting-user resolution", () => {
       params(runId),
     );
     expect(res.status).toBe(404);
+    const body = (await res.json()) as { code: string; message: string };
+    expect(body.code).toBe("DISCORD_ACCOUNT_NOT_LINKED");
+    expect(body.message).toMatch(/haven't logged in/);
+    expect(body.message).toMatch(/\/dashboard and log in with Discord/);
   });
 
   it("resolves a known Discord user and returns their signup options", async () => {

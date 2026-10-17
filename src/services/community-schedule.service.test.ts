@@ -669,8 +669,8 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
 
   it("Wed 00:30 slot: release pass at Wed 00:33 creates NEXT (released raid ID); page shows Open Run", async () => {
     await raidRepository.ensureReferenceRaids();
-    // Wed 07 Oct 2026 00:33 Europe/Berlin
-    const now = new Date("2026-10-06T22:33:00.000Z");
+    // Wed 06 Jan 2027 00:33 Europe/Berlin (CET; fixed future date — creating a Run checks the real clock)
+    const now = new Date("2027-01-05T23:33:00.000Z");
     const result = await communityScheduleService.createSchedulePlan(
       admin,
       {
@@ -707,10 +707,10 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
       .find((row) => row.slot.id === slotId);
 
     expect(current?.materialization.state).toBe("PAST");
-    expect(current?.occurrence.scheduledStartAt).toBe("2026-10-06T22:30:00.000Z");
+    expect(current?.occurrence.scheduledStartAt).toBe("2027-01-05T23:30:00.000Z");
     expect(next?.materialization.state).toBe("RUN_CREATED");
     expect(next?.materialization.runId).toBeTruthy();
-    expect(next?.occurrence.scheduledStartAt).toBe("2026-10-13T22:30:00.000Z");
+    expect(next?.occurrence.scheduledStartAt).toBe("2027-01-12T23:30:00.000Z");
 
     const runContents = await orm.RunRaidContent.where({ runId: next!.materialization.runId! }).all();
     expect(runContents).toHaveLength(2);
