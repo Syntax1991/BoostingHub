@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { freezeSystemTime, restoreSystemTime, SCHEDULE_TEST_CLOCK } from "@/test/time";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
@@ -191,6 +192,10 @@ function planFromRun(runId: string, time: { weekday?: "FRIDAY"; localStartTime?:
     OCC_NOW,
   );
 }
+
+// Deterministic wall clock (see SCHEDULE_TEST_CLOCK); Run creation reads the real clock.
+beforeEach(() => freezeSystemTime(SCHEDULE_TEST_CLOCK, { advance: true }));
+afterEach(() => restoreSystemTime());
 
 beforeAll(async () => {
   await upsertUser(lead);
