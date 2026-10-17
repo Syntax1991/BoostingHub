@@ -7,11 +7,23 @@ export const DAY_MS = 24 * HOUR_MS;
 /**
  * Freeze only `Date` / `Date.now()`. Leaves setTimeout/setInterval real so
  * Prisma and other async I/O keep working under Vitest.
+ *
+ * `advance: true` starts the clock at that instant and lets it run on with
+ * real time — deterministic start, but successive writes still get later
+ * timestamps (so `updatedAt`-based "unchanged" assertions keep their teeth).
  */
-export function freezeSystemTime(isoOrDate: string | Date): void {
-  vi.useFakeTimers({ toFake: ["Date"] });
+export function freezeSystemTime(isoOrDate: string | Date, options: { advance?: boolean } = {}): void {
+  vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: options.advance ?? false });
   vi.setSystemTime(typeof isoOrDate === "string" ? new Date(isoOrDate) : isoOrDate);
 }
+
+/**
+ * Wall clock for the DB-backed Community Schedule suites: a fixed instant
+ * before every Run their fixtures create (Jan / Feb 2027). Run creation checks
+ * the real clock ("Scheduled start cannot be in the past"), so without it those
+ * suites would start failing once the fixture dates become history.
+ */
+export const SCHEDULE_TEST_CLOCK = "2027-01-01T12:00:00.000Z";
 
 export function restoreSystemTime(): void {
   vi.useRealTimers();

@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { freezeSystemTime, restoreSystemTime, SCHEDULE_TEST_CLOCK } from "@/test/time";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import {
   COMMUNITY_SCHEDULE_TIME_ZONE,
@@ -133,6 +134,10 @@ const CURRENT_WINDOW = "2027-01-13T05:00:00.000Z";
 const NEXT_WINDOW = "2027-01-20T05:00:00.000Z";
 /** Monday 18 Jan 2027 12:00 CET — the weekly Draft release for the NEXT_WINDOW raid ID. */
 const RELEASE_NOW = new Date("2027-01-18T11:00:00.000Z");
+
+// Deterministic wall clock (see SCHEDULE_TEST_CLOCK); Run creation reads the real clock.
+beforeEach(() => freezeSystemTime(SCHEDULE_TEST_CLOCK, { advance: true }));
+afterEach(() => restoreSystemTime());
 
 beforeAll(async () => {
   await cleanupUsers();
@@ -724,8 +729,9 @@ describe("communityScheduleMaterializationService.runPass", () => {
 
   it("released raid ID only: past CURRENT is not even considered, NEXT is created (pass + page)", async () => {
     // Wed 06 Jan 2027 00:33 Europe/Berlin (CET) — CURRENT Wed 00:30 is past; NEXT is +1 week.
-    // (Fixed future date: creating a Run checks the real clock.)
     const now = new Date("2027-01-05T23:33:00.000Z");
+    // This test is about "now": the wall clock is exactly `now` (Run creation reads it).
+    freezeSystemTime(now, { advance: true });
     const plan = await communityScheduleService.createSchedulePlan(admin, {
       raidLeadId: ids.lead,
       runSetup: { mode: "existing", templateId },

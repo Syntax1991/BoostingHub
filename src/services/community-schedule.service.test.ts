@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { freezeSystemTime, restoreSystemTime, SCHEDULE_TEST_CLOCK } from "@/test/time";
 import { VENOMOUS_ABYSS_PRODUCT_CONTENT_ID, VENOMOUS_ABYSS_PRODUCT_ID } from "@/lib/product-catalog";
 import { seededProductSelection } from "@/lib/test-run-input";
 import type { AuthenticatedUser } from "@/auth/authorization";
@@ -128,6 +129,10 @@ const user = asUser(ids.user, "CS User", "USER");
 const lead = asUser(ids.lead, "CS Lead", "RAID_LEAD");
 const admin = asUser(ids.admin, "CS Admin", "ADMIN");
 const owner = asUser(ids.owner, "CS Owner", "OWNER");
+
+// Deterministic wall clock (see SCHEDULE_TEST_CLOCK); Run creation reads the real clock.
+beforeEach(() => freezeSystemTime(SCHEDULE_TEST_CLOCK, { advance: true }));
+afterEach(() => restoreSystemTime());
 
 beforeAll(async () => {
   await cleanupSlots();
@@ -669,8 +674,10 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
 
   it("Wed 00:30 slot: release pass at Wed 00:33 creates NEXT (released raid ID); page shows Open Run", async () => {
     await raidRepository.ensureReferenceRaids();
-    // Wed 06 Jan 2027 00:33 Europe/Berlin (CET; fixed future date — creating a Run checks the real clock)
+    // Wed 06 Jan 2027 00:33 Europe/Berlin (CET)
     const now = new Date("2027-01-05T23:33:00.000Z");
+    // This test is about "now": the wall clock is exactly `now` (Run creation reads it).
+    freezeSystemTime(now, { advance: true });
     const result = await communityScheduleService.createSchedulePlan(
       admin,
       {
