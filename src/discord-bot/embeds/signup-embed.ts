@@ -240,7 +240,11 @@ export function buildSignupEmbed(
   const description = `${formatDiscordRunTitleLink(data.runTitle, data.runId)}\n${summary}`;
   const raidLeadEmoji = roleEmoji("raidlead", roleIndicators);
   const emptyValue = data.uniqueSignupCount === 0 ? "No signups yet." : EMPTY_FIELD_VALUE;
-  const windowLine = data.signupWindowOpen ? "Signups are open." : "Signups are closed.";
+  const windowLine = isRunEnded(data)
+    ? "This run has ended — Raid Lead / Admin can archive it below."
+    : data.signupWindowOpen
+      ? "Signups are open."
+      : "Signups are closed.";
 
   return new EmbedBuilder()
     .setTitle("Signups")
@@ -255,11 +259,28 @@ export function buildSignupEmbed(
       ...buildRoleSectionFields(signedRoleColumns(data), classIndicators, roleIndicators, emptyValue),
     )
     .setColor(color)
-    .setFooter({ text: `${windowLine} Signup does not mean selected.` });
+    .setFooter({ text: isRunEnded(data) ? windowLine : `${windowLine} Signup does not mean selected.` });
 }
 
-/** Buttons disable once the signup window is no longer open — the server remains the real gate either way. */
+/** Completed / cancelled: the Run can be archived (same rule as the app: canArchiveRun). */
+function isRunEnded(data: Pick<SignupEmbedData, "runStatus">): boolean {
+  return data.runStatus === "COMPLETED" || data.runStatus === "CANCELLED";
+}
+
+/**
+ * Buttons disable once the signup window is no longer open — the server remains the real gate either way.
+ * An ended Run shows only "Archive Run" (Raid Lead / Admin; confirmed ephemerally, archived by the server).
+ */
 export function buildSignupButtons(data: SignupEmbedData): ActionRowBuilder<ButtonBuilder> {
+  if (isRunEnded(data)) {
+    return new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(buildCustomId("archive", data.runId))
+        .setLabel("Archive Run")
+        .setEmoji("🗄️")
+        .setStyle(ButtonStyle.Secondary),
+    );
+  }
   const disabled = !data.signupWindowOpen;
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
