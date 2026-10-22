@@ -200,7 +200,8 @@ describe("resolveRosterWclPerformance", () => {
         zoneId: 53,
         encounterId: 0,
         difficulty: 4,
-        metricKey: "dps",
+        // Venomous shares zone 53 with Tidebound → raid-scoped cache key.
+        metricKey: "dps@raid",
         bestPct: 91,
         avgPct: 70,
         fetchedAt: "2026-09-20T11:00:00.000Z",

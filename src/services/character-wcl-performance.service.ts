@@ -3,7 +3,7 @@ import {
   type WarcraftLogsRankingMetric,
   type WarcraftLogsRankingRole,
 } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
-import { effectiveWclRankingEncounterId, type RaidCatalog } from "@/lib/raid-catalog";
+import { effectiveWclRankingEncounterId, type CatalogRaid, type RaidCatalog } from "@/lib/raid-catalog";
 import { raidContentDisplayName } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 import { findSpecialization } from "@/lib/wow-specializations";
@@ -50,6 +50,8 @@ type FetchKey = {
   warcraftLogsId: string;
   zoneId: number;
   encounterId: number;
+  /** Zone-wide query restricted to this raid's encounters (shared zone); null → plain zone-wide. */
+  scopeEncounterIds: readonly number[] | null;
   difficulty: number;
   metricKey: string;
   metric: WarcraftLogsRankingMetric;
@@ -114,6 +116,26 @@ export function rolesRelevantForWclPerformance(input: {
 
 export function buildMetricKey(metricKeyBase: string, specName: string | null): string {
   return specName ? `${metricKeyBase}:${specName}` : metricKeyBase;
+}
+
+/** Cache metricKey suffix for zone rankings restricted to one raid's encounters. */
+export const RAID_SCOPED_METRIC_SUFFIX = "@raid";
+
+/**
+ * Encounters to restrict a zone-wide ranking to: only for a multi-boss raid
+ * whose WCL zone also holds another catalog raid (e.g. The Venomous Abyss in
+ * zone 53 next to The Tidebound Grotto and Kith'ix) — zone-wide averages would
+ * otherwise include those raids' bosses. Unshared zones stay plain zone-wide.
+ */
+export function sharedZoneEncounterScope(
+  raid: Pick<CatalogRaid, "id" | "wclZoneId" | "bosses">,
+  catalog: Pick<RaidCatalog, "raids">,
+): number[] | null {
+  if (raid.wclZoneId == null) return null;
+  const shared = catalog.raids.some((other) => other.id !== raid.id && other.wclZoneId === raid.wclZoneId);
+  if (!shared) return null;
+  const ids = [...new Set(raid.bosses.flatMap((boss) => boss.wclEncounterIds))];
+  return ids.length > 0 ? ids : null;
 }
 
 function isFresh(row: CharacterWclPerformanceRecord, nowMs: number): boolean {
@@ -190,11 +212,13 @@ export async function resolveRosterWclPerformance(input: {
     .map((content) => {
       const raid = catalog.findById(content.raidId);
       if (!raid?.wclZoneId) return null;
+      const encounterId = effectiveWclRankingEncounterId(raid) ?? 0;
       return {
         raidId: content.raidId,
         raidName: raidContentDisplayName(content.raidId, content.raidName),
         zoneId: raid.wclZoneId,
-        encounterId: effectiveWclRankingEncounterId(raid) ?? 0,
+        encounterId,
+        scopeEncounterIds: encounterId > 0 ? null : sharedZoneEncounterScope(raid, catalog),
       };
     })
     .filter((row): row is NonNullable<typeof row> => row != null);
@@ -244,7 +268,9 @@ export async function resolveRosterWclPerformance(input: {
           booster.character.specialization,
           offeredRole,
         );
-        const metricKey = buildMetricKey(metricKeyBase, specName);
+        // Raid-scoped values get their own cache key (never mixed with zone-wide rows).
+        const metricKey =
+          buildMetricKey(metricKeyBase, specName) + (content.scopeEncounterIds ? RAID_SCOPED_METRIC_SUFFIX : "");
         const keyId = [
           booster.character.id,
           content.zoneId,
@@ -258,6 +284,7 @@ export async function resolveRosterWclPerformance(input: {
             warcraftLogsId: wclId,
             zoneId: content.zoneId,
             encounterId: content.encounterId,
+            scopeEncounterIds: content.scopeEncounterIds,
             difficulty: wclDifficulty,
             metricKey,
             metric,
@@ -309,6 +336,7 @@ export async function resolveRosterWclPerformance(input: {
         role: key.role,
         specName: key.specName,
         encounterId: key.encounterId > 0 ? key.encounterId : undefined,
+        encounterIds: key.scopeEncounterIds ?? undefined,
       });
 
       if (response.status === "SUCCESS") {

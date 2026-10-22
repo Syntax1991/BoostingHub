@@ -48,9 +48,20 @@ export type WarcraftLogsFindCharacterResult =
 export type WarcraftLogsRankingMetric = "dps" | "hps";
 export type WarcraftLogsRankingRole = "Tank" | "Healer" | "DPS";
 
+/** One encounter row of a WCL `zoneRankings` payload (`rankings[]`). */
+export type WarcraftLogsEncounterPercent = {
+  encounterId: number;
+  /** Best parse percentile on this encounter (null: no ranked kill). */
+  rankPercent: number | null;
+  /** Median parse percentile on this encounter. */
+  medianPercent: number | null;
+};
+
 export type WarcraftLogsZoneRankings = {
   bestPerformanceAverage: number | null;
   medianPerformanceAverage: number | null;
+  /** Per-encounter rows of a zone payload; null when the payload has none (encounter rankings / older shape). */
+  encounters: WarcraftLogsEncounterPercent[] | null;
 };
 
 export type WarcraftLogsZoneRankingsResult =
@@ -313,6 +324,48 @@ export function mapZoneRankings(raw: unknown): WarcraftLogsZoneRankings | null {
   return {
     bestPerformanceAverage: asFiniteNumber(record.bestPerformanceAverage),
     medianPerformanceAverage: asFiniteNumber(record.medianPerformanceAverage),
+    encounters: mapZoneEncounterRows(record.rankings),
+  };
+}
+
+function mapZoneEncounterRows(raw: unknown): WarcraftLogsEncounterPercent[] | null {
+  if (!Array.isArray(raw)) return null;
+  const rows: WarcraftLogsEncounterPercent[] = [];
+  for (const item of raw) {
+    const row = asRecord(item);
+    const encounterId = asFiniteNumber(asRecord(row?.encounter)?.id);
+    if (!row || encounterId == null) continue;
+    rows.push({
+      encounterId,
+      rankPercent: asFiniteNumber(row.rankPercent),
+      medianPercent: asFiniteNumber(row.medianPercent),
+    });
+  }
+  return rows;
+}
+
+function averageOf(values: number[]): number | null {
+  return values.length === 0 ? null : values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+/**
+ * Best / Avg restricted to `encounterIds` — for a multi-boss raid whose WCL
+ * zone also holds other raids' encounters (zone-wide averages would mix them
+ * in). Same averaging as WCL's zone averages: mean over the encounters with a
+ * value. Returns the zone-wide values unchanged when the payload carries no
+ * per-encounter rows.
+ */
+export function scopeZoneRankingsToEncounters(
+  rankings: WarcraftLogsZoneRankings,
+  encounterIds: readonly number[],
+): WarcraftLogsZoneRankings {
+  if (rankings.encounters == null || encounterIds.length === 0) return rankings;
+  const wanted = new Set(encounterIds);
+  const rows = rankings.encounters.filter((row) => wanted.has(row.encounterId));
+  return {
+    bestPerformanceAverage: averageOf(rows.flatMap((row) => (row.rankPercent == null ? [] : [row.rankPercent]))),
+    medianPerformanceAverage: averageOf(rows.flatMap((row) => (row.medianPercent == null ? [] : [row.medianPercent]))),
+    encounters: rows,
   };
 }
 
@@ -339,6 +392,7 @@ export function mapEncounterRankings(raw: unknown): WarcraftLogsZoneRankings | n
   return {
     bestPerformanceAverage: bestFromRanks ?? average,
     medianPerformanceAverage: median ?? average,
+    encounters: null,
   };
 }
 
@@ -812,6 +866,8 @@ export const warcraftLogsApiClient = {
     specName?: string;
     /** When set, uses encounterRankings for this boss (e.g. Nymrissa). */
     encounterId?: number;
+    /** Zone query only: restrict Best/Avg to these encounters (raid in a shared zone). */
+    encounterIds?: readonly number[];
   }): Promise<WarcraftLogsZoneRankingsResult> {
     if (!isWarcraftLogsConfigured()) {
       return { status: "NOT_CONFIGURED" };
@@ -859,9 +915,13 @@ export const warcraftLogsApiClient = {
         return { status: "NOT_FOUND" };
       }
 
-      const rankings = useEncounter
+      const mapped = useEncounter
         ? mapEncounterRankings(characterRaw.encounterRankings)
         : mapZoneRankings(characterRaw.zoneRankings);
+      const rankings =
+        mapped && !useEncounter && input.encounterIds?.length
+          ? scopeZoneRankingsToEncounters(mapped, input.encounterIds)
+          : mapped;
       if (!rankings) {
         return { status: "NOT_FOUND" };
       }

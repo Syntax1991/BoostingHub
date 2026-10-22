@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildRaidCatalog, effectiveWclRankingEncounterId, type CatalogRaid } from "@/lib/raid-catalog";
 import { warcraftLogsApiClient } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
 import { characterWclPerformanceRepository } from "@/repositories/character-wcl-performance.repository";
-import { resolveRosterWclPerformance } from "@/services/character-wcl-performance.service";
+import {
+  RAID_SCOPED_METRIC_SUFFIX,
+  resolveRosterWclPerformance,
+  sharedZoneEncounterScope,
+} from "@/services/character-wcl-performance.service";
 
 const ZONE = 53;
 
@@ -85,5 +89,65 @@ describe("roster WCL performance ranking scope", () => {
 
     const scopes = fetch.mock.calls.map(([args]) => `${args.zoneId}:${args.encounterId ?? "zone"}`).sort();
     expect(scopes).toEqual(["53:3513", "53:zone"]);
+    // Venomous shares zone 53 with Tide / Kith'ix → its zone query is restricted to its own bosses.
+    const venomousCall = fetch.mock.calls.find(([args]) => args.encounterId == null)![0];
+    expect(venomousCall.encounterIds).toEqual([3470, 3445]);
+    const kithixCall = fetch.mock.calls.find(([args]) => args.encounterId === 3513)![0];
+    expect(kithixCall.encounterIds).toBeUndefined();
+  });
+});
+
+describe("sharedZoneEncounterScope", () => {
+  it("multi-boss raid in a shared zone → its own encounter ids", () => {
+    expect(sharedZoneEncounterScope(VENOMOUS, buildRaidCatalog([VENOMOUS, KITHIX, TIDEBOUND]))).toEqual([3470, 3445]);
+  });
+
+  it("alone in its zone → plain zone-wide (no change)", () => {
+    expect(sharedZoneEncounterScope(VENOMOUS, buildRaidCatalog([VENOMOUS]))).toBeNull();
+  });
+
+  it("no zone or no boss mapping → none", () => {
+    const catalog = buildRaidCatalog([VENOMOUS, KITHIX]);
+    expect(sharedZoneEncounterScope({ ...VENOMOUS, wclZoneId: null }, catalog)).toBeNull();
+    expect(sharedZoneEncounterScope({ ...VENOMOUS, bosses: [] }, catalog)).toBeNull();
+  });
+
+  it("raid-scoped values use their own cache key (old zone-wide rows are not reused)", async () => {
+    vi.spyOn(warcraftLogsApiClient, "isConfigured").mockReturnValue(true);
+    vi.spyOn(warcraftLogsApiClient, "fetchZoneRankings").mockResolvedValue({
+      status: "SUCCESS",
+      rankings: { bestPerformanceAverage: 65, medianPerformanceAverage: 45, encounters: [] },
+    });
+    const zoneWideRow = {
+      id: "old",
+      characterId: "c1",
+      zoneId: 53,
+      encounterId: 0,
+      difficulty: 4,
+      metricKey: "dps:Fire",
+      bestPct: 99,
+      avgPct: 99,
+      fetchedAt: "2026-10-22T11:00:00.000Z",
+    };
+    vi.spyOn(characterWclPerformanceRepository, "listForCharacters").mockResolvedValue([zoneWideRow] as never);
+    const upsert = vi.spyOn(characterWclPerformanceRepository, "upsert").mockResolvedValue(undefined as never);
+
+    const result = await resolveRosterWclPerformance({
+      difficulty: "HEROIC",
+      contents: [{ raidId: VENOMOUS.id, raidName: VENOMOUS.name, sortOrder: 1 }],
+      boosters: [
+        {
+          signupId: "s1",
+          offeredRoles: ["RANGED_DPS"],
+          character: { id: "c1", wowClass: "MAGE", specialization: "Fire", primaryRole: "RANGED_DPS", warcraftLogsId: "123" },
+        },
+      ],
+      catalog: buildRaidCatalog([VENOMOUS, KITHIX]),
+      now: new Date("2026-10-22T12:00:00.000Z"),
+    });
+
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ metricKey: `dps:Fire${RAID_SCOPED_METRIC_SUFFIX}`, bestPct: 65 }));
+    expect(JSON.stringify(result.get("s1"))).toContain("65");
+    expect(JSON.stringify(result.get("s1"))).not.toContain("99");
   });
 });

@@ -311,6 +311,7 @@ describe("warcraftLogsApiClient.fetchZoneRankings", () => {
       rankings: {
         bestPerformanceAverage: 92.4,
         medianPerformanceAverage: 71.1,
+        encounters: null,
       },
     });
 
@@ -364,6 +365,7 @@ describe("warcraftLogsApiClient.fetchZoneRankings", () => {
       rankings: {
         bestPerformanceAverage: 80.1,
         medianPerformanceAverage: 68.5,
+        encounters: null,
       },
     });
 
