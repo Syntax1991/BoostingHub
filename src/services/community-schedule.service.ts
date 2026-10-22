@@ -805,7 +805,7 @@ function projectWindow(
   };
 }
 
-async function listTemplateOptions(_user: AuthenticatedUser): Promise<{
+async function listTemplateOptions(): Promise<{
   options: CommunityScheduleTemplateOption[];
   recordsById: Map<string, RunTemplateRecord>;
   products: PlanningProduct[];
@@ -1070,7 +1070,7 @@ export const communityScheduleService = {
     const [slots, eligibleRaidLeads, templateBundle] = await Promise.all([
       communityScheduleRepository.listAll(),
       canEdit ? userRepository.listEligibleRaidLeads() : Promise.resolve([]),
-      listTemplateOptions(user),
+      listTemplateOptions(),
     ]);
     if (canEdit) {
       await raidRepository.ensureReferenceRaids();
