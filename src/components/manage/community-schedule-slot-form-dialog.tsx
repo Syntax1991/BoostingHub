@@ -7,6 +7,7 @@ import {
   scheduleStartPayload,
   type ScheduleStartState,
 } from "@/components/manage/community-schedule-start-fields";
+import { PingRolesField } from "@/components/manage/community-schedule-ping-field";
 import { formatDate } from "@/lib/datetime";
 import type { ScheduleRunCounts } from "@/lib/community-schedule";
 import { COMMUNITY_SCHEDULE_RUN_MODES, COMMUNITY_WEEKDAYS } from "@/models/enums";
@@ -52,6 +53,8 @@ type EditProps = {
     runTemplateId: string | null;
     autoCreateRun: boolean;
     runMode: CommunityScheduleRunMode;
+    /** "Ping roles" for the Runs this time creates. */
+    discordRolePing?: boolean;
     /** Current activation boundary (raid-ID window start); null = immediately. */
     firstWindowStartAt?: string | null;
     /** Future Runs of this time — shown as the consequence of a time / start change. */
@@ -88,6 +91,9 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
   );
   const [runMode, setRunMode] = useState<CommunityScheduleRunMode>(
     props.mode === "edit" ? props.initial.runMode : "INHOUSE",
+  );
+  const [discordRolePing, setDiscordRolePing] = useState(
+    props.mode === "edit" ? (props.initial.discordRolePing ?? false) : false,
   );
   const [useDefaults, setUseDefaults] = useState(
     props.mode === "edit" ? !(props.initial.compositionOverrideEnabled ?? false) : true,
@@ -148,6 +154,7 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
       runTemplateId: runTemplateId.trim().length > 0 ? runTemplateId : null,
       autoCreateRun,
       runMode,
+      discordRolePing,
       compositionOverrideEnabled: !useDefaults,
       desiredTankCountOverride: useDefaults ? null : tanks,
       desiredHealerCountOverride: useDefaults ? null : healers,
@@ -374,6 +381,7 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
                 />
                 <span>Automatically create weekly Run (open for signups) — release: Monday 12:00 (Europe/Berlin)</span>
               </label>
+              <PingRolesField checked={discordRolePing} onChange={setDiscordRolePing} />
               <label className="grid gap-1 text-sm">
                 <span className="text-xs text-muted">Notes (optional)</span>
                 <textarea

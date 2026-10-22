@@ -144,6 +144,8 @@ export const createCommunityScheduleSlotSchema = z
     runTemplateId: runTemplateIdSchema,
     autoCreateRun: z.boolean().optional().default(false),
     runMode: runModeSchema,
+    /** "Ping roles" for created Runs. Omitted → off (create) / keep the current setting (update). */
+    discordRolePing: z.boolean().optional(),
     /** Omitted → active immediately (create) / keep the current boundary (update). */
     start: scheduleStartSchema.optional(),
   })
@@ -226,6 +228,8 @@ export const createSchedulePlanSchema = refineUniquePlanSlots(
         .array(planSlotSchema)
         .max(MAX_SLOTS_PER_PLAN, `At most ${MAX_SLOTS_PER_PLAN} times per plan.`),
       autoCreateRun: z.boolean(),
+      /** "Ping roles" for created Runs. Omitted → the basis Run's setting for the basis time, off otherwise. */
+      discordRolePing: z.boolean().optional(),
       start: scheduleStartSchema.optional(),
       notes: notesSchema,
     })
@@ -242,6 +246,8 @@ export const addScheduleTimesSchema = refineUniquePlanSlots(
         .min(1, "Add at least one weekly time.")
         .max(MAX_SLOTS_PER_PLAN, `At most ${MAX_SLOTS_PER_PLAN} times per plan.`),
       autoCreateRun: z.boolean(),
+      /** "Ping roles" for created Runs. Omitted → off. */
+      discordRolePing: z.boolean().optional(),
       start: scheduleStartSchema.optional(),
       notes: notesSchema,
     })

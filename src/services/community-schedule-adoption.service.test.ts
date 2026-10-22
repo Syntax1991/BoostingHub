@@ -503,6 +503,22 @@ describe("Create Schedule from an existing Run (adoption)", () => {
     expect((await communityScheduleRunRepository.findByRunId(other))).toMatchObject({ origin: "ATTACHED", scheduleSlotId: slots[2]!.id });
     expect(await runSnapshot(other)).toEqual(otherBefore);
     expect(await testTemplates()).toHaveLength(1);
+    // "Ping roles": the basis time takes the basis Run's (on); further times stay off.
+    expect(slots.map((slot) => slot!.discordRolePing)).toEqual([true, false, false]);
+  });
+
+  it("Ping roles: taken from the basis Run (also when off), an explicit choice wins", async () => {
+    await setupA();
+    const quiet = await manualRun({ scheduledStartAt: NEXT_FRIDAY_2000, bosses: 6, composition: [2, 3, 13, 1] });
+    await orm.Run.where({ id: quiet }).update({ discordRolePing: false });
+    expect((await candidateFor(quiet))?.discordRolePing).toBe(false);
+    const fromQuiet = await planFromRun(quiet);
+    expect((await communityScheduleRepository.findById(fromQuiet.slotIds[0]!))?.discordRolePing).toBe(false);
+
+    const loud = await manualRun({ scheduledStartAt: "2027-01-23T19:00:00.000Z", bosses: 6, composition: [2, 3, 13, 1] });
+    await orm.Run.where({ id: loud }).update({ discordRolePing: false });
+    const overridden = await planFromRun(loud, {}, { discordRolePing: true });
+    expect((await communityScheduleRepository.findById(overridden.slotIds[0]!))?.discordRolePing).toBe(true);
   });
 
   it("an existing Run on a time without a basis Run never defines the Run Setup", async () => {

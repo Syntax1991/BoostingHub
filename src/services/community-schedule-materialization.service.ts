@@ -269,6 +269,7 @@ async function materializeSlotWindowsInternal(input: {
             desiredHealerCountOverride: slot.desiredHealerCountOverride,
             desiredDpsCountOverride: slot.desiredDpsCountOverride,
             desiredLootbuddyCountOverride: slot.desiredLootbuddyCountOverride,
+            discordRolePing: slot.discordRolePing,
           },
           actor: { kind: "SYSTEM" },
         });
@@ -348,6 +349,7 @@ export const communityScheduleMaterializationService = {
         desiredHealerCountOverride: slot.desiredHealerCountOverride,
         desiredDpsCountOverride: slot.desiredDpsCountOverride,
         desiredLootbuddyCountOverride: slot.desiredLootbuddyCountOverride,
+        discordRolePing: slot.discordRolePing,
       },
       actor,
     });

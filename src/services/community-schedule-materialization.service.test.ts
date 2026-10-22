@@ -244,9 +244,12 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       lootType: string;
       title: string;
       signupsOpen: boolean;
+      discordRolePing: boolean;
     } | null;
     expect(run?.status).toBe("OPEN");
     expect(run?.signupsOpen).toBe(true);
+    // "Ping roles" is off unless the Schedule time turns it on.
+    expect(run?.discordRolePing).toBe(false);
     expect(run?.difficulty).toBe("HEROIC");
     expect(run?.lootType).toBe("UNSAVED");
     expect(run?.title).not.toContain("LABEL MUST NOT BECOME TITLE");
@@ -262,6 +265,62 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       | undefined;
     expect(created?.actorKind).toBe("USER");
     expect(created?.actorUserId).toBe(ids.lead);
+  });
+
+  it("a time with Ping roles on creates Runs that ping; an edit without the field keeps it", async () => {
+    const now = new Date("2027-01-15T12:00:00.000Z");
+    const { slot } = await communityScheduleService.createSlot(admin, {
+      weekday: "FRIDAY",
+      localStartTime: "19:45",
+      label: "Ping",
+      raidLeadId: ids.lead,
+      notes: null,
+      runTemplateId: templateId,
+      autoCreateRun: false,
+      runMode: "INHOUSE",
+      discordRolePing: true,
+    });
+    expect(slot.discordRolePing).toBe(true);
+    const result = await communityScheduleMaterializationService.materializeOccurrence(
+      { kind: "USER", user: lead },
+      { scheduleSlotId: slot.id, window: "NEXT", now },
+    );
+    const run = (await orm.Run.where({ id: result.runId }).first()) as { discordRolePing: boolean } | null;
+    expect(run?.discordRolePing).toBe(true);
+
+    await communityScheduleService.updateSlot(
+      admin,
+      {
+        slotId: slot.id,
+        weekday: "FRIDAY",
+        localStartTime: "19:45",
+        label: "Ping renamed",
+        raidLeadId: ids.lead,
+        notes: null,
+        runTemplateId: templateId,
+        autoCreateRun: false,
+        runMode: "INHOUSE",
+      } as never,
+      now,
+    );
+    expect((await communityScheduleRepository.findById(slot.id))?.discordRolePing).toBe(true);
+    await communityScheduleService.updateSlot(
+      admin,
+      {
+        slotId: slot.id,
+        weekday: "FRIDAY",
+        localStartTime: "19:45",
+        label: "Ping renamed",
+        raidLeadId: ids.lead,
+        notes: null,
+        runTemplateId: templateId,
+        autoCreateRun: false,
+        runMode: "INHOUSE",
+        discordRolePing: false,
+      } as never,
+      now,
+    );
+    expect((await communityScheduleRepository.findById(slot.id))?.discordRolePing).toBe(false);
   });
 
   it("rejects CURRENT occurrence in the past", async () => {

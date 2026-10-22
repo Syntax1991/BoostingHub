@@ -910,6 +910,9 @@ model CommunityScheduleSlot {
   autoCreateRun  Boolean          @default(false)
   /// Management Discord Share classification (Inhouse / Team Run). Independent of Run materialization.
   runMode        CommunityScheduleRunMode @default(INHOUSE)
+  /// "Ping roles" for the Runs this slot creates (Run.discordRolePing). Off by
+  /// default; a slot based on an existing Run takes that Run's setting.
+  discordRolePing Boolean         @default(false)
   /// Activation boundary: raid-ID window start (Wed 06:00 Europe/Berlin) of the
   /// first occurrence the materializer may create. Null = active immediately
   /// (legacy). Earlier occurrences are never auto-created; existing Runs are

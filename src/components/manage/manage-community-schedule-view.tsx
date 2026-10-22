@@ -112,6 +112,7 @@ function WindowSection({
                               runTemplateId: slot.runTemplateId,
                               autoCreateRun: slot.autoCreateRun,
                               runMode: slot.runMode,
+                              discordRolePing: slot.discordRolePing,
                               firstWindowStartAt: slot.firstWindowStartAt,
                               runCounts: runCountsBySlotId[slot.id],
                               compositionOverrideEnabled: slot.compositionOverrideEnabled,
@@ -321,7 +322,7 @@ function WeeklyPlanSection({ page }: { page: CommunitySchedulePage }) {
                       {!slot.isActive ? " · Inactive" : ""}
                     </span>
                     <span className="ml-2 text-xs text-muted">
-                      Weekly Run {slot.autoCreateRun ? "✓" : "✗"}
+                      Weekly Run {slot.autoCreateRun ? "✓" : "✗"} · Ping roles {slot.discordRolePing ? "✓" : "✗"}
                     </span>
                     {slot.notes ? <p className="mt-0.5 text-xs text-muted">{slot.notes}</p> : null}
                   </div>

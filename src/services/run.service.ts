@@ -587,6 +587,8 @@ export const runService = {
       desiredDpsCountOverride: number | null;
       desiredLootbuddyCountOverride: number | null;
     } | null;
+    /** "Ping roles" (Run.discordRolePing); omitted → on, like a manually created Run. */
+    discordRolePing?: boolean;
   }): Promise<RunCreateWithContentsInput> {
     await raidRepository.ensureReferenceRaids();
     if (input.template.contents.length === 0) {
@@ -614,7 +616,7 @@ export const runService = {
       desiredHealerCount: composition.desiredHealerCount,
       desiredDpsCount: composition.desiredDpsCount,
       desiredLootbuddyCount: composition.desiredLootbuddyCount,
-      discordRolePing: true,
+      discordRolePing: input.discordRolePing ?? true,
     };
     const raidById = await resolveRaidsForContents(contents, { requireRaidAvailability: false });
     const raidLead = await requireEligibleRaidLead(input.raidLeadId);
@@ -639,6 +641,8 @@ export const runService = {
       desiredHealerCountOverride: number | null;
       desiredDpsCountOverride: number | null;
       desiredLootbuddyCountOverride: number | null;
+      /** The slot's "Ping roles" setting, copied onto the Run. */
+      discordRolePing: boolean;
     };
     actor: { kind: "USER"; user: AuthenticatedUser } | { kind: "SYSTEM" };
     /** Slot state this occurrence was computed from; re-checked under the slot lock. */
@@ -649,6 +653,7 @@ export const runService = {
       scheduledStartAt: input.scheduledStartAt,
       raidLeadId: input.raidLeadId,
       scheduleSlot: input.scheduleSlot,
+      discordRolePing: input.scheduleSlot.discordRolePing,
     });
 
     const createdByKind = input.actor.kind;
