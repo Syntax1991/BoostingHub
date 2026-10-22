@@ -25,6 +25,7 @@ describe("mapZoneRankings", () => {
     ).toEqual({
       bestPerformanceAverage: 91.2,
       medianPerformanceAverage: 70.5,
+      encounters: null,
     });
   });
 
