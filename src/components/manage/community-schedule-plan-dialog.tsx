@@ -9,6 +9,7 @@ import {
   useAdoptionCandidates,
   type ScheduleStartState,
 } from "@/components/manage/community-schedule-start-fields";
+import { PingRolesField } from "@/components/manage/community-schedule-ping-field";
 import { COMMUNITY_SCHEDULE_RUN_MODES, COMMUNITY_WEEKDAYS, RAID_DIFFICULTIES, RUN_LOOT_TYPES } from "@/models/enums";
 import type { CommunityScheduleRunMode, RaidDifficulty, RunLootType } from "@/models/enums";
 import { MAX_SLOTS_PER_PLAN } from "@/lib/community-schedule";
@@ -77,6 +78,8 @@ export function CommunitySchedulePlanDialog({
   const [overrideAdoptedSetup, setOverrideAdoptedSetup] = useState(false);
   const [templateId, setTemplateId] = useState("");
   const [autoCreateRun, setAutoCreateRun] = useState(false);
+  /** "Ping roles" for the created Runs: off by default, a basis Run's own setting when based on one. */
+  const [discordRolePing, setDiscordRolePing] = useState(false);
   const [slots, setSlots] = useState<SlotRow[]>([newSlotRow()]);
   const [start, setStart] = useState<ScheduleStartState>(DEFAULT_SCHEDULE_START);
   /**
@@ -155,6 +158,7 @@ export function CommunitySchedulePlanDialog({
     setRaidLeadId(candidate.raidLeadId ?? "");
     setBasisWeekday(candidate.weekday);
     setBasisTime(candidate.localStartTime);
+    setDiscordRolePing(candidate.discordRolePing);
     setOverrideAdoptedSetup(false);
   }
 
@@ -162,6 +166,7 @@ export function CommunitySchedulePlanDialog({
     setError(null);
     setScheduleSource(next);
     setBasisRunId(null);
+    setDiscordRolePing(false);
     setOverrideAdoptedSetup(false);
     // A basis Run brings its own first time; further times are optional.
     setSlots(next === "run" ? [] : [newSlotRow()]);
@@ -200,6 +205,7 @@ export function CommunitySchedulePlanDialog({
     setSetupMode(templatesForLead.length > 0 ? "existing" : "create");
     setTemplateId("");
     setAutoCreateRun(false);
+    setDiscordRolePing(false);
     setSlots([newSlotRow()]);
     setName("");
     setProduct(initialProduct());
@@ -257,6 +263,7 @@ export function CommunitySchedulePlanDialog({
     const common = {
       slots: slotPayload,
       autoCreateRun,
+      discordRolePing,
       start: scheduleStartPayload(start),
       notes: planNotes,
       ...composition,
@@ -760,6 +767,12 @@ export function CommunitySchedulePlanDialog({
                 />
                 <span>Automatically create weekly Run (open for signups) — release: Monday 12:00 (Europe/Berlin)</span>
               </label>
+
+              <PingRolesField
+                checked={discordRolePing}
+                onChange={setDiscordRolePing}
+                hint={byBasis && basisRunId ? "Taken from the selected Run." : undefined}
+              />
 
               <fieldset className="grid gap-2 rounded-md border border-border p-3">
                 <legend className="px-1 text-xs font-medium text-muted">Composition</legend>

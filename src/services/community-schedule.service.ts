@@ -200,6 +200,8 @@ export type CommunityScheduleRunSetupSlot = {
   isActive: boolean;
   autoCreateRun: boolean;
   runMode: CommunityScheduleRunMode;
+  /** "Ping roles" for the Runs this time creates. */
+  discordRolePing: boolean;
   label: string;
   notes: string | null;
   compositionOverrideEnabled: boolean;
@@ -546,6 +548,7 @@ function groupRunSetups(
       isActive: slot.isActive,
       autoCreateRun: slot.autoCreateRun,
       runMode: slot.runMode,
+      discordRolePing: slot.discordRolePing,
       label: slot.label,
       notes: slot.notes,
       compositionOverrideEnabled: slot.compositionOverrideEnabled,
@@ -855,12 +858,16 @@ async function createSlotsInTx(input: {
     localStartTime: string;
     runMode: CommunityScheduleRunMode;
     attachRunId?: string | null;
+    /** Per-slot "Ping roles" (basis time: the basis Run's); else `discordRolePing`. */
+    discordRolePing?: boolean;
   }>;
   label: string;
   notes: string | null;
   raidLeadId: string;
   runTemplateId: string;
   autoCreateRun: boolean;
+  /** "Ping roles" for the Runs these slots create; omitted → off. */
+  discordRolePing?: boolean;
   composition: ReturnType<typeof normalizeScheduleCompositionWrite>;
   start: ScheduleStart | undefined;
   actor: AuthenticatedUser;
@@ -879,6 +886,7 @@ async function createSlotsInTx(input: {
         runTemplateId: input.runTemplateId,
         autoCreateRun: input.autoCreateRun,
         runMode: slot.runMode,
+        discordRolePing: slot.discordRolePing ?? input.discordRolePing ?? false,
         firstWindowStartAt: resolveStartBoundary(slot, input.start, input.now),
         composition: input.composition,
         createdById: input.actor.id,
@@ -1184,7 +1192,7 @@ export const communityScheduleService = {
         400,
       );
     }
-    let slots = input.slots;
+    let slots: Array<(typeof input.slots)[number] & { discordRolePing?: boolean }> = input.slots;
     if (basisRun) {
       if (slots.some((slot) => slot.attachRunId === basisRun.id)) {
         throw new DomainError("VALIDATION_FAILED", "The basis Run is already the first occurrence.", 400);
@@ -1196,6 +1204,8 @@ export const communityScheduleService = {
           localStartTime: input.basisLocalStartTime ?? basisTime.localStartTime,
           runMode: input.basisRunMode ?? "INHOUSE",
           attachRunId: basisRun.id,
+          // Like Setup and Raid Lead: taken from the basis Run unless set explicitly.
+          discordRolePing: input.discordRolePing ?? basisRun.discordRolePing,
         },
         ...slots,
       ];
@@ -1259,6 +1269,7 @@ export const communityScheduleService = {
         raidLeadId,
         runTemplateId: resolvedTemplateId,
         autoCreateRun: input.autoCreateRun,
+        discordRolePing: input.discordRolePing,
         composition,
         start: input.start,
         actor: user,
@@ -1269,7 +1280,7 @@ export const communityScheduleService = {
     }).catch(mapAttachUniqueViolation);
 
     await auditAttached(user, result.attached);
-    // Planning only: Drafts are released Monday 12:00 (or via manual Create Run).
+    // Planning only: Runs are released Monday 12:00 (or via manual Create Run).
     return { templateId: result.templateId, slotIds: result.slotIds };
   },
 
@@ -1308,6 +1319,7 @@ export const communityScheduleService = {
           raidLeadId: input.raidLeadId,
           runTemplateId: template.id,
           autoCreateRun: input.autoCreateRun,
+          discordRolePing: input.discordRolePing,
           composition,
           start: input.start,
           actor: user,
@@ -1346,6 +1358,7 @@ export const communityScheduleService = {
       runTemplateId: input.runTemplateId,
       autoCreateRun: input.autoCreateRun,
       runMode: input.runMode,
+      discordRolePing: input.discordRolePing,
       firstWindowStartAt: resolveStartBoundary(input, input.start, now ?? new Date()),
       composition,
       createdById: user.id,
@@ -1401,6 +1414,7 @@ export const communityScheduleService = {
           runTemplateId: input.runTemplateId,
           autoCreateRun: input.autoCreateRun,
           runMode: input.runMode,
+          discordRolePing: input.discordRolePing,
           // Only an explicit start choice moves the boundary.
           ...(input.start ? { firstWindowStartAt: nextBoundary } : {}),
           composition,

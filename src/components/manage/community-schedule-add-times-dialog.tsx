@@ -14,6 +14,7 @@ import type { CommunityScheduleRunMode } from "@/models/enums";
 import { MAX_SLOTS_PER_PLAN } from "@/lib/community-schedule";
 import { COMMUNITY_SCHEDULE_RUN_MODE_LABELS } from "@/lib/labels";
 import { addCommunityScheduleTimesAction } from "@/controllers/community-schedule.actions";
+import { PingRolesField } from "@/components/manage/community-schedule-ping-field";
 import type { AdoptionCandidate } from "@/services/community-schedule-occurrence.service";
 
 const WEEKDAY_LABELS: Record<(typeof COMMUNITY_WEEKDAYS)[number], string> = {
@@ -58,6 +59,7 @@ export function CommunityScheduleAddTimesDialog({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [autoCreateRun, setAutoCreateRun] = useState(false);
+  const [discordRolePing, setDiscordRolePing] = useState(false);
   const [slots, setSlots] = useState<SlotRow[]>([newSlotRow()]);
   const [start, setStart] = useState<ScheduleStartState>(DEFAULT_SCHEDULE_START);
   const [notes, setNotes] = useState("");
@@ -98,6 +100,7 @@ export function CommunityScheduleAddTimesDialog({
   function resetForm() {
     setError(null);
     setAutoCreateRun(false);
+    setDiscordRolePing(false);
     setSlots([newSlotRow()]);
     setStart(DEFAULT_SCHEDULE_START);
     setNotes("");
@@ -117,6 +120,7 @@ export function CommunityScheduleAddTimesDialog({
           attachRunId: slot.attachRunId,
         })),
         autoCreateRun,
+        discordRolePing,
         start: scheduleStartPayload(start),
         notes,
         compositionOverrideEnabled: false,
@@ -263,6 +267,8 @@ export function CommunityScheduleAddTimesDialog({
                 />
                 <span>Automatically create weekly Run (open for signups) — release: Monday 12:00 (Europe/Berlin)</span>
               </label>
+
+              <PingRolesField checked={discordRolePing} onChange={setDiscordRolePing} />
 
               <label className="grid gap-1 text-sm">
                 <span className="text-xs text-muted">Notes (optional)</span>

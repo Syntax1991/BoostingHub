@@ -24,6 +24,8 @@ export type CommunityScheduleSlotRecord = {
   runTemplateId: string | null;
   autoCreateRun: boolean;
   runMode: CommunityScheduleRunMode;
+  /** "Ping roles" for the Runs this slot creates (Run.discordRolePing). */
+  discordRolePing: boolean;
   /** Activation boundary (raid-ID window start); null = active immediately. */
   firstWindowStartAt: string | null;
   compositionOverrideEnabled: boolean;
@@ -64,6 +66,8 @@ export type CommunityScheduleSlotWrite = {
   runTemplateId: string | null;
   autoCreateRun: boolean;
   runMode: CommunityScheduleRunMode;
+  /** "Ping roles" for created Runs; omitted → off. */
+  discordRolePing?: boolean;
   /** Activation boundary; omitted / null = active immediately. */
   firstWindowStartAt?: string | null;
   /** Omitted → inherit RunTemplate defaults. */
@@ -81,6 +85,8 @@ export type CommunityScheduleSlotUpdate = {
   runTemplateId: string | null;
   autoCreateRun: boolean;
   runMode: CommunityScheduleRunMode;
+  /** "Ping roles" for created Runs; omitted → keep the current setting. */
+  discordRolePing?: boolean;
   /** Omitted → keep the current boundary; null → active immediately. */
   firstWindowStartAt?: string | null;
   /** Omitted → inherit RunTemplate defaults. */
@@ -116,6 +122,7 @@ function mapSlot(row: Record<string, unknown>): CommunityScheduleSlotRecord {
     runTemplateId: asStringOrNull(row.runTemplateId),
     autoCreateRun: asBoolean(row.autoCreateRun, false),
     runMode: mapRunMode(row.runMode),
+    discordRolePing: asBoolean(row.discordRolePing, false),
     firstWindowStartAt: row.firstWindowStartAt == null ? null : asIsoTimestamp(row.firstWindowStartAt),
     compositionOverrideEnabled: asBoolean(row.compositionOverrideEnabled, false),
     desiredTankCountOverride: asNumberOrNull(row.desiredTankCountOverride),
@@ -244,6 +251,7 @@ export const communityScheduleRepository = {
       runTemplateId: input.runTemplateId,
       autoCreateRun: input.autoCreateRun,
       runMode: input.runMode,
+      discordRolePing: input.discordRolePing ?? false,
       firstWindowStartAt: input.firstWindowStartAt ?? null,
       compositionOverrideEnabled: composition.compositionOverrideEnabled,
       desiredTankCountOverride: composition.desiredTankCountOverride,
@@ -279,6 +287,7 @@ export const communityScheduleRepository = {
       runTemplateId: input.runTemplateId,
       autoCreateRun: input.autoCreateRun,
       runMode: input.runMode,
+      ...(input.discordRolePing !== undefined ? { discordRolePing: input.discordRolePing } : {}),
       ...(input.firstWindowStartAt !== undefined ? { firstWindowStartAt: input.firstWindowStartAt } : {}),
       compositionOverrideEnabled: composition.compositionOverrideEnabled,
       desiredTankCountOverride: composition.desiredTankCountOverride,

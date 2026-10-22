@@ -2882,6 +2882,13 @@
                   "kind": "scalar"
                 }
               },
+              "discordRolePing": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
               "firstWindowStartAt": {
                 "nullable": true,
                 "type": {
@@ -3081,6 +3088,9 @@
                 },
                 "desiredTankCountOverride": {
                   "column": "desiredTankCountOverride"
+                },
+                "discordRolePing": {
+                  "column": "discordRolePing"
                 },
                 "firstWindowStartAt": {
                   "column": "firstWindowStartAt"
@@ -11383,6 +11393,15 @@
                   "nativeType": "int4",
                   "nullable": true
                 },
+                "discordRolePing": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
                 "firstWindowStartAt": {
                   "codecId": "pg/timestamptz-string@1",
                   "nativeType": "timestamptz",
@@ -16968,7 +16987,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "694ae2b74bb3d73ff2a3730e8eafe50ea015fa8ed8ec51989f56391f79aaa99f"
+    "storageHash": "18eedde5299606ba7da14228477db8c80918d4ca030f4ccdc68cddf994078cab"
   },
   "execution": {
     "executionHash": "b27b9239312d18e407528e2d06057d2da4f3e67bdff7bffe5f827471950c2fa6",

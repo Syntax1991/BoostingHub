@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'694ae2b74bb3d73ff2a3730e8eafe50ea015fa8ed8ec51989f56391f79aaa99f'>;
+  StorageHashBase<'18eedde5299606ba7da14228477db8c80918d4ca030f4ccdc68cddf994078cab'>;
 export type ExecutionHash =
   ExecutionHashBase<'b27b9239312d18e407528e2d06057d2da4f3e67bdff7bffe5f827471950c2fa6'>;
 export type ProfileHash =
@@ -434,6 +434,7 @@ export type FieldOutputTypes = {
       readonly runTemplateId: CodecTypes['pg/text@1']['output'] | null;
       readonly autoCreateRun: CodecTypes['pg/bool@1']['output'];
       readonly runMode: 'INHOUSE' | 'TEAM_RUN';
+      readonly discordRolePing: CodecTypes['pg/bool@1']['output'];
       readonly firstWindowStartAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly compositionOverrideEnabled: CodecTypes['pg/bool@1']['output'];
       readonly desiredTankCountOverride: CodecTypes['pg/int4@1']['output'] | null;
@@ -1172,6 +1173,7 @@ export type FieldInputTypes = {
       readonly runTemplateId: CodecTypes['pg/text@1']['input'] | null;
       readonly autoCreateRun: CodecTypes['pg/bool@1']['input'];
       readonly runMode: 'INHOUSE' | 'TEAM_RUN';
+      readonly discordRolePing: CodecTypes['pg/bool@1']['input'];
       readonly firstWindowStartAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly compositionOverrideEnabled: CodecTypes['pg/bool@1']['input'];
       readonly desiredTankCountOverride: CodecTypes['pg/int4@1']['input'] | null;
@@ -1908,6 +1910,7 @@ export type StorageColumnTypes = {
       readonly desiredHealerCountOverride: CodecTypes['pg/int4@1']['output'] | null;
       readonly desiredLootbuddyCountOverride: CodecTypes['pg/int4@1']['output'] | null;
       readonly desiredTankCountOverride: CodecTypes['pg/int4@1']['output'] | null;
+      readonly discordRolePing: CodecTypes['pg/bool@1']['output'];
       readonly firstWindowStartAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly isActive: CodecTypes['pg/bool@1']['output'];
@@ -2646,6 +2649,7 @@ export type StorageColumnInputTypes = {
       readonly desiredHealerCountOverride: CodecTypes['pg/int4@1']['input'] | null;
       readonly desiredLootbuddyCountOverride: CodecTypes['pg/int4@1']['input'] | null;
       readonly desiredTankCountOverride: CodecTypes['pg/int4@1']['input'] | null;
+      readonly discordRolePing: CodecTypes['pg/bool@1']['input'];
       readonly firstWindowStartAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly isActive: CodecTypes['pg/bool@1']['input'];
@@ -4447,6 +4451,15 @@ type ContractBase = Omit<
                   readonly default: {
                     readonly kind: 'literal';
                     readonly value: DefaultLiteralValue<'pg/text@1', 'INHOUSE'>;
+                  };
+                };
+                readonly discordRolePing: {
+                  readonly nativeType: 'bool';
+                  readonly codecId: 'pg/bool@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/bool@1', false>;
                   };
                 };
                 readonly firstWindowStartAt: {
@@ -9897,6 +9910,10 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
+              readonly discordRolePing: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/bool@1' };
+              };
               readonly firstWindowStartAt: {
                 readonly nullable: true;
                 readonly type: {
@@ -10012,6 +10029,7 @@ type ContractBase = Omit<
                 readonly runTemplateId: { readonly column: 'runTemplateId' };
                 readonly autoCreateRun: { readonly column: 'autoCreateRun' };
                 readonly runMode: { readonly column: 'runMode' };
+                readonly discordRolePing: { readonly column: 'discordRolePing' };
                 readonly firstWindowStartAt: { readonly column: 'firstWindowStartAt' };
                 readonly compositionOverrideEnabled: {
                   readonly column: 'compositionOverrideEnabled';

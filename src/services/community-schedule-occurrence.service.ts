@@ -261,6 +261,8 @@ export type AdoptionCandidate = {
   raidLeadId: string | null;
   raidLeadName: string;
   runSetup: RunSetupAdoption;
+  /** The Run's "Ping roles" — taken over by a Schedule based on this Run. */
+  discordRolePing: boolean;
 };
 
 type RunPlanningSnapshot = {
@@ -511,6 +513,7 @@ export const communityScheduleOccurrenceService = {
         raidLeadId: lead ? lead.id : null,
         raidLeadName: run.raidLeadName,
         runSetup: await resolveRunSetupAdoption(run),
+        discordRolePing: run.discordRolePing,
       });
     }
     candidates.sort((a, b) => a.scheduledStartAt.localeCompare(b.scheduledStartAt));
