@@ -394,6 +394,11 @@ export class BotApiClient {
     });
   }
 
+  /** Archives a completed / cancelled Run as the acting Discord User (Raid Lead / Admin only). */
+  archiveRun(runId: string, discordUserId: string) {
+    return this.request<{ id: string }>(`/api/bot/runs/${runId}/archive`, { method: "POST", discordUserId });
+  }
+
   getMySignups(discordUserId: string) {
     return this.request<unknown>("/api/bot/my-signups", { discordUserId });
   }

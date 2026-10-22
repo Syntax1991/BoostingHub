@@ -1045,7 +1045,7 @@ describe("discordSyncService.listSyncWork", () => {
     const after = await runDiscordPostRepository.findByRunId(runId);
     expect(after?.signupMessageId).toBe("msg-url");
     expect(after?.lastSignupSignature).toContain(SIGNUP_MESSAGE_FORMAT_VERSION);
-    expect(JSON.parse(after!.lastSignupSignature!).messageFormatVersion).toBe("v8-run-title-link");
+    expect(JSON.parse(after!.lastSignupSignature!).messageFormatVersion).toBe("v9-archive-run-button");
 
     expect((await discordSyncService.listSyncWork()).signups.some((entry) => entry.runId === runId)).toBe(false);
     vi.unstubAllEnvs();

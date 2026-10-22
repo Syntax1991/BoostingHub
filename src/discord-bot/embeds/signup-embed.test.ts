@@ -208,6 +208,33 @@ describe("chunkEmbedFieldLines", () => {
   });
 });
 
+describe("buildSignupButtons — ended Run", () => {
+  it("open Run: the four signup buttons", () => {
+    const row = buildSignupButtons(emptyData()).toJSON() as { components: Array<{ custom_id: string }> };
+    expect(row.components.map((button) => button.custom_id.split(":")[1])).toEqual([
+      "signup",
+      "quick-signup",
+      "lootbuddy",
+      "cancel",
+    ]);
+  });
+
+  it.each(["COMPLETED", "CANCELLED"] as const)("%s Run: only an Archive Run button", (runStatus) => {
+    const data = emptyData({ runStatus, signupWindowOpen: false });
+    const row = buildSignupButtons(data).toJSON() as { components: Array<{ custom_id: string; label: string }> };
+    expect(row.components).toHaveLength(1);
+    expect(row.components[0]).toMatchObject({ custom_id: `boostinghub:archive:${data.runId}`, label: "Archive Run" });
+    expect(buildSignupEmbed(data).toJSON().footer?.text).toMatch(/ended — Raid Lead \/ Admin can archive/);
+  });
+
+  it.each(["IN_PROGRESS", "PUBLISHED"] as const)("%s Run: no Archive Run button", (runStatus) => {
+    const row = buildSignupButtons(emptyData({ runStatus, signupWindowOpen: false })).toJSON() as {
+      components: Array<{ custom_id: string }>;
+    };
+    expect(row.components.some((button) => button.custom_id.includes(":archive:"))).toBe(false);
+  });
+});
+
 describe("buildSignupEmbed", () => {
   afterEach(() => {
     vi.unstubAllEnvs();

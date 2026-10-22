@@ -5,6 +5,11 @@ import { parseCharacterScopedCustomId, parseCustomId } from "@/discord-bot/custo
 import type { BotEnv } from "@/discord-bot/env";
 import { handleCancelButton, handleWithdrawReasonModal } from "@/discord-bot/interactions/cancel-handler";
 import {
+  handleArchiveButton,
+  handleArchiveConfirmButton,
+  handleArchiveKeepButton,
+} from "@/discord-bot/interactions/archive-handler";
+import {
   handleCharacterSelect,
   handleConfirmSignupButton,
   handleDiscardSignupButton,
@@ -68,6 +73,15 @@ export function createBotClient(env: BotEnv): Client {
             break;
           case "lootbuddy":
             await handleLootbuddyButton(interaction, api, parsed.runId);
+            break;
+          case "archive":
+            await handleArchiveButton(interaction, parsed.runId);
+            break;
+          case "archive-confirm":
+            await handleArchiveConfirmButton(interaction, api, parsed.runId);
+            break;
+          case "archive-keep":
+            await handleArchiveKeepButton(interaction);
             break;
           case "lootbuddy-add":
           case "lootbuddy-edit":

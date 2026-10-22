@@ -25,6 +25,10 @@ const ACTIONS = [
   "lootbuddy-discard",
   /** Modal asking a picked player for their withdrawal reason. */
   "withdraw-reason",
+  /** Completed / cancelled Run: "Archive Run" on the Signup message, then an ephemeral confirm. */
+  "archive",
+  "archive-confirm",
+  "archive-keep",
 ] as const;
 export type ButtonAction = (typeof ACTIONS)[number];
 
