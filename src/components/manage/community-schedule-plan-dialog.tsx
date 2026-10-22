@@ -311,7 +311,7 @@ export function CommunitySchedulePlanDialog({
             <p className="mt-1 text-xs text-muted">
               Base a Schedule on a Run Setup or on an existing Run, with one or more weekly times (Europe/Berlin).
               Saving only plans the times. With
-              weekly Drafts on, each raid ID&apos;s Draft Runs are created on Monday 12:00 before its Wednesday reset;
+              weekly Runs on, each raid ID&apos;s Runs are created open for signups on Monday 12:00 before its Wednesday reset;
               use Create Run for an earlier one.
             </p>
 
@@ -758,7 +758,7 @@ export function CommunitySchedulePlanDialog({
                   disabled={(byBasis && !basisRunId) || (!adoptSetup && setupMode === "existing" && !templateId)}
                   onChange={(event) => setAutoCreateRun(event.target.checked)}
                 />
-                <span>Automatically create weekly Draft — Draft release: Monday 12:00 (Europe/Berlin)</span>
+                <span>Automatically create weekly Run (open for signups) — release: Monday 12:00 (Europe/Berlin)</span>
               </label>
 
               <fieldset className="grid gap-2 rounded-md border border-border p-3">

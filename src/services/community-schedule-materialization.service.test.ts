@@ -182,6 +182,24 @@ afterAll(async () => {
   await cleanupUsers();
 });
 
+
+/** A signup row (withdrawn counts too): the Run is no longer Schedule-owned. */
+async function addSignup(runId: string, userId: string, status: "PENDING" | "WITHDRAWN" = "PENDING") {
+  const now = new Date().toISOString();
+  await orm.RunSignup.create({
+    id: crypto.randomUUID(),
+    runId,
+    userId,
+    characterId: null,
+    participationType: "LOOTBUDDY",
+    isBackup: false,
+    status,
+    lootbuddyClass: "MAGE",
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
 describe("communityScheduleMaterializationService.materializeOccurrence", () => {
   it("USER cannot materialize", async () => {
     const { slot } = await communityScheduleService.createSlot(admin, {
@@ -203,7 +221,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
     );
   });
 
-  it("RAID_LEAD can materialize own slot into a DRAFT run from template fields", async () => {
+  it("RAID_LEAD can materialize own slot into an OPEN run (signups open) from template fields", async () => {
     const now = new Date("2027-01-15T12:00:00.000Z");
     const { slot } = await communityScheduleService.createSlot(admin, {
       weekday: "FRIDAY",
@@ -227,8 +245,8 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       title: string;
       signupsOpen: boolean;
     } | null;
-    expect(run?.status).toBe("DRAFT");
-    expect(run?.signupsOpen).toBe(false);
+    expect(run?.status).toBe("OPEN");
+    expect(run?.signupsOpen).toBe(true);
     expect(run?.difficulty).toBe("HEROIC");
     expect(run?.lootType).toBe("UNSAVED");
     expect(run?.title).not.toContain("LABEL MUST NOT BECOME TITLE");
@@ -291,7 +309,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
     expect(second.runId).toBe(first.runId);
   });
 
-  it("time edit archives the Schedule Draft, frees the occurrence; Create Run makes one new Draft", async () => {
+  it("time edit archives the Schedule Run without signups, frees the occurrence; Create Run makes one new Run", async () => {
     const now = new Date("2027-01-15T12:00:00.000Z");
     const { slot } = await communityScheduleService.createSlot(admin, {
       weekday: "FRIDAY",
@@ -339,7 +357,9 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
     // Retired through the Cancel + Archive end state, never deleted, never re-timed.
     const retired = (await orm.Run.where({ id: first.runId }).first()) as Record<string, unknown>;
     expect(retired.status).toBe("CANCELLED");
-    expect(retired.cancelledFromStatus).toBe("DRAFT");
+    expect(retired.cancelledFromStatus).toBe("OPEN");
+    expect(retired.cancelledFromSignupsOpen).toBe(true);
+    expect(retired.signupsOpen).toBe(false);
     expect(retired.archivedAt).not.toBeNull();
     expect(retired.archivedById).toBe(ids.admin);
     expect(Date.parse(String(retired.scheduledStartAt))).toBe(Date.parse(beforeOccurrence.scheduledStartAt));
@@ -554,7 +574,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
 });
 
 describe("communityScheduleMaterializationService.runPass", () => {
-  it("creates DRAFT runs for auto-create slots with SYSTEM actor (no fabricated USER)", async () => {
+  it("creates OPEN runs for auto-create slots with SYSTEM actor (no fabricated USER)", async () => {
     const now = new Date("2027-01-15T12:00:00.000Z");
     // Persist via repository so this test isolates the hourly pass (not post-save immediate create).
     await communityScheduleRepository.create({
@@ -605,8 +625,12 @@ describe("communityScheduleMaterializationService.runPass", () => {
       status: string;
       signupsOpen: boolean;
     } | null;
-    expect(run?.status).toBe("DRAFT");
-    expect(run?.signupsOpen).toBe(false);
+    expect(run?.status).toBe("OPEN");
+    expect(run?.signupsOpen).toBe(true);
+    const opened = (await orm.RunDomainEvent.where({ runId: ownSystemLink!.runId, type: "RUN_OPENED" }).first()) as {
+      actorKind: string;
+    } | null;
+    expect(opened?.actorKind).toBe("SYSTEM");
   });
 
   it("Monday 12:00 release creates only the following raid ID; 11:59 / catch-up passes never jump ahead", async () => {
@@ -1204,7 +1228,7 @@ describe("Schedule-owned Draft lifecycle (cleanup on Schedule changes)", () => {
     expect((await communityScheduleRepository.findById(slotId))?.firstWindowStartAt).toBe(NEXT_WINDOW);
     expect(later.cleanup.retiredDrafts).toBe(1);
     expect(await status(currentRunId)).toEqual({ status: "CANCELLED", archived: true });
-    expect(await status(nextRunId)).toEqual({ status: "DRAFT", archived: false });
+    expect(await status(nextRunId)).toEqual({ status: "OPEN", archived: false });
 
     await communityScheduleService.updateSlot(admin, { ...base, start: { mode: "IMMEDIATE" } }, OCC_NOW);
     // No eager replacement: the freed CURRENT occurrence stays empty until Create Run.
@@ -1231,9 +1255,9 @@ describe("Schedule-owned Draft lifecycle (cleanup on Schedule changes)", () => {
     expect(link.occurrenceStartAt).toBe("2027-01-23T19:00:00.000Z");
   });
 
-  it("time change protects a Run that left DRAFT and a past Draft", async () => {
+  it("time change protects a Run someone signed up for (even withdrawn) and a past Run", async () => {
     const { currentRunId, nextRunId, base } = await slotWithDrafts();
-    await runService.openRun(admin, nextRunId);
+    await addSignup(nextRunId, ids.user, "WITHDRAWN");
     const openedBefore = await runSnapshot(nextRunId);
     // After Fri 15 Jan 19:45 CET started: the CURRENT Draft is in the past.
     const afterStart = new Date("2027-01-15T20:00:00.000Z");
@@ -1244,7 +1268,21 @@ describe("Schedule-owned Draft lifecycle (cleanup on Schedule changes)", () => {
     );
     expect(result.cleanup).toEqual({ retiredDrafts: 0, protectedRuns: 1, attachedRuns: 0 });
     expect(await runSnapshot(nextRunId)).toEqual(openedBefore);
-    expect(await status(currentRunId)).toEqual({ status: "DRAFT", archived: false });
+    expect(await status(currentRunId)).toEqual({ status: "OPEN", archived: false });
+  });
+
+  it("a Run further along (ROSTERING) and a legacy Schedule Draft: only the Draft is retired", async () => {
+    const { currentRunId, nextRunId, base } = await slotWithDrafts();
+    // Existing Schedule Drafts (created before Runs were born OPEN) stay owned.
+    await orm.Run.where({ id: currentRunId }).update({ status: "DRAFT", signupsOpen: false });
+    await orm.Run.where({ id: nextRunId }).update({ status: "ROSTERING" });
+    const result = await communityScheduleService.updateSlot(admin, { ...base, localStartTime: "21:00" }, OCC_NOW);
+    expect(result.cleanup).toEqual({ retiredDrafts: 1, protectedRuns: 1, attachedRuns: 0 });
+    expect(await status(currentRunId)).toEqual({ status: "CANCELLED", archived: true });
+    expect(await status(nextRunId)).toEqual({ status: "ROSTERING", archived: false });
+    const legacy = (await orm.Run.where({ id: currentRunId }).first()) as Record<string, unknown>;
+    expect(legacy.cancelledFromStatus).toBe("DRAFT");
+    expect(legacy.cancelledFromSignupsOpen).toBe(false);
   });
 
   it("deactivate retires owned Drafts, never an ATTACHED Run; reactivate creates nothing", async () => {
@@ -1317,8 +1355,8 @@ describe("Schedule-owned Draft lifecycle (cleanup on Schedule changes)", () => {
       spy.mockRestore();
     }
     expect((await communityScheduleRepository.findById(slotId))?.localStartTime).toBe("19:45");
-    expect(await status(currentRunId)).toEqual({ status: "DRAFT", archived: false });
-    expect(await status(nextRunId)).toEqual({ status: "DRAFT", archived: false });
+    expect(await status(currentRunId)).toEqual({ status: "OPEN", archived: false });
+    expect(await status(nextRunId)).toEqual({ status: "OPEN", archived: false });
     expect(await communityScheduleRunRepository.listBySlotIds([slotId])).toHaveLength(2);
   });
 
@@ -1353,7 +1391,7 @@ describe("Schedule-owned Draft lifecycle (cleanup on Schedule changes)", () => {
     for (const link of links) {
       expect(link.occurrenceStartAt).toBe("2027-01-23T19:00:00.000Z");
     }
-    const liveFridayDrafts = (await orm.Run.where({ raidLeadId: ids.lead, status: "DRAFT" }).all()).filter(
+    const liveFridayDrafts = (await orm.Run.where({ raidLeadId: ids.lead, status: "OPEN" }).all()).filter(
       (row) => Date.parse(String((row as { scheduledStartAt: string }).scheduledStartAt)) === Date.parse("2027-01-22T18:45:00.000Z") &&
         (row as { archivedAt: string | null }).archivedAt == null,
     );
@@ -1375,7 +1413,7 @@ describe("Schedule-owned Draft lifecycle (cleanup on Schedule changes)", () => {
     ]);
     expect((await communityScheduleRepository.findById(slotId))?.isActive).toBe(false);
     for (const link of await communityScheduleRunRepository.listBySlotIds([slotId])) {
-      expect(await status(link.runId)).not.toEqual({ status: "DRAFT", archived: false });
+      expect(await status(link.runId)).not.toEqual({ status: "OPEN", archived: false });
     }
   });
 });

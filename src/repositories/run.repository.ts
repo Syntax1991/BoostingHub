@@ -262,6 +262,18 @@ async function replaceRaidContentsTx(
   await insertRaidContents(ormLike, runId, contents, now);
 }
 
+/**
+ * Anyone signed up (any signup row, withdrawn included) or rostered on the Run
+ * — such a Run is never retired by a Schedule edit, even while still OPEN.
+ */
+async function hasParticipationHistoryInTx(txOrm: TxOrm, runId: string): Promise<boolean> {
+  if (await txOrm.RunSignup.where({ runId }).select("id").first()) return true;
+  const roster = (await txOrm.RunRoster.where({ runId }).first()) as Record<string, unknown> | null;
+  if (!roster) return false;
+  if (asStringOrNull(roster.publishedAt)) return true;
+  return (await txOrm.RunRosterEntry.where({ rosterId: asString(roster.id) }).select("id").first()) != null;
+}
+
 function mapOfferedRoles(value: unknown): CharacterRole[] {
   if (!Array.isArray(value)) return [];
   return normalizeOfferedRoles(
@@ -582,7 +594,8 @@ export const runRepository = {
    * Atomic DRAFT Run + contents + roster + CommunityScheduleRun link.
    * On unique (scheduleSlotId, windowStartAt), throws SCHEDULE_OCCURRENCE_ALREADY_CREATED.
    */
-  async createDraftWithScheduleLink(input: {
+  /** A Schedule-created Run: born OPEN with signups open (no manual "Open" step). */
+  async createOpenRunWithScheduleLink(input: {
     draft: RunCreateWithContentsInput;
     link: {
       scheduleSlotId: string;
@@ -610,7 +623,7 @@ export const runRepository = {
           difficulty: input.draft.difficulty,
           lootType: input.draft.lootType,
           scheduledStartAt: input.draft.scheduledStartAt,
-          status: "DRAFT",
+          status: "OPEN",
           raidLeadId: input.draft.raidLeadId,
           notes: input.draft.notes,
           desiredTankCount: input.draft.desiredTankCount,
@@ -618,7 +631,7 @@ export const runRepository = {
           desiredDpsCount: input.draft.desiredDpsCount,
           desiredLootbuddyCount: input.draft.desiredLootbuddyCount ?? 0,
           discordRolePing: input.draft.discordRolePing ?? true,
-          signupsOpen: false,
+          signupsOpen: true,
           createdAt: now,
           updatedAt: now,
         });
@@ -1059,14 +1072,23 @@ export const runRepository = {
     });
   },
 
+  /** Of `ids`: the Runs anyone has signed up for or been rostered on (see hasParticipationHistoryInTx). */
+  async listIdsWithParticipationHistory(ids: readonly string[]): Promise<Set<string>> {
+    const result = new Set<string>();
+    for (const id of new Set(ids)) {
+      if (await hasParticipationHistoryInTx(orm, id)) result.add(id);
+    }
+    return result;
+  },
+
   /**
-   * Retires a Schedule-owned Draft whose occurrence the Schedule no longer has:
-   * the same end state as Cancel + Archive (status CANCELLED from DRAFT,
-   * cancelRevision bumped, archived by the acting user). Locks the roster like
-   * Cancel, then re-checks authoritatively: only a still-DRAFT, unarchived Run
-   * starting after `notBefore` is retired — a Run that meanwhile left DRAFT
-   * (opened / published) is never touched. No announcement / notifications: a
-   * Draft was never public and has no signups. Returns whether it retired.
+   * Retires a Schedule-owned Run whose occurrence the Schedule no longer has:
+   * the same end state as Cancel + Archive (status CANCELLED, cancelRevision
+   * bumped, archived by the acting user). Locks the roster like Cancel, then
+   * re-checks authoritatively: only an unarchived Run starting after
+   * `notBefore` that is still DRAFT, or OPEN without any signup / roster
+   * history, is retired — anything else is never touched. No notifications:
+   * nobody signed up. Returns whether it retired.
    */
   async retireScheduleDraftInTx(
     txOrm: TxOrm,
@@ -1080,11 +1102,13 @@ export const runRepository = {
       await lockRosterInTx(txOrm, asString(rosterLookup.id));
     }
     const current = (await txOrm.Run.where({ id: input.runId }).first()) as Record<string, unknown> | null;
+    const status = current ? mapRunStatus(current.status) : null;
     if (
       !current ||
-      mapRunStatus(current.status) !== "DRAFT" ||
+      (status !== "DRAFT" && status !== "OPEN") ||
       asStringOrNull(current.archivedAt) != null ||
-      Date.parse(asString(current.scheduledStartAt)) <= input.notBefore.getTime()
+      Date.parse(asString(current.scheduledStartAt)) <= input.notBefore.getTime() ||
+      (await hasParticipationHistoryInTx(txOrm, input.runId))
     ) {
       return false;
     }
@@ -1092,8 +1116,8 @@ export const runRepository = {
     await txOrm.Run.where({ id: input.runId }).update({
       status: "CANCELLED",
       signupsOpen: false,
-      cancelledFromStatus: "DRAFT",
-      cancelledFromSignupsOpen: false,
+      cancelledFromStatus: status,
+      cancelledFromSignupsOpen: Boolean(current.signupsOpen),
       cancelRevision: asNumber(current.cancelRevision, 0) + 1,
       archivedAt: now,
       archivedById: input.actorId,

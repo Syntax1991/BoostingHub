@@ -264,7 +264,7 @@ export function isBeforeScheduleStart(firstWindowStartAt: string | null | undefi
   return Boolean(firstWindowStartAt) && Date.parse(windowStartAt) < Date.parse(firstWindowStartAt!);
 }
 
-/** Weekly Draft release: Monday 12:00 Europe/Berlin (wall clock, DST-safe). */
+/** Weekly release (Schedule Runs created OPEN): Monday 12:00 Europe/Berlin (wall clock, DST-safe). */
 export const SCHEDULE_DRAFT_RELEASE_LOCAL_TIME = "12:00";
 export const SCHEDULE_DRAFT_RELEASE_LABEL = "Monday 12:00 (Europe/Berlin)";
 
@@ -306,9 +306,9 @@ export function nextScheduleDraftReleaseAt(now: Date = new Date(), timeZone: str
 
 /** Counts of the Runs a Schedule time had produced or been linked to (future occurrences only). */
 export type ScheduleRunCounts = {
-  /** Schedule-created Runs still in Draft — archived when their occurrence goes away. */
+  /** Schedule-created Runs nobody signed up for — archived when their occurrence goes away. */
   retiredDrafts: number;
-  /** Schedule-created Runs that already left Draft — never changed by Schedule edits. */
+  /** Schedule-created Runs with signups or further along — never changed by Schedule edits. */
   protectedRuns: number;
   /** Existing Runs linked via "Use existing Run" — never changed by Schedule edits. */
   attachedRuns: number;
@@ -322,7 +322,7 @@ function plural(count: number, singular: string, pluralForm = `${singular}s`): s
 export function describeScheduleCleanupResult(counts: ScheduleRunCounts): string {
   const parts: string[] = [];
   if (counts.retiredDrafts > 0) {
-    parts.push(`${plural(counts.retiredDrafts, "scheduled Draft Run")} archived.`);
+    parts.push(`${plural(counts.retiredDrafts, "scheduled Run without signups", "scheduled Runs without signups")} archived.`);
   }
   if (counts.protectedRuns > 0) {
     parts.push(`${plural(counts.protectedRuns, "active Run")} unchanged.`);
@@ -338,7 +338,7 @@ export function describeScheduleCleanupPreview(counts: ScheduleRunCounts): strin
   const lines: string[] = [];
   if (counts.retiredDrafts > 0) {
     lines.push(
-      `${plural(counts.retiredDrafts, "scheduled Draft Run")} will be archived.`,
+      `${plural(counts.retiredDrafts, "scheduled Run without signups", "scheduled Runs without signups")} will be archived.`,
     );
   }
   if (counts.protectedRuns > 0) {

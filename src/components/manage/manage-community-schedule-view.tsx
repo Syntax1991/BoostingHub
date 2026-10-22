@@ -277,7 +277,7 @@ function WeeklyPlanSection({ page }: { page: CommunitySchedulePage }) {
                   {group.runSetupName} · {group.raidLeadName}
                 </p>
                 <p className="mt-0.5 text-xs text-muted">
-                  Weekly Draft: {group.autoCreateSummary} (release {SCHEDULE_DRAFT_RELEASE_LABEL})
+                  Weekly Run: {group.autoCreateSummary} (release {SCHEDULE_DRAFT_RELEASE_LABEL})
                   {group.runTemplateId ? "" : " · No Run Setup linked"}
                 </p>
               </div>
@@ -321,7 +321,7 @@ function WeeklyPlanSection({ page }: { page: CommunitySchedulePage }) {
                       {!slot.isActive ? " · Inactive" : ""}
                     </span>
                     <span className="ml-2 text-xs text-muted">
-                      Weekly Draft {slot.autoCreateRun ? "✓" : "✗"}
+                      Weekly Run {slot.autoCreateRun ? "✓" : "✗"}
                     </span>
                     {slot.notes ? <p className="mt-0.5 text-xs text-muted">{slot.notes}</p> : null}
                   </div>
@@ -353,7 +353,7 @@ export function ManageCommunityScheduleView({ page }: { page: CommunityScheduleP
     <div>
       <PageHeader
         title="Community Schedule"
-        description={`Reusable Run Setups and recurring community times. Weekly Drafts are released ${SCHEDULE_DRAFT_RELEASE_LABEL} for the raid ID starting that Wednesday. Does not open Runs or post to Discord Schedule automatically.`}
+        description={`Reusable Run Setups and recurring community times. Weekly Runs are created open for signups ${SCHEDULE_DRAFT_RELEASE_LABEL} for the raid ID starting that Wednesday.`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {page.canEdit ? (

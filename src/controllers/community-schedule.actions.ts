@@ -41,7 +41,7 @@ function withCleanupMessage(base: string, cleanup: ScheduleRunCounts): string {
   return detail ? `${base} ${detail}` : base;
 }
 
-const RELEASE_NOTE = `Drafts are created at the weekly release (${SCHEDULE_DRAFT_RELEASE_LABEL}) or via Create Run.`;
+const RELEASE_NOTE = `Runs are created open for signups at the weekly release (${SCHEDULE_DRAFT_RELEASE_LABEL}) or via Create Run.`;
 
 export type CreateCommunityScheduleSlotActionResult =
   | { ok: true; message: string; slotId: string }

@@ -196,9 +196,9 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
             </p>
             {props.mode === "edit" && (props.initial.runCounts?.retiredDrafts ?? 0) > 0 ? (
               <p className="mt-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
-                Changing weekday / time (or moving Starts later) archives the affected scheduled Draft Run
-                {props.initial.runCounts!.retiredDrafts === 1 ? "" : "s"} ({props.initial.runCounts!.retiredDrafts}).
-                Active and linked existing Runs remain unchanged. No replacement Draft is created before the next
+                Changing weekday / time (or moving Starts later) archives the affected scheduled Run
+                {props.initial.runCounts!.retiredDrafts === 1 ? "" : "s"} without signups ({props.initial.runCounts!.retiredDrafts}).
+                Runs with signups and linked existing Runs remain unchanged. No replacement Run is created before the next
                 Monday 12:00 release (or Create Run).
               </p>
             ) : null}
@@ -372,7 +372,7 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
                   disabled={!runTemplateId}
                   onChange={(event) => setAutoCreateRun(event.target.checked)}
                 />
-                <span>Automatically create weekly Draft — Draft release: Monday 12:00 (Europe/Berlin)</span>
+                <span>Automatically create weekly Run (open for signups) — release: Monday 12:00 (Europe/Berlin)</span>
               </label>
               <label className="grid gap-1 text-sm">
                 <span className="text-xs text-muted">Notes (optional)</span>
