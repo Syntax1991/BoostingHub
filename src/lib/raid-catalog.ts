@@ -48,6 +48,23 @@ export type RaidCatalog = {
   raidIdByWclEncounterId: ReadonlyMap<number, string>;
 };
 
+/**
+ * WCL encounter to rank a raid by. The stored `wclRankingEncounterId` wins;
+ * otherwise a raid with exactly one boss and exactly one WCL encounter id is
+ * ranked by that fight — the same rule discovery applies, but also when the
+ * boss was added / mapped after the raid's zone was resolved (e.g. a lair
+ * like The Unbinding of Kith'ix inside a shared zone). Null → zone-wide.
+ */
+export function effectiveWclRankingEncounterId(
+  raid: Pick<CatalogRaid, "wclZoneId" | "wclRankingEncounterId" | "bosses">,
+): number | null {
+  if (raid.wclRankingEncounterId != null) return raid.wclRankingEncounterId;
+  if (raid.wclZoneId == null) return null;
+  const [onlyBoss, ...others] = raid.bosses;
+  if (!onlyBoss || others.length > 0 || onlyBoss.wclEncounterIds.length !== 1) return null;
+  return onlyBoss.wclEncounterIds[0] ?? null;
+}
+
 /** Parse a stored JSON number array (`RaidBoss.blizzardEncounterIds` / `wclEncounterIds`). */
 export function parseEncounterIds(value: unknown): number[] {
   if (typeof value !== "string" || value.trim() === "") return [];

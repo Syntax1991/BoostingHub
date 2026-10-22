@@ -3,7 +3,7 @@ import {
   type WarcraftLogsRankingMetric,
   type WarcraftLogsRankingRole,
 } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
-import type { RaidCatalog } from "@/lib/raid-catalog";
+import { effectiveWclRankingEncounterId, type RaidCatalog } from "@/lib/raid-catalog";
 import { raidContentDisplayName } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 import { findSpecialization } from "@/lib/wow-specializations";
@@ -194,7 +194,7 @@ export async function resolveRosterWclPerformance(input: {
         raidId: content.raidId,
         raidName: raidContentDisplayName(content.raidId, content.raidName),
         zoneId: raid.wclZoneId,
-        encounterId: raid.wclRankingEncounterId ?? 0,
+        encounterId: effectiveWclRankingEncounterId(raid) ?? 0,
       };
     })
     .filter((row): row is NonNullable<typeof row> => row != null);

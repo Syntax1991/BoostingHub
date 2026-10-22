@@ -9,6 +9,7 @@ import {
 } from "@/components/manage/raid-catalog/raid-catalog-format";
 import { RaidFormDialog } from "@/components/manage/raid-catalog/raid-form-dialog";
 import { RaidWclIntegration } from "@/components/manage/raid-catalog/raid-wcl-integration";
+import { effectiveWclRankingEncounterId } from "@/lib/raid-catalog";
 import { DeleteRaidButton } from "@/components/manage/raid-catalog/delete-raid-button";
 import {
   DeleteEncounterButton,
@@ -78,7 +79,8 @@ export function ManageRaidCatalogRaidView({ raid, seasons }: { raid: RaidCatalog
           <RaidWclIntegration
             raidId={raid.id}
             wclZoneId={raid.wclZoneId}
-            wclRankingEncounterId={raid.wclRankingEncounterId}
+            wclRankingEncounterId={effectiveWclRankingEncounterId(raid)}
+            rankingFromOnlyEncounter={raid.wclRankingEncounterId == null && effectiveWclRankingEncounterId(raid) != null}
           />
         </Card>
         <Card className="px-4 py-3">

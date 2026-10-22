@@ -1,4 +1,5 @@
 /** Display helpers for the Raid Catalog admin (pure, client-safe). */
+import { effectiveWclRankingEncounterId, type CatalogRaid } from "@/lib/raid-catalog";
 
 export function formatIdList(ids: readonly number[]): string {
   return ids.length === 0 ? "—" : ids.join(", ");
@@ -13,11 +14,14 @@ export function formatBlizzard(raid: { blizzardInstanceId: number | null }): str
   return raid.blizzardInstanceId == null ? "Not mapped" : `Instance ${raid.blizzardInstanceId}`;
 }
 
-export function formatWarcraftLogs(raid: { wclZoneId: number | null; wclRankingEncounterId: number | null }): string {
+export function formatWarcraftLogs(
+  raid: Pick<CatalogRaid, "wclZoneId" | "wclRankingEncounterId" | "bosses">,
+): string {
   if (raid.wclZoneId == null) return "Not resolved";
-  return raid.wclRankingEncounterId == null
+  const encounter = effectiveWclRankingEncounterId(raid);
+  return encounter == null
     ? `Connected · Zone ${raid.wclZoneId}`
-    : `Connected · Zone ${raid.wclZoneId} · Encounter ${raid.wclRankingEncounterId}`;
+    : `Connected · Zone ${raid.wclZoneId} · Encounter ${encounter}`;
 }
 
 export function pluralize(count: number, singular: string, plural = `${singular}s`): string {
