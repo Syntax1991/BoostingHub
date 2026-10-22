@@ -9,10 +9,13 @@ export function RaidWclIntegration({
   raidId,
   wclZoneId,
   wclRankingEncounterId,
+  rankingFromOnlyEncounter = false,
 }: {
   raidId: string;
   wclZoneId: number | null;
+  /** Effective ranking encounter (stored, or derived from the raid's only encounter). */
   wclRankingEncounterId: number | null;
+  rankingFromOnlyEncounter?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -45,7 +48,10 @@ export function RaidWclIntegration({
           <dt>Zone</dt>
           <dd className="font-mono text-xs text-foreground">{wclZoneId}</dd>
           <dt>Ranking encounter</dt>
-          <dd className="font-mono text-xs text-foreground">{wclRankingEncounterId ?? "— (zone-wide)"}</dd>
+          <dd className="font-mono text-xs text-foreground">
+            {wclRankingEncounterId ?? "— (zone-wide)"}
+            {rankingFromOnlyEncounter ? <span className="ml-1 font-sans text-muted">(its only encounter)</span> : null}
+          </dd>
         </dl>
       ) : (
         <p className="text-xs text-muted">
