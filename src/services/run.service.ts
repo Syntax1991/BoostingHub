@@ -626,7 +626,8 @@ export const runService = {
     });
   },
 
-  async createScheduleMaterializedDraft(input: {
+  /** A Schedule occurrence's Run — created OPEN (signups open), so nobody has to remember to open it. */
+  async createScheduleMaterializedRun(input: {
     template: RunTemplateRecord;
     scheduledStartAt: string;
     scheduleSlotId: string;
@@ -655,7 +656,7 @@ export const runService = {
     const materializedBy = createdByKind;
 
     try {
-      const { runId } = await runRepository.createDraftWithScheduleLink({
+      const { runId } = await runRepository.createOpenRunWithScheduleLink({
         draft,
         link: {
           scheduleSlotId: input.scheduleSlotId,
@@ -665,8 +666,8 @@ export const runService = {
           createdByKind,
         },
         // Serializes with Schedule edits / deactivation / deletion (they lock the
-        // same slot row): never create a Draft for an occurrence the slot no
-        // longer has, so cleanup can never leave an orphan Schedule Draft.
+        // same slot row): never create a Run for an occurrence the slot no
+        // longer has, so cleanup can never leave an orphan Schedule Run.
         guardInTx: input.slotGuard
           ? async (txOrm) => {
               const slot = await communityScheduleRepository.lockInTx(input.scheduleSlotId, txOrm);
@@ -690,7 +691,7 @@ export const runService = {
       await runDomainEventService.record({
         runId,
         type: "RUN_CREATED",
-        summary: "Run draft created from community schedule.",
+        summary: "Run created from community schedule (open for signups).",
         actorKind: createdByKind,
         actorUser: input.actor.kind === "USER" ? input.actor.user : null,
         payload: {
@@ -703,12 +704,20 @@ export const runService = {
           lootType: draft.lootType,
         },
       });
+      await runDomainEventService.record({
+        runId,
+        type: "RUN_OPENED",
+        summary: "Run opened for signups (community schedule).",
+        actorKind: createdByKind,
+        actorUser: input.actor.kind === "USER" ? input.actor.user : null,
+        payload: { fromStatus: "DRAFT", toStatus: "OPEN", signupsOpen: true },
+      });
 
       if (input.actor.kind === "USER") {
         await activityRepository.create({
           userId: input.actor.user.id,
           type: "RUN_CREATED",
-          message: "Created a run draft from the community schedule.",
+          message: "Created a run from the community schedule (open for signups).",
         });
       }
 

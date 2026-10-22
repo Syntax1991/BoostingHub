@@ -13,7 +13,6 @@ import { communityScheduleRunRepository } from "@/repositories/community-schedul
 import { raidRepository } from "@/repositories/raid.repository";
 import { runTemplateRepository } from "@/repositories/run-template.repository";
 import { communityScheduleMaterializationService } from "@/services/community-schedule-materialization.service";
-import { runService } from "@/services/run.service";
 import { communityScheduleService } from "@/services/community-schedule.service";
 
 const ids = {
@@ -154,6 +153,24 @@ afterAll(async () => {
   await cleanupSlots();
   await cleanupUsers();
 });
+
+
+/** A signup row (withdrawn counts too): the Run is no longer Schedule-owned. */
+async function addSignup(runId: string, userId: string, status: "PENDING" | "WITHDRAWN" = "PENDING") {
+  const now = new Date().toISOString();
+  await orm.RunSignup.create({
+    id: crypto.randomUUID(),
+    runId,
+    userId,
+    characterId: null,
+    participationType: "LOOTBUDDY",
+    isBackup: false,
+    status,
+    lootbuddyClass: "MAGE",
+    createdAt: now,
+    updatedAt: now,
+  });
+}
 
 describe("communityScheduleService authorization", () => {
   it("USER cannot read or mutate", async () => {
@@ -790,7 +807,7 @@ describe("communityScheduleService mutable planning delete", () => {
       title: string;
     } | null;
     // Retired (Cancel + Archive end state); the Run itself and its snapshot stay.
-    expect(runBefore?.status).toBe("DRAFT");
+    expect(runBefore?.status).toBe("OPEN");
     expect(runAfter?.status).toBe("CANCELLED");
     expect(runAfter?.scheduledStartAt).toBe(runBefore?.scheduledStartAt);
     expect(runAfter?.title).toBe(runBefore?.title);
@@ -807,7 +824,7 @@ describe("communityScheduleService mutable planning delete", () => {
     expect(await runTemplateRepository.findById(plan.templateId)).toBeTruthy();
   });
 
-  it("deletes Run Setup after materialization; slots gone, an opened Run unchanged", async () => {
+  it("deletes Run Setup after materialization; slots gone, a Run with signups unchanged", async () => {
     const emptyTemplateId = await runTemplateRepository.create({
       ...repoTemplateFields,
       name: "Orphan Setup",
@@ -838,14 +855,14 @@ describe("communityScheduleService mutable planning delete", () => {
       },
       now,
     );
-    // Weekly release (Mon 18 Jan 12:00 CET) creates the Drafts; the Thursday one is then opened.
+    // Weekly release (Mon 18 Jan 12:00 CET) creates the Runs (OPEN); someone signs up for the Thursday one.
     await communityScheduleMaterializationService.runPass(new Date("2027-01-18T11:00:00.000Z"));
     const links = await orm.CommunityScheduleRun.where({
       scheduleSlotId: plan.slotIds[0]!,
     }).all();
     expect(links.length).toBeGreaterThan(0);
     const runId = String((links[0] as { runId: string }).runId);
-    await runService.openRun(admin, runId);
+    await addSignup(runId, ids.user);
     const runBefore = (await orm.Run.where({ id: runId }).first()) as {
       scheduledStartAt: string;
       status: string;
@@ -867,7 +884,7 @@ describe("communityScheduleService mutable planning delete", () => {
 
     const deleted = await communityScheduleService.deleteRunSetup(admin, plan.templateId, now);
     expect(deleted.deletedSlotCount).toBe(2);
-    // The opened Thursday Run is protected; the Friday Draft is archived.
+    // The Thursday Run with a signup is protected; the Friday Run without signups is archived.
     expect(deleted.cleanup).toEqual({ retiredDrafts: 1, protectedRuns: 1, attachedRuns: 0 });
     expect(await runTemplateRepository.findById(plan.templateId)).toBeNull();
     expect(

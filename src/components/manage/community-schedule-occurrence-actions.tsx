@@ -11,8 +11,8 @@ import { CommunityScheduleAttachRunDialog } from "@/components/manage/community-
 const STATE_LABELS: Record<CommunityScheduleOccurrenceView["state"], string> = {
   RUN_CREATED: "Run created",
   NO_RUN_YET: "No run yet",
-  AUTO_WAITING: "Draft planned",
-  AUTO_BLOCKED: "Weekly Draft blocked",
+  AUTO_WAITING: "Run planned",
+  AUTO_BLOCKED: "Weekly Run blocked",
   NOT_STARTED: "Before schedule start",
   PAST: "Past",
 };
@@ -51,11 +51,11 @@ export function CommunityScheduleOccurrenceActions({
         <p className="text-[10px] text-muted">Run Setup: {materialization.templateLabel}</p>
       ) : null}
       <p className="text-[10px] text-muted">
-        Weekly Draft: {materialization.autoCreateRun ? "ON" : "OFF"}
+        Weekly Run: {materialization.autoCreateRun ? "ON" : "OFF"}
       </p>
       {materialization.state === "AUTO_WAITING" && materialization.draftReleaseAt ? (
         <p className="max-w-xs text-right text-[10px] text-muted">
-          Draft release: {formatDateTime(materialization.draftReleaseAt, "Europe/Berlin")}
+          Release: {formatDateTime(materialization.draftReleaseAt, "Europe/Berlin")}
         </p>
       ) : null}
       {materialization.note ? (

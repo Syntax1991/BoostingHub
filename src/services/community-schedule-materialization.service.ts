@@ -256,7 +256,7 @@ async function materializeSlotWindowsInternal(input: {
           continue;
         }
 
-        const result = await runService.createScheduleMaterializedDraft({
+        const result = await runService.createScheduleMaterializedRun({
           template: template!,
           scheduledStartAt: occurrence.scheduledStartAt,
           scheduleSlotId: slot.id,
@@ -335,7 +335,7 @@ export const communityScheduleMaterializationService = {
       );
     }
 
-    return runService.createScheduleMaterializedDraft({
+    return runService.createScheduleMaterializedRun({
       template,
       scheduledStartAt: occurrence.scheduledStartAt,
       scheduleSlotId: slot.id,

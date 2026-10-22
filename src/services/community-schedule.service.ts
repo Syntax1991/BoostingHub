@@ -88,9 +88,10 @@ import type {
 import type { CreateRunTemplateInput, UpdateRunTemplateInput } from "@/validators/run-template";
 
 /**
- * What a Schedule mutation did to Runs it had created. Only MATERIALIZED +
- * still-DRAFT future Runs are Schedule-owned and get retired (archived);
- * everything else is reported as unchanged.
+ * What a Schedule mutation did to Runs it had created. Only MATERIALIZED
+ * future Runs nobody has signed up for (still DRAFT, or OPEN without signup /
+ * roster history) are Schedule-owned and get retired (archived); everything
+ * else is reported as unchanged.
  */
 export type ScheduleDraftCleanup = ScheduleRunCounts;
 
@@ -698,7 +699,7 @@ function buildMaterializationView(input: {
       return {
         state: "NO_RUN_YET",
         draftReleaseAt,
-        note: "This raid ID's Draft release already passed — use Create Run if it should take place.",
+        note: "This raid ID's weekly release already passed — use Create Run if it should take place.",
         templateLabel: input.templateLabel ?? undefined,
         autoCreateRun,
         canMaterialize,
@@ -929,12 +930,12 @@ async function auditAttached(actor: AuthenticatedUser, attached: readonly Attach
 }
 
 /**
- * Retires the slot's Schedule-owned Drafts (origin MATERIALIZED, still DRAFT,
- * unarchived, starting after `now`) for which `affects(link)` is true, and
+ * Retires the slot's Schedule-owned Runs (origin MATERIALIZED, DRAFT or OPEN
+ * without signups, unarchived, starting after `now`) for which `affects(link)` is true, and
  * frees their occurrence. Runs inside the caller's transaction, after the
  * slot row is locked (so a concurrent materialization either committed
  * before — and is cleaned up here — or re-checks the changed slot and aborts).
- * Non-DRAFT and ATTACHED Runs are only counted, never touched.
+ * Runs with signups, further along, and ATTACHED Runs are only counted, never touched.
  */
 async function retireOwnedDraftsInTx(
   txOrm: TxOrm,
@@ -976,16 +977,17 @@ async function auditRetiredDrafts(actor: AuthenticatedUser, runIds: readonly str
       runId,
       actorUser: actor,
       type: "RUN_SCHEDULE_DRAFT_RETIRED",
-      summary: `Schedule Draft archived: ${reason}.`,
+      summary: `Schedule Run archived: ${reason}.`,
       payload: { reason },
     });
   }
 }
 
 /**
- * Per slot: future Runs it created that are still Drafts (a delete / deactivate
- * / time change archives them), created Runs that left Draft, and linked
- * existing Runs (both never changed). Same ownership rule as the cleanup.
+ * Per slot: future Runs it created that nobody signed up for (a delete /
+ * deactivate / time change archives them), created Runs with signups or
+ * further along, and linked existing Runs (both never changed). Same
+ * ownership rule as the cleanup.
  */
 async function futureRunCountsBySlot(
   links: readonly CommunityScheduleRunRecord[],
@@ -997,13 +999,19 @@ async function futureRunCountsBySlot(
   const runs = new Map(
     (await runRepository.listLifecycleByIds(relevant.map((link) => link.runId))).map((run) => [run.id, run]),
   );
+  const withHistory = await runRepository.listIdsWithParticipationHistory(
+    relevant
+      .filter((link) => link.origin !== "ATTACHED" && runs.get(link.runId)?.status === "OPEN")
+      .map((link) => link.runId),
+  );
   const result = new Map<string, ScheduleRunCounts>();
   for (const link of relevant) {
     const run = runs.get(link.runId);
     if (!run || run.archivedAt != null || run.status === "CANCELLED") continue;
     const counts = result.get(link.scheduleSlotId!) ?? { ...NO_CLEANUP };
+    const owned = run.status === "DRAFT" || (run.status === "OPEN" && !withHistory.has(run.id));
     if (link.origin === "ATTACHED") counts.attachedRuns += 1;
-    else if (run.status === "DRAFT" && Date.parse(run.scheduledStartAt) > now.getTime()) counts.retiredDrafts += 1;
+    else if (owned && Date.parse(run.scheduledStartAt) > now.getTime()) counts.retiredDrafts += 1;
     else counts.protectedRuns += 1;
     result.set(link.scheduleSlotId!, counts);
   }

@@ -156,7 +156,7 @@ export function CommunityScheduleAddTimesDialog({
             <h2 className="text-base font-semibold">Add times</h2>
             <p className="mt-1 text-xs text-muted">
               Add weekly times to <span className="font-medium text-foreground">{runSetupName}</span>. Saving only
-              plans the times — weekly Drafts are created at the Monday 12:00 release (or via Create Run).
+              plans the times — weekly Runs are created open for signups at the Monday 12:00 release (or via Create Run).
             </p>
 
             <div className="mt-4 grid gap-3">
@@ -261,7 +261,7 @@ export function CommunityScheduleAddTimesDialog({
                   checked={autoCreateRun}
                   onChange={(event) => setAutoCreateRun(event.target.checked)}
                 />
-                <span>Automatically create weekly Draft — Draft release: Monday 12:00 (Europe/Berlin)</span>
+                <span>Automatically create weekly Run (open for signups) — release: Monday 12:00 (Europe/Berlin)</span>
               </label>
 
               <label className="grid gap-1 text-sm">

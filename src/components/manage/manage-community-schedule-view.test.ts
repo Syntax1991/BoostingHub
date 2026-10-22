@@ -314,7 +314,7 @@ describe("ManageCommunityScheduleView", () => {
     expect(html).toContain("Duplicate");
     expect(html).toContain("Inhouse");
     expect(html).toContain("Team Run");
-    expect(html).toContain("Weekly Draft: MIXED");
+    expect(html).toContain("Weekly Run: MIXED");
     expect(html).toContain("Monday 12:00 (Europe/Berlin)");
     expect(html).toContain("Add times");
     expect(html).toContain("Delete");
