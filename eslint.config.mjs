@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "src/prisma/contract.d.ts",
     "src/prisma/contract.json",
     "migrations/**",
+    // Local agent tooling (skills / worktrees) — not project source.
+    ".claude/**",
   ]),
 ]);
 
