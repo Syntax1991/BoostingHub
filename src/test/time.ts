@@ -25,6 +25,17 @@ export function freezeSystemTime(isoOrDate: string | Date, options: { advance?: 
  */
 export const SCHEDULE_TEST_CLOCK = "2027-01-01T12:00:00.000Z";
 
+/**
+ * Wall clock for DB-backed suites that assert on a global newest-first feed
+ * (`activityRepository.listRecent`, `userNotificationRepository.listForUser`)
+ * with a limit. The shared test DB keeps the rows earlier suites wrote at
+ * their frozen clocks (SCHEDULE_TEST_CLOCK and the Jan 2027 instants in the
+ * schedule suites), which sort ahead of anything written at the real "now"
+ * and push a suite's own events out of the top N. Must stay after every other
+ * frozen clock in the DB suites.
+ */
+export const FEED_TEST_CLOCK = "2027-06-01T12:00:00.000Z";
+
 export function restoreSystemTime(): void {
   vi.useRealTimers();
 }
