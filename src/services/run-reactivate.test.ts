@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
+import { FEED_TEST_CLOCK, freezeSystemTime, restoreSystemTime } from "@/test/time";
 import { futureTestIso, venomousCreateInput } from "@/lib/test-run-input";
 import { isSignupWindowOpen } from "@/services/run-state";
 import { raidRepository } from "@/repositories/raid.repository";
@@ -107,6 +108,12 @@ async function cleanupRun(runId: string) {
 
 const lead = asUser(ids.lead, "Rx Lead", "RAID_LEAD");
 const admin = asUser(ids.admin, "Rx Admin", "ADMIN");
+
+// Deterministic wall clock (see FEED_TEST_CLOCK), frozen once for the whole file
+// so time stays monotonic across tests that share state; the global newest-first
+// feeds asserted on here must not be outranked by rows other suites left behind.
+beforeAll(() => freezeSystemTime(FEED_TEST_CLOCK, { advance: true }));
+afterAll(() => restoreSystemTime());
 
 beforeAll(async () => {
   await raidRepository.ensureReferenceRaids();

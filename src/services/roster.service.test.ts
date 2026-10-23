@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
+import { FEED_TEST_CLOCK, freezeSystemTime, restoreSystemTime } from "@/test/time";
 import { activityRepository } from "@/repositories/activity.repository";
 import { rosterRepository } from "@/repositories/roster.repository";
 import { signupRepository } from "@/repositories/signup.repository";
@@ -81,6 +82,12 @@ const SYLVA_USER_ID = "66666666-6666-4666-8666-666666666666";
 async function setSylvaBooster(isBooster: boolean) {
   await orm.User.where({ id: SYLVA_USER_ID }).update({ isBooster });
 }
+
+// Deterministic wall clock (see FEED_TEST_CLOCK), frozen once for the whole file
+// so time stays monotonic across tests that share state; the global newest-first
+// feeds asserted on here must not be outranked by rows other suites left behind.
+beforeAll(() => freezeSystemTime(FEED_TEST_CLOCK, { advance: true }));
+afterAll(() => restoreSystemTime());
 
 beforeAll(async () => {
   await setSylvaBooster(false);
