@@ -20,6 +20,15 @@ const apiMocks = vi.hoisted(() => ({
 const raiderIoMocks = vi.hoisted(() => ({ getCharacterEquippedItemLevel: vi.fn() }));
 vi.mock("@/integrations/blizzard/blizzard-api-client", () => ({ blizzardApiClient: apiMocks }));
 vi.mock("@/integrations/raider-io/raider-io-api-client", () => ({ raiderIoApiClient: raiderIoMocks }));
+// Warcraft Logs auto-link enrichment runs after every successful sync; keep it
+// offline (a real WARCRAFT_LOGS_* in .env would otherwise hit the live API).
+vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/integrations/warcraft-logs/warcraft-logs-api-client")>()),
+  warcraftLogsApiClient: {
+    isConfigured: () => true,
+    findCharacter: async () => ({ status: "NOT_FOUND" as const }),
+  },
+}));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 vi.mock("next/link", () => ({
   default: ({ href, children, ...props }: { href: string; children: unknown }) =>
