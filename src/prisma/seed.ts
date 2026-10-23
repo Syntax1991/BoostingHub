@@ -1,5 +1,6 @@
 import { hashPassword } from "better-auth/crypto";
 import { db, orm } from "@/lib/prisma";
+import { wipeSeedDatabase } from "@/prisma/seed-wipe";
 import { getDevAuthPassword } from "@/auth/dev-auth";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { buildRunTitle } from "@/lib/run-title";
@@ -215,82 +216,8 @@ const ids = {
   },
 };
 
-async function wipe() {
-  // Strike.userId/createdById are Restrict against User; must go before Users.
-  for (const row of await orm.Strike.select("id").all()) {
-    await orm.Strike.where({ id: row.id }).delete();
-  }
-  for (const row of await orm.RunAttendance.select("id").all()) {
-    await orm.RunAttendance.where({ id: row.id }).delete();
-  }
-  for (const row of await orm.RunRosterEntry.select("id").all()) {
-    await orm.RunRosterEntry.where({ id: row.id }).delete();
-  }
-  for (const row of await orm.RunRoster.select("id").all()) {
-    await orm.RunRoster.where({ id: row.id }).delete();
-  }
-  for (const row of await orm.RunSignupRole.select("id").all()) {
-    await orm.RunSignupRole.where({ id: row.id }).delete();
-  }
-  for (const row of await orm.RunSignup.select("id").all()) {
-    await orm.RunSignup.where({ id: row.id }).delete();
-  }
-  for (const row of await orm.RunRaidContent.select("id").all()) {
-    await orm.RunRaidContent.where({ id: row.id }).delete();
-  }
-  for (const row of await orm.CharacterRaidLockout.select("id").all()) {
-    await orm.CharacterRaidLockout.where({ id: row.id }).delete();
-  }
-  for (const row of await orm.BoosterAccess.select("id").all()) {
-    await orm.BoosterAccess.where({ id: row.id }).delete();
-  }
-  for (const row of await orm.ActivityEvent.select("id").all()) {
-    await orm.ActivityEvent.where({ id: row.id }).delete();
-  }
-  // Shared Warcraft Logs report cache is not owned by any Run; its Run
-  // associations/fight rows cascade from it (and from the Runs below).
-  for (const row of await orm.WarcraftLogsReport.select("id").all()) {
-    await orm.WarcraftLogsReport.where({ id: row.id }).delete();
-  }
-  for (const row of await orm.Run.select("id").all()) {
-    await orm.Run.where({ id: row.id }).delete();
-  }
-  // Templates reference Raid + User (Restrict); clear before both.
-  for (const row of await orm.RunTemplate.select("id").all()) {
-    await orm.RunTemplate.where({ id: row.id }).delete();
-  }
-  // Product contents reference Raid (Restrict); clear products before raids.
-  for (const row of await orm.ProductRaidContent.select("id").all()) {
-    await orm.ProductRaidContent.where({ id: row.id }).delete();
-  }
-  for (const row of await orm.Product.select("id").all()) {
-    await orm.Product.where({ id: row.id }).delete();
-  }
-  for (const row of await orm.RaidBoss.select("id").all()) {
-    await orm.RaidBoss.where({ id: row.id }).delete();
-  }
-  for (const row of await orm.Character.select("id").all()) {
-    await orm.Character.where({ id: row.id }).delete();
-  }
-  for (const row of await orm.Session.select("id").all()) {
-    await orm.Session.where({ id: row.id }).delete();
-  }
-  for (const row of await orm.Account.select("id").all()) {
-    await orm.Account.where({ id: row.id }).delete();
-  }
-  for (const row of await orm.Verification.select("id").all()) {
-    await orm.Verification.where({ id: row.id }).delete();
-  }
-  for (const row of await orm.Raid.select("id").all()) {
-    await orm.Raid.where({ id: row.id }).delete();
-  }
-  for (const row of await orm.User.select("id").all()) {
-    await orm.User.where({ id: row.id }).delete();
-  }
-}
-
 async function seed() {
-  await wipe();
+  await wipeSeedDatabase();
   const password = await hashPassword(PASSWORD);
 
   await orm.User.create({
