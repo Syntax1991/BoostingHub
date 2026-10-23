@@ -67,8 +67,14 @@ helper preserves them. They are not part of the supported tooling.
 ## Normal update deploy
 
 ```bash
-sudo bash /var/www/boostinghub/deploy/update-server.sh
+sudo /var/www/boostinghub/deploy/update-server.sh
 ```
+
+This is the one supported invocation. The script is tracked executable
+(Git mode `100755`, `#!/usr/bin/env bash`, LF line endings enforced by
+`.gitattributes`), so the checkout keeps the execute bit after every
+fast-forward. Releases before that tracked it as `100644`, which made the
+direct call fail with `Permission denied`.
 
 Optional first argument: branch (default `main`). Success ends with
 `DEPLOY_OK before=<sha> after=<sha>`. Any failed step aborts, and every later

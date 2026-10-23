@@ -4,6 +4,8 @@
 # the stubs record their calls in order so the test can assert the sequence.
 #
 #   bash deploy/update-server.test.sh
+#
+# The helper itself is invoked directly in every case, exactly like production.
 set -uo pipefail
 
 SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/update-server.sh"
@@ -14,6 +16,15 @@ trap 'rm -rf "${TMP}"' EXIT
 pass() { echo "ok   - $1"; }
 fail() { echo "FAIL - $1"; FAILURES=$((FAILURES + 1)); }
 check() { if eval "$2"; then pass "$1"; else fail "$1"; fi; }
+
+# Canonical invocation is the direct call (`sudo /var/www/boostinghub/deploy/update-server.sh`):
+# the helper must be tracked executable, run under bash, and have LF line endings.
+if git -C "$(dirname "${SCRIPT}")" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  MODE="$(git -C "$(dirname "${SCRIPT}")" ls-files --stage update-server.sh | cut -d' ' -f1)"
+  check "update-server.sh is tracked executable (git mode 100755)" '[[ "${MODE}" == 100755 ]]'
+fi
+check "update-server.sh has a bash shebang" '[[ "$(head -n1 "${SCRIPT}")" == "#!/usr/bin/env bash" ]]'
+check "update-server.sh has LF line endings" '! grep -q "$(printf "\r")" "${SCRIPT}"'
 
 BIN="${TMP}/bin"
 mkdir -p "${BIN}"
@@ -120,7 +131,7 @@ run_deploy() {
   OUTPUT="$(env "$@" PATH="${BIN}:${PATH}" STATE="${STATE}" LOG="${LOG}" APP="${APP}" \
     BOOSTINGHUB_APP_DIR="${APP}" BOOSTINGHUB_SITE_URL=https://example.test/ \
     BOOSTINGHUB_DEPLOY_LOCK="${case_dir}/deploy.lock" BOOSTINGHUB_RUNNING_JOB_WAIT_SECONDS=20 \
-    bash "${SCRIPT}" 2>&1)"
+    "${SCRIPT}" 2>&1)"
   RC=$?
   CALLS="$(cat "${LOG}/calls")"
   SETUP=""
