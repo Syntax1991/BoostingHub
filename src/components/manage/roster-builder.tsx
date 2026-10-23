@@ -1224,7 +1224,7 @@ function SignupRowCard({
   const showWcl = Boolean(character?.warcraftLogsId) || wclForColumn.length > 0;
   return (
     <div
-      className={`flex items-start gap-3 rounded-md border px-3 py-2 ${
+      className={`flex flex-wrap items-start gap-x-3 gap-y-2 rounded-md border px-3 py-2 xl:flex-nowrap ${
         selected ? "border-accent bg-accent/10" : "border-border bg-transparent"
       } ${disabled ? "opacity-70" : ""}`}
     >
@@ -1325,8 +1325,10 @@ function SignupRowCard({
         ) : null}
       </div>
       {showWcl ? (
+        // Below xl the performance lines get their own row under the details
+        // (they are long and would squeeze / overflow the card on phones).
         <div
-          className="ml-auto shrink-0 self-start text-right text-xs"
+          className="basis-full pl-7 text-left text-xs xl:ml-auto xl:basis-auto xl:shrink-0 xl:self-start xl:pl-0 xl:text-right"
           aria-label="Warcraft Logs performance"
         >
           {character?.warcraftLogsId ? (
