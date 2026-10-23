@@ -24,7 +24,11 @@ vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOr
 }));
 
 import { PUT as notificationDeliveryPut } from "@/app/api/bot/notifications/[notificationId]/delivery/route";
+import type { OwnedBlizzardCharacter } from "@/lib/blizzard/types";
+import { battleNetConnectionRepository } from "@/repositories/battle-net-connection.repository";
+import { battleNetImportSessionRepository } from "@/repositories/battle-net-import-session.repository";
 import { characterRepository } from "@/repositories/character.repository";
+import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
 import { characterBlizzardSyncService } from "@/services/character-blizzard-sync.service";
 import { discordSyncService } from "@/services/discord-sync.service";
 
@@ -253,5 +257,81 @@ describe("CHARACTER_BATTLENET_REPAIR notification", () => {
     const acked = await orm.UserNotification.where({ id: String(sentRow!.id) }).first();
     expect(String(acked?.discordDeliveryStatus)).toBe("SENT");
     expect((await deliveryRequest(String(sentRow!.id), "BOGUS")).status).toBe(400);
+  });
+});
+
+/** A fresh OAuth roster (what the Battle.net connect callback stores), for the owner's EU account. */
+async function reconnectBattleNet(owner: AuthenticatedUser, characters: OwnedBlizzardCharacter[]) {
+  await battleNetConnectionRepository.upsert({
+    userId: owner.id,
+    region: "EU",
+    battleNetAccountId: `acct-${owner.id}`,
+    battleTag: "Repair#1",
+    scope: "wow.profile openid",
+  });
+  const session = await battleNetImportSessionRepository.create({
+    userId: owner.id,
+    region: "EU",
+    characters,
+    expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+  });
+  return characterBlizzardImportService.autoLinkExistingCharacters(owner, session.id);
+}
+
+function rosterEntry(id: string, name: string): OwnedBlizzardCharacter {
+  return { id, name, realmId: "506", realmName: "Draenor", realmSlug: "draenor", wowClass: "MONK", level: 90, region: "EU" };
+}
+
+describe("repair lifecycle: failing sync → one notification → reconnect → sync resumes", () => {
+  it("repairs only from the owner's roster, notifies once, resumes syncing, and a second reconnect changes nothing", async () => {
+    const owner = await createUser("Lifecycle Owner", discordId());
+    const broken = await createLinkedCharacter(owner, "Lifecycle");
+    const healthy = await createLinkedCharacter(owner, "Untouched");
+    const healthyBefore = await characterRepository.findById(healthy.id);
+
+    // 1. Blizzard now has another character id under this name: syncs fail, the owner is told once.
+    mockIdentityConflict();
+    await failRefresh(owner, broken.id);
+    await failRefresh(owner, broken.id);
+    expect(await repairNotifications(owner.id)).toHaveLength(1);
+
+    // 2. No proof yet: a roster without the new id (it is not on this account) repairs nothing —
+    //    name + realm alone never rewrite the identity.
+    const unproven = await reconnectBattleNet(owner, [rosterEntry(healthy.blizzardCharacterId!, "Untouched")]);
+    expect(unproven.repair).toEqual({ renamedCharacterIds: [], relinkedCharacterIds: [], skipped: 0 });
+    expect((await characterRepository.findById(broken.id))?.blizzardCharacterId).toBe(broken.blizzardCharacterId);
+
+    // 3. The owner's fresh roster holds the new id with the same name/realm/class: repaired.
+    const roster = [rosterEntry("190292456", "Lifecycle"), rosterEntry(healthy.blizzardCharacterId!, "Untouched")];
+    const proven = await reconnectBattleNet(owner, roster);
+    expect(proven.repair).toEqual({ renamedCharacterIds: [], relinkedCharacterIds: [broken.id], skipped: 0 });
+    expect(proven.linkedCharacterIds).toEqual([]);
+    const repaired = await characterRepository.findById(broken.id);
+    expect(repaired?.blizzardCharacterId).toBe("190292456");
+    expect([repaired?.lastSyncErrorCode, repaired?.syncFailureCount]).toEqual([null, 0]);
+    // The unaffected Character and the owner's Character count are unchanged.
+    const healthyAfter = await characterRepository.findById(healthy.id);
+    expect([healthyAfter?.name, healthyAfter?.blizzardCharacterId, healthyAfter?.updatedAt]).toEqual([
+      healthyBefore?.name,
+      healthyBefore?.blizzardCharacterId,
+      healthyBefore?.updatedAt,
+    ]);
+    expect(await orm.Character.where({ userId: owner.id }).all()).toHaveLength(2);
+
+    // 4. The next sync succeeds against the repaired identity.
+    const lastSyncedBefore = repaired?.lastSyncedAt;
+    await characterBlizzardSyncService.refreshCharacter(owner, broken.id);
+    const synced = await characterRepository.findById(broken.id);
+    expect(synced?.lastSyncedAt).not.toBe(lastSyncedBefore);
+    expect(synced?.lastSyncErrorCode ?? null).toBeNull();
+
+    // 5. Reconnecting again is a no-op: no repair, no link, no further notification.
+    const again = await reconnectBattleNet(owner, roster);
+    expect(again.repair).toEqual({ renamedCharacterIds: [], relinkedCharacterIds: [], skipped: 0 });
+    expect(again.linkedCharacterIds).toEqual([]);
+    expect(await repairNotifications(owner.id)).toHaveLength(1);
+    expect(
+      await orm.ActivityEvent.where({ userId: owner.id, type: "BATTLENET_CHARACTER_REPAIRED" }).all(),
+    ).toHaveLength(1);
   });
 });

@@ -7,6 +7,8 @@ export default defineConfig({
     include: ["src/**/*.test.ts"],
     fileParallelism: false,
     globalSetup: ["./vitest.global-setup.ts"],
+    // Fails a test file that lets a real Warcraft Logs / Blizzard / Raider.IO request escape.
+    setupFiles: ["./src/test/external-api-guard.ts"],
   },
   resolve: {
     alias: {
