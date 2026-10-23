@@ -58,14 +58,8 @@ export type ProductWrite = {
 };
 
 /** Replace a product's ordered contents in place: keeps row ids per raid, never touches Runs/templates. */
-async function writeProductContents(
-  txOrm: TxOrm,
-  productId: string,
-  contents: readonly ProductContentWrite[],
-) {
-  const existing = (await txOrm.ProductRaidContent.where({ productId }).all()) as Array<
-    Record<string, unknown>
-  >;
+async function writeProductContents(txOrm: TxOrm, productId: string, contents: readonly ProductContentWrite[]) {
+  const existing = (await txOrm.ProductRaidContent.where({ productId }).all()) as Array<Record<string, unknown>>;
   const byRaid = new Map(existing.map((row) => [asString(row.raidId), asString(row.id)]));
   const keepRaidIds = new Set(contents.map((content) => content.raidId));
   for (const row of existing) {
@@ -94,12 +88,7 @@ async function writeProductContents(
     if (id) {
       await txOrm.ProductRaidContent.where({ id }).update(values);
     } else {
-      await txOrm.ProductRaidContent.create({
-        id: crypto.randomUUID(),
-        productId,
-        raidId: content.raidId,
-        ...values,
-      });
+      await txOrm.ProductRaidContent.create({ id: crypto.randomUUID(), productId, raidId: content.raidId, ...values });
     }
   }
 }
@@ -226,15 +215,9 @@ export const raidCatalogRepository = {
   async listRaidReferenceCounts(): Promise<Map<string, RaidReferenceCounts>> {
     const [runContents, templateContents, productContents, lockouts] = await Promise.all([
       orm.RunRaidContent.groupBy("raidId").aggregate((aggregate) => ({ count: aggregate.count() })),
-      orm.RunTemplateRaidContent.groupBy("raidId").aggregate((aggregate) => ({
-        count: aggregate.count(),
-      })),
-      orm.ProductRaidContent.groupBy("raidId").aggregate((aggregate) => ({
-        count: aggregate.count(),
-      })),
-      orm.CharacterRaidLockout.groupBy("raidId").aggregate((aggregate) => ({
-        count: aggregate.count(),
-      })),
+      orm.RunTemplateRaidContent.groupBy("raidId").aggregate((aggregate) => ({ count: aggregate.count() })),
+      orm.ProductRaidContent.groupBy("raidId").aggregate((aggregate) => ({ count: aggregate.count() })),
+      orm.CharacterRaidLockout.groupBy("raidId").aggregate((aggregate) => ({ count: aggregate.count() })),
     ]);
     const maps = {
       runContents: toCountMap(runContents as GroupedCount[]),
@@ -260,15 +243,9 @@ export const raidCatalogRepository = {
   async raidReferenceCounts(raidId: string): Promise<RaidReferenceCounts> {
     const [runContents, templateContents, productContents, lockouts] = await Promise.all([
       orm.RunRaidContent.where({ raidId }).aggregate((aggregate) => ({ count: aggregate.count() })),
-      orm.RunTemplateRaidContent.where({ raidId }).aggregate((aggregate) => ({
-        count: aggregate.count(),
-      })),
-      orm.ProductRaidContent.where({ raidId }).aggregate((aggregate) => ({
-        count: aggregate.count(),
-      })),
-      orm.CharacterRaidLockout.where({ raidId }).aggregate((aggregate) => ({
-        count: aggregate.count(),
-      })),
+      orm.RunTemplateRaidContent.where({ raidId }).aggregate((aggregate) => ({ count: aggregate.count() })),
+      orm.ProductRaidContent.where({ raidId }).aggregate((aggregate) => ({ count: aggregate.count() })),
+      orm.CharacterRaidLockout.where({ raidId }).aggregate((aggregate) => ({ count: aggregate.count() })),
     ]);
     const value = (row: unknown) => asNumber((row as { count?: unknown }).count, 0);
     return {
@@ -335,14 +312,8 @@ export const raidCatalogRepository = {
   },
 
   /** Persist the discovered Blizzard journal instance id. Touches nothing else. */
-  async updateRaidBlizzardInstance(
-    raidId: string,
-    input: { blizzardInstanceId: number; now: string },
-  ): Promise<void> {
-    await orm.Raid.where({ id: raidId }).update({
-      blizzardInstanceId: input.blizzardInstanceId,
-      updatedAt: input.now,
-    });
+  async updateRaidBlizzardInstance(raidId: string, input: { blizzardInstanceId: number; now: string }): Promise<void> {
+    await orm.Raid.where({ id: raidId }).update({ blizzardInstanceId: input.blizzardInstanceId, updatedAt: input.now });
   },
 
   /** Hard delete — callers must have proven the Raid unreferenced. Its RaidBoss rows go with it. */
@@ -371,11 +342,7 @@ export const raidCatalogRepository = {
   /** Identity-preserving edit: id, raidId and sortOrder are never written here. */
   async updateEncounter(
     bossId: string,
-    input: {
-      name: string;
-      blizzardEncounterIds: readonly number[];
-      wclEncounterIds: readonly number[];
-    },
+    input: { name: string; blizzardEncounterIds: readonly number[]; wclEncounterIds: readonly number[] },
   ): Promise<void> {
     await orm.RaidBoss.where({ id: bossId }).update({
       name: input.name,
@@ -405,16 +372,11 @@ export const raidCatalogRepository = {
   },
 
   async findProductIdByKey(key: string): Promise<string | null> {
-    const row = (await orm.Product.where({ key }).select("id").first()) as Record<
-      string,
-      unknown
-    > | null;
+    const row = (await orm.Product.where({ key }).select("id").first()) as Record<string, unknown> | null;
     return row ? asString(row.id) : null;
   },
 
-  async createProduct(
-    input: ProductWrite & { id: string; key: string; now: string },
-  ): Promise<void> {
+  async createProduct(input: ProductWrite & { id: string; key: string; now: string }): Promise<void> {
     await db.transaction(async (tx) => {
       const txOrm = txOrmOf(tx);
       await txOrm.Product.create({
@@ -446,10 +408,7 @@ export const raidCatalogRepository = {
     });
   },
 
-  async setProductFlags(
-    productId: string,
-    input: { active?: boolean; selectable?: boolean; now: string },
-  ) {
+  async setProductFlags(productId: string, input: { active?: boolean; selectable?: boolean; now: string }) {
     const { now, ...flags } = input;
     await orm.Product.where({ id: productId }).update({ ...flags, updatedAt: now });
   },

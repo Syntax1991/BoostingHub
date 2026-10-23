@@ -40,10 +40,7 @@ export function encounterIdList(label: string) {
     z
       .array(positiveId(`${label} ids`), { error: `${label} ids must be a list of numbers.` })
       .max(50, `Too many ${label} ids.`)
-      .refine(
-        (ids) => new Set(ids).size === ids.length,
-        `${label} ids must not contain duplicates.`,
-      )
+      .refine((ids) => new Set(ids).size === ids.length, `${label} ids must not contain duplicates.`)
       .transform((ids) => [...ids].sort((a, b) => a - b)),
   );
 }
@@ -114,29 +111,19 @@ export const encounterAdminFieldsSchema = z.object({
 });
 export type EncounterAdminFieldsInput = z.infer<typeof encounterAdminFieldsSchema>;
 
-export const createEncounterSchema = encounterAdminFieldsSchema.extend({
-  raidId: z.string().min(1),
-});
-export const updateEncounterSchema = encounterAdminFieldsSchema.extend({
-  bossId: z.string().min(1),
-});
+export const createEncounterSchema = encounterAdminFieldsSchema.extend({ raidId: z.string().min(1) });
+export const updateEncounterSchema = encounterAdminFieldsSchema.extend({ bossId: z.string().min(1) });
 export const encounterIdSchema = z.object({ bossId: z.string().min(1) });
 export const moveEncounterSchema = z.object({
   bossId: z.string().min(1),
   direction: z.enum(["UP", "DOWN"]),
 });
 
-const optionalCount = z.preprocess(
-  (value) => {
-    if (value === "" || value === undefined || value === null) return null;
-    if (typeof value === "string") return Number(value.trim());
-    return value;
-  },
-  z
-    .number({ error: "Boss counts must be numbers." })
-    .int("Boss counts must be whole numbers.")
-    .nullable(),
-);
+const optionalCount = z.preprocess((value) => {
+  if (value === "" || value === undefined || value === null) return null;
+  if (typeof value === "string") return Number(value.trim());
+  return value;
+}, z.number({ error: "Boss counts must be numbers." }).int("Boss counts must be whole numbers.").nullable());
 
 export const productContentSchema = z.object({
   raidId: z.string().min(1, "Choose a raid for every content row."),
@@ -153,10 +140,7 @@ const productFields = {
   selectable: z.boolean(),
   sortOrder,
   /** Ordered: the array position is the content sortOrder (1-based). */
-  contents: z
-    .array(productContentSchema)
-    .min(1, "A product needs at least one raid content.")
-    .max(10),
+  contents: z.array(productContentSchema).min(1, "A product needs at least one raid content.").max(10),
 };
 
 /** Create never accepts a client-supplied key — the server generates it from `name`. */

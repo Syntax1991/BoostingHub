@@ -71,9 +71,7 @@ export function parseEncounterIds(value: unknown): number[] {
   try {
     const parsed: unknown = JSON.parse(value);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (item): item is number => typeof item === "number" && Number.isInteger(item),
-    );
+    return parsed.filter((item): item is number => typeof item === "number" && Number.isInteger(item));
   } catch {
     return [];
   }
@@ -89,18 +87,14 @@ function compareRaids(a: CatalogRaid, b: CatalogRaid): number {
 
 export function buildRaidCatalog(raids: readonly CatalogRaid[]): RaidCatalog {
   const ordered = [...raids]
-    .map((raid) => ({
-      ...raid,
-      bosses: [...raid.bosses].sort((a, b) => a.sortOrder - b.sortOrder),
-    }))
+    .map((raid) => ({ ...raid, bosses: [...raid.bosses].sort((a, b) => a.sortOrder - b.sortOrder) }))
     .sort(compareRaids);
   const byId = new Map(ordered.map((raid) => [raid.id, raid]));
   const raidIdByWclEncounterId = new Map<number, string>();
   for (const raid of ordered) {
     for (const boss of raid.bosses) {
       for (const encounterId of boss.wclEncounterIds) {
-        if (!raidIdByWclEncounterId.has(encounterId))
-          raidIdByWclEncounterId.set(encounterId, raid.id);
+        if (!raidIdByWclEncounterId.has(encounterId)) raidIdByWclEncounterId.set(encounterId, raid.id);
       }
     }
   }

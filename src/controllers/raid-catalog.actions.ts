@@ -276,10 +276,7 @@ export async function setProductSelectableAction(input: unknown): Promise<Action
     const { productId, value } = productFlagSchema.parse(input);
     const { name } = await raidCatalogService.setProductSelectable(admin, productId, value);
     revalidateRaidCatalog();
-    return {
-      ok: true,
-      message: `Product "${name}" is now ${value ? "selectable" : "hidden from selection"}.`,
-    };
+    return { ok: true, message: `Product "${name}" is now ${value ? "selectable" : "hidden from selection"}.` };
   } catch (error) {
     return mapActionError(error);
   }
