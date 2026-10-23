@@ -204,6 +204,11 @@ export const raidCatalogRepository = {
     });
   },
 
+  /** Persist the discovered Blizzard journal instance id. Touches nothing else. */
+  async updateRaidBlizzardInstance(raidId: string, input: { blizzardInstanceId: number; now: string }): Promise<void> {
+    await orm.Raid.where({ id: raidId }).update({ blizzardInstanceId: input.blizzardInstanceId, updatedAt: input.now });
+  },
+
   /** Hard delete — callers must have proven the Raid unreferenced. Its RaidBoss rows go with it. */
   async deleteRaid(raidId: string): Promise<void> {
     await orm.Raid.where({ id: raidId }).delete();

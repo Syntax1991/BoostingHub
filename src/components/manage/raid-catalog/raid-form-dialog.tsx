@@ -114,7 +114,7 @@ export function RaidFormDialog({ raid, seasons }: { raid?: RaidFormValues; seaso
           <div className="mt-2">
             <Field
               label="Blizzard instance id"
-              hint="Journal instance id for lockout sync. Leave empty if unknown — Warcraft Logs ids are detected automatically."
+              hint="Journal instance id for lockout sync. Leave empty — it is detected from the Blizzard journal (Retry detection replaces it with Blizzard's id)."
             >
               <input
                 className={fieldInputClass}

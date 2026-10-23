@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { blizzardApiClient } from "@/integrations/blizzard/blizzard-api-client";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
@@ -90,6 +91,13 @@ const runFields = {
   desiredHealerCount: 4,
   desiredDpsCount: 14,
 };
+
+
+// No live Battle.net: Blizzard journal discovery (on raid / encounter writes) sees an empty journal.
+beforeAll(() => {
+  vi.spyOn(blizzardApiClient, "getJournalInstanceIndex").mockResolvedValue([]);
+  vi.spyOn(blizzardApiClient, "getJournalInstance").mockResolvedValue(null);
+});
 
 beforeAll(async () => {
   await raidRepository.ensureReferenceRaids();

@@ -56,6 +56,11 @@ export function blizzardProfileNamespace(region: WowRegion): string {
   return region === "EU" ? "profile-eu" : "profile-us";
 }
 
+/** Game Data (journal, …) namespace — static data, identical ids in every region. */
+export function blizzardStaticNamespace(region: WowRegion): string {
+  return region === "EU" ? "static-eu" : "static-us";
+}
+
 export function blizzardLocale(region: WowRegion): string {
   return region === "EU" ? "en_GB" : "en_US";
 }

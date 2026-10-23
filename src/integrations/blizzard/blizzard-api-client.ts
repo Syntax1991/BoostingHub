@@ -6,6 +6,7 @@ import {
   blizzardOAuthTokenUrl,
   blizzardOAuthUserInfoUrl,
   blizzardProfileNamespace,
+  blizzardStaticNamespace,
   getBlizzardConfig,
 } from "@/lib/blizzard/config";
 import {
@@ -15,6 +16,8 @@ import {
 import { mapPlayableClassId } from "@/lib/blizzard/playable-class";
 import type {
   BlizzardCharacterRaidEncounters,
+  BlizzardJournalInstance,
+  BlizzardJournalInstanceRef,
   BlizzardProfileStatus,
   BlizzardProfileSummary,
   BlizzardRaidInstanceProgress,
@@ -409,7 +412,44 @@ export const blizzardApiClient = {
 
     return { raids: mapCharacterRaidEncounters(payload) };
   },
+
+  /** Every Adventure Journal instance (id + name) — Game Data API, static namespace. */
+  async getJournalInstanceIndex(region: WowRegion): Promise<BlizzardJournalInstanceRef[]> {
+    const token = await this.getClientCredentialsToken();
+    const url = new URL(`${blizzardApiHost(region)}/data/wow/journal-instance/index`);
+    url.searchParams.set("namespace", blizzardStaticNamespace(region));
+    url.searchParams.set("locale", blizzardLocale(region));
+    const payload = await fetchJson(
+      url.toString(),
+      { headers: { Authorization: `Bearer ${token}` } },
+      "journal-instance-index",
+    );
+    const instances = asRecord(payload)?.instances;
+    return Array.isArray(instances) ? instances.flatMap((row) => mapJournalRef(row)) : [];
+  },
+
+  /** One journal instance with its category and journal encounters. */
+  async getJournalInstance(region: WowRegion, instanceId: number): Promise<BlizzardJournalInstance | null> {
+    const token = await this.getClientCredentialsToken();
+    const url = new URL(`${blizzardApiHost(region)}/data/wow/journal-instance/${instanceId}`);
+    url.searchParams.set("namespace", blizzardStaticNamespace(region));
+    url.searchParams.set("locale", blizzardLocale(region));
+    const payload = asRecord(
+      await fetchJson(url.toString(), { headers: { Authorization: `Bearer ${token}` } }, "journal-instance"),
+    );
+    const ref = mapJournalRef(payload)[0];
+    if (!ref) return null;
+    const encounters = Array.isArray(payload?.encounters) ? payload.encounters.flatMap((row) => mapJournalRef(row)) : [];
+    return { ...ref, category: asString(asRecord(payload?.category)?.type), encounters };
+  },
 };
+
+function mapJournalRef(value: unknown): BlizzardJournalInstanceRef[] {
+  const record = asRecord(value);
+  const id = asNumber(record?.id);
+  const name = asString(record?.name);
+  return id != null && id > 0 && name ? [{ id, name }] : [];
+}
 
 function mapCharacterRaidEncounters(payload: unknown): BlizzardRaidInstanceProgress[] {
   const root = asRecord(payload);

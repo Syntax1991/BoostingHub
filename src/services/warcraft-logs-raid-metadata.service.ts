@@ -19,11 +19,13 @@ export type WclRaidMetadataResolution =
       status: "RESOLVED";
       wclZoneId: number;
       wclRankingEncounterId: number | null;
-      /** Boss id → WCL encounter ids (and optional Blizzard journal ids) to fill when empty. */
+      /**
+       * Boss id → WCL encounter ids to fill when empty. Blizzard ids are NOT taken
+       * from WCL's journalID (it can differ) — see blizzard-raid-metadata.service.
+       */
       encounterMappings: ReadonlyArray<{
         bossId: string;
         wclEncounterIds: number[];
-        blizzardEncounterIds: number[] | null;
       }>;
     }
   | { status: "UNRESOLVED"; reason: "NO_MATCH" | "AMBIGUOUS" | "NOT_CONFIGURED" | "UNAVAILABLE" };
@@ -104,7 +106,6 @@ export function resolveWarcraftLogsRaidMetadata(
   const encounterMappings: Array<{
     bossId: string;
     wclEncounterIds: number[];
-    blizzardEncounterIds: number[] | null;
   }> = [];
 
   for (const boss of raid.bosses) {
@@ -124,7 +125,6 @@ export function resolveWarcraftLogsRaidMetadata(
     encounterMappings.push({
       bossId: boss.id,
       wclEncounterIds: [encounter.id],
-      blizzardEncounterIds: encounter.journalId != null ? [encounter.journalId] : null,
     });
   }
 
@@ -164,7 +164,6 @@ export type DiscoverRaidMetadataResult = {
   encounterPatches: ReadonlyArray<{
     bossId: string;
     wclEncounterIds: number[];
-    blizzardEncounterIds: number[] | null;
   }>;
 };
 

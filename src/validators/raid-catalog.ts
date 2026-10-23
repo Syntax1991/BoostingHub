@@ -59,7 +59,7 @@ export const raidMetadataSchema = z.object({
   season,
   sortOrder,
   trackLockouts: z.boolean(),
-  /** Optional advanced Blizzard journal instance id until auto-discovery exists. */
+  /** Optional advanced Blizzard journal instance id; normally detected from the Blizzard journal. */
   blizzardInstanceId: optionalId("Blizzard instance id"),
 });
 export type RaidMetadataInput = z.infer<typeof raidMetadataSchema>;

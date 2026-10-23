@@ -67,6 +67,7 @@ export function RaidWclIntegration({
         >
           Retry detection
         </button>
+        <span className="self-center text-xs text-muted">Also refreshes the Blizzard instance / encounter ids.</span>
         {connected ? (
           <button
             type="button"
