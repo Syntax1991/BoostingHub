@@ -137,3 +137,41 @@ export function catalogRaidFromFixture(entry: WowRaidCatalogEntry): CatalogRaid 
 export function fixtureRaidCatalog(): RaidCatalog {
   return buildRaidCatalog(WOW_RAID_CATALOG.map(catalogRaidFromFixture));
 }
+
+/** Admin-facing integration status of one catalog raid (derived — nothing stored). */
+export type RaidIntegrationStatus = {
+  /** Linked to a Blizzard journal instance. */
+  blizzardLinked: boolean;
+  bossTotal: number;
+  /** Bosses with a Blizzard journal encounter id. */
+  bossesMapped: number;
+  /** READY: tracked + linked + every boss mapped. */
+  lockouts: "READY" | "INCOMPLETE" | "NOT_TRACKED";
+  /** MAPPED: WCL zone + every boss has a WCL encounter id. */
+  warcraftLogs: "MAPPED" | "NEEDS_MAPPING";
+};
+
+export function raidIntegrationStatus(
+  raid: Pick<CatalogRaid, "blizzardInstanceId" | "trackLockouts" | "wclZoneId" | "bosses">,
+): RaidIntegrationStatus {
+  const bossTotal = raid.bosses.length;
+  const bossesMapped = raid.bosses.filter((boss) => boss.blizzardEncounterIds.length > 0).length;
+  const blizzardLinked = raid.blizzardInstanceId != null;
+  const allMapped = bossTotal > 0 && bossesMapped === bossTotal;
+  return {
+    blizzardLinked,
+    bossTotal,
+    bossesMapped,
+    lockouts: !raid.trackLockouts
+      ? "NOT_TRACKED"
+      : blizzardLinked && allMapped
+        ? "READY"
+        : "INCOMPLETE",
+    warcraftLogs:
+      raid.wclZoneId != null &&
+      bossTotal > 0 &&
+      raid.bosses.every((boss) => boss.wclEncounterIds.length > 0)
+        ? "MAPPED"
+        : "NEEDS_MAPPING",
+  };
+}

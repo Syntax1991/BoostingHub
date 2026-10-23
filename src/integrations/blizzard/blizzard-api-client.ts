@@ -440,7 +440,12 @@ export const blizzardApiClient = {
     const ref = mapJournalRef(payload)[0];
     if (!ref) return null;
     const encounters = Array.isArray(payload?.encounters) ? payload.encounters.flatMap((row) => mapJournalRef(row)) : [];
-    return { ...ref, category: asString(asRecord(payload?.category)?.type), encounters };
+    return {
+      ...ref,
+      category: asString(asRecord(payload?.category)?.type),
+      expansion: asString(asRecord(payload?.expansion)?.name),
+      encounters,
+    };
   },
 };
 

@@ -2,7 +2,14 @@ import { assertCanManageRaidCatalog, type AuthenticatedUser } from "@/auth/autho
 import { DomainError } from "@/lib/errors";
 import { allocateUniqueProductKey } from "@/lib/product-key";
 import { PRODUCT_CATALOG_FIXTURE, type ProductBossCountMode, type ProductDefinition } from "@/lib/product-catalog";
-import type { CatalogBoss, CatalogRaid, RaidCatalog } from "@/lib/raid-catalog";
+import {
+  raidIntegrationStatus,
+  type CatalogBoss,
+  type CatalogRaid,
+  type RaidCatalog,
+  type RaidIntegrationStatus,
+} from "@/lib/raid-catalog";
+import { RAID_SEASONS } from "@/lib/raid-seasons";
 import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
 import { activityRepository } from "@/repositories/activity.repository";
 import {
@@ -52,6 +59,8 @@ export type RaidCatalogRaidRow = CatalogRaid & {
   seeded: boolean;
   /** Encounter count / order / membership cannot change (referenced or seeded). */
   structureLocked: boolean;
+  /** Blizzard / boss mapping / lockout / Warcraft Logs readiness (derived). */
+  status: RaidIntegrationStatus;
 };
 
 export type RaidCatalogProductContentRow = ProductDefinition["contents"][number] & {
@@ -71,12 +80,21 @@ export type RaidCatalogPageData = {
   products: RaidCatalogProductRow[];
   /** Distinct persisted seasons for the Season selector (no hardcoded list). */
   seasons: string[];
+  /** Code-defined Blizzard import seasons (`RAID_SEASONS`), newest first. */
+  importSeasons: Array<{ key: string; name: string; current: boolean; raidCount: number }>;
 };
 
 function toRaidRow(raid: CatalogRaid, references: RaidReferenceCounts): RaidCatalogRaidRow {
   const referenced = isRaidReferenced(references);
   const seeded = SEEDED_RAID_IDS.has(raid.id);
-  return { ...raid, references, referenced, seeded, structureLocked: referenced || seeded };
+  return {
+    ...raid,
+    references,
+    referenced,
+    seeded,
+    structureLocked: referenced || seeded,
+    status: raidIntegrationStatus(raid),
+  };
 }
 
 export function summarizeProductContent(
@@ -259,7 +277,7 @@ async function record(admin: AuthenticatedUser, type: string, message: string): 
  * Apply WCL discovery patches. Never throws — catalog writes already succeeded.
  * Soft discovery fills only empty fields; `force` overwrites (Retry detection).
  */
-async function applyWclDiscovery(
+export async function applyWclDiscovery(
   raidId: string,
   options: DiscoverRaidMetadataOptions = {},
   now = new Date(),
@@ -395,6 +413,12 @@ export const raidCatalogService = {
       raids: catalog.raids.map((raid) => toRaidRow(raid, references.get(raid.id) ?? EMPTY_RAID_REFERENCES)),
       products: products.map((product) => toProductRow(product, catalog)),
       seasons,
+      importSeasons: RAID_SEASONS.map((season) => ({
+        key: season.key,
+        name: season.name,
+        current: season.current,
+        raidCount: season.journalInstanceIds.length,
+      })),
     };
   },
 

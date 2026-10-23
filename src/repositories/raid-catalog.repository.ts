@@ -1,3 +1,4 @@
+import { DomainError } from "@/lib/errors";
 import { db, orm } from "@/lib/prisma";
 import { asNumber, asString } from "@/lib/persistence";
 import type { ProductBossCountMode } from "@/lib/product-catalog";
@@ -92,7 +93,113 @@ async function writeProductContents(txOrm: TxOrm, productId: string, contents: r
   }
 }
 
+/** `pg_advisory_xact_lock` namespace serializing Blizzard raid imports (one instance id → one Raid). */
+export const RAID_IMPORT_LOCK_NAMESPACE = 837470;
+
+/** One raid of a Blizzard import / refresh: only Blizzard-owned fields, plus BoostingHub defaults for a new raid. */
+export type BlizzardRaidImportWrite = {
+  blizzardInstanceId: number;
+  name: string;
+  raid:
+    | { kind: "CREATE"; id: string; season: string; sortOrder: number; trackLockouts: boolean }
+    | { kind: "UPDATE"; id: string };
+  /** Bosses in Blizzard order; `id: null` creates the boss. */
+  bosses: ReadonlyArray<{
+    id: string | null;
+    name: string;
+    sortOrder: number;
+    blizzardEncounterIds: readonly number[];
+  }>;
+  /** Unreferenced bosses Blizzard no longer returns. */
+  removeBossIds: readonly string[];
+  /** Kept bosses Blizzard no longer returns (in-use raids), ordered after Blizzard's. */
+  staleBossIds: readonly string[];
+};
+
+async function lockRaidImports(tx: { execute: (plan: never) => Promise<unknown> }): Promise<void> {
+  const plan = db.raw
+    .sql`WITH _lock AS (SELECT pg_advisory_xact_lock(${RAID_IMPORT_LOCK_NAMESPACE}::int4, 0)) SELECT 1::int4 AS n FROM _lock`
+    .returnsRow({ n: "pg/int4@1" })
+    .build();
+  await tx.execute(plan as never);
+}
+
 export const raidCatalogRepository = {
+  /**
+   * Apply a Blizzard import / refresh atomically: every raid and boss of `writes`
+   * or nothing. Serialized by an advisory lock and re-checked inside it, so a
+   * Blizzard instance id never ends up on two Raids. Never touches season / order /
+   * lockout tracking / availability of existing raids, WCL ids, Products or Runs.
+   */
+  async applyBlizzardRaidImports(
+    writes: readonly BlizzardRaidImportWrite[],
+    now: string,
+  ): Promise<void> {
+    await db.transaction(async (tx) => {
+      await lockRaidImports(tx as unknown as { execute: (plan: never) => Promise<unknown> });
+      const txOrm = txOrmOf(tx);
+      for (const write of writes) {
+        const owners = (await txOrm.Raid.where({ blizzardInstanceId: write.blizzardInstanceId })
+          .select("id", "name")
+          .all()) as Array<Record<string, unknown>>;
+        const clash = owners.find((row) => asString(row.id) !== write.raid.id);
+        if (clash) {
+          throw new DomainError(
+            "CONTENT_BLIZZARD_INSTANCE_CONFLICT",
+            `Blizzard instance ${write.blizzardInstanceId} is already imported as ${asString(clash.name)}. Use Refresh from Blizzard instead.`,
+          );
+        }
+        if (write.raid.kind === "CREATE") {
+          await txOrm.Raid.create({
+            id: write.raid.id,
+            name: write.name,
+            season: write.raid.season,
+            // Not offered for new Runs until an admin enables it.
+            isActive: false,
+            sortOrder: write.raid.sortOrder,
+            trackLockouts: write.raid.trackLockouts,
+            blizzardInstanceId: write.blizzardInstanceId,
+            wclZoneId: null,
+            wclRankingEncounterId: null,
+            createdAt: now,
+            updatedAt: now,
+          });
+        } else {
+          await txOrm.Raid.where({ id: write.raid.id }).update({
+            name: write.name,
+            blizzardInstanceId: write.blizzardInstanceId,
+            updatedAt: now,
+          });
+        }
+        for (const bossId of write.removeBossIds) {
+          await txOrm.RaidBoss.where({ id: bossId }).delete();
+        }
+        for (const boss of write.bosses) {
+          const values = {
+            name: boss.name,
+            sortOrder: boss.sortOrder,
+            blizzardEncounterIds: serializeEncounterIds(boss.blizzardEncounterIds),
+          };
+          if (boss.id) {
+            await txOrm.RaidBoss.where({ id: boss.id }).update(values);
+          } else {
+            await txOrm.RaidBoss.create({
+              id: crypto.randomUUID(),
+              raidId: write.raid.id,
+              ...values,
+              wclEncounterIds: serializeEncounterIds([]),
+            });
+          }
+        }
+        for (const [index, bossId] of write.staleBossIds.entries()) {
+          await txOrm.RaidBoss.where({ id: bossId }).update({
+            sortOrder: write.bosses.length + index + 1,
+          });
+        }
+      }
+    });
+  },
+
   /** Distinct non-empty `Raid.season` values for the Season selector (newest / lexical order). */
   async listDistinctSeasons(): Promise<string[]> {
     const rows = (await orm.Raid.select("season").all()) as Array<{ season: unknown }>;

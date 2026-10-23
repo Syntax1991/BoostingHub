@@ -99,6 +99,8 @@ export type BlizzardJournalInstanceRef = { id: number; name: string };
 export type BlizzardJournalInstance = BlizzardJournalInstanceRef & {
   /** `RAID` / `DUNGEON` / … (null when Blizzard omits it). */
   category: string | null;
+  /** Journal expansion name (e.g. "Midnight"); null when Blizzard omits it. */
+  expansion?: string | null;
   /** Journal encounters in journal order. */
   encounters: BlizzardJournalInstanceRef[];
 };

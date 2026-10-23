@@ -75,6 +75,27 @@ export type UpdateRaidInput = z.infer<typeof updateRaidSchema>;
 
 export const raidIdSchema = z.object({ raidId: z.string().min(1) });
 
+/** Blizzard journal instance id typed by the admin ("1320"). */
+const journalInstanceId = z.preprocess(
+  (value) => (typeof value === "string" ? Number(value.trim()) : value),
+  positiveId("Blizzard Journal Instance ID"),
+);
+
+export const previewRaidImportSchema = z.object({ journalInstanceId });
+
+/** Season / lockout tracking apply only when the import creates the raid. */
+export const importRaidSchema = z.object({
+  journalInstanceId,
+  season: season.optional(),
+  trackLockouts: z.boolean().optional(),
+});
+
+export const seasonKeySchema = z.object({
+  seasonKey: z.string().trim().min(1, "Choose a season.").max(64),
+});
+
+export const importSeasonSchema = seasonKeySchema.extend({ trackLockouts: z.boolean().optional() });
+
 /** Internal / discovery-facing encounter fields (includes WCL ids). */
 export const encounterFieldsSchema = z.object({
   name,
