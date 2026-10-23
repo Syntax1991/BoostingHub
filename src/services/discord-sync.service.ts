@@ -52,6 +52,7 @@ import { lockoutService } from "@/services/lockout.service";
 import { isSignupWindowOpen, SIGNUP_WINDOW_STATUSES } from "@/services/run-state";
 import { isActiveSignupOffer, isAvailableSignup, isSignedUpSignup } from "@/services/signup-state";
 import { parseRescheduleHrefTimestamps } from "@/services/notification-content";
+import { findCharacterStillNeedingBattleNetRepair } from "@/services/character-repair-notification.service";
 
 /**
  * Where a Run's dedicated Discord channel belongs, decided once here and
@@ -469,6 +470,21 @@ export type NotificationDmWorkItem = {
     reason: string;
     rosterUrl: string | null;
   } | null;
+};
+
+/**
+ * Discord DM work from a PENDING UserNotification that belongs to the User's
+ * account, not to a Run (no runId) — rendered by the bot from these fields
+ * and acknowledged per notification.
+ */
+export type AccountNotificationDmWorkItem = {
+  notificationId: string;
+  type: "CHARACTER_BATTLENET_REPAIR";
+  discordUserId: string;
+  /** e.g. "Sharaleen-Draenor (EU)". */
+  characterLabel: string;
+  /** Absolute Characters page URL (where the Battle.net reconnect is), null when the app URL is not configured. */
+  charactersUrl: string | null;
 };
 
 /** Shared Run-channel lifecycle announcement (not a User DM). */
@@ -1013,12 +1029,35 @@ function toStartMember(
   };
 }
 
-async function buildPendingNotificationDms(): Promise<NotificationDmWorkItem[]> {
+async function buildPendingNotificationDms(): Promise<{
+  notificationDmWorkItems: NotificationDmWorkItem[];
+  accountNotificationDms: AccountNotificationDmWorkItem[];
+}> {
   const pendingNotificationRows = await userNotificationRepository.listPendingDiscordDmNotifications(50);
   const notificationDmWorkItems: NotificationDmWorkItem[] = [];
+  const accountNotificationDms: AccountNotificationDmWorkItem[] = [];
 
   for (const notification of pendingNotificationRows) {
-    if (!notification.discordUserId || !notification.runId) continue;
+    if (!notification.discordUserId) continue;
+
+    if (notification.type === "CHARACTER_BATTLENET_REPAIR") {
+      const character = await findCharacterStillNeedingBattleNetRepair(notification.sourceKey);
+      if (!character) {
+        // Repaired (or gone) before the DM went out, e.g. during Quiet Hours — nothing left to ask.
+        await userNotificationRepository.skipPendingDiscordDelivery(notification.id);
+        continue;
+      }
+      accountNotificationDms.push({
+        notificationId: notification.id,
+        type: "CHARACTER_BATTLENET_REPAIR",
+        discordUserId: notification.discordUserId,
+        characterLabel: `${character.name}-${character.realm} (${character.region})`,
+        charactersUrl: absoluteAppUrl("/characters"),
+      });
+      continue;
+    }
+
+    if (!notification.runId) continue;
 
     const run = await runRepository.findById(notification.runId);
     if (!run || run.archivedAt) {
@@ -1134,7 +1173,7 @@ async function buildPendingNotificationDms(): Promise<NotificationDmWorkItem[]> 
     });
   }
 
-  return notificationDmWorkItems;
+  return { notificationDmWorkItems, accountNotificationDms };
 }
 
 /**
@@ -1180,6 +1219,8 @@ export const discordSyncService = {
     /** Always empty — Raid Invite DMs come from notificationDms (PENDING UserNotification). */
     raidInvites: RaidInviteWorkItem[];
     notificationDms: NotificationDmWorkItem[];
+    /** PENDING account-level UserNotification DMs (no Run), e.g. CHARACTER_BATTLENET_REPAIR. */
+    accountNotificationDms: AccountNotificationDmWorkItem[];
     /** PENDING RunDiscordAnnouncement rows (channel lifecycle), createdAt ASC. */
     runAnnouncements: RunAnnouncementWorkItem[];
     /** Discord ids of trusted Warcraft Logs log bots (empty = auto-attach off). */
@@ -1457,7 +1498,7 @@ export const discordSyncService = {
       }
     }
 
-    const notificationDms = await buildPendingNotificationDms();
+    const { notificationDmWorkItems: notificationDms, accountNotificationDms } = await buildPendingNotificationDms();
 
     const runAnnouncements: RunAnnouncementWorkItem[] = pendingAnnouncements.map((row) => ({
       announcementId: row.id,
@@ -1514,6 +1555,7 @@ export const discordSyncService = {
       start,
       raidInvites,
       notificationDms,
+      accountNotificationDms,
       runAnnouncements,
       warcraftLogsReportAuthorIds,
       warcraftLogsReportChannels,
@@ -1949,6 +1991,10 @@ export const discordSyncService = {
       if (!notification.runId) return { deliver: false };
       const run = await runRepository.findById(notification.runId);
       return { deliver: Boolean(run && run.status !== "CANCELLED") };
+    }
+
+    if (notification.type === "CHARACTER_BATTLENET_REPAIR") {
+      return { deliver: Boolean(await findCharacterStillNeedingBattleNetRepair(notification.sourceKey)) };
     }
 
     return { deliver: true };

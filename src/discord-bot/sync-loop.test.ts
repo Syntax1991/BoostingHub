@@ -1373,6 +1373,54 @@ describe("syncOnce — UserNotification DMs", () => {
     });
   });
 
+  it("sends the one-time Battle.net repair DM (account notification, no Run) and acks it per notification", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+    ]);
+    const sendDm = vi.fn().mockResolvedValue({ id: "dm-repair" });
+    const { client } = makeDiscordClient(children);
+    (client as { users: { fetch: ReturnType<typeof vi.fn> } }).users = {
+      fetch: vi.fn().mockResolvedValue({ id: "discord-owner", send: sendDm }),
+    };
+    const api = makeApi({ channels: [], signups: [], roster: [] });
+    const accountDm = {
+      notificationId: "cccccccc-cccc-4ccc-8ccc-cccccccccc41",
+      type: "CHARACTER_BATTLENET_REPAIR",
+      discordUserId: "discord-owner",
+      characterLabel: "Sharaleen-Draenor (EU)",
+      charactersUrl: "https://hub.test/characters",
+    };
+    (api.listSyncWork as ReturnType<typeof vi.fn>).mockResolvedValue({
+      channels: [],
+      signups: [],
+      roster: [],
+      start: [],
+      raidInvites: [],
+      notificationDms: [],
+      accountNotificationDms: [accountDm],
+    });
+
+    await syncOnce(client as never, botEnv(), api);
+
+    expect(sendDm).toHaveBeenCalledTimes(1);
+    const content = sendDm.mock.calls[0][0].content as string;
+    expect(content).toContain("**Battle.net link needs a refresh**");
+    expect(content).toContain("**Sharaleen-Draenor (EU)**");
+    expect(content).toContain("No need to delete it.");
+    expect(content).toContain("https://hub.test/characters");
+    expect(api.recordNotificationDmDelivery).toHaveBeenCalledWith(accountDm.notificationId, "SENT");
+    expect(api.recordDiscordState).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ kind: "notification-dm" }));
+
+    // Repaired before delivery: the authority check stops the send, nothing is acked.
+    sendDm.mockClear();
+    (api.recordNotificationDmDelivery as ReturnType<typeof vi.fn>).mockClear();
+    (api.confirmNotificationDmDelivery as ReturnType<typeof vi.fn>).mockResolvedValue({ deliver: false });
+    await syncOnce(client as never, botEnv(), api);
+    expect(sendDm).not.toHaveBeenCalled();
+    expect(api.recordNotificationDmDelivery).not.toHaveBeenCalled();
+  });
+
   it("marks FAILED_PERMANENT when Discord rejects the notification DM", async () => {
     const children = new Map<string, Child>([
       [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
@@ -2944,6 +2992,7 @@ function makeApi(input: {
     confirmChannelRetirement: vi.fn().mockResolvedValue({ retire: true }),
     confirmRunAnnouncementDelivery: vi.fn().mockResolvedValue({ deliver: true }),
     confirmNotificationDmDelivery: vi.fn().mockResolvedValue({ deliver: true }),
+    recordNotificationDmDelivery: vi.fn().mockResolvedValue({ recorded: true }),
   } as unknown as BotApiClient;
 }
 

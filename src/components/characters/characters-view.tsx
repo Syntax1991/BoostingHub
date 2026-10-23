@@ -20,6 +20,8 @@ import { formatWeeklyAvailabilityButtonLabel } from "@/lib/weekly-availability-d
 import { formatCharacterPageSpecLine } from "@/lib/character-roster-metadata";
 import { cn } from "@/lib/cn";
 import {
+  BATTLENET_IDENTITY_REPAIR_HINT,
+  BATTLENET_IDENTITY_REPAIR_TITLE,
   BLIZZARD_PROFILE_UNAVAILABLE_HINT,
   BLIZZARD_PROFILE_UNAVAILABLE_TITLE,
   BLIZZARD_SYNC_STALE_HINT,
@@ -149,7 +151,11 @@ export function CharactersView({ data }: { data: Page }) {
                       <AvailabilityCell character={character} />
                     </td>
                     <td className="px-4 py-3 text-xs text-muted">
-                      {character.blizzardSyncState.kind === "PROFILE_UNAVAILABLE" ? (
+                      {character.battleNetRepairNeeded ? (
+                        <span className="cursor-help text-warning" title={BATTLENET_IDENTITY_REPAIR_HINT}>
+                          {BATTLENET_IDENTITY_REPAIR_TITLE}
+                        </span>
+                      ) : character.blizzardSyncState.kind === "PROFILE_UNAVAILABLE" ? (
                         <span className="cursor-help text-warning" title={BLIZZARD_PROFILE_UNAVAILABLE_HINT}>
                           {BLIZZARD_PROFILE_UNAVAILABLE_TITLE}
                         </span>

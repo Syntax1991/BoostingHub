@@ -26,6 +26,7 @@ import { resolveMonotonicItemLevel, toStoredItemLevel } from "@/lib/character-it
 import { resolveRaiderIoItemLevelEnrichment } from "@/services/character-raider-io-ilvl";
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
+import { characterRepairNotificationService } from "@/services/character-repair-notification.service";
 
 /**
  * Owns refreshing already Blizzard-linked characters: single refresh,
@@ -395,6 +396,8 @@ export async function syncLinkedCharacterProfile(
       logCharacterSyncFailure({ category: code, trigger: options.trigger, region: character.region });
       try {
         await characterRepository.recordSyncFailure(character.id, { code, failedAt: new Date().toISOString() });
+        // Once per broken identity: tell the owner a Battle.net reconnect repairs it (best-effort).
+        await characterRepairNotificationService.notifyOwnerIfRepairNeeded(character.id);
       } catch {
         console.error(
           JSON.stringify({ event: "character_sync_telemetry_write_failed", trigger: options.trigger, region: character.region }),

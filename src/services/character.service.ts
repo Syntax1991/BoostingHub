@@ -30,7 +30,7 @@ import { characterWeeklyAvailabilityService } from "@/services/character-weekly-
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
 import { lockoutService } from "@/services/lockout.service";
-import { deriveBlizzardSyncState } from "@/lib/blizzard/sync-state";
+import { deriveBlizzardSyncState, needsBattleNetIdentityRepair } from "@/lib/blizzard/sync-state";
 import { resolveSyncHealthStaleMinutes } from "@/lib/blizzard/sync-health";
 
 /**
@@ -201,6 +201,7 @@ export const characterService = {
           isActive: character.isActive,
           lastSyncedAt: character.lastSyncedAt,
           blizzardSyncState: blizzardSyncStateFor(character),
+          battleNetRepairNeeded: needsBattleNetIdentityRepair(character),
           updatedAt: character.updatedAt,
           blizzardLinked: Boolean(character.blizzardCharacterId),
           blizzardRealmId: character.blizzardRealmId,
@@ -267,6 +268,7 @@ export const characterService = {
       updatedAt: character.updatedAt,
       lastSyncedAt: character.lastSyncedAt,
       blizzardSyncState: blizzardSyncStateFor(character),
+      battleNetRepairNeeded: needsBattleNetIdentityRepair(character),
       blizzardLinked: Boolean(character.blizzardCharacterId),
       blizzardCharacterId: character.blizzardCharacterId,
       blizzardRealmId: character.blizzardRealmId,

@@ -90,9 +90,11 @@ export async function GET(request: NextRequest) {
 
     // Best-effort: a failed auto-link never fails the connection; the import dialog still offers it.
     let linked = 0;
+    let repaired = 0;
     try {
       const autoLink = await characterBlizzardImportService.autoLinkExistingCharacters(user, result.importSessionId);
       linked = autoLink.linkedCharacterIds.length;
+      repaired = autoLink.repair.renamedCharacterIds.length + autoLink.repair.relinkedCharacterIds.length;
     } catch (error) {
       if (isDomainError(error) && error.code === "BATTLENET_NOT_CONFIGURED") throw error;
     }
@@ -102,6 +104,7 @@ export async function GET(request: NextRequest) {
       region: result.region,
       importSession: result.importSessionId,
       ...(linked > 0 ? { linked: String(linked) } : {}),
+      ...(repaired > 0 ? { repaired: String(repaired) } : {}),
     });
     clearStateCookie(response);
     return response;

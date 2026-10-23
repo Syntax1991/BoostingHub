@@ -44,6 +44,7 @@ export const characterController = {
     region?: string | string[];
     code?: string | string[];
     linked?: string | string[];
+    repaired?: string | string[];
   } = {}) {
     const user = await requireUserOrRedirect("/characters");
     const page = await characterService.getCharacterPage(user);
@@ -87,6 +88,7 @@ export const characterController = {
         region: firstParam(searchParams.region),
         code: firstParam(searchParams.code),
         linked: Math.max(0, Number.parseInt(firstParam(searchParams.linked) ?? "", 10) || 0),
+        repaired: Math.max(0, Number.parseInt(firstParam(searchParams.repaired) ?? "", 10) || 0),
         importSessionId,
       },
     };

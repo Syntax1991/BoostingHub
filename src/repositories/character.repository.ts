@@ -112,6 +112,15 @@ export type CharacterBlizzardLinkInput = {
   lastSyncedAt?: string | null;
 };
 
+export type CharacterBlizzardIdentityRepairInput = {
+  name: string;
+  realm: string;
+  normalizedName: string;
+  normalizedRealm: string;
+  blizzardCharacterId: string;
+  blizzardRealmId: string;
+};
+
 export type CharacterBlizzardSyncInput = {
   name: string;
   normalizedName: string;
@@ -437,6 +446,35 @@ export const characterRepository = {
       // A verified link enrichment also starts the manual refresh cooldown.
       ...(input.lastSyncedAt ? { lastSyncAttemptAt: input.lastSyncedAt } : {}),
       updatedAt: new Date().toISOString(),
+    });
+  },
+
+  /**
+   * Battle.net identity repair (rename / transfer / re-created character,
+   * proven by a fresh OAuth roster): moves the row onto its current Blizzard
+   * identity in one transaction. Signups, lockout history, specs and
+   * availability stay on the row. The Warcraft Logs link and its cached
+   * performance belong to the old WCL identity and are dropped (auto-link
+   * rediscovers them); the failure telemetry is cleared so the scheduler
+   * resyncs the row on its next pass instead of waiting out the backoff.
+   */
+  async repairBlizzardIdentity(characterId: string, input: CharacterBlizzardIdentityRepairInput): Promise<void> {
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: typeof orm }).public ?? (tx.orm as unknown as typeof orm)) as typeof orm;
+      await txOrm.Character.where({ id: characterId }).update({
+        name: input.name,
+        realm: input.realm,
+        normalizedName: input.normalizedName,
+        normalizedRealm: input.normalizedRealm,
+        blizzardCharacterId: input.blizzardCharacterId,
+        blizzardRealmId: input.blizzardRealmId,
+        warcraftLogsId: null,
+        lastSyncErrorAt: null,
+        lastSyncErrorCode: null,
+        syncFailureCount: 0,
+        updatedAt: new Date().toISOString(),
+      });
+      await txOrm.CharacterWclPerformance.where({ characterId }).delete();
     });
   },
 

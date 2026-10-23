@@ -621,6 +621,10 @@
               {
                 "name": "RUN_SCOPE_CHANGED",
                 "value": "RUN_SCOPE_CHANGED"
+              },
+              {
+                "name": "CHARACTER_BATTLENET_REPAIR",
+                "value": "CHARACTER_BATTLENET_REPAIR"
               }
             ]
           },
@@ -16187,8 +16191,8 @@
                   "prefix": "user_notification_discordDeliveryStatus_check"
                 },
                 {
-                  "expression": "\"type\" IN ('ROSTER_SELECTED', 'RAID_INVITE', 'RUN_CANCELLED', 'RUN_RESCHEDULED', 'ROSTER_REMOVED', 'ROSTER_WITHDRAWN', 'RUN_REACTIVATED', 'RUN_SCOPE_CHANGED')",
-                  "name": "user_notification_type_check_586fff74",
+                  "expression": "\"type\" IN ('ROSTER_SELECTED', 'RAID_INVITE', 'RUN_CANCELLED', 'RUN_RESCHEDULED', 'ROSTER_REMOVED', 'ROSTER_WITHDRAWN', 'RUN_REACTIVATED', 'RUN_SCOPE_CHANGED', 'CHARACTER_BATTLENET_REPAIR')",
+                  "name": "user_notification_type_check_00ed1686",
                   "prefix": "user_notification_type_check"
                 }
               ],
@@ -16840,7 +16844,8 @@
                 "ROSTER_REMOVED",
                 "ROSTER_WITHDRAWN",
                 "RUN_REACTIVATED",
-                "RUN_SCOPE_CHANGED"
+                "RUN_SCOPE_CHANGED",
+                "CHARACTER_BATTLENET_REPAIR"
               ]
             },
             "ParticipationType": {
@@ -16987,7 +16992,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "18eedde5299606ba7da14228477db8c80918d4ca030f4ccdc68cddf994078cab"
+    "storageHash": "61b92f9402f7825de761de9d22b7ce30c0a3a4d6e59f9c54d21f64583fd27260"
   },
   "execution": {
     "executionHash": "b27b9239312d18e407528e2d06057d2da4f3e67bdff7bffe5f827471950c2fa6",

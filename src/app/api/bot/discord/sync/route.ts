@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
       start: work.start,
       raidInvites: work.raidInvites,
       notificationDms: work.notificationDms,
+      accountNotificationDms: work.accountNotificationDms,
       runAnnouncements: work.runAnnouncements,
       // Explicit projection: every field the bot reads must be listed here.
       warcraftLogsReportAuthorIds: work.warcraftLogsReportAuthorIds,

@@ -310,6 +310,45 @@ export function buildRosterWithdrawnDmMessage(input: {
   return lines.join("\n");
 }
 
+/**
+ * CHARACTER_BATTLENET_REPAIR copy — sent once per broken Blizzard identity of a
+ * linked Character (see character-repair-notification.service). Tells the
+ * owner to reconnect Battle.net, which repairs the link and keeps history;
+ * deleting and re-importing would drop it.
+ */
+export function characterBattleNetRepairWebNotification(input: {
+  characterId: string;
+  characterLabel: string;
+}): { title: string; message: string; href: string } {
+  return {
+    title: "Reconnect Battle.net to repair a character",
+    message:
+      `Blizzard no longer shows ${input.characterLabel} under its stored name, realm or character ID — it was probably ` +
+      "renamed, transferred or re-created. Reconnect Battle.net on the Characters page once: the link repairs itself " +
+      "and the character keeps its signups and history. No need to delete it.",
+    href: `/characters/${input.characterId}`,
+  };
+}
+
+export function buildCharacterBattleNetRepairDmMessage(input: {
+  characterLabel: string;
+  charactersUrl: string | null;
+}): string {
+  const lines = [
+    "🔗 **Battle.net link needs a refresh**",
+    "",
+    `Blizzard no longer shows **${escapeDiscordInlineText(input.characterLabel)}** under its stored name, realm or ` +
+      "character ID — it was probably renamed, transferred or re-created.",
+    "",
+    "Reconnect Battle.net on the Characters page once: the link repairs itself and the character keeps its signups " +
+      "and history. No need to delete it. If the character no longer exists in-game, deactivate it instead.",
+  ];
+  if (input.charactersUrl) {
+    lines.push("", input.charactersUrl);
+  }
+  return lines.join("\n");
+}
+
 export function buildRunCancelledDmMessage(input: {
   productLabel: string;
   scheduledStartAt: string;

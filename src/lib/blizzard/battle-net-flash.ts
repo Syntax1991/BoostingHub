@@ -7,6 +7,8 @@ export type BattleNetFlashInput = {
   region: string | null;
   code: string | null;
   linked: number;
+  /** Linked Characters whose renamed / transferred / re-created Blizzard identity was repaired. */
+  repaired?: number;
 };
 
 export type BattleNetFlashMessage = {
@@ -42,9 +44,14 @@ export function battleNetFlashMessage(flash: BattleNetFlashInput): BattleNetFlas
       flash.linked > 0
         ? ` Linked ${flash.linked} existing character${flash.linked === 1 ? "" : "s"} automatically.`
         : "";
+    const repairedCount = flash.repaired ?? 0;
+    const repaired =
+      repairedCount > 0
+        ? ` Repaired the link of ${repairedCount} renamed, transferred or re-created character${repairedCount === 1 ? "" : "s"}.`
+        : "";
     return {
       tone: "success",
-      text: `${connected}${linked} Use Import to choose further characters.`,
+      text: `${connected}${linked}${repaired} Use Import to choose further characters.`,
     };
   }
   if (flash.status === "error") {
@@ -78,7 +85,7 @@ export function battleNetFlashMessage(flash: BattleNetFlashInput): BattleNetFlas
 }
 
 /** Query parameters the Battle.net connect/callback redirect adds to `/characters`. */
-const BATTLENET_FLASH_PARAMS = ["battlenet", "code", "region", "importSession", "linked"] as const;
+const BATTLENET_FLASH_PARAMS = ["battlenet", "code", "region", "importSession", "linked", "repaired"] as const;
 
 /**
  * For an ERROR flash: the same URL without the Battle.net flash parameters (every other

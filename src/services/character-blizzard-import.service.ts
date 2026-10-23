@@ -605,6 +605,145 @@ async function linkExactMatchesFromRoster(
   return result;
 }
 
+export type IdentityRepairResult = {
+  /** Linked rows whose Blizzard character was renamed or transferred: name + realm followed the id. */
+  renamedCharacterIds: string[];
+  /** Linked rows moved onto the Blizzard character that now holds their name, realm and class. */
+  relinkedCharacterIds: string[];
+  /** Repair candidates refused by the safety rules (class, name collision, live identity, taken id). */
+  skipped: number;
+};
+
+/** The public profile under this roster entry's name/realm must report exactly its id, realm id and class. */
+async function verifyLiveRosterIdentity(region: WowRegion, owned: OwnedBlizzardCharacter): Promise<boolean> {
+  const summary = await blizzardApiClient.getCharacterProfileSummary(region, owned.realmSlug, owned.name);
+  return (
+    summary.id === owned.id &&
+    (!summary.realmId || summary.realmId === owned.realmId) &&
+    (!summary.wowClass || summary.wowClass === owned.wowClass)
+  );
+}
+
+/**
+ * Battle.net identity repair for the owner's LINKED Characters. Needs a fresh
+ * OAuth roster: it is the only proof of what the account owns right now (a
+ * stored snapshot predates the change and cannot show it).
+ *
+ * 1. Follow the id: the stored Blizzard id is on the roster under another
+ *    name and/or realm (rename, transfer) → the row takes that name/realm.
+ * 2. Re-link: the stored id is no longer on the account at all, and the
+ *    account holds a character with the row's exact name, realm and class
+ *    whose identity no other row uses (re-created character, name handed to
+ *    another character of the same account) → the row moves to that id.
+ *
+ * Both require the live profile to confirm the roster entry and never touch
+ * class, specialization, signups or lockout history. Everything else (no
+ * match, class change, name collision) stays as is for the owner to decide.
+ */
+async function repairIdentitiesFromRoster(
+  user: AuthenticatedUser,
+  roster: { region: WowRegion; characters: OwnedBlizzardCharacter[] },
+): Promise<IdentityRepairResult> {
+  const result: IdentityRepairResult = { renamedCharacterIds: [], relinkedCharacterIds: [], skipped: 0 };
+  const rosterById = new Map(roster.characters.map((owned) => [owned.id, owned]));
+  const linkedRows = async () =>
+    (await characterRepository.listByUserId(user.id)).filter(
+      (row) => row.isActive && row.region === roster.region && row.blizzardCharacterId,
+    );
+
+  async function repair(
+    row: Awaited<ReturnType<typeof linkedRows>>[number],
+    owned: OwnedBlizzardCharacter,
+    mode: "RENAMED" | "RELINKED",
+  ): Promise<boolean> {
+    try {
+      const identity = prepareImportedIdentity(owned);
+      const collision = await characterRepository.findIdentityConflict({
+        userId: user.id,
+        region: identity.region,
+        normalizedName: identity.normalizedName,
+        normalizedRealm: identity.normalizedRealm,
+        excludeId: row.id,
+      });
+      if (collision || !(await verifyLiveRosterIdentity(roster.region, owned))) return false;
+
+      await characterRepository.repairBlizzardIdentity(row.id, {
+        name: identity.name,
+        realm: identity.realm,
+        normalizedName: identity.normalizedName,
+        normalizedRealm: identity.normalizedRealm,
+        blizzardCharacterId: owned.id,
+        blizzardRealmId: owned.realmId,
+      });
+      const before = `${row.name}-${row.realm}`;
+      const after = `${identity.name}-${identity.realm}`;
+      await activityRepository.create({
+        userId: user.id,
+        type: "BATTLENET_CHARACTER_REPAIRED",
+        message:
+          mode === "RENAMED"
+            ? `Repaired Battle.net link: ${before} (${roster.region}) is now ${after} (renamed or transferred).`
+            : `Repaired Battle.net link: ${after} (${roster.region}) re-linked to the Blizzard character that now has this name.`,
+      });
+      console.info(JSON.stringify({ event: "battlenet_identity_repaired", mode, region: roster.region }));
+      return true;
+    } catch (error) {
+      if (isDomainError(error) && error.code === "BATTLENET_NOT_CONFIGURED") throw error;
+      console.warn(
+        JSON.stringify({
+          event: "battlenet_identity_repair_failed",
+          mode,
+          region: roster.region,
+          errorCode: isDomainError(error)
+            ? error.code
+            : isUniqueConstraintViolation(error)
+              ? "UNIQUE_CONSTRAINT"
+              : "INTERNAL",
+        }),
+      );
+      return false;
+    }
+  }
+
+  // 1. Follow the id (first, so a renamed row frees its old name for step 2).
+  for (const row of await linkedRows()) {
+    const owned = rosterById.get(row.blizzardCharacterId!);
+    if (!owned) continue;
+    const moved =
+      normalizeCharacterIdentity(prepareCharacterName(owned.name)) !== row.normalizedName ||
+      normalizeCharacterIdentity(prepareRealmName(owned.realmName)) !== row.normalizedRealm ||
+      (row.blizzardRealmId !== null && owned.realmId !== row.blizzardRealmId);
+    if (!moved) continue;
+    if (owned.wowClass !== row.wowClass) {
+      result.skipped += 1;
+      continue;
+    }
+    if (await repair(row, owned, "RENAMED")) result.renamedCharacterIds.push(row.id);
+    else result.skipped += 1;
+  }
+
+  // 2. Re-link rows whose stored id left the account.
+  for (const row of await linkedRows()) {
+    if (rosterById.has(row.blizzardCharacterId!)) continue;
+    const owned = roster.characters.find(
+      (entry) =>
+        meetsImportCharacterLevel(entry.level) &&
+        entry.wowClass === row.wowClass &&
+        normalizeCharacterIdentity(prepareCharacterName(entry.name)) === row.normalizedName &&
+        normalizeCharacterIdentity(prepareRealmName(entry.realmName)) === row.normalizedRealm,
+    );
+    if (!owned) continue;
+    if (await characterRepository.findByBlizzardIdentity(roster.region, owned.realmId, owned.id)) {
+      result.skipped += 1;
+      continue;
+    }
+    if (await repair(row, owned, "RELINKED")) result.relinkedCharacterIds.push(row.id);
+    else result.skipped += 1;
+  }
+
+  return result;
+}
+
 export const characterBlizzardImportService = {
   lookupPublicCharacterProfile,
 
@@ -674,11 +813,25 @@ export const characterBlizzardImportService = {
    * from, so this is the same link the import dialog offers, applied without
    * the manual pick. Nothing is imported. Best-effort per Character: one that
    * fails stays manual and remains available in the import dialog.
+   * Before linking, already-linked Characters whose Blizzard identity changed
+   * (rename, transfer, re-created character) are repaired from the same fresh
+   * roster — see repairIdentitiesFromRoster.
    */
-  async autoLinkExistingCharacters(user: AuthenticatedUser, sessionId: string): Promise<ExactMatchLinkResult> {
+  async autoLinkExistingCharacters(
+    user: AuthenticatedUser,
+    sessionId: string,
+  ): Promise<ExactMatchLinkResult & { repair: IdentityRepairResult }> {
     const session = await requireLiveImportSession(user, sessionId);
-    // Fresh OAuth roster: ownership and identity were just proven.
-    return linkExactMatchesFromRoster(user, session, { verifyLiveIdentity: false });
+    // Fresh OAuth roster: ownership and identity were just proven. Repair the
+    // already-linked rows first so a renamed row cannot shadow an exact match.
+    const repair = await repairIdentitiesFromRoster(user, session);
+    const links = await linkExactMatchesFromRoster(user, session, { verifyLiveIdentity: false });
+    // Optional WCL enrichment for the repaired rows (their old WCL link was dropped).
+    await characterWarcraftLogsService.tryAutoLinkManyIfMissing([
+      ...repair.renamedCharacterIds,
+      ...repair.relinkedCharacterIds,
+    ]);
+    return { ...links, repair };
   },
 
   /**
