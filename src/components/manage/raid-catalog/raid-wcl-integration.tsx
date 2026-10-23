@@ -41,9 +41,7 @@ export function RaidWclIntegration({
     <div className="space-y-2 text-sm">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="font-medium">Warcraft Logs</h3>
-        <span className={connected ? "text-success" : "text-muted"}>
-          {connected ? "Connected" : "Not resolved"}
-        </span>
+        <span className={connected ? "text-success" : "text-muted"}>{connected ? "Connected" : "Not resolved"}</span>
       </div>
       {connected ? (
         <dl className="grid grid-cols-[9rem_1fr] gap-y-0.5 text-muted">
@@ -52,15 +50,12 @@ export function RaidWclIntegration({
           <dt>Ranking encounter</dt>
           <dd className="font-mono text-xs text-foreground">
             {wclRankingEncounterId ?? "— (zone-wide)"}
-            {rankingFromOnlyEncounter ? (
-              <span className="ml-1 font-sans text-muted">(its only encounter)</span>
-            ) : null}
+            {rankingFromOnlyEncounter ? <span className="ml-1 font-sans text-muted">(its only encounter)</span> : null}
           </dd>
         </dl>
       ) : (
         <p className="text-xs text-muted">
-          No safe automatic match yet. Detection runs on create and when encounters change; you can
-          retry anytime.
+          No safe automatic match yet. Detection runs on create and when encounters change; you can retry anytime.
         </p>
       )}
       <div className="flex flex-wrap gap-2 pt-1">
@@ -72,9 +67,7 @@ export function RaidWclIntegration({
         >
           Retry detection
         </button>
-        <span className="self-center text-xs text-muted">
-          Also refreshes the Blizzard instance / encounter ids.
-        </span>
+        <span className="self-center text-xs text-muted">Also refreshes the Blizzard instance / encounter ids.</span>
         {connected ? (
           <button
             type="button"

@@ -8,11 +8,7 @@ import {
   moveEncounterAction,
   updateEncounterAction,
 } from "@/controllers/raid-catalog.actions";
-import {
-  RaidCatalogDialog,
-  Field,
-  fieldInputClass,
-} from "@/components/manage/raid-catalog/raid-catalog-dialog";
+import { RaidCatalogDialog, Field, fieldInputClass } from "@/components/manage/raid-catalog/raid-catalog-dialog";
 import { idListInputValue } from "@/components/manage/raid-catalog/raid-catalog-format";
 
 type EncounterValues = {
@@ -23,19 +19,11 @@ type EncounterValues = {
 };
 
 /** Add an encounter (unlocked raids only) or edit one's name and Blizzard ids. WCL ids are auto-discovered. */
-export function EncounterFormDialog({
-  raidId,
-  encounter,
-}: {
-  raidId: string;
-  encounter?: EncounterValues;
-}) {
+export function EncounterFormDialog({ raidId, encounter }: { raidId: string; encounter?: EncounterValues }) {
   const editing = Boolean(encounter?.bossId);
   const [name, setName] = useState(encounter?.name ?? "");
   const [blizzard, setBlizzard] = useState(idListInputValue(encounter?.blizzardEncounterIds ?? []));
-  const [showAdvanced, setShowAdvanced] = useState(
-    (encounter?.blizzardEncounterIds.length ?? 0) > 0,
-  );
+  const [showAdvanced, setShowAdvanced] = useState((encounter?.blizzardEncounterIds.length ?? 0) > 0);
 
   function reset() {
     setName(encounter?.name ?? "");
@@ -58,23 +46,15 @@ export function EncounterFormDialog({
       submitLabel={editing ? "Save encounter" : "Add encounter"}
       onOpen={reset}
       onSubmit={() =>
-        editing
-          ? updateEncounterAction({ ...fields, bossId: encounter!.bossId })
-          : createEncounterAction({ ...fields, raidId })
+        editing ? updateEncounterAction({ ...fields, bossId: encounter!.bossId }) : createEncounterAction({ ...fields, raidId })
       }
     >
       <Field label="Name">
-        <input
-          className={fieldInputClass}
-          value={name}
-          maxLength={100}
-          onChange={(e) => setName(e.target.value)}
-        />
+        <input className={fieldInputClass} value={name} maxLength={100} onChange={(e) => setName(e.target.value)} />
       </Field>
       {editing && (encounter?.wclEncounterIds.length ?? 0) > 0 ? (
         <p className="text-xs text-muted">
-          Warcraft Logs: <span className="font-mono">{encounter!.wclEncounterIds.join(", ")}</span>{" "}
-          (read-only)
+          Warcraft Logs: <span className="font-mono">{encounter!.wclEncounterIds.join(", ")}</span> (read-only)
         </p>
       ) : null}
       <div>
@@ -87,10 +67,7 @@ export function EncounterFormDialog({
         </button>
         {showAdvanced ? (
           <div className="mt-2">
-            <Field
-              label="Blizzard encounter ids"
-              hint="Journal encounter ids, separated by commas. Leave empty — they are detected from the Blizzard journal."
-            >
+            <Field label="Blizzard encounter ids" hint="Journal encounter ids, separated by commas. Leave empty — they are detected from the Blizzard journal.">
               <input
                 className={fieldInputClass}
                 inputMode="numeric"
@@ -106,15 +83,7 @@ export function EncounterFormDialog({
   );
 }
 
-export function EncounterMoveButtons({
-  bossId,
-  first,
-  last,
-}: {
-  bossId: string;
-  first: boolean;
-  last: boolean;
-}) {
+export function EncounterMoveButtons({ bossId, first, last }: { bossId: string; first: boolean; last: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
