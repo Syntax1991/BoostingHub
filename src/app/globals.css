@@ -67,6 +67,22 @@ a {
   dialog:modal {
     margin: auto;
   }
+
+  /*
+   * A form control never makes its container wider than the space it has.
+   * Without this, a select's intrinsic width (its longest option, e.g. a long
+   * Run label) or a number input's (`size=20`) sizes the auto tracks of the
+   * surrounding `grid` labels, and on phones a dialog then scrolls sideways
+   * with its fields cut off. `max-width: 100%` makes these compressible
+   * controls contribute no min-content width; `min-width: 0` lets them shrink
+   * in flex rows. Base layer, so explicit width utilities still win.
+   */
+  select,
+  textarea,
+  input:not([type="checkbox"]):not([type="radio"]) {
+    min-width: 0;
+    max-width: 100%;
+  }
 }
 
 ::-webkit-scrollbar {
