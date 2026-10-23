@@ -110,7 +110,15 @@ export function RaidCatalogDialog({
 
 export const fieldInputClass = "h-9 w-full rounded-md border border-border bg-surface px-2 text-sm";
 
-export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+export function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: ReactNode;
+}) {
   return (
     <label className="block text-sm">
       <span className="mb-1 block text-muted">{label}</span>

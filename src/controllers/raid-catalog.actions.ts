@@ -3,12 +3,20 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/auth/session";
 import { mapActionError, type ActionResult } from "@/lib/action-result";
+import {
+  raidCatalogImportService,
+  type RaidImportPreview,
+  type SeasonImportPreview,
+} from "@/services/raid-catalog-import.service";
 import { raidCatalogService } from "@/services/raid-catalog.service";
 import {
   createEncounterSchema,
   createProductSchema,
-  createRaidSchema,
   encounterIdSchema,
+  importRaidSchema,
+  importSeasonSchema,
+  previewRaidImportSchema,
+  seasonKeySchema,
   moveEncounterSchema,
   productIdSchema,
   raidIdSchema,
@@ -25,13 +33,97 @@ function revalidateRaidCatalog(raidId?: string) {
   if (raidId) revalidatePath(`/manage/raid-catalog/raids/${raidId}`);
 }
 
-export async function createRaidAction(input: unknown): Promise<ActionResult & { raidId?: string }> {
+function importSummary(result: { created: number; updated: number; unchanged: number }): string {
+  const parts = [
+    result.created > 0 ? `${result.created} imported` : null,
+    result.updated > 0 ? `${result.updated} updated` : null,
+    result.unchanged > 0 ? `${result.unchanged} already up to date` : null,
+  ].filter(Boolean);
+  return parts.join(", ");
+}
+
+export async function previewRaidImportAction(
+  input: unknown,
+): Promise<ActionResult & { preview?: RaidImportPreview }> {
   try {
     const admin = await requireAdmin();
-    const parsed = createRaidSchema.parse(input);
-    const { raidId } = await raidCatalogService.createRaid(admin, parsed);
+    const { journalInstanceId } = previewRaidImportSchema.parse(input);
+    const preview = await raidCatalogImportService.previewRaidImport(admin, journalInstanceId);
+    return { ok: true, message: `Fetched ${preview.plan.name}.`, preview };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function importRaidAction(
+  input: unknown,
+): Promise<ActionResult & { raidId?: string }> {
+  try {
+    const admin = await requireAdmin();
+    const parsed = importRaidSchema.parse(input);
+    const result = await raidCatalogImportService.importRaid(admin, parsed);
+    revalidateRaidCatalog(result.raidIds[0]);
+    return {
+      ok: true,
+      message: `${result.plan.name}: ${importSummary(result)}.`,
+      raidId: result.raidIds[0],
+    };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function previewSeasonImportAction(
+  input: unknown,
+): Promise<ActionResult & { preview?: SeasonImportPreview }> {
+  try {
+    const admin = await requireAdmin();
+    const { seasonKey } = seasonKeySchema.parse(input);
+    const preview = await raidCatalogImportService.previewSeasonImport(admin, seasonKey);
+    return { ok: true, message: `Fetched ${preview.season.name}.`, preview };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function importSeasonAction(input: unknown): Promise<ActionResult> {
+  try {
+    const admin = await requireAdmin();
+    const parsed = importSeasonSchema.parse(input);
+    const result = await raidCatalogImportService.importSeason(admin, parsed);
+    revalidateRaidCatalog();
+    return { ok: true, message: `Season imported: ${importSummary(result)}.` };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function previewRaidRefreshAction(
+  input: unknown,
+): Promise<ActionResult & { preview?: RaidImportPreview }> {
+  try {
+    const admin = await requireAdmin();
+    const { raidId } = raidIdSchema.parse(input);
+    const preview = await raidCatalogImportService.previewRaidRefresh(admin, raidId);
+    return { ok: true, message: `Fetched ${preview.plan.name}.`, preview };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function refreshRaidFromBlizzardAction(input: unknown): Promise<ActionResult> {
+  try {
+    const admin = await requireAdmin();
+    const { raidId } = raidIdSchema.parse(input);
+    const result = await raidCatalogImportService.refreshRaid(admin, raidId);
     revalidateRaidCatalog(raidId);
-    return { ok: true, message: `Raid "${parsed.name}" created.`, raidId };
+    return {
+      ok: true,
+      message:
+        result.updated > 0
+          ? `${result.plan.name} refreshed from Blizzard.`
+          : `${result.plan.name} is already up to date.`,
+    };
   } catch (error) {
     return mapActionError(error);
   }
@@ -184,7 +276,10 @@ export async function setProductSelectableAction(input: unknown): Promise<Action
     const { productId, value } = productFlagSchema.parse(input);
     const { name } = await raidCatalogService.setProductSelectable(admin, productId, value);
     revalidateRaidCatalog();
-    return { ok: true, message: `Product "${name}" is now ${value ? "selectable" : "hidden from selection"}.` };
+    return {
+      ok: true,
+      message: `Product "${name}" is now ${value ? "selectable" : "hidden from selection"}.`,
+    };
   } catch (error) {
     return mapActionError(error);
   }

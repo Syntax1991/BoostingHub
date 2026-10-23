@@ -8,6 +8,8 @@ import {
   runAvailabilityLabel,
 } from "@/components/manage/raid-catalog/raid-catalog-format";
 import { RaidFormDialog } from "@/components/manage/raid-catalog/raid-form-dialog";
+import { RefreshRaidDialog } from "@/components/manage/raid-catalog/raid-import-dialogs";
+import { RaidStatusBadges } from "@/components/manage/raid-catalog/raid-status-badges";
 import { RaidWclIntegration } from "@/components/manage/raid-catalog/raid-wcl-integration";
 import { effectiveWclRankingEncounterId } from "@/lib/raid-catalog";
 import { DeleteRaidButton } from "@/components/manage/raid-catalog/delete-raid-button";
@@ -23,19 +25,32 @@ function referenceLines(raid: RaidCatalogRaidRow): string[] {
   if (references.runContents > 0) lines.push(pluralize(references.runContents, "Run content"));
   const setups = references.templateContents;
   if (setups > 0) lines.push(pluralize(setups, "Run Setup reference"));
-  if (references.productContents > 0) lines.push(pluralize(references.productContents, "Product content"));
+  if (references.productContents > 0)
+    lines.push(pluralize(references.productContents, "Product content"));
   if (references.lockouts > 0) lines.push(pluralize(references.lockouts, "Character lockout"));
   return lines;
 }
 
-/** One raid: identity-preserving metadata, usage, and its encounters (structure locked when in use). */
-export function ManageRaidCatalogRaidView({ raid, seasons }: { raid: RaidCatalogRaidRow; seasons: readonly string[] }) {
+/** One raid: BoostingHub settings, Blizzard / WCL status, usage, and its encounters. */
+export function ManageRaidCatalogRaidView({
+  raid,
+  seasons,
+}: {
+  raid: RaidCatalogRaidRow;
+  seasons: readonly string[];
+}) {
   const usage = referenceLines(raid);
   const canDelete = !raid.referenced && !raid.seeded;
+  // Blizzard owns the boss list of an imported raid: no manual encounter editing.
+  const blizzardLinked = raid.blizzardInstanceId != null;
+  const encountersEditable = !blizzardLinked && !raid.structureLocked;
 
   return (
     <div>
-      <Link href="/manage/raid-catalog" className="mb-3 inline-block text-xs text-muted hover:text-foreground">
+      <Link
+        href="/manage/raid-catalog"
+        className="mb-3 inline-block text-xs text-muted hover:text-foreground"
+      >
         ← Raid Catalog
       </Link>
       <PageHeader
@@ -43,6 +58,7 @@ export function ManageRaidCatalogRaidView({ raid, seasons }: { raid: RaidCatalog
         description={`${raid.season} · ${pluralize(raid.bosses.length, "encounter")}`}
         actions={
           <div className="flex flex-wrap gap-2">
+            {blizzardLinked ? <RefreshRaidDialog raidId={raid.id} /> : null}
             <RaidFormDialog
               seasons={seasons}
               raid={{
@@ -60,10 +76,12 @@ export function ManageRaidCatalogRaidView({ raid, seasons }: { raid: RaidCatalog
         }
       />
 
+      <RaidStatusBadges status={raid.status} className="mb-4" />
+
       <div className="mb-6 grid gap-4 md:grid-cols-3">
         <Card className="px-4 py-3">
           <h2 className="mb-2 text-sm font-semibold">Details</h2>
-          <dl className="grid grid-cols-[9rem_1fr] gap-y-1 text-sm">
+          <dl className="grid grid-cols-[7rem_minmax(0,1fr)] gap-y-1 text-sm">
             <dt className="text-muted">Order</dt>
             <dd>{raid.sortOrder}</dd>
             <dt className="text-muted">Lockouts</dt>
@@ -80,7 +98,9 @@ export function ManageRaidCatalogRaidView({ raid, seasons }: { raid: RaidCatalog
             raidId={raid.id}
             wclZoneId={raid.wclZoneId}
             wclRankingEncounterId={effectiveWclRankingEncounterId(raid)}
-            rankingFromOnlyEncounter={raid.wclRankingEncounterId == null && effectiveWclRankingEncounterId(raid) != null}
+            rankingFromOnlyEncounter={
+              raid.wclRankingEncounterId == null && effectiveWclRankingEncounterId(raid) != null
+            }
           />
         </Card>
         <Card className="px-4 py-3">
@@ -92,15 +112,23 @@ export function ManageRaidCatalogRaidView({ raid, seasons }: { raid: RaidCatalog
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-muted">Not used by any Run, Run Setup, Product or lockout.</p>
+            <p className="text-sm text-muted">
+              Not used by any Run, Run Setup, Product or lockout.
+            </p>
           )}
           <p className="mt-2 text-xs text-muted">
-            {raid.structureLocked
-              ? raid.referenced
-                ? "Encounters cannot be added, removed or reordered: boss counts and stored lockouts depend on them. Names and integration ids stay editable."
-                : "Core catalog raid: encounters cannot be added, removed or reordered. Names and integration ids stay editable."
-              : "Unused raid: encounters can be added, edited, reordered and deleted."}
-            {raid.referenced || raid.seeded ? " This raid cannot be deleted; turn off “Available for new Runs” instead." : null}
+            {blizzardLinked
+              ? raid.structureLocked
+                ? "Bosses, order and Blizzard ids come from the Blizzard journal (Refresh from Blizzard). Because this raid is in use or core content, a refresh never adds or removes bosses — differences are shown for reconciliation."
+                : "Bosses, order and Blizzard ids come from the Blizzard journal (Refresh from Blizzard)."
+              : raid.structureLocked
+                ? raid.referenced
+                  ? "Encounters cannot be added, removed or reordered: boss counts and stored lockouts depend on them. Names and integration ids stay editable."
+                  : "Core catalog raid: encounters cannot be added, removed or reordered. Names and integration ids stay editable."
+                : "Unused raid: encounters can be added, edited, reordered and deleted."}
+            {raid.referenced || raid.seeded
+              ? " This raid cannot be deleted; turn off “Available for new Runs” instead."
+              : null}
           </p>
         </Card>
       </div>
@@ -109,57 +137,70 @@ export function ManageRaidCatalogRaidView({ raid, seasons }: { raid: RaidCatalog
         <CardHeader
           title="Encounters"
           description="Ordered as in the raid. Blizzard ids drive lockout sync; Warcraft Logs ids attach logged fights."
-          action={raid.structureLocked ? null : <EncounterFormDialog raidId={raid.id} />}
+          action={encountersEditable ? <EncounterFormDialog raidId={raid.id} /> : null}
         />
         {raid.bosses.length === 0 ? (
-          <EmptyState title="No encounters yet." description="Add the raid's encounters in order." />
+          <EmptyState
+            title="No encounters yet."
+            description="Import the raid from Blizzard to add its bosses."
+          />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead className="text-xs uppercase tracking-wide text-muted">
-                <tr>
-                  <th className="px-4 py-2 font-medium">Order</th>
-                  <th className="px-4 py-2 font-medium">Encounter</th>
-                  <th className="px-4 py-2 font-medium">Blizzard</th>
-                  <th className="px-4 py-2 font-medium">Warcraft Logs</th>
-                  <th className="px-4 py-2 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {raid.bosses.map((boss, index) => (
-                  <tr key={boss.id} className="border-t border-border align-middle">
-                    <td className="px-4 py-3 text-muted">{boss.sortOrder}</td>
-                    <td className="px-4 py-3 font-medium">{boss.name}</td>
-                    <td className="px-4 py-3 text-muted">{formatIdList(boss.blizzardEncounterIds)}</td>
-                    <td className="px-4 py-3 text-muted">{formatIdList(boss.wclEncounterIds)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap items-center gap-1">
-                        <EncounterFormDialog
-                          raidId={raid.id}
-                          encounter={{
-                            bossId: boss.id,
-                            name: boss.name,
-                            blizzardEncounterIds: boss.blizzardEncounterIds,
-                            wclEncounterIds: boss.wclEncounterIds,
-                          }}
+          <ol className="divide-y divide-border">
+            {raid.bosses.map((boss, index) => (
+              <li
+                key={boss.id}
+                className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm"
+              >
+                <div className="min-w-0">
+                  <p className="break-words font-medium">
+                    <span className="mr-2 text-muted">{boss.sortOrder}.</span>
+                    {boss.name}
+                  </p>
+                  <p className="text-xs text-muted">
+                    {boss.blizzardEncounterIds.length > 0
+                      ? "Blizzard mapped"
+                      : "Blizzard not mapped"}{" "}
+                    ·{" "}
+                    {boss.wclEncounterIds.length > 0
+                      ? "Warcraft Logs mapped"
+                      : "Warcraft Logs needs mapping"}
+                  </p>
+                  <details className="text-xs text-muted">
+                    <summary className="cursor-pointer select-none hover:text-foreground">
+                      Ids
+                    </summary>
+                    <span className="font-mono">
+                      Blizzard {formatIdList(boss.blizzardEncounterIds)} · WCL{" "}
+                      {formatIdList(boss.wclEncounterIds)}
+                    </span>
+                  </details>
+                </div>
+                {blizzardLinked ? null : (
+                  <div className="flex flex-wrap items-center gap-1">
+                    <EncounterFormDialog
+                      raidId={raid.id}
+                      encounter={{
+                        bossId: boss.id,
+                        name: boss.name,
+                        blizzardEncounterIds: boss.blizzardEncounterIds,
+                        wclEncounterIds: boss.wclEncounterIds,
+                      }}
+                    />
+                    {raid.structureLocked ? null : (
+                      <>
+                        <EncounterMoveButtons
+                          bossId={boss.id}
+                          first={index === 0}
+                          last={index === raid.bosses.length - 1}
                         />
-                        {raid.structureLocked ? null : (
-                          <>
-                            <EncounterMoveButtons
-                              bossId={boss.id}
-                              first={index === 0}
-                              last={index === raid.bosses.length - 1}
-                            />
-                            <DeleteEncounterButton bossId={boss.id} name={boss.name} />
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                        <DeleteEncounterButton bossId={boss.id} name={boss.name} />
+                      </>
+                    )}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ol>
         )}
       </Card>
     </div>

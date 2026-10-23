@@ -40,7 +40,10 @@ export function encounterIdList(label: string) {
     z
       .array(positiveId(`${label} ids`), { error: `${label} ids must be a list of numbers.` })
       .max(50, `Too many ${label} ids.`)
-      .refine((ids) => new Set(ids).size === ids.length, `${label} ids must not contain duplicates.`)
+      .refine(
+        (ids) => new Set(ids).size === ids.length,
+        `${label} ids must not contain duplicates.`,
+      )
       .transform((ids) => [...ids].sort((a, b) => a - b)),
   );
 }
@@ -75,6 +78,27 @@ export type UpdateRaidInput = z.infer<typeof updateRaidSchema>;
 
 export const raidIdSchema = z.object({ raidId: z.string().min(1) });
 
+/** Blizzard journal instance id typed by the admin ("1320"). */
+const journalInstanceId = z.preprocess(
+  (value) => (typeof value === "string" ? Number(value.trim()) : value),
+  positiveId("Blizzard Journal Instance ID"),
+);
+
+export const previewRaidImportSchema = z.object({ journalInstanceId });
+
+/** Season / lockout tracking apply only when the import creates the raid. */
+export const importRaidSchema = z.object({
+  journalInstanceId,
+  season: season.optional(),
+  trackLockouts: z.boolean().optional(),
+});
+
+export const seasonKeySchema = z.object({
+  seasonKey: z.string().trim().min(1, "Choose a season.").max(64),
+});
+
+export const importSeasonSchema = seasonKeySchema.extend({ trackLockouts: z.boolean().optional() });
+
 /** Internal / discovery-facing encounter fields (includes WCL ids). */
 export const encounterFieldsSchema = z.object({
   name,
@@ -90,19 +114,29 @@ export const encounterAdminFieldsSchema = z.object({
 });
 export type EncounterAdminFieldsInput = z.infer<typeof encounterAdminFieldsSchema>;
 
-export const createEncounterSchema = encounterAdminFieldsSchema.extend({ raidId: z.string().min(1) });
-export const updateEncounterSchema = encounterAdminFieldsSchema.extend({ bossId: z.string().min(1) });
+export const createEncounterSchema = encounterAdminFieldsSchema.extend({
+  raidId: z.string().min(1),
+});
+export const updateEncounterSchema = encounterAdminFieldsSchema.extend({
+  bossId: z.string().min(1),
+});
 export const encounterIdSchema = z.object({ bossId: z.string().min(1) });
 export const moveEncounterSchema = z.object({
   bossId: z.string().min(1),
   direction: z.enum(["UP", "DOWN"]),
 });
 
-const optionalCount = z.preprocess((value) => {
-  if (value === "" || value === undefined || value === null) return null;
-  if (typeof value === "string") return Number(value.trim());
-  return value;
-}, z.number({ error: "Boss counts must be numbers." }).int("Boss counts must be whole numbers.").nullable());
+const optionalCount = z.preprocess(
+  (value) => {
+    if (value === "" || value === undefined || value === null) return null;
+    if (typeof value === "string") return Number(value.trim());
+    return value;
+  },
+  z
+    .number({ error: "Boss counts must be numbers." })
+    .int("Boss counts must be whole numbers.")
+    .nullable(),
+);
 
 export const productContentSchema = z.object({
   raidId: z.string().min(1, "Choose a raid for every content row."),
@@ -119,7 +153,10 @@ const productFields = {
   selectable: z.boolean(),
   sortOrder,
   /** Ordered: the array position is the content sortOrder (1-based). */
-  contents: z.array(productContentSchema).min(1, "A product needs at least one raid content.").max(10),
+  contents: z
+    .array(productContentSchema)
+    .min(1, "A product needs at least one raid content.")
+    .max(10),
 };
 
 /** Create never accepts a client-supplied key — the server generates it from `name`. */

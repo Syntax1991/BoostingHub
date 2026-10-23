@@ -9,7 +9,12 @@ import {
   setProductSelectableAction,
   updateProductAction,
 } from "@/controllers/raid-catalog.actions";
-import { CheckboxField, RaidCatalogDialog, Field, fieldInputClass } from "@/components/manage/raid-catalog/raid-catalog-dialog";
+import {
+  CheckboxField,
+  RaidCatalogDialog,
+  Field,
+  fieldInputClass,
+} from "@/components/manage/raid-catalog/raid-catalog-dialog";
 
 export type ProductRaidOption = { id: string; name: string; bossTotal: number };
 
@@ -40,7 +45,15 @@ const text = (value: number | null) => (value == null ? "" : String(value));
 
 function toRows(values?: ProductFormValues): ContentRow[] {
   if (!values || values.contents.length === 0) {
-    return [{ raidId: "", bossCountMode: "VARIABLE", fixedBossCount: "", minBossCount: "1", defaultBossCount: "" }];
+    return [
+      {
+        raidId: "",
+        bossCountMode: "VARIABLE",
+        fixedBossCount: "",
+        minBossCount: "1",
+        defaultBossCount: "",
+      },
+    ];
   }
   return values.contents.map((content) => ({
     raidId: content.raidId,
@@ -52,7 +65,13 @@ function toRows(values?: ProductFormValues): ContentRow[] {
 }
 
 /** Create or edit a Product with its ordered raid contents. The key is generated server-side and never edited. */
-export function ProductFormDialog({ product, raids }: { product?: ProductFormValues; raids: ProductRaidOption[] }) {
+export function ProductFormDialog({
+  product,
+  raids,
+}: {
+  product?: ProductFormValues;
+  raids: ProductRaidOption[];
+}) {
   const editing = Boolean(product?.productId);
   const [name, setName] = useState(product?.name ?? "");
   const [active, setActive] = useState(product?.active ?? true);
@@ -91,7 +110,9 @@ export function ProductFormDialog({ product, raids }: { product?: ProductFormVal
       defaultBossCount: row.bossCountMode === "VARIABLE" ? row.defaultBossCount : null,
     }));
     const fields = { name, active, selectable, sortOrder, contents };
-    return editing ? updateProductAction({ ...fields, productId: product!.productId }) : createProductAction(fields);
+    return editing
+      ? updateProductAction({ ...fields, productId: product!.productId })
+      : createProductAction(fields);
   }
 
   return (
@@ -108,10 +129,21 @@ export function ProductFormDialog({ product, raids }: { product?: ProductFormVal
     >
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Name">
-          <input className={fieldInputClass} value={name} maxLength={100} onChange={(e) => setName(e.target.value)} />
+          <input
+            className={fieldInputClass}
+            value={name}
+            maxLength={100}
+            onChange={(e) => setName(e.target.value)}
+          />
         </Field>
         <Field label="Order">
-          <input className={fieldInputClass} type="number" min={0} value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} />
+          <input
+            className={fieldInputClass}
+            type="number"
+            min={0}
+            value={sortOrder}
+            onChange={(e) => setSortOrder(e.target.value)}
+          />
         </Field>
         <div className="flex flex-col justify-end gap-2 sm:col-span-2">
           <CheckboxField label="Active" checked={active} onChange={setActive} />
@@ -137,7 +169,8 @@ export function ProductFormDialog({ product, raids }: { product?: ProductFormVal
                     <option value="">Choose a raid…</option>
                     {raids.map((option) => (
                       <option key={option.id} value={option.id} disabled={option.bossTotal === 0}>
-                        {option.name} ({option.bossTotal} encounter{option.bossTotal === 1 ? "" : "s"})
+                        {option.name} ({option.bossTotal} encounter
+                        {option.bossTotal === 1 ? "" : "s"})
                       </option>
                     ))}
                   </select>
@@ -147,7 +180,9 @@ export function ProductFormDialog({ product, raids }: { product?: ProductFormVal
                   <select
                     className={fieldInputClass}
                     value={row.bossCountMode}
-                    onChange={(e) => patch(index, { bossCountMode: e.target.value as ContentRow["bossCountMode"] })}
+                    onChange={(e) =>
+                      patch(index, { bossCountMode: e.target.value as ContentRow["bossCountMode"] })
+                    }
                   >
                     <option value="VARIABLE">Variable</option>
                     <option value="FIXED">Fixed</option>
@@ -191,12 +226,26 @@ export function ProductFormDialog({ product, raids }: { product?: ProductFormVal
                     </label>
                   </>
                 )}
-                <span className="pb-2 text-xs text-muted">{raid ? `max ${raid.bossTotal}` : ""}</span>
+                <span className="pb-2 text-xs text-muted">
+                  {raid ? `max ${raid.bossTotal}` : ""}
+                </span>
                 <span className="ml-auto inline-flex gap-1">
-                  <button type="button" aria-label="Move up" disabled={index === 0} onClick={() => move(index, -1)} className="h-8 w-8 rounded-md text-muted hover:bg-surface-raised disabled:opacity-40">
+                  <button
+                    type="button"
+                    aria-label="Move up"
+                    disabled={index === 0}
+                    onClick={() => move(index, -1)}
+                    className="h-8 w-8 rounded-md text-muted hover:bg-surface-raised disabled:opacity-40"
+                  >
                     ↑
                   </button>
-                  <button type="button" aria-label="Move down" disabled={index === rows.length - 1} onClick={() => move(index, 1)} className="h-8 w-8 rounded-md text-muted hover:bg-surface-raised disabled:opacity-40">
+                  <button
+                    type="button"
+                    aria-label="Move down"
+                    disabled={index === rows.length - 1}
+                    onClick={() => move(index, 1)}
+                    className="h-8 w-8 rounded-md text-muted hover:bg-surface-raised disabled:opacity-40"
+                  >
                     ↓
                   </button>
                   <button
@@ -218,14 +267,22 @@ export function ProductFormDialog({ product, raids }: { product?: ProductFormVal
           onClick={() =>
             setRows((current) => [
               ...current,
-              { raidId: "", bossCountMode: "VARIABLE", fixedBossCount: "", minBossCount: "1", defaultBossCount: "" },
+              {
+                raidId: "",
+                bossCountMode: "VARIABLE",
+                fixedBossCount: "",
+                minBossCount: "1",
+                defaultBossCount: "",
+              },
             ])
           }
           className="h-8 rounded-md border border-border px-2 text-xs hover:bg-surface-raised"
         >
           Add raid content
         </button>
-        <p className="text-xs text-muted">The maximum boss count always follows the raid&apos;s encounter count.</p>
+        <p className="text-xs text-muted">
+          The maximum boss count always follows the raid&apos;s encounter count.
+        </p>
       </fieldset>
     </RaidCatalogDialog>
   );
@@ -245,7 +302,13 @@ export function ProductFlagToggle({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const label =
-    flag === "active" ? (value ? "Deactivate" : "Activate") : value ? "Hide from selection" : "Make selectable";
+    flag === "active"
+      ? value
+        ? "Deactivate"
+        : "Activate"
+      : value
+        ? "Hide from selection"
+        : "Make selectable";
 
   return (
     <span className="inline-flex items-center gap-1">
