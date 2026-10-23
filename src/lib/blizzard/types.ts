@@ -92,3 +92,13 @@ export type BlizzardRaidInstanceProgress = {
 export type BlizzardCharacterRaidEncounters = {
   raids: BlizzardRaidInstanceProgress[];
 };
+
+/** Adventure Journal instance (Game Data API) — the id space the character encounters API uses. */
+export type BlizzardJournalInstanceRef = { id: number; name: string };
+
+export type BlizzardJournalInstance = BlizzardJournalInstanceRef & {
+  /** `RAID` / `DUNGEON` / … (null when Blizzard omits it). */
+  category: string | null;
+  /** Journal encounters in journal order. */
+  encounters: BlizzardJournalInstanceRef[];
+};

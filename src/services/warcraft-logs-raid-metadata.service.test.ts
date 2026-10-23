@@ -76,9 +76,10 @@ describe("resolveWarcraftLogsRaidMetadata", () => {
       wclRankingEncounterId: null,
     });
     if (result.status !== "RESOLVED") return;
+    // WCL ids only — Blizzard ids come from the Blizzard journal, never from WCL's journalID.
     expect(result.encounterMappings).toEqual([
-      { bossId: "b1", wclEncounterIds: [3470], blizzardEncounterIds: [2888] },
-      { bossId: "b2", wclEncounterIds: [3445], blizzardEncounterIds: [2874] },
+      { bossId: "b1", wclEncounterIds: [3470] },
+      { bossId: "b2", wclEncounterIds: [3445] },
     ]);
   });
 
@@ -103,7 +104,7 @@ describe("resolveWarcraftLogsRaidMetadata", () => {
       status: "RESOLVED",
       wclZoneId: 53,
       wclRankingEncounterId: 3379,
-      encounterMappings: [{ bossId: "nym", wclEncounterIds: [3379], blizzardEncounterIds: [2849] }],
+      encounterMappings: [{ bossId: "nym", wclEncounterIds: [3379] }],
     });
   });
 

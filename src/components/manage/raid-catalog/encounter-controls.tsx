@@ -67,7 +67,7 @@ export function EncounterFormDialog({ raidId, encounter }: { raidId: string; enc
         </button>
         {showAdvanced ? (
           <div className="mt-2">
-            <Field label="Blizzard encounter ids" hint="Journal encounter ids, separated by commas. Leave empty if unknown.">
+            <Field label="Blizzard encounter ids" hint="Journal encounter ids, separated by commas. Leave empty — they are detected from the Blizzard journal.">
               <input
                 className={fieldInputClass}
                 inputMode="numeric"

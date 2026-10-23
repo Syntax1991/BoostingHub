@@ -14,6 +14,7 @@ import {
 } from "@/repositories/raid-catalog.repository";
 import { productRepository } from "@/repositories/product.repository";
 import { raidRepository } from "@/repositories/raid.repository";
+import { discoverBlizzardRaidMetadata } from "@/services/blizzard-raid-metadata.service";
 import {
   discoverWarcraftLogsRaidMetadata,
   type DiscoverRaidMetadataOptions,
@@ -275,10 +276,8 @@ async function applyWclDiscovery(
     for (const patch of result.encounterPatches) {
       const boss = raid.bosses.find((row) => row.id === patch.bossId);
       if (!boss) continue;
-      const blizzardEncounterIds =
-        boss.blizzardEncounterIds.length > 0 || patch.blizzardEncounterIds == null
-          ? [...boss.blizzardEncounterIds]
-          : [...patch.blizzardEncounterIds];
+      // Blizzard ids come from the Blizzard journal (applyBlizzardDiscovery), never from WCL.
+      const blizzardEncounterIds = [...boss.blizzardEncounterIds];
       const wclEncounterIds =
         options.force || boss.wclEncounterIds.length === 0
           ? [...patch.wclEncounterIds]
@@ -311,6 +310,73 @@ async function applyWclDiscovery(
   } catch (error) {
     console.error("[raid-catalog] WCL discovery failed", { raidId }, error);
   }
+}
+
+/**
+ * Apply Blizzard journal discovery (instance id + boss encounter ids). Never
+ * throws — catalog writes already succeeded. Soft discovery fills only empty
+ * fields; `force` (Retry detection) overwrites them with Blizzard's ids.
+ */
+async function applyBlizzardDiscovery(
+  raidId: string,
+  options: { force?: boolean } = {},
+  now = new Date(),
+): Promise<void> {
+  try {
+    const { raid } = await loadRaidContext(raidId);
+    const result = await discoverBlizzardRaidMetadata(raid);
+    if (result.status !== "RESOLVED") return;
+    const force = options.force === true;
+
+    const writeInstance =
+      raid.blizzardInstanceId !== result.blizzardInstanceId && (raid.blizzardInstanceId == null || force);
+    if (writeInstance) {
+      try {
+        assertIntegrationIds(await raidRepository.loadCatalog(), {
+          raidId: raid.id,
+          blizzardInstanceId: result.blizzardInstanceId,
+        });
+        await raidCatalogRepository.updateRaidBlizzardInstance(raid.id, {
+          blizzardInstanceId: result.blizzardInstanceId,
+          now: now.toISOString(),
+        });
+      } catch {
+        // Another raid owns this instance id — leave both alone.
+      }
+    }
+
+    for (const mapping of result.encounterMappings) {
+      const boss = raid.bosses.find((row) => row.id === mapping.bossId);
+      if (!boss) continue;
+      const same =
+        boss.blizzardEncounterIds.length === mapping.blizzardEncounterIds.length &&
+        boss.blizzardEncounterIds.every((id, index) => id === mapping.blizzardEncounterIds[index]);
+      if (same || (boss.blizzardEncounterIds.length > 0 && !force)) continue;
+      try {
+        assertEncounterIds(await raidRepository.loadCatalog(), {
+          raidId: raid.id,
+          bossId: boss.id,
+          blizzardEncounterIds: mapping.blizzardEncounterIds,
+          wclEncounterIds: boss.wclEncounterIds,
+        });
+      } catch {
+        continue;
+      }
+      await raidCatalogRepository.updateEncounter(boss.id, {
+        name: boss.name,
+        blizzardEncounterIds: mapping.blizzardEncounterIds,
+        wclEncounterIds: [...boss.wclEncounterIds],
+      });
+    }
+  } catch (error) {
+    console.error("[raid-catalog] Blizzard discovery failed", { raidId }, error);
+  }
+}
+
+/** WCL + Blizzard discovery; each step tolerates the other's outage. */
+async function applyDiscovery(raidId: string, options: DiscoverRaidMetadataOptions = {}, now = new Date()) {
+  await applyWclDiscovery(raidId, options, now);
+  await applyBlizzardDiscovery(raidId, { force: options.force }, now);
 }
 
 /* --------------------------------------------------------------- service */
@@ -364,7 +430,7 @@ export const raidCatalogService = {
     });
     await record(admin, "CONTENT_RAID_CREATED", `Raid "${input.name}" created.`);
     // Soft discovery — never fails the create.
-    await applyWclDiscovery(raidId, {}, now);
+    await applyDiscovery(raidId, {}, now);
     return { raidId };
   },
 
@@ -385,17 +451,20 @@ export const raidCatalogService = {
     await record(admin, "CONTENT_RAID_UPDATED", `Raid "${input.name}" updated.`);
     // Soft re-discovery when the match key may have changed; never erases existing mappings.
     if (nameChanged || raid.wclZoneId == null) {
-      await applyWclDiscovery(raid.id, {}, now);
+      await applyDiscovery(raid.id, {}, now);
     }
   },
 
-  /** Explicit Retry detection — may overwrite prior WCL raid/encounter mappings. */
+  /**
+   * Explicit Retry detection — may overwrite prior WCL raid/encounter mappings,
+   * and replaces the Blizzard instance / encounter ids with the Blizzard journal's.
+   */
   async retryWclDetection(admin: AuthenticatedUser, raidId: string, now = new Date()): Promise<{ resolved: boolean }> {
     assertCanManageRaidCatalog(admin);
     await loadRaidContext(raidId);
-    await applyWclDiscovery(raidId, { force: true }, now);
+    await applyDiscovery(raidId, { force: true }, now);
     const { raid } = await loadRaidContext(raidId);
-    await record(admin, "CONTENT_RAID_WCL_RETRY", `Warcraft Logs detection retried for "${raid.name}".`);
+    await record(admin, "CONTENT_RAID_WCL_RETRY", `Warcraft Logs + Blizzard detection retried for "${raid.name}".`);
     return { resolved: raid.wclZoneId != null };
   },
 
@@ -459,7 +528,7 @@ export const raidCatalogService = {
       wclEncounterIds,
     });
     await record(admin, "CONTENT_ENCOUNTER_CREATED", `Encounter "${input.name}" added to ${raid.name}.`);
-    if (wclEncounterIds.length === 0) await applyWclDiscovery(raid.id);
+    if (wclEncounterIds.length === 0) await applyDiscovery(raid.id);
     return { bossId };
   },
 
@@ -488,7 +557,7 @@ export const raidCatalogService = {
       wclEncounterIds,
     });
     await record(admin, "CONTENT_ENCOUNTER_UPDATED", `Encounter "${input.name}" in ${raid.name} updated.`);
-    if (wclEncounterIds.length === 0) await applyWclDiscovery(raid.id);
+    if (wclEncounterIds.length === 0) await applyDiscovery(raid.id);
   },
 
   async moveEncounter(admin: AuthenticatedUser, input: { bossId: string; direction: "UP" | "DOWN" }): Promise<void> {
