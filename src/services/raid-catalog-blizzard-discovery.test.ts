@@ -17,6 +17,14 @@ vi.mock("@/lib/blizzard/config", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/blizzard/config")>()),
   isBlizzardConfigured: () => true,
 }));
+// No live Warcraft Logs: WCL zone discovery (on raid / encounter writes) sees an empty zone list.
+vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/integrations/warcraft-logs/warcraft-logs-api-client")>()),
+  warcraftLogsApiClient: {
+    isConfigured: () => true,
+    fetchZones: async () => ({ status: "SUCCESS" as const, zones: [] }),
+  },
+}));
 
 /** Seeded ADMIN (src/prisma/seed.ts). */
 const admin: AuthenticatedUser = {

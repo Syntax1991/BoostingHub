@@ -23,6 +23,15 @@ import { raidRepository } from "@/repositories/raid.repository";
 import { raidCatalogService } from "@/services/raid-catalog.service";
 import type { ProductContentInput } from "@/validators/raid-catalog";
 
+// No live Warcraft Logs: WCL zone discovery (on raid / encounter writes) sees an empty zone list.
+vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/integrations/warcraft-logs/warcraft-logs-api-client")>()),
+  warcraftLogsApiClient: {
+    isConfigured: () => true,
+    fetchZones: async () => ({ status: "SUCCESS" as const, zones: [] }),
+  },
+}));
+
 /**
  * Raid Catalog admin (/manage/raid-catalog): ADMIN / OWNER only; DB authority;
  * referenced raids keep their encounter structure; products never rewrite
