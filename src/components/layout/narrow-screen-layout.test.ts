@@ -81,3 +81,33 @@ describe("Characters table", () => {
     expect(table![2]).toContain("min-w-[1180px]");
   });
 });
+
+describe("mobile bottom navigation", () => {
+  it("stays reachable on long pages: sticky to the viewport bottom, in the flow, above page content", () => {
+    const nav = classNameContaining(read("components/layout/app-shell.tsx"), "grid-cols-6").split(/\s+/);
+    expect(nav).toEqual(expect.arrayContaining(["sticky", "bottom-0", "z-30", "md:hidden"]));
+    expect(nav).not.toContain("fixed"); // fixed would cover the end of the page content
+  });
+});
+
+describe("form controls inside narrow dialogs", () => {
+  it("never widen their container: globals.css caps select / textarea / input width in @layer base", () => {
+    // A long option (Run label) or a number input's intrinsic width otherwise sized the
+    // dialogs' grid labels and made Create Schedule scroll sideways on phones.
+    const base = read("app/globals.css").match(/@layer base\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
+    const rule = base.match(/select,\s*textarea,\s*input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\)\s*\{([^}]*)\}/);
+    expect(rule, "form-control rule in @layer base").toBeTruthy();
+    expect(rule![1]).toMatch(/min-width:\s*0;/);
+    expect(rule![1]).toMatch(/max-width:\s*100%;/);
+  });
+});
+
+describe("Attendance table", () => {
+  it("contains its absolutely positioned sr-only labels, so they cannot widen the page", () => {
+    const section = read("components/runs/run-attendance-section.tsx");
+    expect(section).toContain('className="sr-only"');
+    const table = section.match(/<div className="([^"]*overflow-x-auto[^"]*)">\s*<table className="([^"]*)"/);
+    expect(table, "overflow-x-auto wrapper directly around the table").toBeTruthy();
+    expect(table![1].split(/\s+/)).toContain("relative");
+  });
+});

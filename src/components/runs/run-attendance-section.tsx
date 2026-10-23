@@ -197,7 +197,12 @@ function ManagerAttendancePanel({
           ))}
         </div>
       ) : null}
-      <div className="overflow-x-auto">
+      {/*
+        `relative`: the rows' sr-only status labels are absolutely positioned;
+        without a positioned ancestor they escape this scroll container and
+        widen the whole page on phones.
+      */}
+      <div className="relative overflow-x-auto">
         <table className="min-w-[44rem] w-full text-left text-sm">
           <thead className="border-b border-border text-xs uppercase tracking-wide text-muted">
             <tr>

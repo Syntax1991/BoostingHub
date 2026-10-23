@@ -189,8 +189,13 @@ export function AppShell({
           </div>
         ) : null}
         <main className="flex-1 overflow-x-hidden px-4 py-5 md:px-6">{children}</main>
-        {/* One column per NAV entry: with 6 entries a 5-column grid pushed Settings onto a second row. */}
-        <nav className="grid grid-cols-6 border-t border-border bg-surface md:hidden">
+        {/*
+          One column per NAV entry: with 6 entries a 5-column grid pushed Settings onto a second row.
+          Sticky: the phone tab bar stays reachable on long pages (a Run detail is several screens
+          tall) instead of only after scrolling to the very end. It stays in the flow, so it never
+          covers the end of the page content.
+        */}
+        <nav className="sticky bottom-0 z-30 grid grid-cols-6 border-t border-border bg-surface md:hidden">
           {NAV.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href;
