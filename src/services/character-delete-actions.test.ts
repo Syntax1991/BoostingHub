@@ -11,6 +11,15 @@ vi.mock("next/link", () => ({
     createElement("a", { href, ...props }, children as never),
 }));
 vi.mock("@/components/characters/battle-net-panel", () => ({ BattleNetPanel: () => null }));
+// Warcraft Logs auto-link enrichment runs after Character writes/syncs; keep it
+// offline (a real WARCRAFT_LOGS_* in .env would otherwise hit the live API).
+vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/integrations/warcraft-logs/warcraft-logs-api-client")>()),
+  warcraftLogsApiClient: {
+    isConfigured: () => true,
+    findCharacter: async () => ({ status: "NOT_FOUND" as const }),
+  },
+}));
 
 import { CharactersView } from "@/components/characters/characters-view";
 import { ManageCharactersView } from "@/components/manage/manage-characters-view";

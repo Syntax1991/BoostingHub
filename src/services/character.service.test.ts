@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
@@ -6,6 +6,16 @@ import { characterRepository } from "@/repositories/character.repository";
 import { signupRepository } from "@/repositories/signup.repository";
 import { characterService } from "@/services/character.service";
 import { signupService } from "@/services/signup.service";
+
+// Warcraft Logs auto-link enrichment runs after Character writes/syncs; keep it
+// offline (a real WARCRAFT_LOGS_* in .env would otherwise hit the live API).
+vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/integrations/warcraft-logs/warcraft-logs-api-client")>()),
+  warcraftLogsApiClient: {
+    isConfigured: () => true,
+    findCharacter: async () => ({ status: "NOT_FOUND" as const }),
+  },
+}));
 
 const ids = {
   owner: "aaaaaaaa-aaaa-4aaa-8aaa-cm0000000001",

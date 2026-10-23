@@ -171,6 +171,8 @@ enum NotificationType {
   RUN_REACTIVATED  = "RUN_REACTIVATED"
   /// Planned raid scope (RunRaidContent) changed — to every signed-up User.
   RUN_SCOPE_CHANGED = "RUN_SCOPE_CHANGED"
+  /// To a Character's owner, once per broken Blizzard identity: reconnect Battle.net to repair it.
+  CHARACTER_BATTLENET_REPAIR = "CHARACTER_BATTLENET_REPAIR"
 }
 
 /// Discord DM delivery decision snapshotted at notification creation.

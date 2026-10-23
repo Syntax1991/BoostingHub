@@ -1,4 +1,5 @@
 import { BLIZZARD_SYNC_RETRY_GRACE_MINUTES, isSuccessfulSyncStale } from "@/lib/blizzard/sync-health";
+import type { CharacterSyncErrorCode } from "@/models/enums";
 
 /**
  * User-facing Blizzard sync state for a Character, derived from what is
@@ -57,5 +58,40 @@ export const BLIZZARD_PROFILE_UNAVAILABLE_TITLE = "Blizzard profile unavailable"
 export const BLIZZARD_PROFILE_UNAVAILABLE_HINT =
   "Blizzard's profile API is not currently publishing this character's profile. Check the name and realm, log " +
   "into the character once, log out, then refresh again later.";
+/** PROFILE_UNAVAILABLE can be short Blizzard propagation lag; only a repeated 404 suggests a rename / transfer. */
+export const BATTLENET_REPAIR_HINT_MIN_PROFILE_FAILURES = 3;
+
+/**
+ * True when a LINKED Character's latest sync failed because Blizzard no longer
+ * shows its identity under the stored name/realm (renamed, transferred or
+ * re-created). Reconnecting Battle.net repairs that automatically
+ * (characterBlizzardImportService.autoLinkExistingCharacters), so the owner is
+ * told to reconnect — not to delete and re-import, which would drop history.
+ */
+export function needsBattleNetIdentityRepair(character: {
+  isActive: boolean;
+  blizzardCharacterId: string | null;
+  lastSyncedAt: string | null;
+  lastSyncErrorAt: string | null;
+  lastSyncErrorCode: CharacterSyncErrorCode | null;
+  syncFailureCount: number;
+}): boolean {
+  if (!character.isActive || !character.blizzardCharacterId || !character.lastSyncErrorAt) return false;
+  const failingNow =
+    !character.lastSyncedAt || new Date(character.lastSyncErrorAt).getTime() > new Date(character.lastSyncedAt).getTime();
+  if (!failingNow) return false;
+  if (character.lastSyncErrorCode === "IDENTITY_CONFLICT") return true;
+  return (
+    character.lastSyncErrorCode === "PROFILE_UNAVAILABLE" &&
+    character.syncFailureCount >= BATTLENET_REPAIR_HINT_MIN_PROFILE_FAILURES
+  );
+}
+
+export const BATTLENET_IDENTITY_REPAIR_TITLE = "Reconnect Battle.net to repair";
+export const BATTLENET_IDENTITY_REPAIR_HINT =
+  "Blizzard no longer shows this character under its stored name, realm or character ID — it was probably renamed, " +
+  "transferred or re-created. Reconnect Battle.net on the Characters page: the link repairs itself and the character " +
+  "keeps its signups and history. No need to delete it. If it no longer exists in-game, deactivate it instead.";
+
 export const BLIZZARD_SYNC_STALE_HINT =
   "Recent Blizzard syncs for this character have failed. Showing the last known item level and lockouts.";

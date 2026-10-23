@@ -63,6 +63,7 @@ function baseDetails(overrides: Partial<Details> = {}): Details {
     updatedAt: "2026-09-16T00:00:00.000Z",
     lastSyncedAt: null,
     blizzardSyncState: { kind: "AWAITING_FIRST_SYNC" as const },
+    battleNetRepairNeeded: false,
     blizzardLinked: false,
     blizzardCharacterId: null,
     blizzardRealmId: null,
@@ -107,5 +108,15 @@ describe("CharacterDetailsView Warcraft Logs action", () => {
     const html = renderToStaticMarkup(createElement(CharacterDetailsView, { data: baseDetails() }));
     expect(html).not.toContain("warcraftlogs.com");
     expect(html).toContain("Find Warcraft Logs");
+  });
+
+  it("tells the owner to reconnect Battle.net (not delete) when the Blizzard identity changed", () => {
+    const repair = renderToStaticMarkup(
+      createElement(CharacterDetailsView, { data: baseDetails({ battleNetRepairNeeded: true }) }),
+    );
+    expect(repair).toContain("Reconnect Battle.net to repair");
+    expect(repair).toContain("No need to delete it.");
+    const healthy = renderToStaticMarkup(createElement(CharacterDetailsView, { data: baseDetails() }));
+    expect(healthy).not.toContain("Reconnect Battle.net to repair");
   });
 });

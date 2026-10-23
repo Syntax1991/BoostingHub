@@ -17,6 +17,15 @@ const apiMocks = vi.hoisted(() => ({
 vi.mock("@/integrations/blizzard/blizzard-api-client", () => ({
   blizzardApiClient: apiMocks,
 }));
+// Warcraft Logs auto-link enrichment runs after Character writes/syncs; keep it
+// offline (a real WARCRAFT_LOGS_* in .env would otherwise hit the live API).
+vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/integrations/warcraft-logs/warcraft-logs-api-client")>()),
+  warcraftLogsApiClient: {
+    isConfigured: () => true,
+    findCharacter: async () => ({ status: "NOT_FOUND" as const }),
+  },
+}));
 
 import { blizzardApiClient } from "@/integrations/blizzard/blizzard-api-client";
 import { battleNetService } from "@/services/battle-net.service";

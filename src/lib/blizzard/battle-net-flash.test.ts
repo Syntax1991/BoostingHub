@@ -40,6 +40,12 @@ describe("battleNetFlashMessage", () => {
     });
     expect(battleNetFlashMessage({ status: null, region: null, code: null, linked: 0 })).toBeNull();
   });
+
+  it("reports repaired Battle.net links after a reconnect", () => {
+    expect(battleNetFlashMessage({ status: "connected", region: "EU", code: null, linked: 0, repaired: 1 })?.text).toBe(
+      "Battle.net connected (EU). Repaired the link of 1 renamed, transferred or re-created character. Use Import to choose further characters.",
+    );
+  });
 });
 
 describe("battleNetErrorFlashCleanUrl", () => {

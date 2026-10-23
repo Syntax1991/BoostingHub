@@ -21,6 +21,8 @@ import { LinkWarcraftLogsButton } from "@/components/characters/link-warcraft-lo
 import { refreshBlizzardCharacterAction } from "@/controllers/blizzard.actions";
 import type { characterService } from "@/services/character.service";
 import {
+  BATTLENET_IDENTITY_REPAIR_HINT,
+  BATTLENET_IDENTITY_REPAIR_TITLE,
   BLIZZARD_PROFILE_UNAVAILABLE_HINT,
   BLIZZARD_PROFILE_UNAVAILABLE_TITLE,
   BLIZZARD_SYNC_STALE_HINT,
@@ -209,7 +211,12 @@ export function CharacterDetailsView({ data }: { data: Details }) {
               <dt className="text-muted">Last synced</dt>
               <dd>{data.lastSyncedAt ? formatDateTime(data.lastSyncedAt) : "Never synced"}</dd>
             </div>
-            {data.blizzardSyncState.kind === "PROFILE_UNAVAILABLE" ? (
+            {data.battleNetRepairNeeded ? (
+              <div role="status" className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
+                <p className="font-medium text-warning">{BATTLENET_IDENTITY_REPAIR_TITLE}</p>
+                <p className="mt-1 text-muted">{BATTLENET_IDENTITY_REPAIR_HINT}</p>
+              </div>
+            ) : data.blizzardSyncState.kind === "PROFILE_UNAVAILABLE" ? (
               <div role="status" className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
                 <p className="font-medium text-warning">{BLIZZARD_PROFILE_UNAVAILABLE_TITLE}</p>
                 <p className="mt-1 text-muted">{BLIZZARD_PROFILE_UNAVAILABLE_HINT}</p>

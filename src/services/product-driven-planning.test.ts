@@ -16,6 +16,15 @@ import { runDetailService } from "@/services/run-detail.service";
 import { runService } from "@/services/run.service";
 import { runTemplateService } from "@/services/run-template.service";
 
+// No live Warcraft Logs: WCL zone discovery (on raid / encounter writes) sees an empty zone list.
+vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/integrations/warcraft-logs/warcraft-logs-api-client")>()),
+  warcraftLogsApiClient: {
+    isConfigured: () => true,
+    fetchZones: async () => ({ status: "SUCCESS" as const, zones: [] }),
+  },
+}));
+
 /**
  * Product-driven planning regression: a Product created through the admin
  * catalog with an arbitrary key and THREE contents (VARIABLE first, then two

@@ -211,6 +211,14 @@ export class BotApiClient {
           | "WARRIOR"
           | null;
       }>;
+      /** Account-level DMs (no Run); optional so an older API response is tolerated. */
+      accountNotificationDms?: Array<{
+        notificationId: string;
+        type: "CHARACTER_BATTLENET_REPAIR";
+        discordUserId: string;
+        characterLabel: string;
+        charactersUrl: string | null;
+      }>;
       runAnnouncements: Array<{
         announcementId: string;
         runId: string;
@@ -273,6 +281,14 @@ export class BotApiClient {
     return this.request<{ deliver: boolean }>(
       `/api/bot/notifications/${notificationId}/delivery-authority`,
     );
+  }
+
+  /** DM outcome of an account-level UserNotification (no Run). Compare-and-set on the API side. */
+  recordNotificationDmDelivery(notificationId: string, result: "SENT" | "FAILED_PERMANENT") {
+    return this.request<{ recorded: boolean }>(`/api/bot/notifications/${notificationId}/delivery`, {
+      method: "PUT",
+      body: JSON.stringify({ result }),
+    });
   }
 
   recordDiscordState(

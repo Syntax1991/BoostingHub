@@ -65,6 +65,7 @@ import {
   buildRunScopeChangedChannelEmbed,
 } from "@/discord-bot/embeds/run-lifecycle-announcement";
 import {
+  buildCharacterBattleNetRepairDmMessage,
   buildRosterSelectedDmMessage,
   buildRosterRemovedDmMessage,
   buildRosterWithdrawnDmMessage,
@@ -103,6 +104,7 @@ type RosterLaneItem = SyncWork["roster"][number];
 type StartLaneItem = NonNullable<SyncWork["start"]>[number];
 type RaidInviteLaneItem = NonNullable<SyncWork["raidInvites"]>[number];
 type NotificationDmLaneItem = NonNullable<SyncWork["notificationDms"]>[number];
+type AccountNotificationDmLaneItem = NonNullable<SyncWork["accountNotificationDms"]>[number];
 type RunAnnouncementLaneItem = NonNullable<SyncWork["runAnnouncements"]>[number];
 
 /** Minimal fields shared by every lane that may resolve a Run channel. */
@@ -595,6 +597,21 @@ async function syncOnceInner(
           });
           messagePhaseError ??= error;
         }
+      }
+    }
+
+    for (const item of work.accountNotificationDms ?? []) {
+      try {
+        await syncAccountNotificationDm(client, api, item);
+      } catch (error) {
+        console.error(`[discord-bot] account notification DM failed for ${item.notificationId} (${item.type})`, error);
+        await recordDiscordLaneFailure(pass, {
+          operation: "NOTIFICATION_DM",
+          error,
+          messageKind: "dm",
+          entityId: item.notificationId,
+        });
+        messagePhaseError ??= error;
       }
     }
   } finally {
@@ -1346,6 +1363,53 @@ async function syncNotificationDm(
         notificationId: item.notificationId,
         result: "FAILED_PERMANENT",
       });
+      return;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Account-level UserNotification DM (no Run), e.g. CHARACTER_BATTLENET_REPAIR.
+ * Same rules as the Run DM lane: authority re-checked right before send,
+ * permanent Discord DM errors → FAILED_PERMANENT, transient errors stay PENDING.
+ */
+async function syncAccountNotificationDm(
+  client: Client,
+  api: BotApiClient,
+  item: AccountNotificationDmLaneItem,
+): Promise<void> {
+  if (item.type !== "CHARACTER_BATTLENET_REPAIR") return;
+  const content = buildCharacterBattleNetRepairDmMessage({
+    characterLabel: item.characterLabel,
+    charactersUrl: item.charactersUrl,
+  });
+
+  try {
+    const user = await client.users.fetch(item.discordUserId);
+    let authority: { deliver: boolean };
+    try {
+      authority = await api.confirmNotificationDmDelivery(item.notificationId);
+    } catch (error) {
+      console.warn(
+        `[discord-bot] notification DM authority unavailable for ${item.notificationId} — not sending (retry next pass)`,
+        error,
+      );
+      return;
+    }
+    if (!authority.deliver) {
+      console.warn(`[discord-bot] skipping notification DM ${item.notificationId}: delivery no longer authorized`);
+      return;
+    }
+    await user.send({ content });
+    await api.recordNotificationDmDelivery(item.notificationId, "SENT");
+  } catch (error) {
+    if (isDiscordPermanentDmError(error)) {
+      // One line, no error object: the DiscordAPIError carries the DM request body.
+      console.warn(
+        `[discord-bot] cannot DM notification ${item.notificationId} (${item.type}) to ${item.discordUserId} (Discord ${extractDiscordApiCode(error) ?? "unknown"}) — marking FAILED_PERMANENT`,
+      );
+      await api.recordNotificationDmDelivery(item.notificationId, "FAILED_PERMANENT");
       return;
     }
     throw error;

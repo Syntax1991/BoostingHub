@@ -10,6 +10,7 @@ export default async function CharactersPage({
     region?: string | string[];
     code?: string | string[];
     linked?: string | string[];
+    repaired?: string | string[];
   }>;
 }) {
   const params = await searchParams;

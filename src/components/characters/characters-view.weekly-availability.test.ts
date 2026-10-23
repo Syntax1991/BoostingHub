@@ -57,6 +57,7 @@ function baseCharacter(overrides: Partial<CharacterRow> = {}): CharacterRow {
     isActive: true,
     lastSyncedAt: null,
     blizzardSyncState: { kind: "AWAITING_FIRST_SYNC" as const },
+    battleNetRepairNeeded: false,
     updatedAt: "2026-09-16T00:00:00.000Z",
     blizzardLinked: false,
     blizzardRealmId: null,

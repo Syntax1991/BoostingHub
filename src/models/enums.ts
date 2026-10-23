@@ -158,6 +158,7 @@ export const NOTIFICATION_TYPES = [
   "ROSTER_WITHDRAWN",
   "RUN_REACTIVATED",
   "RUN_SCOPE_CHANGED",
+  "CHARACTER_BATTLENET_REPAIR",
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 

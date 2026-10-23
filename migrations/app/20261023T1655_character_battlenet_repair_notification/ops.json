@@ -1,0 +1,86 @@
+[
+  {
+    "id": "dropCheckConstraint.user_notification.user_notification_type_check_586fff74",
+    "label": "Drop check constraint \"user_notification_type_check_586fff74\" on \"user_notification\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "user_notification_type_check_586fff74",
+        "table": "user_notification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"user_notification_type_check_586fff74\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_notification_type_check_586fff74",
+          "public",
+          "\"public\".\"user_notification\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"user_notification_type_check_586fff74\"",
+        "sql": "ALTER TABLE \"public\".\"user_notification\" DROP CONSTRAINT \"user_notification_type_check_586fff74\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"user_notification_type_check_586fff74\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_notification_type_check_586fff74",
+          "public",
+          "\"public\".\"user_notification\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.user_notification.user_notification_type_check_00ed1686",
+    "label": "Add check constraint \"user_notification_type_check_00ed1686\" on \"user_notification\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "user_notification_type_check_00ed1686",
+        "table": "user_notification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"user_notification_type_check_00ed1686\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_notification_type_check_00ed1686",
+          "public",
+          "\"public\".\"user_notification\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"user_notification_type_check_00ed1686\"",
+        "sql": "ALTER TABLE \"public\".\"user_notification\" ADD CONSTRAINT \"user_notification_type_check_00ed1686\" CHECK (\"type\" IN ('ROSTER_SELECTED', 'RAID_INVITE', 'RUN_CANCELLED', 'RUN_RESCHEDULED', 'ROSTER_REMOVED', 'ROSTER_WITHDRAWN', 'RUN_REACTIVATED', 'RUN_SCOPE_CHANGED', 'CHARACTER_BATTLENET_REPAIR'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"user_notification_type_check_00ed1686\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_notification_type_check_00ed1686",
+          "public",
+          "\"public\".\"user_notification\""
+        ]
+      }
+    ]
+  }
+]

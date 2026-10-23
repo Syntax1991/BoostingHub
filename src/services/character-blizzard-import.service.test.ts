@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
+import { DomainError, isDomainError } from "@/lib/errors";
+import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { orm } from "@/lib/prisma";
 import type { OwnedBlizzardCharacter } from "@/lib/blizzard/types";
 import { battleNetConnectionRepository } from "@/repositories/battle-net-connection.repository";
@@ -19,6 +20,18 @@ const apiMocks = vi.hoisted(() => ({
 
 vi.mock("@/integrations/blizzard/blizzard-api-client", () => ({
   blizzardApiClient: apiMocks,
+}));
+vi.mock("@/integrations/raider-io/raider-io-api-client", () => ({
+  raiderIoApiClient: { getCharacterEquippedItemLevel: async () => ({ status: "NOT_FOUND" as const }) },
+}));
+// Warcraft Logs auto-link enrichment runs after every successful sync; keep it
+// offline (a real WARCRAFT_LOGS_* in .env would otherwise hit the live API).
+vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/integrations/warcraft-logs/warcraft-logs-api-client")>()),
+  warcraftLogsApiClient: {
+    isConfigured: () => true,
+    findCharacter: async () => ({ status: "NOT_FOUND" as const }),
+  },
 }));
 
 import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
@@ -453,6 +466,243 @@ describe("characterBlizzardImportService.autoLinkExistingCharacters", () => {
     expect(result.linkedCharacterIds).toEqual([]);
     const row = await orm.Character.where({ id: others.id }).first();
     expect(row?.blizzardCharacterId ?? null).toBeNull();
+  });
+});
+
+describe("Battle.net identity repair on connect (rename / transfer / re-created character)", () => {
+  const owner = asUser(ids.owner);
+  const draenor = { realmId: "1303", realmName: "Draenor", realmSlug: "draenor" };
+
+  /**
+   * A linked Character whose syncs fail the way prod did — plus history that
+   * must survive a repair (lockout of a past reset, specialization) and WCL
+   * data that belongs to the old identity.
+   */
+  async function seedFailingLinkedCharacter(input: {
+    owned: OwnedBlizzardCharacter;
+    errorCode: "IDENTITY_CONFLICT" | "PROFILE_UNAVAILABLE";
+  }) {
+    const character = await characterService.createCharacter(owner, {
+      name: input.owned.name,
+      realm: input.owned.realmName,
+      region: input.owned.region,
+      wowClass: input.owned.wowClass,
+      specialization: "Elemental",
+      itemLevel: 650,
+    });
+    createdCharacterIds.push(character.id);
+    const nowIso = new Date().toISOString();
+    await orm.Character.where({ id: character.id }).update({
+      blizzardCharacterId: input.owned.id,
+      blizzardRealmId: input.owned.realmId,
+      warcraftLogsId: "wcl-old-identity",
+      lastSyncedAt: new Date(Date.now() - 2 * 24 * 60 * 60_000).toISOString(),
+      lastSyncAttemptAt: nowIso,
+      lastSyncErrorAt: nowIso,
+      lastSyncErrorCode: input.errorCode,
+      syncFailureCount: 13,
+    });
+    await orm.CharacterRaidLockout.create({
+      id: crypto.randomUUID(),
+      characterId: character.id,
+      raidId: VENOMOUS_ABYSS_RAID_ID,
+      difficulty: "HEROIC",
+      resetIdentifier: "2026-W01",
+      bossesDefeated: 8,
+      isComplete: true,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    });
+    await orm.CharacterWclPerformance.create({
+      id: crypto.randomUUID(),
+      characterId: character.id,
+      zoneId: 44,
+      encounterId: 0,
+      difficulty: 4,
+      metricKey: "dps",
+      bestPct: 91,
+      avgPct: 80,
+      fetchedAt: nowIso,
+      createdAt: nowIso,
+    });
+    return character.id;
+  }
+
+  /** Live profiles by lowercase name (the live check of each roster entry). */
+  function mockLiveProfiles(byName: Record<string, OwnedBlizzardCharacter>) {
+    apiMocks.getCharacterProfileSummary.mockImplementation(async (_region: string, _realm: string, name: string) => {
+      const owned = byName[name.toLowerCase()];
+      if (!owned) throw new DomainError("BLIZZARD_CHARACTER_NOT_FOUND", "not found", 404);
+      return {
+        id: owned.id,
+        name: owned.name,
+        realmId: owned.realmId,
+        realmSlug: owned.realmSlug,
+        realmName: owned.realmName,
+        wowClass: owned.wowClass,
+        equippedItemLevel: 660,
+        activeSpecialization: "Enhancement",
+      };
+    });
+  }
+
+  async function expectRepaired(characterId: string, expected: { name: string; realm: string; id: string; realmId: string }) {
+    const row = await orm.Character.where({ id: characterId }).first();
+    expect(String(row?.name)).toBe(expected.name);
+    expect(String(row?.realm)).toBe(expected.realm);
+    expect(String(row?.blizzardCharacterId)).toBe(expected.id);
+    expect(String(row?.blizzardRealmId)).toBe(expected.realmId);
+    // Owner choices and history stay; the old WCL identity and failure state go.
+    expect(String(row?.specialization)).toBe("Elemental");
+    expect(row?.warcraftLogsId ?? null).toBeNull();
+    expect(row?.lastSyncErrorCode ?? null).toBeNull();
+    expect(row?.lastSyncErrorAt ?? null).toBeNull();
+    expect(Number(row?.syncFailureCount)).toBe(0);
+    expect(await orm.CharacterRaidLockout.where({ characterId }).all()).toHaveLength(1);
+    expect(await orm.CharacterWclPerformance.where({ characterId }).all()).toHaveLength(0);
+  }
+
+  it("rename: the row follows its Blizzard id to the new name", async () => {
+    const before = ownedCharacter({ id: "300401", name: "Bnrepold" });
+    const characterId = await seedFailingLinkedCharacter({ owned: before, errorCode: "PROFILE_UNAVAILABLE" });
+    const after = ownedCharacter({ id: before.id, name: "Bnrepnew" });
+    mockLiveProfiles({ bnrepnew: after });
+    const session = await seedConnectionAndSession(ids.owner, "EU", [after]);
+
+    const result = await characterBlizzardImportService.autoLinkExistingCharacters(owner, session.id);
+
+    expect(result.repair).toEqual({ renamedCharacterIds: [characterId], relinkedCharacterIds: [], skipped: 0 });
+    expect(result.linkedCharacterIds).toEqual([]);
+    await expectRepaired(characterId, { name: "Bnrepnew", realm: "Twisting Nether", id: before.id, realmId: before.realmId });
+    const activity = await orm.ActivityEvent.where({ userId: ids.owner, type: "BATTLENET_CHARACTER_REPAIRED" }).all();
+    expect(activity.map((row) => String(row.message)).filter((message) => message.includes("Bnrepold"))).toEqual([
+      "Repaired Battle.net link: Bnrepold-Twisting Nether (EU) is now Bnrepnew-Twisting Nether (renamed or transferred).",
+    ]);
+  });
+
+  it("realm transfer: the row follows its Blizzard id to the new realm", async () => {
+    const before = ownedCharacter({ id: "300402", name: "Bnreptransfer" });
+    const characterId = await seedFailingLinkedCharacter({ owned: before, errorCode: "PROFILE_UNAVAILABLE" });
+    const after = ownedCharacter({ id: before.id, name: before.name, ...draenor });
+    mockLiveProfiles({ bnreptransfer: after });
+    const session = await seedConnectionAndSession(ids.owner, "EU", [after]);
+
+    const result = await characterBlizzardImportService.autoLinkExistingCharacters(owner, session.id);
+
+    expect(result.repair.renamedCharacterIds).toEqual([characterId]);
+    await expectRepaired(characterId, { name: before.name, realm: "Draenor", id: before.id, realmId: draenor.realmId });
+  });
+
+  it("re-created character: the row re-links to the account's character with the same name, realm and class", async () => {
+    // The Sharaleen case: same name/realm/class on Blizzard, but a new character id.
+    const oldIdentity = ownedCharacter({ id: "300410", name: "Bnrecreate" });
+    const characterId = await seedFailingLinkedCharacter({ owned: oldIdentity, errorCode: "IDENTITY_CONFLICT" });
+    const newIdentity = ownedCharacter({ id: "300411", name: "Bnrecreate" });
+    mockLiveProfiles({ bnrecreate: newIdentity });
+    const session = await seedConnectionAndSession(ids.owner, "EU", [newIdentity]);
+
+    const result = await characterBlizzardImportService.autoLinkExistingCharacters(owner, session.id);
+
+    expect(result.repair).toEqual({ renamedCharacterIds: [], relinkedCharacterIds: [characterId], skipped: 0 });
+    await expectRepaired(characterId, { name: "Bnrecreate", realm: "Twisting Nether", id: newIdentity.id, realmId: newIdentity.realmId });
+  });
+
+  it("name swap: the renamed old character keeps the row, the new holder of the name stays importable", async () => {
+    const oldIdentity = ownedCharacter({ id: "300420", name: "Bnswapname" });
+    const characterId = await seedFailingLinkedCharacter({ owned: oldIdentity, errorCode: "IDENTITY_CONFLICT" });
+    const renamedOld = ownedCharacter({ id: oldIdentity.id, name: "Bnswapother" });
+    const newHolder = ownedCharacter({ id: "300421", name: "Bnswapname" });
+    mockLiveProfiles({ bnswapother: renamedOld, bnswapname: newHolder });
+    const session = await seedConnectionAndSession(ids.owner, "EU", [renamedOld, newHolder]);
+
+    const result = await characterBlizzardImportService.autoLinkExistingCharacters(owner, session.id);
+
+    expect(result.repair).toEqual({ renamedCharacterIds: [characterId], relinkedCharacterIds: [], skipped: 0 });
+    await expectRepaired(characterId, { name: "Bnswapother", realm: "Twisting Nether", id: oldIdentity.id, realmId: oldIdentity.realmId });
+    const candidates = await characterBlizzardImportService.resolveImportCandidates(owner, session.id);
+    expect(candidates.candidates.find((row) => row.blizzardCharacterId === newHolder.id)?.status).toBe("import");
+  });
+
+  it("never repairs without proof: class change, taken id, failed live check, unchanged or vanished characters", async () => {
+    const classChanged = ownedCharacter({ id: "300430", name: "Bnsafeclass" });
+    const takenId = ownedCharacter({ id: "300431", name: "Bnsafetaken" });
+    const liveMismatch = ownedCharacter({ id: "300432", name: "Bnsafelive" });
+    const unchanged = ownedCharacter({ id: "300433", name: "Bnsafesame" });
+    const vanished = ownedCharacter({ id: "300434", name: "Bnsafegone" });
+    const rows = {
+      classChanged: await seedFailingLinkedCharacter({ owned: classChanged, errorCode: "IDENTITY_CONFLICT" }),
+      takenId: await seedFailingLinkedCharacter({ owned: takenId, errorCode: "IDENTITY_CONFLICT" }),
+      liveMismatch: await seedFailingLinkedCharacter({ owned: liveMismatch, errorCode: "IDENTITY_CONFLICT" }),
+      unchanged: await seedFailingLinkedCharacter({ owned: unchanged, errorCode: "PROFILE_UNAVAILABLE" }),
+      vanished: await seedFailingLinkedCharacter({ owned: vanished, errorCode: "PROFILE_UNAVAILABLE" }),
+    };
+    // The candidate id for "takenId" is already linked to another user's Character.
+    const takenCandidate = ownedCharacter({ id: "300441", name: takenId.name });
+    const othersRow = await characterService.createCharacter(asUser(ids.other, "Blizzard Other"), {
+      name: "Bnsafeholder",
+      realm: takenCandidate.realmName,
+      region: "EU",
+      wowClass: takenCandidate.wowClass,
+      specialization: "Elemental",
+      itemLevel: 600,
+    });
+    createdCharacterIds.push(othersRow.id);
+    await orm.Character.where({ id: othersRow.id }).update({
+      blizzardCharacterId: takenCandidate.id,
+      blizzardRealmId: takenCandidate.realmId,
+    });
+    const roster = [
+      ownedCharacter({ id: "300440", name: classChanged.name, wowClass: "MAGE" }),
+      takenCandidate,
+      ownedCharacter({ id: "300442", name: liveMismatch.name }),
+      unchanged,
+    ];
+    mockLiveProfiles({
+      // Blizzard still publishes the OLD id under this name — the roster entry is not confirmed.
+      bnsafelive: liveMismatch,
+      bnsafesame: unchanged,
+      bnsafetaken: takenCandidate,
+    });
+    const session = await seedConnectionAndSession(ids.owner, "EU", roster);
+
+    const result = await characterBlizzardImportService.autoLinkExistingCharacters(owner, session.id);
+
+    expect(result.repair.renamedCharacterIds).toEqual([]);
+    expect(result.repair.relinkedCharacterIds).toEqual([]);
+    // taken id + failed live check; class change is no candidate, unchanged/vanished need nothing.
+    expect(result.repair.skipped).toBe(2);
+    const seeded = { classChanged, takenId, liveMismatch, unchanged, vanished };
+    for (const [key, characterId] of Object.entries(rows)) {
+      const row = await orm.Character.where({ id: characterId }).first();
+      expect(String(row?.blizzardCharacterId)).toBe(seeded[key as keyof typeof seeded].id);
+      expect(row?.lastSyncErrorCode ?? null).not.toBeNull();
+      expect(String(row?.warcraftLogsId)).toBe("wcl-old-identity");
+    }
+    const repairs = await orm.ActivityEvent.where({ userId: ids.owner, type: "BATTLENET_CHARACTER_REPAIRED" }).all();
+    expect(repairs.filter((row) => String(row.message).includes("Bnsafe"))).toHaveLength(0);
+  });
+
+  it("a rename onto a name the owner already uses for another Character is skipped", async () => {
+    const before = ownedCharacter({ id: "300450", name: "Bncollideold" });
+    const characterId = await seedFailingLinkedCharacter({ owned: before, errorCode: "PROFILE_UNAVAILABLE" });
+    const manual = await characterService.createCharacter(owner, {
+      name: "Bncollidenew",
+      realm: before.realmName,
+      region: "EU",
+      wowClass: "MAGE",
+      specialization: "Frost",
+      itemLevel: 600,
+    });
+    createdCharacterIds.push(manual.id);
+    const after = ownedCharacter({ id: before.id, name: "Bncollidenew" });
+    mockLiveProfiles({ bncollidenew: after });
+    const session = await seedConnectionAndSession(ids.owner, "EU", [after]);
+
+    const result = await characterBlizzardImportService.autoLinkExistingCharacters(owner, session.id);
+
+    expect(result.repair).toEqual({ renamedCharacterIds: [], relinkedCharacterIds: [], skipped: 1 });
+    const row = await orm.Character.where({ id: characterId }).first();
+    expect(String(row?.name)).toBe("Bncollideold");
   });
 });
 
