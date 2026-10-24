@@ -56,7 +56,8 @@ describe("AppShell mobile navigation drawer", () => {
     expect(shell).toContain('if (event.key === "Escape") setMobileNavOpen(false)');
     expect(shell).toContain('document.body.style.overflow = "hidden"');
     expect(shell).toContain("document.body.style.overflow = previousOverflow");
-    expect(shell).toMatch(/setMobileNavOpen\(false\);\r?\n\s*\}, \[pathname\]/);
+    expect(shell).toContain("if (navPathname !== pathname)");
+    expect(shell).toContain("setMobileNavOpen(false)");
   });
 
   it("reuses one primary NAV list and authorization management filtering", () => {

@@ -66,11 +66,14 @@ export function AppShell({
   const manageNav = showManage ? getManagementNavItems(user.accountRole) : [];
   const onManageRoute = pathname.startsWith("/manage");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [navPathname, setNavPathname] = useState(pathname);
   const drawerTitleId = useId();
 
-  useEffect(() => {
+  // Close the drawer when the route changes (link click, back/forward) without an effect.
+  if (navPathname !== pathname) {
+    setNavPathname(pathname);
     setMobileNavOpen(false);
-  }, [pathname]);
+  }
 
   useEffect(() => {
     if (!mobileNavOpen) return;
