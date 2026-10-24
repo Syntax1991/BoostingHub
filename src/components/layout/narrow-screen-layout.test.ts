@@ -41,10 +41,9 @@ describe("AppShell mobile header", () => {
     expect(header).not.toContain("overflow-x-hidden");
   });
 
-  it("gives the mobile bottom navigation one column per entry, so none wraps to a second row", () => {
-    const entries = (shell.match(/const NAV = \[([\s\S]*?)\];/)?.[1].match(/\{ href:/g) ?? []).length;
-    expect(entries).toBeGreaterThan(0);
-    expect(classNameContaining(shell, "border-t border-border bg-surface md:hidden")).toContain(`grid-cols-${entries}`);
+  it("exposes a mobile menu control instead of a multi-column bottom bar", () => {
+    expect(shell).toContain("Open navigation menu");
+    expect(shell).not.toMatch(/grid-cols-\d+/);
   });
 });
 
@@ -82,11 +81,12 @@ describe("Characters table", () => {
   });
 });
 
-describe("mobile bottom navigation", () => {
-  it("stays reachable on long pages: sticky to the viewport bottom, in the flow, above page content", () => {
-    const nav = classNameContaining(read("components/layout/app-shell.tsx"), "grid-cols-6").split(/\s+/);
-    expect(nav).toEqual(expect.arrayContaining(["sticky", "bottom-0", "z-30", "md:hidden"]));
-    expect(nav).not.toContain("fixed"); // fixed would cover the end of the page content
+describe("mobile navigation drawer", () => {
+  it("replaces the bottom bar with a fixed left drawer that does not stay in the page flow", () => {
+    const shell = read("components/layout/app-shell.tsx");
+    expect(shell).not.toMatch(/sticky bottom-0/);
+    expect(shell).toContain("fixed inset-0 z-40 md:hidden");
+    expect(shell).toContain("w-[min(85vw,20rem)]");
   });
 });
 

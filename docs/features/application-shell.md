@@ -8,8 +8,9 @@ Give authenticated operators a persistent dark operations UI for the Phase 1 rou
 
 1. Sign in at `/` with Discord or a development identity.
 2. Land on `/dashboard`. The dashboard's **Recent Activity** (community-wide operational events) is shown to raid leads and admins only; regular users never receive those events.
-3. Move between Runs, My Runs, Characters, Profile. Open a Run from those lists at `/runs/[runId]`.
-4. Raid leads and admins also see Manage, with a role-based sub-nav (Overview / Runs / Schedule; ADMIN also Users / Characters / Analytics / System).
+3. Move between Runs, My Runs, Characters, Profile, Settings. Open a Run from those lists at `/runs/[runId]`.
+4. On mobile widths (`md` and below), open the header menu for an off-canvas left drawer (Main + Management). Desktop keeps the persistent SideNav. There is no mobile bottom navigation.
+5. Raid leads and admins also see Manage, with a role-based sub-nav (Overview / Runs / Schedule; ADMIN also Users / Characters / Raid Catalog / Analytics / System).
 
 ## Permissions
 
