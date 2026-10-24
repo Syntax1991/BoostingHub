@@ -596,6 +596,13 @@ describe("rosterService publish and republish", () => {
   });
 });
 
+/** Runs start with Booster signups for the Raid Lead's Characters; these tests count only their own offers. */
+async function withdrawRaidLeadBootstrap(runId: string) {
+  const thorneActor = asUser(ids.thorne, "Thorne Ironvein", "RAID_LEAD");
+  const rows = (await orm.RunSignup.where({ runId, userId: ids.thorne }).select("id").all()) as Array<{ id: string }>;
+  for (const row of rows) await signupService.withdrawSignup(thorneActor, row.id);
+}
+
 describe("rosterService publishedRole snapshot", () => {
   const createdCharacterIds: string[] = [];
   const createdRunIds: string[] = [];
@@ -791,6 +798,7 @@ describe("rosterService publishedRole snapshot", () => {
     const run = await runService.createRun(thorne, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1 }));
     createdRunIds.push(run.id);
     await runService.openRun(thorne, run.id);
+    await withdrawRaidLeadBootstrap(run.id);
 
     await signupService.setCharacterOffers(kael, {
       runId: run.id,
@@ -869,6 +877,7 @@ describe("rosterService publishedRole snapshot", () => {
     const run = await runService.createRun(thorne, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(), desiredTankCount: 0, desiredHealerCount: 2, desiredDpsCount: 2 }));
     createdRunIds.push(run.id);
     await runService.openRun(thorne, run.id);
+    await withdrawRaidLeadBootstrap(run.id);
 
     await signupService.setCharacterOffers(kael, {
       runId: run.id,

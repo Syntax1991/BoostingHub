@@ -78,7 +78,7 @@ export function RunsView({ data, timeZone = DEFAULT_TIME_ZONE }: { data: RunsPag
                       <div>{formatDate(run.scheduledStartAt, timeZone)}</div>
                       <div className="text-xs">{formatTime(run.scheduledStartAt, timeZone)}</div>
                     </td>
-                    <td className="px-4 py-3">{run.raidLeadName}</td>
+                    <td className="px-4 py-3">{run.raidLeadDisplayName}</td>
                     <td className="px-4 py-3 text-xs text-muted">
                       {run.desiredTankCount}T / {run.desiredHealerCount}H / {run.desiredDpsCount}D
                       {run.desiredLootbuddyCount > 0 ? ` · ${run.desiredLootbuddyCount} LB` : ""}

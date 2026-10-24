@@ -40,7 +40,7 @@ export function RunOverviewSection({
           </div>
           <div>
             <dt className="text-muted">Raid Lead</dt>
-            <dd className="mt-1">{run.raidLeadName}</dd>
+            <dd className="mt-1">{run.raidLeadDisplayName}</dd>
           </div>
           <div>
             <dt className="text-muted">Status</dt>

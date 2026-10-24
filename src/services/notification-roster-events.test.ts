@@ -117,6 +117,24 @@ async function createSignup(input: {
   characterId: string;
   role: CharacterRole;
 }) {
+  // The Raid Lead's Characters already have a Booster offer from Run creation:
+  // reuse it with exactly the requested role instead of inserting a duplicate.
+  const existing = (await orm.RunSignup.where({
+    runId: input.runId,
+    userId: input.userId,
+    characterId: input.characterId,
+    participationType: "BOOSTER",
+  }).first()) as { id: string } | null;
+  if (existing) {
+    await orm.RunSignupRole.where({ signupId: existing.id }).delete();
+    await orm.RunSignupRole.create({
+      id: crypto.randomUUID(),
+      signupId: existing.id,
+      role: input.role,
+      createdAt: new Date().toISOString(),
+    });
+    return existing.id;
+  }
   const id = crypto.randomUUID();
   createdSignupIds.push(id);
   const now = new Date().toISOString();
@@ -927,7 +945,12 @@ describe("replace a participant after Start", () => {
   it("a signed-up replacement: original No-show, replacement Present (full cut) + Raid Invite, Final Setup re-edited", async () => {
     const { runId, healer, bench, healerRowId } = await startedRunWithHealer();
     const before = await attendanceService.getManagerAttendance(lead, runId);
-    expect(before.replacementCandidates.map((candidate) => candidate.signupId)).toEqual([bench]);
+    // Unselected signups are the candidates: the bench player and the Raid Lead's
+    // own unpicked Character (signed up automatically when the Run was created).
+    const leadDpsOffer = (await orm.RunSignup.where({ runId, userId: ids.lead, characterId: charLeadDps }).first()) as {
+      id: string;
+    };
+    expect(before.replacementCandidates.map((candidate) => candidate.signupId).sort()).toEqual([bench, leadDpsOffer.id].sort());
     let work = await discordSyncService.listSyncWork();
     expect(work.start?.some((item) => item.runId === runId)).toBe(false);
 

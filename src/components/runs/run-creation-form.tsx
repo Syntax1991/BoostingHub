@@ -154,7 +154,8 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
   }
   function effectiveRaidLeadName(row: Row) {
     if (!form.canAssignRaidLead) return form.defaultRaidLeadName;
-    return form.raidLeads.find((lead) => lead.id === effectiveRaidLeadId(row))?.name ?? "";
+    // Titles show the Run display identity (Raid Lead nickname, else name).
+    return form.raidLeads.find((lead) => lead.id === effectiveRaidLeadId(row))?.displayName ?? "";
   }
 
   function previewTitle(row: Row) {

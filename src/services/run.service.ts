@@ -32,6 +32,7 @@ import { activityRepository } from "@/repositories/activity.repository";
 import { attendanceRepository } from "@/repositories/attendance.repository";
 import { raidRepository } from "@/repositories/raid.repository";
 import { communityScheduleRunRepository } from "@/repositories/community-schedule-run.repository";
+import { planRaidLeadBoosterSignups } from "@/services/run-raid-lead-bootstrap.service";
 import { communityScheduleRepository } from "@/repositories/community-schedule.repository";
 import { isBeforeScheduleStart } from "@/lib/community-schedule";
 import type { CommunityWeekday } from "@/models/enums";
@@ -133,12 +134,35 @@ async function resolveRaidsForContents(
   return byId;
 }
 
+/**
+ * Every NEW concrete Run starts with Booster signups for its Raid Lead's
+ * eligible Characters (run-raid-lead-bootstrap.service), written atomically
+ * with the Run. Owner is always `draft.raidLeadId`, never the acting user.
+ */
+async function withRaidLeadBootstrap<T extends RunCreateWithContentsInput>(draft: T): Promise<T> {
+  const initialBoosterSignups = await planRaidLeadBoosterSignups({
+    raidLeadId: draft.raidLeadId,
+    difficulty: draft.difficulty,
+    lootType: draft.lootType,
+    scheduledStartAt: draft.scheduledStartAt,
+    contents: draft.contents,
+  });
+  return { ...draft, initialBoosterSignups };
+}
+
+/** The acting user's Run display identity (Raid Lead nickname, else name) for title previews. */
+async function ownRaidLeadDisplayName(user: AuthenticatedUser): Promise<string> {
+  return (await userRepository.findRaidLeadDisplayName(user.id)) ?? user.name;
+}
+
 async function requireEligibleRaidLead(raidLeadId: string) {
   const lead = await userRepository.findById(raidLeadId);
   if (!lead || !isEligibleRaidLead(lead)) {
     throw new DomainError("RUN_RAID_LEAD_INVALID", "Choose an eligible raid lead.");
   }
-  return lead;
+  // Run titles show the Run display identity (Raid Lead nickname, else name).
+  const displayName = (await userRepository.findRaidLeadDisplayName(raidLeadId)) ?? lead.name;
+  return { ...lead, displayName };
 }
 
 /**
@@ -415,6 +439,7 @@ export const runService = {
         scheduledStartAt: run.scheduledStartAt,
         status: run.status,
         raidLeadName: run.raidLeadName,
+        raidLeadDisplayName: run.raidLeadDisplayName,
         notes: run.notes,
         desiredTankCount: run.desiredTankCount,
         desiredHealerCount: run.desiredHealerCount,
@@ -483,6 +508,7 @@ export const runService = {
         status: run.status,
         raidLeadId: run.raidLeadId,
         raidLeadName: run.raidLeadName,
+        raidLeadDisplayName: run.raidLeadDisplayName,
         signupsOpen: run.signupsOpen,
         signupWindowOpen: isSignupWindowOpen(run.status, run.signupsOpen),
         signupCount: run.signups.filter((signup) => signup.status !== "WITHDRAWN").length,
@@ -511,7 +537,7 @@ export const runService = {
     const products = toProductOptions(await productPlanningService.listAll());
     const raidLeads = hasAdminAccess(user.accountRole)
       ? await userRepository.listEligibleRaidLeads()
-      : [{ id: user.id, name: user.name, accountRole: user.accountRole }];
+      : [{ id: user.id, name: user.name, displayName: await ownRaidLeadDisplayName(user), accountRole: user.accountRole }];
     const scheduled = new Date(Date.now() + 24 * 60 * 60 * 1000);
     scheduled.setUTCMinutes(0, 0, 0);
     const scheduledStartAt = scheduled.toISOString();
@@ -520,7 +546,7 @@ export const runService = {
       actorRole: user.accountRole,
       canAssignRaidLead: hasAdminAccess(user.accountRole),
       defaultRaidLeadId: hasAdminAccess(user.accountRole) ? (raidLeads[0]?.id ?? "") : user.id,
-      defaultRaidLeadName: user.name,
+      defaultRaidLeadName: await ownRaidLeadDisplayName(user),
       products,
       raidLeads,
       defaults: {
@@ -554,9 +580,9 @@ export const runService = {
       contents,
       raidById,
       raidLeadId,
-      raidLeadName: raidLead.name,
+      raidLeadName: raidLead.displayName,
     });
-    const id = await runRepository.create(draft);
+    const id = await runRepository.create(await withRaidLeadBootstrap(draft));
 
     await activityRepository.create({
       userId: user.id,
@@ -624,7 +650,7 @@ export const runService = {
       contents,
       raidById,
       raidLeadId: input.raidLeadId,
-      raidLeadName: raidLead.name,
+      raidLeadName: raidLead.displayName,
     });
   },
 
@@ -662,7 +688,7 @@ export const runService = {
 
     try {
       const { runId } = await runRepository.createOpenRunWithScheduleLink({
-        draft,
+        draft: await withRaidLeadBootstrap(draft),
         link: {
           scheduleSlotId: input.scheduleSlotId,
           windowStartAt: input.windowStartAt,
@@ -748,7 +774,7 @@ export const runService = {
     const products = toProductOptions(await productPlanningService.listAll());
     const raidLeads = hasAdminAccess(user.accountRole)
       ? await userRepository.listEligibleRaidLeads()
-      : [{ id: user.id, name: user.name, accountRole: user.accountRole }];
+      : [{ id: user.id, name: user.name, displayName: await ownRaidLeadDisplayName(user), accountRole: user.accountRole }];
     const scheduled = new Date(Date.now() + 24 * 60 * 60 * 1000);
     scheduled.setUTCMinutes(0, 0, 0);
     const scheduledStartAt = scheduled.toISOString();
@@ -778,7 +804,7 @@ export const runService = {
       actorRole: user.accountRole,
       canAssignRaidLead: hasAdminAccess(user.accountRole),
       defaultRaidLeadId: hasAdminAccess(user.accountRole) ? (raidLeads[0]?.id ?? "") : user.id,
-      defaultRaidLeadName: user.name,
+      defaultRaidLeadName: await ownRaidLeadDisplayName(user),
       products,
       raidLeads,
       templates,
@@ -887,7 +913,7 @@ export const runService = {
             contents,
             raidById,
             raidLeadId,
-            raidLeadName: raidLead.name,
+            raidLeadName: raidLead.displayName,
           }),
         );
       } catch (error) {
@@ -898,7 +924,9 @@ export const runService = {
       }
     }
 
-    const ids = await runRepository.createManyDraftsAtomic(prepared);
+    const bootstrapped: RunCreateWithContentsInput[] = [];
+    for (const draft of prepared) bootstrapped.push(await withRaidLeadBootstrap(draft));
+    const ids = await runRepository.createManyDraftsAtomic(bootstrapped);
 
     await activityRepository.create({
       userId: user.id,
@@ -992,6 +1020,8 @@ export const runService = {
 
     let raidLeadId = run.raidLeadId;
     let raidLeadName = run.raidLeadName;
+    // The title shows the Run display identity; the audit event keeps account names.
+    let raidLeadTitleName = run.raidLeadDisplayName;
     if (leadChanged) {
       if (!capabilities.canReassignRaidLead) {
         throw new DomainError("RUN_RAID_LEAD_INVALID", "You cannot reassign the raid lead for this run.");
@@ -999,6 +1029,7 @@ export const runService = {
       const lead = await requireEligibleRaidLead(input.raidLeadId!);
       raidLeadId = input.raidLeadId!;
       raidLeadName = lead.name;
+      raidLeadTitleName = lead.displayName;
     }
 
     let difficulty = run.difficulty;
@@ -1043,7 +1074,7 @@ export const runService = {
       difficulty,
       lootType: input.lootType,
       titleCoverage: display.titleCoverage,
-      raidLeadName,
+      raidLeadName: raidLeadTitleName,
     });
 
     // Material raid-scope change (by raidId; a reorder is not one). Drives

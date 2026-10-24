@@ -28,7 +28,7 @@ export function RunDetailView({
             {run.title}
           </Link>
         }
-        description={`${run.productLabel}${run.contentSummary ? ` · ${run.contentSummary}` : ""} · Lead ${run.raidLeadName}`}
+        description={`${run.productLabel}${run.contentSummary ? ` · ${run.contentSummary}` : ""} · Lead ${run.raidLeadDisplayName}`}
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">
             {run.discordChannelUrl ? (

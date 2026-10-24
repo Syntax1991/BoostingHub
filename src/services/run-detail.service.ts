@@ -145,6 +145,7 @@ export const runDetailService = {
       status: run.status,
       raidLeadId: run.raidLeadId,
       raidLeadName: run.raidLeadName,
+      raidLeadDisplayName: run.raidLeadDisplayName,
       notes: run.notes,
       signupsOpen: run.signupsOpen,
       signupWindowOpen: isSignupWindowOpen(run.status, run.signupsOpen),
@@ -233,7 +234,7 @@ export const runDetailService = {
         plannedBossCount: number;
         totalBossCount: number;
       }>;
-      raidLeads: Array<{ id: string; name: string }>;
+      raidLeads: Array<{ id: string; name: string; displayName: string }>;
     } | null = null;
 
     if (manage && capabilities.canEdit) {
@@ -252,7 +253,7 @@ export const runDetailService = {
       );
       const raidLeads = capabilities.canReassignRaidLead
         ? await userRepository.listEligibleRaidLeads()
-        : [{ id: run.raidLeadId, name: run.raidLeadName }];
+        : [{ id: run.raidLeadId, name: run.raidLeadName, displayName: run.raidLeadDisplayName }];
       editor = {
         canAssignRaidLead: capabilities.canReassignRaidLead,
         products,

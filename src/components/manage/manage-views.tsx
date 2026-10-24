@@ -76,7 +76,7 @@ export function ManageRunsView({ data, massCreatedCount }: { data: ManagedRunsPa
                         </div>
                       </td>
                       <td className="px-4 py-3 text-muted">{formatDateTime(run.scheduledStartAt)}</td>
-                      <td className="px-4 py-3">{run.raidLeadName}</td>
+                      <td className="px-4 py-3">{run.raidLeadDisplayName}</td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <RunStatusBadge status={run.status} />

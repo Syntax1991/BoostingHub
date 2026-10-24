@@ -632,7 +632,7 @@ function toSignupEmbedData(run: RunListRecord): SignupEmbedData {
     productLabel,
     contentSummary: run.contentDisplay.summary,
     titleCoverage: run.contentDisplay.titleCoverage,
-    raidLeadName: run.raidLeadName,
+    raidLeadName: run.raidLeadDisplayName,
     raidLeadDiscordUserId: run.raidLeadDiscordUserId,
     difficulty: run.difficulty,
     lootType: run.lootType,
@@ -1319,7 +1319,7 @@ export const discordSyncService = {
           archiveArtifactsNeeded,
           archiveCloseMessageId: post.archiveCloseMessageId,
           archiveTranscriptMessageId: post.archiveTranscriptMessageId,
-          raidLeadName: run.raidLeadName,
+          raidLeadName: run.raidLeadDisplayName,
           raidLeadDiscordUserId: run.raidLeadDiscordUserId,
           panelName: run.contentDisplay.productLabel,
           scanWarcraftLogs:
