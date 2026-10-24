@@ -36,16 +36,18 @@ export function RunChannelSettingsCard({
   return (
     <Card>
       <CardHeader
-        title="Run Channels"
-        description="Optional short name used only in Manawyrm Hub Discord Run channel names."
+        title="Raid Lead Nickname"
+        description="Optional name shown for you as Raid Lead on your Runs: in the Run title and the Discord Run channel."
       />
       <div className="space-y-3 px-4 py-4 text-sm">
         {error ? <p className="text-danger">{error}</p> : null}
         {saved && !error ? <p className="text-xs text-muted">Preferences saved.</p> : null}
         <label className="block">
-          <span className="font-medium">Run channel nickname</span>
+          <span className="font-medium">Raid Lead nickname</span>
           <span className="mt-0.5 block text-xs text-muted">
-            Example: mon-2200-hc-vip-9of9-syntax. Leave empty to use your Manawyrm Hub name.
+            Example: title “Mon 22:00 HC VIP 9/9 Syntax”, channel mon-2200-hc-vip-9of9-syntax. Leave empty to use your
+            Manawyrm Hub name. Applies to Runs created or re-titled (edited) afterwards; existing titles are not
+            rewritten.
           </span>
           <input
             type="text"

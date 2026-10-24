@@ -3,7 +3,6 @@ import { db, orm } from "@/lib/prisma";
 import { mapRaidBossRefs, type RaidBossRef } from "@/lib/lockout-bosses";
 import { and, or } from "@prisma/orm-postgres/orm-client";
 import { DomainError } from "@/lib/errors";
-import { normalizeOfferedRoles } from "@/lib/offered-roles";
 import {
   projectRunContentDisplay,
   type RunContentDisplay,
@@ -38,6 +37,9 @@ import {
 } from "@/repositories/run-discord-announcement.repository";
 import { isUniqueViolation } from "@/repositories/community-schedule-run.repository";
 import { lockRosterInTx } from "@/repositories/roster.repository";
+import { getRaidLeadDisplayName } from "@/lib/raid-lead-display";
+import { normalizeOfferedRoles } from "@/lib/offered-roles";
+import type { InitialBoosterSignup } from "@/services/run-raid-lead-bootstrap.service";
 import type { RunDomainEventActorKind } from "@/models/enums";
 import { canCancelRun, canEditRunBeforeStart, REACTIVATABLE_FROM_STATUSES } from "@/services/run-state";
 
@@ -123,10 +125,13 @@ export type RunListRecord = {
   contentRevision: number;
   status: RunStatus;
   raidLeadId: string;
+  /** Account name of the Raid Lead (audit / account surfaces). */
   raidLeadName: string;
+  /** Run display identity: Raid Lead nickname, else raidLeadName (see getRaidLeadDisplayName). */
+  raidLeadDisplayName: string;
   /**
-   * Raid Lead's current Settings nickname for Discord channel naming only.
-   * Null → fall back to raidLeadName. Never affects Run.title.
+   * Raid Lead's current nickname (Settings), live. Used by Discord channel
+   * naming; Run.title snapshots the display name when it is (re)generated.
    */
   raidLeadDiscordRunChannelNickname: string | null;
   /** Discord snowflake for the Raid Lead User, when linked. */
@@ -224,7 +229,57 @@ export type RunCreateWithContentsInput = {
   /** Defaults to true when omitted (legacy callers / tests). */
   discordRolePing?: boolean;
   contents: RunContentWriteSpec[];
+  /**
+   * Raid Lead Character bootstrap (planned by run-raid-lead-bootstrap.service):
+   * written in the Run's creation transaction. Omitted → none.
+   */
+  initialBoosterSignups?: readonly InitialBoosterSignup[];
 };
+
+/**
+ * Initial PENDING, non-backup BOOSTER signups (+ offered-role rows) for a Run
+ * being created, inside its transaction. Idempotent: a Character that already
+ * has a BOOSTER row on the Run is skipped (unique runId/userId/characterId/type).
+ */
+export async function insertInitialBoosterSignupsInTx(
+  txOrm: TxOrm,
+  runId: string,
+  signups: readonly InitialBoosterSignup[],
+  now: string,
+): Promise<number> {
+  let inserted = 0;
+  for (const signup of signups) {
+    const roles = normalizeOfferedRoles(signup.offeredRoles);
+    if (roles.length === 0) continue;
+    const existing = await txOrm.RunSignup.where({
+      runId,
+      userId: signup.userId,
+      characterId: signup.characterId,
+      participationType: "BOOSTER",
+    })
+      .select("id")
+      .first();
+    if (existing) continue;
+    const signupId = crypto.randomUUID();
+    await txOrm.RunSignup.create({
+      id: signupId,
+      runId,
+      userId: signup.userId,
+      characterId: signup.characterId,
+      participationType: "BOOSTER",
+      isBackup: false,
+      status: "PENDING",
+      publishedRole: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    for (const role of roles) {
+      await txOrm.RunSignupRole.create({ id: crypto.randomUUID(), signupId, role, createdAt: now });
+    }
+    inserted += 1;
+  }
+  return inserted;
+}
 
 async function insertRaidContents(
   ormLike: TxOrm,
@@ -306,7 +361,11 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
     status: mapRunStatus(run.status),
     raidLeadId: asString(run.raidLeadId ?? raidLead.id),
     raidLeadName: asString(raidLead.name, "Unknown lead"),
-    /** Live nickname for Discord channel naming only — never snapshotted onto the Run. */
+    raidLeadDisplayName: getRaidLeadDisplayName({
+      name: asString(raidLead.name, "Unknown lead"),
+      discordRunChannelNickname: asStringOrNull(raidLead.discordRunChannelNickname),
+    }),
+    /** Live Raid Lead nickname (Run display identity) — never snapshotted onto the Run. */
     raidLeadDiscordRunChannelNickname: asStringOrNull(raidLead.discordRunChannelNickname),
     raidLeadDiscordUserId: asStringOrNull(raidLead.discordUserId),
     notes: asStringOrNull(run.notes),
@@ -578,6 +637,7 @@ export const runRepository = {
         updatedAt: now,
       });
       await insertRaidContents(txOrm, id, input.contents, now);
+      await insertInitialBoosterSignupsInTx(txOrm, id, input.initialBoosterSignups ?? [], now);
       await txOrm.RunRoster.create({
         id: crypto.randomUUID(),
         runId: id,
@@ -636,6 +696,7 @@ export const runRepository = {
           updatedAt: now,
         });
         await insertRaidContents(txOrm, runId, input.draft.contents, now);
+        await insertInitialBoosterSignupsInTx(txOrm, runId, input.draft.initialBoosterSignups ?? [], now);
         await txOrm.RunRoster.create({
           id: crypto.randomUUID(),
           runId,
@@ -703,6 +764,7 @@ export const runRepository = {
           updatedAt: now,
         });
         await insertRaidContents(txOrm, id, input.contents, now);
+        await insertInitialBoosterSignupsInTx(txOrm, id, input.initialBoosterSignups ?? [], now);
         await txOrm.RunRoster.create({
           id: crypto.randomUUID(),
           runId: id,

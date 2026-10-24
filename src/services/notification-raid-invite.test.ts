@@ -115,6 +115,24 @@ async function createSignup(input: {
   characterId: string;
   role: CharacterRole;
 }) {
+  // The Raid Lead's Characters already have a Booster offer from Run creation:
+  // reuse it with exactly the requested role instead of inserting a duplicate.
+  const existing = (await orm.RunSignup.where({
+    runId: input.runId,
+    userId: input.userId,
+    characterId: input.characterId,
+    participationType: "BOOSTER",
+  }).first()) as { id: string } | null;
+  if (existing) {
+    await orm.RunSignupRole.where({ signupId: existing.id }).delete();
+    await orm.RunSignupRole.create({
+      id: crypto.randomUUID(),
+      signupId: existing.id,
+      role: input.role,
+      createdAt: new Date().toISOString(),
+    });
+    return existing.id;
+  }
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   await orm.RunSignup.create({

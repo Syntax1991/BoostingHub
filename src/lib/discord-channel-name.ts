@@ -1,3 +1,4 @@
+import { getRaidLeadDisplayName } from "@/lib/raid-lead-display";
 import type { RaidDifficulty, RunLootType } from "@/models/enums";
 import { DEFAULT_TIME_ZONE, zonedParts } from "@/lib/datetime";
 import { DIFFICULTY_ABBREVIATIONS, RUN_LOOT_TYPE_CHANNEL_TOKENS } from "@/lib/labels";
@@ -26,7 +27,7 @@ export type RunChannelNameInput = {
 /** Discord text channel names are capped at 100 characters. */
 const MAX_CHANNEL_NAME_LENGTH = 100;
 
-/** Max raw length for Settings `discordRunChannelNickname` before slugifying. */
+/** Max raw length for the Raid Lead nickname (`discordRunChannelNickname`) before slugifying. */
 export const DISCORD_RUN_CHANNEL_NICKNAME_MAX_LENGTH = 24;
 
 const COMBINING_MARKS_PATTERN = new RegExp("[\\u0300-\\u036f]", "g");
@@ -138,10 +139,10 @@ export function formatRunVoiceChannelName(raidLeadDisplayName: string): string {
   return `${RUN_VOICE_CHANNEL_PREFIX}${lead}`.trim();
 }
 
+/** The Raid Lead part of a Run channel name — the Run display identity ({@link getRaidLeadDisplayName}). */
 export function effectiveRaidLeadChannelName(input: {
   raidLeadName: string;
   discordRunChannelNickname: string | null | undefined;
 }): string {
-  const nick = input.discordRunChannelNickname?.trim();
-  return nick && nick.length > 0 ? nick : input.raidLeadName;
+  return getRaidLeadDisplayName({ name: input.raidLeadName, discordRunChannelNickname: input.discordRunChannelNickname });
 }

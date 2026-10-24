@@ -46,7 +46,7 @@ export function RunEditDialog({
   const [discordRolePing, setDiscordRolePing] = useState(run.discordRolePing);
 
   const raidLeadName =
-    editor.raidLeads.find((lead) => lead.id === raidLeadId)?.name ?? run.raidLeadName;
+    editor.raidLeads.find((lead) => lead.id === raidLeadId)?.displayName ?? run.raidLeadDisplayName;
 
   useEffect(() => {
     dialogRef.current?.showModal();
@@ -226,7 +226,7 @@ export function RunEditDialog({
           ) : (
             <>
               <input
-                value={run.raidLeadName}
+                value={run.raidLeadDisplayName}
                 disabled
                 className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Raid Lead"

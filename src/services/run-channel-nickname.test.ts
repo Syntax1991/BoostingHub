@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { DomainError } from "@/lib/errors";
-import { buildRunTitle } from "@/lib/run-title";
 import {
   buildClosedDiscordRunChannelName,
   buildDiscordRunChannelName,
@@ -161,13 +160,12 @@ describe("Run channel nickname settings", () => {
 });
 
 describe("Run channel nickname in Discord sync projection", () => {
-  it("projects nickname from raidLead include without per-run settings lookup; title unchanged", async () => {
+  it("the Raid Lead nickname is the Run display identity: title, Discord channel and Run record; account name kept", async () => {
     await settingsService.updateRunChannelPreferences(lead, { discordRunChannelNickname: "Syntax" });
-    const scheduledStartAt = futureIso();
     const created = await runService.createRun(
       lead,
       venomousCreateInput({
-        scheduledStartAt,
+        scheduledStartAt: futureIso(),
         desiredTankCount: 1,
         desiredHealerCount: 1,
         desiredDpsCount: 1,
@@ -177,27 +175,62 @@ describe("Run channel nickname in Discord sync projection", () => {
     await runService.openRun(lead, created.id);
 
     const run = await runRepository.findById(created.id);
+    expect(run?.title.endsWith(" Syntax")).toBe(true);
+    expect(run?.raidLeadDisplayName).toBe("Syntax");
+    // Account identity is untouched.
     expect(run?.raidLeadName).toBe("Syntax1991");
-    expect(run?.raidLeadDiscordRunChannelNickname).toBe("Syntax");
-    expect(run?.title).toContain("Syntax1991");
-    expect(run?.title).not.toMatch(/\bSyntax\b(?!1991)/);
+    expect((await settingsService.getSettings(lead)).runChannels.discordRunChannelNickname).toBe("Syntax");
+    expect(((await orm.User.where({ id: ids.lead }).first()) as { name: string }).name).toBe("Syntax1991");
 
     await discordSyncService.recordRunChannel({ runId: created.id, channelId: "nick-chan-1" });
     const work = await discordSyncService.listSyncWork();
     const channel = work.channels.find((row) => row.runId === created.id);
     expect(channel?.desiredChannelName.endsWith("-syntax")).toBe(true);
     expect(channel?.desiredChannelName.endsWith("-syntax1991")).toBe(false);
+  });
 
-    // Title builder still uses real name.
-    expect(
-      buildRunTitle({
-        scheduledStartAt,
-        difficulty: "HEROIC",
-        lootType: "UNSAVED",
-        titleCoverage: "8/8",
-        raidLeadName: run!.raidLeadName,
-      }),
-    ).toContain("Syntax1991");
+  it("without a nickname the title uses User.name", async () => {
+    await settingsService.updateRunChannelPreferences(lead, { discordRunChannelNickname: null });
+    const created = await runService.createRun(
+      lead,
+      venomousCreateInput({ scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1 }),
+    );
+    createdRunIds.push(created.id);
+    const run = await runRepository.findById(created.id);
+    expect(run?.title.endsWith(" Syntax1991")).toBe(true);
+    expect(run?.raidLeadDisplayName).toBe("Syntax1991");
+  });
+
+  it("a later nickname change does not rewrite existing titles; an explicit edit re-titles with the current nickname", async () => {
+    await settingsService.updateRunChannelPreferences(lead, { discordRunChannelNickname: "Syntax" });
+    const scheduledStartAt = futureIso();
+    const created = await runService.createRun(
+      lead,
+      venomousCreateInput({ scheduledStartAt, desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1 }),
+    );
+    createdRunIds.push(created.id);
+
+    await settingsService.updateRunChannelPreferences(lead, { discordRunChannelNickname: "Neo" });
+    // Unrelated profile data changes nothing either.
+    await orm.User.where({ id: ids.lead }).update({ timeZone: "Europe/Vilnius" });
+    const untouched = await runRepository.findById(created.id);
+    expect(untouched?.title.endsWith(" Syntax")).toBe(true);
+    expect(untouched?.raidLeadDisplayName).toBe("Neo"); // live display identity (views, Discord channel)
+
+    await runService.updateRun(lead, {
+      runId: created.id,
+      difficulty: untouched!.difficulty,
+      lootType: untouched!.lootType,
+      scheduledStartAt: untouched!.scheduledStartAt,
+      desiredTankCount: 1,
+      desiredHealerCount: 1,
+      desiredDpsCount: 1,
+      notes: "re-title",
+      ...seededProductSelection("VENOMOUS_ABYSS", 8),
+    });
+    expect((await runRepository.findById(created.id))?.title.endsWith(" Neo")).toBe(true);
+    await orm.User.where({ id: ids.lead }).update({ timeZone: "Europe/Berlin" });
+    await settingsService.updateRunChannelPreferences(lead, { discordRunChannelNickname: null });
   });
 
   it("Raid Lead reassignment uses the new lead nickname for desiredChannelName", async () => {

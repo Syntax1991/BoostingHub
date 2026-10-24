@@ -420,7 +420,7 @@ export const runPreflightService = {
       run: {
         status: run.status,
         raidLeadId: run.raidLeadId,
-        raidLeadName: run.raidLeadName,
+        raidLeadName: run.raidLeadDisplayName,
         signupsOpen: run.signupsOpen,
       },
       manager,
@@ -452,7 +452,7 @@ export const runPreflightService = {
       run: {
         status: run.status,
         raidLeadId: run.raidLeadId,
-        raidLeadName: run.raidLeadName,
+        raidLeadName: run.raidLeadDisplayName,
         signupsOpen: run.signupsOpen,
       },
       manager,

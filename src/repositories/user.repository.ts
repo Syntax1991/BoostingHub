@@ -1,6 +1,7 @@
 import { parseKilledBossIds } from "@/lib/lockout-bosses";
 import { DomainError } from "@/lib/errors";
 import { ROLE_LABELS } from "@/lib/labels";
+import { getRaidLeadDisplayName } from "@/lib/raid-lead-display";
 import { db, orm } from "@/lib/prisma";
 import { or } from "@prisma/orm-postgres/orm-client";
 import type { AccountRole, AccountStatus, BoostingRole, RaidDifficulty, RunStatus, WowRegion } from "@/models/enums";
@@ -328,13 +329,31 @@ export const userRepository = {
   async listEligibleRaidLeads() {
     const users = await orm.User.orderBy((user) => user.name.asc()).all();
     return users
-      .map((user) => mapAuthUser(user as Record<string, unknown>))
-      .filter((user) => isEligibleRaidLead(user))
-      .map((user) => ({
+      .map((row) => ({
+        user: mapAuthUser(row as Record<string, unknown>),
+        nickname: asStringOrNull((row as Record<string, unknown>).discordRunChannelNickname),
+      }))
+      .filter(({ user }) => isEligibleRaidLead(user))
+      .map(({ user, nickname }) => ({
         id: user.id,
         name: user.name,
+        /** Run-facing name (Raid Lead nickname, else name) — what Run titles show. */
+        displayName: getRaidLeadDisplayName({ name: user.name, discordRunChannelNickname: nickname }),
         accountRole: user.accountRole,
       }));
+  },
+
+  /** Run-facing Raid Lead display name (nickname, else name); null when the User does not exist. */
+  async findRaidLeadDisplayName(id: string): Promise<string | null> {
+    const row = (await orm.User.where({ id }).select("name", "discordRunChannelNickname").first()) as Record<
+      string,
+      unknown
+    > | null;
+    if (!row) return null;
+    return getRaidLeadDisplayName({
+      name: asString(row.name),
+      discordRunChannelNickname: asStringOrNull(row.discordRunChannelNickname),
+    });
   },
 
   /** How many Users hold each Boosting Role (a User may hold both). */

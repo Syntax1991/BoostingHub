@@ -116,6 +116,15 @@ async function createCharacter(input: {
   return id;
 }
 
+/** The Raid Lead's Characters are signed up automatically when a Run is created. */
+async function leadSignup(runId: string, characterId: string): Promise<{ id: string }> {
+  const row = (await orm.RunSignup.where({ runId, userId: ids.lead, characterId, participationType: "BOOSTER" }).first()) as {
+    id: string;
+  } | null;
+  if (!row) throw new Error("expected the Raid Lead bootstrap signup");
+  return { id: row.id };
+}
+
 async function approveAccess(userId: string) {
   await orm.User.where({ id: userId }).update({ isBooster: true });
 }
@@ -237,18 +246,9 @@ describe("run lifecycle notifications", () => {
     createdRunIds.push(created.id);
     await runService.openRun(lead, created.id);
 
-    await signupService.createBoosterSignup(lead, {
-      runId: created.id,
-      characterId: charLeadTank,
-      role: "TANK",
-      isBackup: false,
-    });
-    await signupService.createBoosterSignup(lead, {
-      runId: created.id,
-      characterId: charLeadDps,
-      role: "RANGED_DPS",
-      isBackup: false,
-    });
+    // The Raid Lead's two Characters were signed up when the Run was created.
+    await leadSignup(created.id, charLeadTank);
+    await leadSignup(created.id, charLeadDps);
     await signupService.createBoosterSignup(player, {
       runId: created.id,
       characterId: charPlayer,
@@ -415,7 +415,7 @@ describe("run scope change notifications", () => {
     const runId = created.id;
     await runService.openRun(lead, runId);
 
-    const tank = await signupService.createBoosterSignup(lead, { runId, characterId: charLeadTank, role: "TANK", isBackup: false });
+    const tank = await leadSignup(runId, charLeadTank);
     await signupService.createBoosterSignup(player, { runId, characterId: charPlayer, role: "HEALER", isBackup: false });
     const multiA = await signupService.createBoosterSignup(multi, { runId, characterId: charMultiA, role: "HEALER", isBackup: false });
     await signupService.createBoosterSignup(multi, { runId, characterId: charMultiB, role: "HEALER", isBackup: false });
@@ -635,6 +635,10 @@ describe("Run edit notification atomicity", () => {
     );
     createdRunIds.push(created.id);
     await runService.openRun(lead, created.id);
+    // Only player + multi signed up: the Raid Lead withdraws the offers created with the Run.
+    for (const characterId of [charLeadTank, charLeadDps]) {
+      await signupService.withdrawSignup(lead, (await leadSignup(created.id, characterId)).id);
+    }
     await signupService.createBoosterSignup(player, { runId: created.id, characterId: charPlayer, role: "HEALER", isBackup: false });
     await signupService.createBoosterSignup(multi, { runId: created.id, characterId: charMultiA, role: "HEALER", isBackup: false });
     await signupService.createBoosterSignup(multi, { runId: created.id, characterId: charMultiB, role: "HEALER", isBackup: false });
@@ -811,7 +815,7 @@ describe("Cancel / Reactivate notification atomicity", () => {
     createdRunIds.push(created.id);
     const runId = created.id;
     await runService.openRun(lead, runId);
-    const tank = await signupService.createBoosterSignup(lead, { runId, characterId: charLeadTank, role: "TANK", isBackup: false });
+    const tank = await leadSignup(runId, charLeadTank);
     const heal = await signupService.createBoosterSignup(player, { runId, characterId: charPlayer, role: "HEALER", isBackup: false });
     await signupService.createBoosterSignup(multi, { runId, characterId: charMultiA, role: "HEALER", isBackup: false });
     await signupService.createBoosterSignup(multi, { runId, characterId: charMultiB, role: "HEALER", isBackup: false });
