@@ -3,6 +3,7 @@ import {
   type WarcraftLogsRankingMetric,
   type WarcraftLogsRankingRole,
 } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
+import { runAfterResponse } from "@/lib/after-response";
 import { effectiveWclRankingEncounterId, type CatalogRaid, type RaidCatalog } from "@/lib/raid-catalog";
 import { raidContentDisplayName } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
@@ -171,6 +172,74 @@ async function mapPool<T>(items: T[], concurrency: number, fn: (item: T) => Prom
   await Promise.all(workers);
 }
 
+/** WCL refreshes already scheduled in this process (per fetch key) — parallel page views share one. */
+const refreshesInFlight = new Set<string>();
+
+/** Fetch the given keys from Warcraft Logs (bounded concurrency) and upsert the cache rows. */
+async function fetchAndStoreWclPerformance(
+  toFetch: ReadonlyArray<[string, FetchKey]>,
+  cached: Awaited<ReturnType<typeof characterWclPerformanceRepository.listForCharacters>>,
+  nowIso: string,
+  resolved: Map<string, { bestPct: number | null; avgPct: number | null }>,
+): Promise<void> {
+  await mapPool([...toFetch], WCL_PERFORMANCE_FETCH_CONCURRENCY, async ([keyId, key]) => {
+    const stale = cacheLookup(cached, key);
+    try {
+      const response = await warcraftLogsApiClient.fetchZoneRankings({
+        warcraftLogsId: key.warcraftLogsId,
+        zoneId: key.zoneId,
+        difficulty: key.difficulty,
+        metric: key.metric,
+        role: key.role,
+        specName: key.specName,
+        encounterId: key.encounterId > 0 ? key.encounterId : undefined,
+        encounterIds: key.scopeEncounterIds ?? undefined,
+      });
+
+      if (response.status === "SUCCESS") {
+        const bestPct = roundPct(response.rankings.bestPerformanceAverage);
+        const avgPct = roundPct(response.rankings.medianPerformanceAverage);
+        await characterWclPerformanceRepository.upsert({
+          characterId: key.characterId,
+          zoneId: key.zoneId,
+          encounterId: key.encounterId,
+          difficulty: key.difficulty,
+          metricKey: key.metricKey,
+          bestPct,
+          avgPct,
+          fetchedAt: nowIso,
+        });
+        resolved.set(keyId, { bestPct, avgPct });
+        return;
+      }
+
+      if (response.status === "NOT_FOUND") {
+        await characterWclPerformanceRepository.upsert({
+          characterId: key.characterId,
+          zoneId: key.zoneId,
+          encounterId: key.encounterId,
+          difficulty: key.difficulty,
+          metricKey: key.metricKey,
+          bestPct: null,
+          avgPct: null,
+          fetchedAt: nowIso,
+        });
+        resolved.set(keyId, { bestPct: null, avgPct: null });
+        return;
+      }
+
+      // TEMPORARY_FAILURE / NOT_CONFIGURED — keep stale cache when present.
+      if (stale) {
+        resolved.set(keyId, { bestPct: stale.bestPct, avgPct: stale.avgPct });
+      }
+    } catch {
+      if (stale) {
+        resolved.set(keyId, { bestPct: stale.bestPct, avgPct: stale.avgPct });
+      }
+    }
+  });
+}
+
 function roundPct(value: number | null): number | null {
   if (value == null || !Number.isFinite(value)) return null;
   return Math.round(value * 10) / 10;
@@ -191,13 +260,21 @@ export async function resolveRosterWclPerformance(input: {
    * Roster Builder uses cache-only to keep dialog open bounded.
    */
   allowRemoteFetch?: boolean;
+  /**
+   * With remote fetching allowed: answer from the DB cache right away (stale
+   * rows included) and refresh missing / stale rows AFTER the response
+   * (`after()`), so page renders never wait on Warcraft Logs. The next view
+   * shows the refreshed values. Outside a request nothing is refreshed.
+   */
+  deferRemoteFetch?: boolean;
   /** DB raid catalog (WCL zone / ranking encounter); loaded once when omitted. */
   catalog?: RaidCatalog;
 }): Promise<Map<string, WclPerformanceRaidSegment[]>> {
   const result = new Map<string, WclPerformanceRaidSegment[]>();
   const allowRemoteFetch = input.allowRemoteFetch !== false;
-  // Remote mode with no API config → empty. Cache-only still reads DB rows.
-  if (allowRemoteFetch && !warcraftLogsApiClient.isConfigured()) {
+  const deferRemoteFetch = allowRemoteFetch && input.deferRemoteFetch === true;
+  // Inline remote mode with no API config → empty. Cache-only / deferred still read DB rows.
+  if (allowRemoteFetch && !deferRemoteFetch && !warcraftLogsApiClient.isConfigured()) {
     return result;
   }
 
@@ -313,74 +390,34 @@ export async function resolveRosterWclPerformance(input: {
 
   const resolved = new Map<string, { bestPct: number | null; avgPct: number | null }>();
 
+  const inlineFetch = allowRemoteFetch && !deferRemoteFetch;
+  const toRefresh: Array<[string, FetchKey]> = [];
   for (const [keyId, key] of fetchKeys) {
     const hit = cacheLookup(cached, key);
+    const fresh = hit != null && isFresh(hit, nowMs);
+    if (!fresh) toRefresh.push([keyId, key]);
     if (!hit) continue;
-    if (allowRemoteFetch && !isFresh(hit, nowMs)) continue;
-    // Cache-only: accept stale rows. Remote mode: only fresh rows here; stale go to fetch.
+    if (inlineFetch && !fresh) continue;
+    // Cache-only / deferred: accept stale rows. Inline remote mode: only fresh rows here; stale go to fetch.
     resolved.set(keyId, { bestPct: hit.bestPct, avgPct: hit.avgPct });
   }
 
-  if (!allowRemoteFetch) {
-    // Skip remote fan-out entirely.
-  } else {
-  const toFetch = [...fetchKeys.entries()].filter(([keyId]) => !resolved.has(keyId));
-  await mapPool(toFetch, WCL_PERFORMANCE_FETCH_CONCURRENCY, async ([keyId, key]) => {
-    const stale = cacheLookup(cached, key);
-    try {
-      const response = await warcraftLogsApiClient.fetchZoneRankings({
-        warcraftLogsId: key.warcraftLogsId,
-        zoneId: key.zoneId,
-        difficulty: key.difficulty,
-        metric: key.metric,
-        role: key.role,
-        specName: key.specName,
-        encounterId: key.encounterId > 0 ? key.encounterId : undefined,
-        encounterIds: key.scopeEncounterIds ?? undefined,
+  if (inlineFetch) {
+    await fetchAndStoreWclPerformance(toRefresh, cached, nowIso, resolved);
+  } else if (deferRemoteFetch && toRefresh.length > 0 && warcraftLogsApiClient.isConfigured()) {
+    const pending = toRefresh.filter(([keyId]) => !refreshesInFlight.has(keyId));
+    if (pending.length > 0) {
+      for (const [keyId] of pending) refreshesInFlight.add(keyId);
+      runAfterResponse(async () => {
+        try {
+          await fetchAndStoreWclPerformance(pending, cached, new Date().toISOString(), new Map());
+        } finally {
+          for (const [keyId] of pending) refreshesInFlight.delete(keyId);
+        }
+      }, () => {
+        for (const [keyId] of pending) refreshesInFlight.delete(keyId);
       });
-
-      if (response.status === "SUCCESS") {
-        const bestPct = roundPct(response.rankings.bestPerformanceAverage);
-        const avgPct = roundPct(response.rankings.medianPerformanceAverage);
-        await characterWclPerformanceRepository.upsert({
-          characterId: key.characterId,
-          zoneId: key.zoneId,
-          encounterId: key.encounterId,
-          difficulty: key.difficulty,
-          metricKey: key.metricKey,
-          bestPct,
-          avgPct,
-          fetchedAt: nowIso,
-        });
-        resolved.set(keyId, { bestPct, avgPct });
-        return;
-      }
-
-      if (response.status === "NOT_FOUND") {
-        await characterWclPerformanceRepository.upsert({
-          characterId: key.characterId,
-          zoneId: key.zoneId,
-          encounterId: key.encounterId,
-          difficulty: key.difficulty,
-          metricKey: key.metricKey,
-          bestPct: null,
-          avgPct: null,
-          fetchedAt: nowIso,
-        });
-        resolved.set(keyId, { bestPct: null, avgPct: null });
-        return;
-      }
-
-      // TEMPORARY_FAILURE / NOT_CONFIGURED — keep stale cache when present.
-      if (stale) {
-        resolved.set(keyId, { bestPct: stale.bestPct, avgPct: stale.avgPct });
-      }
-    } catch {
-      if (stale) {
-        resolved.set(keyId, { bestPct: stale.bestPct, avgPct: stale.avgPct });
-      }
     }
-  });
   }
 
   for (const plan of signupPlans) {

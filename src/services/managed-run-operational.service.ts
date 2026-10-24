@@ -72,7 +72,7 @@ export async function listManagedRunOperationalHandoffs(
   if (!hasRaidLeadAccess(user.accountRole)) {
     return [];
   }
-  const runs = await runRepository.listManaged();
+  const runs = await runRepository.listManagedUnarchived();
   const managed = runs.filter((run) => canManageRun(user, run) && !run.archivedAt);
   return projectManagedRunHandoffs(user, managed);
 }

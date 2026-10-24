@@ -72,6 +72,10 @@ describe("signupService.getMyRuns — terminal Run filter", () => {
       new Map(),
     );
     vi.spyOn(rosterRepository, "listDraftSelectedRolesBySignupIds").mockResolvedValue(new Map());
+    // The repository filters by Run status in the query; emulate it over the fixtures each test supplies.
+    vi.spyOn(signupRepository, "listByUserIdForRunStatuses").mockImplementation(async (userId, statuses) =>
+      (await signupRepository.listByUserId(userId)).filter((signup) => statuses.includes(signup.run.status)),
+    );
   });
 
   it("includes OPEN + PENDING under pending", async () => {

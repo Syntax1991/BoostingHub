@@ -16,6 +16,7 @@ import type {
   CharacterRole,
   WowClass,
 } from "@/models/enums";
+import { UPCOMING_RUN_STATUSES } from "@/models/enums";
 import {
   asBoolean,
   asNumber,
@@ -453,6 +454,10 @@ export const runRepository = {
     }
     if (filters.status) {
       query = query.where({ status: filters.status });
+    } else {
+      // Every caller keeps only "upcoming" Runs when no status is chosen: never
+      // load ended Runs (and their signups / roster) just to drop them.
+      query = query.where((run) => run.status.in([...UPCOMING_RUN_STATUSES]));
     }
     if (filters.signupsOpen !== undefined) {
       query = query.where({ signupsOpen: filters.signupsOpen });
@@ -480,6 +485,20 @@ export const runRepository = {
     return rows
       .map((row) => mapRaidContent(row as Record<string, unknown>))
       .sort((a, b) => a.sortOrder - b.sortOrder);
+  },
+
+  /** listManaged without archived Runs (filtered in the query — most ended Runs are archived). */
+  async listManagedUnarchived(): Promise<RunListRecord[]> {
+    const runs = await orm.Run
+      .where((run) => run.archivedAt.isNull())
+      .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
+      .include("raidLead")
+      .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
+      .include("roster", (roster) => roster.include("entries").include("externalBoosters"))
+      .orderBy((run) => run.scheduledStartAt.asc())
+      .all();
+
+    return runs.map((run) => mapRun(run as Record<string, unknown>));
   },
 
   async listManaged(): Promise<RunListRecord[]> {

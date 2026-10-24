@@ -8,6 +8,13 @@ const listForCharacters = vi.fn();
 const upsert = vi.fn();
 const fetchZoneRankings = vi.fn();
 const isConfigured = vi.fn();
+const scheduled: Array<() => Promise<void>> = [];
+
+vi.mock("@/lib/after-response", () => ({
+  runAfterResponse: (task: () => Promise<void>) => {
+    scheduled.push(task);
+  },
+}));
 
 vi.mock("@/repositories/character-wcl-performance.repository", () => ({
   characterWclPerformanceRepository: {
@@ -33,6 +40,7 @@ describe("resolveRosterWclPerformance", () => {
     isConfigured.mockReturnValue(true);
     listForCharacters.mockResolvedValue([]);
     upsert.mockResolvedValue(undefined);
+    scheduled.length = 0;
   });
 
   it("returns empty when WCL is not configured", async () => {
@@ -236,5 +244,71 @@ describe("resolveRosterWclPerformance", () => {
 
     expect(fetchZoneRankings).not.toHaveBeenCalled();
     expect(map.get("signup-1")?.[0]?.roles[0]).toMatchObject({ bestPct: 91, avgPct: 70 });
+  });
+
+  it("deferred: answers from the stale cache at once and refreshes after the response, once per key", async () => {
+    const staleRow = {
+      id: "cache-1",
+      characterId: "char-1",
+      zoneId: 53,
+      encounterId: 0,
+      difficulty: 4,
+      metricKey: "dps@raid",
+      bestPct: 50,
+      avgPct: 40,
+      fetchedAt: "2026-09-18T00:00:00.000Z", // older than the 12 h TTL
+    };
+    listForCharacters.mockResolvedValue([staleRow]);
+    fetchZoneRankings.mockResolvedValue({
+      status: "SUCCESS",
+      rankings: { bestPerformanceAverage: 91, medianPerformanceAverage: 70, encounters: null },
+    });
+    const { resolveRosterWclPerformance } = await import("@/services/character-wcl-performance.service");
+    const input = {
+      deferRemoteFetch: true,
+      difficulty: "HEROIC" as const,
+      contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, raidName: "The Venomous Abyss", sortOrder: 1 }],
+      boosters: [
+        {
+          signupId: "signup-1",
+          offeredRoles: ["RANGED_DPS" as const],
+          character: { id: "char-1", wowClass: "MAGE" as const, specialization: null, primaryRole: "RANGED_DPS" as const, warcraftLogsId: "111" },
+        },
+      ],
+      now: new Date("2026-09-20T12:00:00.000Z"),
+    };
+
+    const map = await resolveRosterWclPerformance(input);
+    // The render got the stale values without waiting on Warcraft Logs.
+    expect(fetchZoneRankings).not.toHaveBeenCalled();
+    expect(map.get("signup-1")?.[0]?.roles[0]).toMatchObject({ bestPct: 50, avgPct: 40 });
+    expect(scheduled).toHaveLength(1);
+
+    // A parallel view while the refresh is pending schedules nothing new.
+    await resolveRosterWclPerformance(input);
+    expect(scheduled).toHaveLength(1);
+
+    // After the response: the refresh fetches and stores the fresh values.
+    await scheduled[0]!();
+    expect(fetchZoneRankings).toHaveBeenCalledTimes(1);
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ characterId: "char-1", bestPct: 91, avgPct: 70 }));
+  });
+
+  it("deferred: a fresh cache schedules no refresh", async () => {
+    listForCharacters.mockResolvedValue([
+      { id: "c", characterId: "char-1", zoneId: 53, encounterId: 0, difficulty: 4, metricKey: "dps@raid", bestPct: 91, avgPct: 70, fetchedAt: "2026-09-20T11:00:00.000Z" },
+    ]);
+    const { resolveRosterWclPerformance } = await import("@/services/character-wcl-performance.service");
+    await resolveRosterWclPerformance({
+      deferRemoteFetch: true,
+      difficulty: "HEROIC",
+      contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, raidName: "The Venomous Abyss", sortOrder: 1 }],
+      boosters: [
+        { signupId: "s", offeredRoles: ["RANGED_DPS"], character: { id: "char-1", wowClass: "MAGE", specialization: null, primaryRole: "RANGED_DPS", warcraftLogsId: "111" } },
+      ],
+      now: new Date("2026-09-20T12:00:00.000Z"),
+    });
+    expect(scheduled).toHaveLength(0);
+    expect(fetchZoneRankings).not.toHaveBeenCalled();
   });
 });
