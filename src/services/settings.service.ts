@@ -1,6 +1,7 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { hasRaidLeadAccess } from "@/auth/authorization";
 import { DomainError } from "@/lib/errors";
+import { runService } from "@/services/run.service";
 import { characterRepository } from "@/repositories/character.repository";
 import {
   settingsRepository,
@@ -143,6 +144,8 @@ export const settingsService = {
     await settingsRepository.updateRunChannelPreferences(user.id, {
       discordRunChannelNickname: normalized,
     });
+    // The nickname is the Run display identity: keep active Run titles consistent.
+    await runService.retitleActiveRunsForRaidLead(user.id);
     return this.getSettings(user);
   },
 };

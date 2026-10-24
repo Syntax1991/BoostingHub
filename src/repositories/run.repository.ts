@@ -554,6 +554,17 @@ export const runRepository = {
   },
 
   /** Unarchived Runs in `statuses` starting at or after `fromIso` (no upper bound). */
+  /** Runs a Raid Lead leads that have not ended (DRAFT / OPEN / ROSTERING / PUBLISHED, not archived). */
+  async listActiveIdsForRaidLead(raidLeadId: string): Promise<string[]> {
+    const active: readonly RunStatus[] = ["DRAFT", "OPEN", "ROSTERING", "PUBLISHED"];
+    const rows = (await orm.Run.where({ raidLeadId }).select("id", "status", "archivedAt").all()) as Array<
+      Record<string, unknown>
+    >;
+    return rows
+      .filter((row) => active.includes(mapRunStatus(row.status)) && asStringOrNull(row.archivedAt) == null)
+      .map((row) => asString(row.id));
+  },
+
   async listIdsStartingFrom(fromIso: string, statuses: readonly RunStatus[]): Promise<string[]> {
     const rows = await orm.Run.where((run) =>
       and(run.status.in([...statuses]), run.archivedAt.isNull(), run.scheduledStartAt.gte(fromIso)),

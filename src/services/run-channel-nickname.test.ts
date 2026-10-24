@@ -201,34 +201,67 @@ describe("Run channel nickname in Discord sync projection", () => {
     expect(run?.raidLeadDisplayName).toBe("Syntax1991");
   });
 
-  it("a later nickname change does not rewrite existing titles; an explicit edit re-titles with the current nickname", async () => {
+  it("saving a new nickname re-titles the Raid Lead's not-yet-ended Runs; ended / archived Runs keep their title", async () => {
     await settingsService.updateRunChannelPreferences(lead, { discordRunChannelNickname: "Syntax" });
-    const scheduledStartAt = futureIso();
-    const created = await runService.createRun(
-      lead,
-      venomousCreateInput({ scheduledStartAt, desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1 }),
+    const create = async () => {
+      const created = await runService.createRun(
+        lead,
+        venomousCreateInput({ scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1 }),
+      );
+      createdRunIds.push(created.id);
+      return created.id;
+    };
+    const active = await create();
+    const opened = await create();
+    await runService.openRun(lead, opened);
+    const completed = await create();
+    await orm.Run.where({ id: completed }).update({ status: "COMPLETED" });
+    const archived = await create();
+    await orm.Run.where({ id: archived }).update({ status: "CANCELLED", archivedAt: new Date().toISOString() });
+    // Another Raid Lead's Run is never touched.
+    const foreign = await runService.createRun(
+      otherLead,
+      venomousCreateInput({ scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1 }),
     );
-    createdRunIds.push(created.id);
+    createdRunIds.push(foreign.id);
+    const foreignTitle = (await runRepository.findById(foreign.id))!.title;
 
     await settingsService.updateRunChannelPreferences(lead, { discordRunChannelNickname: "Neo" });
-    // Unrelated profile data changes nothing either.
-    await orm.User.where({ id: ids.lead }).update({ timeZone: "Europe/Vilnius" });
-    const untouched = await runRepository.findById(created.id);
-    expect(untouched?.title.endsWith(" Syntax")).toBe(true);
-    expect(untouched?.raidLeadDisplayName).toBe("Neo"); // live display identity (views, Discord channel)
+    const title = async (id: string) => (await runRepository.findById(id))!.title;
+    expect((await title(active)).endsWith(" Neo")).toBe(true);
+    expect((await title(opened)).endsWith(" Neo")).toBe(true);
+    expect((await title(completed)).endsWith(" Syntax")).toBe(true);
+    expect((await title(archived)).endsWith(" Syntax")).toBe(true);
+    expect(await title(foreign.id)).toBe(foreignTitle);
 
+    // Clearing the nickname falls back to the account name, same rule.
+    await settingsService.updateRunChannelPreferences(lead, { discordRunChannelNickname: null });
+    expect((await title(active)).endsWith(" Syntax1991")).toBe(true);
+    expect((await title(completed)).endsWith(" Syntax")).toBe(true);
+  });
+
+  it("an explicit edit re-titles with the current display identity; unrelated profile changes do nothing", async () => {
+    await settingsService.updateRunChannelPreferences(lead, { discordRunChannelNickname: "Syntax" });
+    const created = await runService.createRun(
+      lead,
+      venomousCreateInput({ scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1 }),
+    );
+    createdRunIds.push(created.id);
+    await orm.User.where({ id: ids.lead }).update({ timeZone: "Europe/Vilnius" });
+    const run = (await runRepository.findById(created.id))!;
+    expect(run.title.endsWith(" Syntax")).toBe(true);
     await runService.updateRun(lead, {
       runId: created.id,
-      difficulty: untouched!.difficulty,
-      lootType: untouched!.lootType,
-      scheduledStartAt: untouched!.scheduledStartAt,
+      difficulty: run.difficulty,
+      lootType: run.lootType,
+      scheduledStartAt: run.scheduledStartAt,
       desiredTankCount: 1,
       desiredHealerCount: 1,
       desiredDpsCount: 1,
       notes: "re-title",
       ...seededProductSelection("VENOMOUS_ABYSS", 8),
     });
-    expect((await runRepository.findById(created.id))?.title.endsWith(" Neo")).toBe(true);
+    expect((await runRepository.findById(created.id))?.title.endsWith(" Syntax")).toBe(true);
     await orm.User.where({ id: ids.lead }).update({ timeZone: "Europe/Berlin" });
     await settingsService.updateRunChannelPreferences(lead, { discordRunChannelNickname: null });
   });
