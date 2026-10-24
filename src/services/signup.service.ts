@@ -63,7 +63,8 @@ function sameRoleSet(a: readonly CharacterRole[], b: readonly CharacterRole[]): 
  */
 export const signupService = {
   async getMyRuns(user: AuthenticatedUser) {
-    const signups = await signupRepository.listByUserId(user.id);
+    // Only signups on upcoming Runs are loaded (not the whole signup history).
+    const signups = await signupRepository.listByUserIdForRunStatuses(user.id, UPCOMING_RUN_STATUSES);
 
     // My Runs is active/upcoming participation only — skip terminal/DRAFT Runs
     // before schedule-conflict projection and before status bucketing.

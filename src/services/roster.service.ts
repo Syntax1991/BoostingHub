@@ -795,7 +795,9 @@ export const rosterService = {
       targetScheduledStartAt: run.scheduledStartAt,
     });
 
+    // Never block the view on Warcraft Logs: cached values now, stale/missing refreshed after the response.
     const wclBySignup = await resolveRosterWclPerformance({
+      deferRemoteFetch: true,
       difficulty: run.difficulty,
       contents: run.contents,
       boosters: signups

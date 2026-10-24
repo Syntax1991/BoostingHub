@@ -346,6 +346,31 @@ export const signupRepository = {
     return queryAllReservationConflicts(orm, input);
   },
 
+  /**
+   * The User's signups on Runs in `runStatuses` only — same shape as
+   * listByUserId, without loading the whole signup history (a long-time
+   * booster has hundreds of ended Runs).
+   */
+  async listByUserIdForRunStatuses(userId: string, runStatuses: readonly RunStatus[]): Promise<SignupListRecord[]> {
+    const runIds = ((await orm.Run.where((run) => run.status.in([...runStatuses])).select("id").all()) as Array<{
+      id: string;
+    }>).map((row) => row.id);
+    if (runIds.length === 0) return [];
+    const signups = await orm.RunSignup
+      .where({ userId })
+      .where((signup) => signup.runId.in(runIds))
+      .include("run", (run) =>
+        run
+          .include("raidLead")
+          .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses"))),
+      )
+      .include("character")
+      .include("offeredRoles")
+      .orderBy((signup) => signup.createdAt.desc())
+      .all();
+    return signups.map((row) => mapSignup(row as Record<string, unknown>));
+  },
+
   async listByUserId(userId: string): Promise<SignupListRecord[]> {
     const signups = await orm.RunSignup
       .where({ userId })
