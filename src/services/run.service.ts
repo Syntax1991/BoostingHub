@@ -768,6 +768,31 @@ export const runService = {
     }
   },
 
+  /**
+   * Keeps the titles of a Raid Lead's not-yet-ended Runs on their current Run
+   * display identity (after a Raid Lead nickname change). Ended (IN_PROGRESS /
+   * COMPLETED / CANCELLED) and archived Runs keep their historical titles.
+   * Same title authority and inputs as create / edit; touches only `title`.
+   */
+  async retitleActiveRunsForRaidLead(raidLeadId: string): Promise<{ retitled: number }> {
+    let retitled = 0;
+    for (const runId of await runRepository.listActiveIdsForRaidLead(raidLeadId)) {
+      const run = await runRepository.findById(runId);
+      if (!run) continue;
+      const title = buildRunTitle({
+        scheduledStartAt: run.scheduledStartAt,
+        difficulty: run.difficulty,
+        lootType: run.lootType,
+        titleCoverage: run.contentDisplay.titleCoverage,
+        raidLeadName: run.raidLeadDisplayName,
+      });
+      if (title === run.title) continue;
+      await runRepository.updateFields(run.id, { title });
+      retitled += 1;
+    }
+    return { retitled };
+  },
+
   async getCreateManyForm(user: AuthenticatedUser) {
     requireManagerRole(user);
     await raidRepository.ensureReferenceRaids();

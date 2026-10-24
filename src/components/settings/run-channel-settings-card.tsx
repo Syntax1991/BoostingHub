@@ -46,8 +46,8 @@ export function RunChannelSettingsCard({
           <span className="font-medium">Raid Lead nickname</span>
           <span className="mt-0.5 block text-xs text-muted">
             Example: title “Mon 22:00 HC VIP 9/9 Syntax”, channel mon-2200-hc-vip-9of9-syntax. Leave empty to use your
-            Manawyrm Hub name. Applies to Runs created or re-titled (edited) afterwards; existing titles are not
-            rewritten.
+            Manawyrm Hub name. Saving renames your Runs that have not started yet; started, completed and
+            cancelled Runs keep their title.
           </span>
           <input
             type="text"
