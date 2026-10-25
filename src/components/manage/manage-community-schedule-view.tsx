@@ -1,4 +1,5 @@
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { PageWorkspace } from "@/components/ui/layout";
 import { formatDate, formatTime } from "@/lib/datetime";
 import {
   communityWeekdayShortLabel,
@@ -349,20 +350,27 @@ function WeeklyPlanSection({ page }: { page: CommunitySchedulePage }) {
   );
 }
 
-export function ManageCommunityScheduleView({ page }: { page: CommunitySchedulePage }) {
+export function ManageCommunityScheduleView({
+  page,
+  justCreated = false,
+}: {
+  page: CommunitySchedulePage;
+  /** Flash after Create Run → Create Schedule. */
+  justCreated?: boolean;
+}) {
   return (
-    <div>
+    <PageWorkspace width="wide">
       <PageHeader
         title="Community Schedule"
-        description={`Reusable Run Setups and recurring community times. Weekly Runs are created open for signups ${SCHEDULE_DRAFT_RELEASE_LABEL} for the raid ID starting that Wednesday.`}
+        description={`Run Setups and recurring times. Weekly Runs open for signups ${SCHEDULE_DRAFT_RELEASE_LABEL} for the raid ID starting that Wednesday.`}
         actions={
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             {page.canEdit ? (
               <RunTemplateFormDialog
                 mode="create"
                 products={page.products}
                 triggerLabel="Create Run Setup"
-                triggerClassName="inline-flex h-9 items-center rounded-md border border-border bg-surface-raised px-3 text-sm font-medium hover:bg-[#222a3b]"
+                triggerClassName="inline-flex h-8 items-center rounded-md border border-border bg-surface-raised px-2.5 text-xs font-medium hover:bg-[#222a3b]"
                 title="Create Run Setup"
                 description="Create a global reusable planning preset with default composition. Attach Schedule times and Raid Leads later."
                 submitLabel="Create Run Setup"
@@ -382,7 +390,16 @@ export function ManageCommunityScheduleView({ page }: { page: CommunityScheduleP
         }
       />
 
-      <div className="grid gap-4">
+      {justCreated ? (
+        <p
+          role="status"
+          className="rounded-md border border-success/35 bg-success/10 px-3 py-2 text-sm text-success"
+        >
+          Recurring schedule created.
+        </p>
+      ) : null}
+
+      <div className="grid gap-2">
         <RunSetupInventorySection page={page} />
         <WeeklyPlanSection page={page} />
         <WindowSection
@@ -402,6 +419,6 @@ export function ManageCommunityScheduleView({ page }: { page: CommunityScheduleP
           runCountsBySlotId={page.runCountsBySlotId}
         />
       </div>
-    </div>
+    </PageWorkspace>
   );
 }

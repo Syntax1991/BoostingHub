@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/ui/primitives";
+import { PageWorkspace } from "@/components/ui/layout";
 import { NotificationSettingsCard } from "@/components/settings/notification-settings-card";
 import { RegionalSettingsCard } from "@/components/settings/regional-settings-card";
 import { GameplaySettingsCard } from "@/components/settings/gameplay-settings-card";
@@ -30,12 +31,12 @@ function notificationSettingsRemountKey(
 
 export function SettingsView({ data }: { data: SettingsPage }) {
   return (
-    <div>
+    <PageWorkspace>
       <PageHeader
         title="Settings"
-        description="Manage your Manawyrm Hub preferences."
+        description="Manawyrm Hub preferences."
       />
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-2 lg:grid-cols-2">
         <NotificationSettingsCard
           key={notificationSettingsRemountKey(data.notifications)}
           preferences={data.notifications}
@@ -53,6 +54,6 @@ export function SettingsView({ data }: { data: SettingsPage }) {
         ) : null}
         <ActiveSessionsSection sessions={data.sessions} />
       </div>
-    </div>
+    </PageWorkspace>
   );
 }

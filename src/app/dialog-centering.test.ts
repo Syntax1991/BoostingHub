@@ -53,6 +53,7 @@ describe("native dialog centering", () => {
     expect(custom.map(({ file }) => file).sort()).toEqual([
       "components/characters/battle-net-import-dialog.tsx",
       "components/manage/roster-builder.tsx",
+      "components/manage/roster-builder.tsx",
       "components/runs/signup-dialog.tsx",
     ]);
     for (const { className } of custom) {

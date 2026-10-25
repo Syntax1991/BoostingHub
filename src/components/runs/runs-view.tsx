@@ -1,30 +1,29 @@
 import Link from "next/link";
-import { DEFAULT_TIME_ZONE, formatDate, formatTime } from "@/lib/datetime";
-import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
-import { DifficultyBadge, RunStatusBadge, SignupStatusBadge } from "@/components/ui/badges";
+import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
+import { EmptyState, PageHeader } from "@/components/ui/primitives";
+import { PageWorkspace } from "@/components/ui/layout";
 import { RunsFilters } from "@/components/runs/runs-filters";
-import { RunSignupButton } from "@/components/runs/signup-dialog";
-import { runCreatePath, runDetailPath } from "@/lib/run-routes";
+import { RunsViewMode } from "@/components/runs/runs-view-mode";
+import { runCreatePath } from "@/lib/run-routes";
 import type { runController } from "@/controllers/app.controller";
 
 type RunsPage = Awaited<ReturnType<typeof runController.getRunsPage>>;
 
 /**
- * Run start times are absolute instants; they are displayed in the viewer's
- * Settings timezone (fallback Europe/Berlin). Order and filters stay on the
- * instant — formatting happens here only.
+ * User-facing Runs discovery — card/grid surface (not Manage → Runs table).
+ * Start times are absolute instants; display uses the viewer Settings timezone.
  */
 export function RunsView({ data, timeZone = DEFAULT_TIME_ZONE }: { data: RunsPage; timeZone?: string }) {
   return (
-    <div>
+    <PageWorkspace width="wide">
       <PageHeader
         title="Runs"
-        description="Browse scheduled boosting operations and sign as booster or lootbuddy for the current run."
+        description="Browse scheduled boosting operations and sign as booster or lootbuddy."
         actions={
           data.canCreate ? (
             <Link
               href={runCreatePath()}
-              className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-black hover:bg-[#d8b436]"
+              className="inline-flex h-8 items-center rounded-md bg-accent px-2.5 text-sm font-medium text-accent-foreground hover:bg-accent-hover"
             >
               Create Run
             </Link>
@@ -32,89 +31,20 @@ export function RunsView({ data, timeZone = DEFAULT_TIME_ZONE }: { data: RunsPag
         }
       />
       <RunsFilters difficulty={data.filters.difficulty} status={data.filters.status} />
-      <p className="mb-2 text-xs text-muted">
+      <p className="mb-3 text-[11px] text-muted">
         Times shown in <span className="text-foreground">{timeZone}</span> ·{" "}
         <Link href="/settings" className="text-accent hover:underline">
-          change in Settings
+          Settings
         </Link>
       </p>
-      <Card>
-        {data.runs.length === 0 ? (
-          <EmptyState
-            title="No upcoming runs yet."
-            description="Clear filters if you applied any, or wait for a raid lead to create runs."
-          />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-left text-sm">
-              <thead className="text-xs uppercase tracking-wide text-muted">
-                <tr>
-                  <th className="px-4 py-2 font-medium">Raid</th>
-                  <th className="px-4 py-2 font-medium">Schedule</th>
-                  <th className="px-4 py-2 font-medium">Lead</th>
-                  <th className="px-4 py-2 font-medium">Comp</th>
-                  <th className="px-4 py-2 font-medium">Signups</th>
-                  <th className="px-4 py-2 font-medium">You</th>
-                  <th className="px-4 py-2 font-medium">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.runs.map((run) => (
-                  <tr key={run.id} className="border-t border-border align-top">
-                    <td className="px-4 py-3">
-                      <Link href={runDetailPath(run.id)} className="max-w-[240px] truncate font-medium text-accent hover:underline">
-                        {run.title}
-                      </Link>
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
-                        <span className="max-w-[220px] truncate">
-                          {run.productLabel}
-                          {run.contentSummary ? ` · ${run.contentSummary}` : ""}
-                        </span>
-                        <DifficultyBadge difficulty={run.difficulty} />
-                        <RunStatusBadge status={run.status} />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-muted" title={timeZone}>
-                      <div>{formatDate(run.scheduledStartAt, timeZone)}</div>
-                      <div className="text-xs">{formatTime(run.scheduledStartAt, timeZone)}</div>
-                    </td>
-                    <td className="px-4 py-3">{run.raidLeadDisplayName}</td>
-                    <td className="px-4 py-3 text-xs text-muted">
-                      {run.desiredTankCount}T / {run.desiredHealerCount}H / {run.desiredDpsCount}D
-                      {run.desiredLootbuddyCount > 0 ? ` · ${run.desiredLootbuddyCount} LB` : ""}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div>{run.signupCount} total</div>
-                      <div className="text-xs text-muted">
-                        {run.signupWindowOpen ? "Open" : "Closed"} · {run.selectedCount} selected
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      {run.alreadySigned ? (
-                        <div className="space-y-1">
-                          {run.currentUserSignups.map((signup) => (
-                            <SignupStatusBadge key={signup.id} status={signup.status} />
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted">Not signed</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <RunSignupButton
-                        runId={run.id}
-                        signupWindowOpen={run.signupWindowOpen}
-                        ownSignupCount={run.ownSignupCount}
-                        timeZone={timeZone}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-    </div>
+      {data.runs.length === 0 ? (
+        <EmptyState
+          title="No upcoming runs yet."
+          description="Clear filters if you applied any, or wait for a raid lead to create runs."
+        />
+      ) : (
+        <RunsViewMode runs={data.runs} timeZone={timeZone} />
+      )}
+    </PageWorkspace>
   );
 }

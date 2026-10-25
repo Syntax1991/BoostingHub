@@ -61,12 +61,15 @@ export const managementHubService = {
     const isAdmin = hasAdminAccess(user.accountRole);
     const cards: ManagementOverviewCard[] = [];
 
-    const runsPromise = hasRaidLeadAccess(user.accountRole)
-      ? listManagedRunOperationalHandoffs(user)
-      : Promise.resolve(null);
+    // Sequence heavy aggregations: unbounded Promise.all peaked at 13
+    // concurrent pool acquires against max=5 (Manage Overview baseline).
+    // Start each leg only after the previous finishes.
+    const projected = hasRaidLeadAccess(user.accountRole)
+      ? await listManagedRunOperationalHandoffs(user)
+      : null;
 
-    const usersPromise = canManageUsers(user.accountRole)
-      ? Promise.all([
+    const usersBundle = canManageUsers(user.accountRole)
+      ? await Promise.all([
           userRepository.countByRole(),
           canManageBoostingRoles(user.accountRole)
             ? Promise.all([
@@ -75,36 +78,16 @@ export const managementHubService = {
               ])
             : Promise.resolve(null),
         ])
-      : Promise.resolve(null);
+      : null;
 
-    const charactersPromise = canManageCharacterOperations(user.accountRole)
-      ? characterOperationsService.getListPage(user, parseCharacterOperationsFilters({}))
-      : Promise.resolve(null);
+    const characterPage = canManageCharacterOperations(user.accountRole)
+      ? await characterOperationsService.getListPage(user, parseCharacterOperationsFilters({}))
+      : null;
 
     // ADMIN / OWNER only — never fetch for RAID_LEAD.
-    const systemPromise = isAdmin ? systemHealthService.getPage(user, {}) : Promise.resolve(null);
-    const analyticsPromise = isAdmin
-      ? operationalAnalyticsService.getReport(user)
-      : Promise.resolve(null);
-    const communityStatsPromise = isAdmin
-      ? communityStatsService.getStats()
-      : Promise.resolve(null);
-
-    const [
-      projected,
-      usersBundle,
-      characterPage,
-      systemPage,
-      analyticsReport,
-      communityStats,
-    ] = await Promise.all([
-      runsPromise,
-      usersPromise,
-      charactersPromise,
-      systemPromise,
-      analyticsPromise,
-      communityStatsPromise,
-    ]);
+    const systemPage = isAdmin ? await systemHealthService.getPage(user, {}) : null;
+    const analyticsReport = isAdmin ? await operationalAnalyticsService.getReport(user) : null;
+    const communityStats = isAdmin ? await communityStatsService.getStats() : null;
 
     if (projected) {
       let rosterWork = 0;

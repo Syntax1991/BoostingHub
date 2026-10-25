@@ -68,7 +68,7 @@ export function CommunityScheduleShareDialog({ share }: { share: FormatCommunity
               <button
                 type="button"
                 onClick={() => void copyText()}
-                className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-black"
+                className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-accent-foreground"
               >
                 {copied ? "Copied" : "Copy"}
               </button>

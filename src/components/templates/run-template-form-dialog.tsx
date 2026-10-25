@@ -180,7 +180,7 @@ export function RunTemplateFormDialog({
         }}
         className={
           triggerClassName ??
-          "inline-flex h-8 items-center rounded-md bg-accent px-2 text-xs font-medium text-black hover:bg-[#d8b436]"
+          "inline-flex h-8 items-center rounded-md bg-accent px-2 text-xs font-medium text-accent-foreground hover:bg-accent-hover"
         }
       >
         {triggerLabel}

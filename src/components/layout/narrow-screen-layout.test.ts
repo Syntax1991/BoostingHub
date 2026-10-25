@@ -74,10 +74,11 @@ describe("notification popup", () => {
 describe("Characters table", () => {
   const view = read("components/characters/characters-view.tsx");
 
-  it("stays wide and scrolls inside its own overflow-x-auto wrapper", () => {
-    const table = view.match(/<div className="([^"]*overflow-x-auto[^"]*)">\s*<table className="([^"]*)"/);
-    expect(table, "overflow-x-auto wrapper directly around the table").toBeTruthy();
-    expect(table![2]).toContain("min-w-[1180px]");
+  it("uses a desktop identity grid that stays inside PageWorkspace (no page-wide table scroll)", () => {
+    expect(view).toContain('data-characters-desktop-identity="header"');
+    expect(view).toContain("DESKTOP_IDENTITY_CLASS");
+    expect(view).not.toMatch(/<table[\s>]/);
+    expect(view).toContain('width="wide"');
   });
 });
 

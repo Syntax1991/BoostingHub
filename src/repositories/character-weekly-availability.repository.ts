@@ -50,7 +50,10 @@ export const characterWeeklyAvailabilityRepository = {
 
   /**
    * Batch load unavailability rows for specific (characterId, resetIdentifier) pairs.
-   * One query — never N+1. Returns Map of `${characterId}:${resetIdentifier}` → sorted difficulties.
+   * One bounded query — never N+1. Filters by characterId AND resetIdentifier so
+   * historical resets for those Characters are not pulled into the app.
+   * Returns Map of `${characterId}:${resetIdentifier}` → sorted difficulties.
+   * Empty / invalid keys → no query.
    */
   async listUnavailableDifficultiesByKeys(
     keys: ReadonlyArray<{ characterId: string; resetIdentifier: string }>,
@@ -64,9 +67,15 @@ export const characterWeeklyAvailabilityRepository = {
     if (unique.size === 0) return result;
 
     const characterIds = [...new Set([...unique.values()].map((row) => row.characterId))];
+    const resetIdentifiers = [...new Set([...unique.values()].map((row) => row.resetIdentifier))];
+
+    // Chained .where AND-composes. Unique index
+    // (characterId, resetIdentifier, difficulty) serves this lookup.
     const rows = await orm.CharacterWeeklyUnavailability.where((f) =>
       f.characterId.in(characterIds),
-    ).all();
+    )
+      .where((f) => f.resetIdentifier.in(resetIdentifiers))
+      .all();
 
     const wanted = new Set(unique.keys());
     const buckets = new Map<string, Set<RaidDifficulty>>();

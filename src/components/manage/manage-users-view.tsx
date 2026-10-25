@@ -3,6 +3,7 @@ import { formatDateTime } from "@/lib/datetime";
 import { CHARACTER_ROLE_LABELS, DIFFICULTY_LABELS, ROLE_LABELS } from "@/lib/labels";
 import { ACCOUNT_ROLES, ACCOUNT_STATUSES, CHARACTER_ROLES, RAID_DIFFICULTIES } from "@/models/enums";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { PageWorkspace } from "@/components/ui/layout";
 import {
   AccountRoleBadge,
   Badge,
@@ -106,21 +107,21 @@ export function ManageUsersView({ data }: { data: Page }) {
   const boostingRoleValue = filters.boostingRole ?? "";
 
   return (
-    <div className="min-w-0 overflow-x-hidden">
+    <PageWorkspace width="wide" className="min-w-0 overflow-x-hidden">
       <PageHeader
         title="Users"
-        description="Account directory, platform roles, booster access, and pending boosting-access review."
+        description="Directory, platform roles, booster access, pending review."
         actions={
-          <Link href="/manage" className="text-sm text-accent hover:underline">
+          <Link href="/manage" className="text-xs text-accent hover:underline">
             Management
           </Link>
         }
       />
 
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className="mb-2 flex flex-wrap gap-1.5">
         <Link
           href={buildHref(filters, { view: "users" })}
-          className={`rounded-md px-3 py-1.5 text-sm ${
+          className={`rounded-md px-2.5 py-1 text-xs font-medium ${
             !isPendingView ? "bg-accent/15 text-accent" : "text-muted hover:bg-surface-raised"
           }`}
           aria-current={!isPendingView ? "page" : undefined}
@@ -129,7 +130,7 @@ export function ManageUsersView({ data }: { data: Page }) {
         </Link>
         <Link
           href={buildHref(filters, { view: "boosting-access" })}
-          className={`rounded-md px-3 py-1.5 text-sm ${
+          className={`rounded-md px-2.5 py-1 text-xs font-medium ${
             isPendingView ? "bg-accent/15 text-accent" : "text-muted hover:bg-surface-raised"
           }`}
           aria-current={isPendingView ? "page" : undefined}
@@ -139,8 +140,8 @@ export function ManageUsersView({ data }: { data: Page }) {
         </Link>
       </div>
 
-      <Card className="mb-4">
-        <form className="flex flex-wrap items-end gap-3 px-4 py-3" method="get">
+      <Card className="mb-3" flush>
+        <form className="flex flex-wrap items-end gap-2 px-2.5 py-2" method="get">
           {isPendingView ? <input type="hidden" name="view" value="boosting-access" /> : null}
           {isPendingView ? (
             <>
@@ -372,6 +373,6 @@ export function ManageUsersView({ data }: { data: Page }) {
           </>
         )}
       </Card>
-    </div>
+    </PageWorkspace>
   );
 }

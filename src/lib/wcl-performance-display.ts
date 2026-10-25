@@ -115,6 +115,37 @@ export function wclPerformanceMetricValue(
   return peak;
 }
 
+/**
+ * Multi-line tooltip for Signup tiles — raid, spec, metric, best/avg.
+ * Empty segments → quiet “no data” copy (never invent percentiles).
+ */
+export function formatWclPerformanceTooltip(
+  segments: WclPerformanceRaidSegment[],
+  groupRole: CharacterRole | null = null,
+): string {
+  const scoped = filterWclPerformanceForGroupRole(segments, groupRole);
+  if (scoped.length === 0) {
+    return "No Warcraft Logs performance for this run content.";
+  }
+  const blocks: string[] = [];
+  for (const segment of scoped) {
+    for (const role of segment.roles) {
+      const lines = [segment.raidName];
+      if (role.specLabel) lines.push(role.specLabel);
+      lines.push(wclMetricLabel(role.role, null));
+      if (role.bestPct != null) lines.push(`best ${formatPct(role.bestPct)}`);
+      if (role.avgPct != null) lines.push(`avg ${formatPct(role.avgPct)}`);
+      if (role.bestPct == null && role.avgPct == null) lines.push("no percentile");
+      blocks.push(lines.join("\n"));
+    }
+  }
+  return blocks.join("\n\n");
+}
+
+function formatPct(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
 export type WclPerfFilter =
   | "ALL"
   | "HAS"

@@ -1,10 +1,9 @@
 import { Badge } from "@/components/ui/badges";
+import { LockoutProgress } from "@/components/ui/lockout-progress";
 import { formatDateTime, formatRelative } from "@/lib/datetime";
-import { COMPACT_DIFFICULTY_LABELS } from "@/lib/blizzard/raid-difficulty";
 import { cn } from "@/lib/cn";
 import type { CharacterLinkageState, CharacterSyncHealth } from "@/lib/blizzard/sync-health";
 import type { RaidLockoutSlot } from "@/lib/lockout-display";
-import type { RaidDifficulty } from "@/models/enums";
 
 /**
  * Presentation only — every state here is derived server-side by the sync
@@ -70,35 +69,12 @@ export function Timestamp({ value, never = "Never" }: { value: string | null; ne
   );
 }
 
-const TRACKED: RaidDifficulty[] = ["NORMAL", "HEROIC", "MYTHIC"];
-
-function difficultyCell(slot: Extract<RaidLockoutSlot, { status: "VERIFIED" }>, difficulty: RaidDifficulty) {
-  const row = slot.rows.find((item) => item.difficulty === difficulty);
-  return row ? `${row.bossesDefeated}/${row.bossTotal}` : "?";
-}
-
 /**
- * One segment per current raid/content, in catalog order. A raid with no
- * verified current-reset rows is "Unknown" — never shown as 0/N.
+ * Dense admin lockout cell — horizontal raid rail with short names.
+ * Personal Characters page keeps the stacked `LockoutProgress` layout.
  */
 export function LockoutSlotsCompact({ slots }: { slots: RaidLockoutSlot[] }) {
-  if (slots.length === 0) return <span className="text-xs text-muted">Unknown</span>;
-  return (
-    <div className="flex flex-col gap-0.5 text-xs">
-      {slots.map((slot) => (
-        <div key={slot.raidId} className="whitespace-nowrap">
-          <span className="font-medium">{slot.raidName}</span>{" "}
-          {slot.status === "UNKNOWN" ? (
-            <span className="text-muted">Unknown</span>
-          ) : (
-            <span className="tabular-nums text-muted">
-              {TRACKED.map((difficulty) => `${COMPACT_DIFFICULTY_LABELS[difficulty]} ${difficultyCell(slot, difficulty)}`).join(" · ")}
-            </span>
-          )}
-        </div>
-      ))}
-    </div>
-  );
+  return <LockoutProgress slots={slots} layout="rail" nameMode="short" className="min-w-[14rem]" />;
 }
 
 export function SummaryStat({

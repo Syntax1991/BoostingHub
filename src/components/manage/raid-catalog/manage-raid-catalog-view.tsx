@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { PageWorkspace } from "@/components/ui/layout";
 import { cn } from "@/lib/cn";
 import type { RaidCatalogPageData } from "@/services/raid-catalog.service";
 import {
@@ -63,12 +64,12 @@ export function ManageRaidCatalogView({ page }: { page: RaidCatalogPageData }) {
   }));
 
   return (
-    <div>
+    <PageWorkspace width="wide">
       <PageHeader
         title="Raid Catalog"
-        description="Manage raids, encounters and reusable run presets."
+        description="Raids, encounters, and reusable run presets."
         actions={
-          <nav aria-label="Raid Catalog sections" className="flex gap-2 text-sm">
+          <nav aria-label="Raid Catalog sections" className="flex gap-1.5 text-xs">
             <a
               href="#raids"
               className="rounded-md px-2 py-1 text-muted hover:bg-surface-raised hover:text-foreground"
@@ -85,7 +86,7 @@ export function ManageRaidCatalogView({ page }: { page: RaidCatalogPageData }) {
         }
       />
 
-      <Card className="mb-8">
+      <Card className="mb-3" flush>
         <div id="raids" className="scroll-mt-20">
           <CardHeader
             title="Raids"
@@ -236,6 +237,6 @@ export function ManageRaidCatalogView({ page }: { page: RaidCatalogPageData }) {
           </div>
         )}
       </Card>
-    </div>
+    </PageWorkspace>
   );
 }

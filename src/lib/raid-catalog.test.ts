@@ -10,6 +10,7 @@ import {
   MANAFORGE_OMEGA_RAID_ID,
   NYMRISSA_WAVECALLER_BOSS_ID,
   TIDEBOUND_GROTTO_RAID_ID,
+  UNBINDING_KITHIX_RAID_ID,
   VENOMOUS_ABYSS_RAID_ID,
 } from "@/lib/wow-raid-catalog";
 
@@ -82,16 +83,22 @@ describe("buildRaidCatalog", () => {
 describe("bootstrap fixture catalog", () => {
   const catalog = fixtureRaidCatalog();
 
-  it("tracks exactly Venomous then Tide for lockouts (Manaforge historical)", () => {
-    expect(catalog.lockoutRaids.map((row) => row.id)).toEqual([VENOMOUS_ABYSS_RAID_ID, TIDEBOUND_GROTTO_RAID_ID]);
+  it("tracks Venomous, Tide, then Kith'ix for lockouts (Manaforge historical)", () => {
+    expect(catalog.lockoutRaids.map((row) => row.id)).toEqual([
+      VENOMOUS_ABYSS_RAID_ID,
+      TIDEBOUND_GROTTO_RAID_ID,
+      UNBINDING_KITHIX_RAID_ID,
+    ]);
     expect(catalog.findById(MANAFORGE_OMEGA_RAID_ID)!.trackLockouts).toBe(false);
   });
 
-  it("keeps zone 53 shared by Venomous and Tide with Nymrissa encounter-scoped", () => {
+  it("keeps zone 53 shared by Venomous, Tide, and Kith'ix with lairs encounter-scoped", () => {
     expect(catalog.findById(VENOMOUS_ABYSS_RAID_ID)).toMatchObject({ wclZoneId: 53, wclRankingEncounterId: null });
     expect(catalog.findById(TIDEBOUND_GROTTO_RAID_ID)).toMatchObject({ wclZoneId: 53, wclRankingEncounterId: 3379 });
+    expect(catalog.findById(UNBINDING_KITHIX_RAID_ID)).toMatchObject({ wclZoneId: 53, wclRankingEncounterId: 3513 });
     expect(catalog.findById(MANAFORGE_OMEGA_RAID_ID)).toMatchObject({ wclZoneId: null, blizzardInstanceId: 1302 });
     expect(catalog.raidIdByWclEncounterId.get(3379)).toBe(TIDEBOUND_GROTTO_RAID_ID);
+    expect(catalog.raidIdByWclEncounterId.get(3513)).toBe(UNBINDING_KITHIX_RAID_ID);
     expect(catalog.raidIdByWclEncounterId.get(3470)).toBe(VENOMOUS_ABYSS_RAID_ID);
     expect(catalog.raidIdByWclEncounterId.get(3129)).toBe(MANAFORGE_OMEGA_RAID_ID);
     expect(catalog.findById(TIDEBOUND_GROTTO_RAID_ID)!.bosses[0]).toMatchObject({

@@ -30,6 +30,8 @@ export function RunManagerActions({
   preflight = null,
   externalBoosters = null,
   addBooster = null,
+  /** `admin` = Run administration block (no Auto Build / Add Booster — those stay in the roster builder). */
+  surface = "all",
 }: {
   run: RunDetailView["run"];
   capabilities: RunDetailView["capabilities"];
@@ -44,7 +46,9 @@ export function RunManagerActions({
   addBooster?: { rosterVersion: number } | null;
   /** Set while the roster is editable — opens the External Boosters dialog. */
   externalBoosters?: { boosters: ExternalBooster[]; rosterVersion: number } | null;
+  surface?: "all" | "admin";
 }) {
+  const showRosterTools = surface !== "admin";
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -70,8 +74,8 @@ export function RunManagerActions({
   }
 
   const hasActions =
+    showRosterTools ||
     Boolean(externalBoosters) ||
-    Boolean(addBooster) ||
     capabilities.canEdit ||
     capabilities.canOpen ||
     capabilities.canCloseSignups ||
@@ -86,27 +90,28 @@ export function RunManagerActions({
   }
 
   return (
-    <div className="flex flex-col items-stretch gap-2 sm:items-end">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {addBooster ? (
-          <Button type="button" variant="secondary" disabled={rosterHasUnsavedEdits} onClick={() => setAddBoosterOpen(true)}>
+    <div className="flex flex-col items-stretch gap-2 sm:items-start">
+      <div className="flex flex-wrap items-center gap-2">
+        {showRosterTools && addBooster ? (
+          <Button type="button" size="md" variant="secondary" disabled={rosterHasUnsavedEdits} onClick={() => setAddBoosterOpen(true)}>
             Add Booster
           </Button>
         ) : null}
-        <RosterBuilderTrigger runId={runId} />
+        {showRosterTools ? <RosterBuilderTrigger runId={runId} /> : null}
         {externalBoosters ? (
-          <Button type="button" variant="secondary" onClick={() => setExternalOpen(true)}>
+          <Button type="button" size="md" variant="secondary" onClick={() => setExternalOpen(true)}>
             External Boosters{externalBoosters.boosters.length > 0 ? ` (${externalBoosters.boosters.length})` : ""}
           </Button>
         ) : null}
         {capabilities.canEdit ? (
-          <Button type="button" variant="secondary" onClick={() => setEditOpen(true)}>
+          <Button type="button" size="md" variant="secondary" onClick={() => setEditOpen(true)}>
             Edit Run
           </Button>
         ) : null}
         {capabilities.canOpen ? (
           <Button
             type="button"
+            size="md"
             disabled={pending}
             onClick={() => runAction(() => openRunAction({ runId }))}
           >
@@ -116,6 +121,7 @@ export function RunManagerActions({
         {capabilities.canCloseSignups ? (
           <Button
             type="button"
+            size="md"
             variant="secondary"
             disabled={pending}
             onClick={() => runAction(() => closeRunSignupsAction({ runId }))}
@@ -126,6 +132,7 @@ export function RunManagerActions({
         {capabilities.canReopenSignups ? (
           <Button
             type="button"
+            size="md"
             variant="secondary"
             disabled={pending}
             onClick={() => runAction(() => reopenRunSignupsAction({ runId }))}
@@ -134,22 +141,22 @@ export function RunManagerActions({
           </Button>
         ) : null}
         {capabilities.canCancel ? (
-          <Button type="button" variant="danger" onClick={() => setCancelOpen(true)}>
+          <Button type="button" size="md" variant="danger" onClick={() => setCancelOpen(true)}>
             Cancel Run
           </Button>
         ) : null}
         {capabilities.canReactivate ? (
-          <Button type="button" onClick={() => setReactivateOpen(true)}>
+          <Button type="button" size="md" onClick={() => setReactivateOpen(true)}>
             Reactivate Run
           </Button>
         ) : null}
         {capabilities.canStart ? (
-          <Button type="button" onClick={() => setStartOpen(true)}>
+          <Button type="button" size="md" onClick={() => setStartOpen(true)}>
             Start Run
           </Button>
         ) : null}
         {capabilities.canComplete ? (
-          <Button type="button" onClick={() => setCompleteOpen(true)}>
+          <Button type="button" size="md" onClick={() => setCompleteOpen(true)}>
             Complete Run{unmarkedCount > 0 ? ` (${unmarkedCount} unmarked)` : ""}
           </Button>
         ) : null}

@@ -62,10 +62,20 @@ export const TIDEBOUND_GROTTO_RAID_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 export const NYMRISSA_WAVECALLER_BOSS_ID = "cc000001-cccc-4ccc-8ccc-cccccccccccc";
 
+/**
+ * Midnight Season 2 lair (The Unbinding of Kith'ix).
+ * Separate Blizzard instance from Venomous / Tide — never merge lockouts.
+ * Verified via Battle.net journal-instance 1324 / encounter 2896 (EU static).
+ */
+export const UNBINDING_KITHIX_RAID_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+export const KITHIX_BOSS_ID = "ee000001-eeee-4eee-8eee-eeeeeeeeeeee";
+
 /** WCL zone id for Midnight Season 2 Venomous Abyss rankings (includes bundled Nymrissa). */
 export const VENOMOUS_ABYSS_WARCRAFT_LOGS_ZONE_ID = 53;
 /** WCL encounter id for Nymrissa Wavecaller within zone 53. */
 export const NYMRISSA_WARCRAFT_LOGS_ENCOUNTER_ID = 3379;
+/** WCL encounter id for Kith'ix within zone 53. */
+export const KITHIX_WARCRAFT_LOGS_ENCOUNTER_ID = 3513;
 
 export const WOW_RAID_CATALOG: readonly WowRaidCatalogEntry[] = [
   {
@@ -230,6 +240,30 @@ export const WOW_RAID_CATALOG: readonly WowRaidCatalogEntry[] = [
         // Verified Battle.net journal encounter id on instance 1317.
         blizzardEncounterIds: [2849],
         warcraftLogsEncounterIds: [3379],
+      },
+    ],
+  },
+  {
+    id: UNBINDING_KITHIX_RAID_ID,
+    name: "The Unbinding of Kith'ix",
+    season: "Midnight Season 2",
+    // Verified Battle.net journal-instance id (en_US: The Unbinding of Kith'ix).
+    blizzardInstanceId: 1324,
+    // Kith'ix is bundled under Venomous Abyss on WCL — encounter-scoped rankings.
+    warcraftLogsZoneId: VENOMOUS_ABYSS_WARCRAFT_LOGS_ZONE_ID,
+    warcraftLogsEncounterId: KITHIX_WARCRAFT_LOGS_ENCOUNTER_ID,
+    sortOrder: 4,
+    trackLockouts: true,
+    // Real raid identity for Bundle RunRaidContent — not a standalone Create product.
+    availableForRuns: false,
+    bosses: [
+      {
+        id: KITHIX_BOSS_ID,
+        name: "Kith'ix",
+        sortOrder: 1,
+        // Verified Battle.net journal encounter id on instance 1324.
+        blizzardEncounterIds: [2896],
+        warcraftLogsEncounterIds: [KITHIX_WARCRAFT_LOGS_ENCOUNTER_ID],
       },
     ],
   },

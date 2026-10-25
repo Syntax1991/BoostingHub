@@ -4,6 +4,7 @@ import { lockoutRepository } from "@/repositories/lockout.repository";
 import { raidRepository } from "@/repositories/raid.repository";
 import {
   TIDEBOUND_GROTTO_RAID_ID,
+  UNBINDING_KITHIX_RAID_ID,
   VENOMOUS_ABYSS_RAID_ID,
 } from "@/lib/wow-raid-catalog";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
@@ -67,8 +68,8 @@ beforeAll(async () => {
   });
 });
 
-/** The production tracked set (DB `Raid.trackLockouts`): Venomous + Tidebound. */
-const TRACKED_RAID_IDS = [VENOMOUS_ABYSS_RAID_ID, TIDEBOUND_GROTTO_RAID_ID];
+/** The production tracked set (DB `Raid.trackLockouts`): Venomous + Tidebound + Kith'ix. */
+const TRACKED_RAID_IDS = [VENOMOUS_ABYSS_RAID_ID, TIDEBOUND_GROTTO_RAID_ID, UNBINDING_KITHIX_RAID_ID];
 
 afterAll(async () => {
   await deleteCharacterCascade(ids.character);

@@ -6,6 +6,7 @@ import {
   MANAFORGE_OMEGA_RAID_ID,
   NYMRISSA_WAVECALLER_BOSS_ID,
   TIDEBOUND_GROTTO_RAID_ID,
+  UNBINDING_KITHIX_RAID_ID,
   VENOMOUS_ABYSS_RAID_ID,
   WOW_RAID_CATALOG,
 } from "@/lib/wow-raid-catalog";
@@ -33,10 +34,14 @@ describe("raid catalog parity (DB vs bootstrap fixture)", () => {
     }
   });
 
-  it("tracks lockouts for exactly Venomous then Tide, in catalog order", async () => {
+  it("tracks lockouts for Venomous, Tide, then Kith'ix in catalog order", async () => {
     const db = await raidRepository.loadCatalog();
-    expect(db.lockoutRaids.map((raid) => raid.id)).toEqual([VENOMOUS_ABYSS_RAID_ID, TIDEBOUND_GROTTO_RAID_ID]);
-    expect(db.lockoutRaids.map((raid) => raid.blizzardInstanceId)).toEqual([1320, 1317]);
+    expect(db.lockoutRaids.map((raid) => raid.id)).toEqual([
+      VENOMOUS_ABYSS_RAID_ID,
+      TIDEBOUND_GROTTO_RAID_ID,
+      UNBINDING_KITHIX_RAID_ID,
+    ]);
+    expect(db.lockoutRaids.map((raid) => raid.blizzardInstanceId)).toEqual([1320, 1317, 1324]);
     expect(db.findById(MANAFORGE_OMEGA_RAID_ID)).toMatchObject({ trackLockouts: false, blizzardInstanceId: 1302 });
   });
 
@@ -59,6 +64,7 @@ describe("raid catalog parity (DB vs bootstrap fixture)", () => {
   it("loads the whole catalog in one query", async () => {
     const { Client } = await import("pg");
     const { vi } = await import("vitest");
+    raidRepository.invalidateCatalogMemo();
     const spy = vi.spyOn(Client.prototype, "query");
     try {
       await raidRepository.loadCatalog();
@@ -154,7 +160,8 @@ describe("ensureReferenceRaids is insert-only", () => {
 
     // The runtime reads the DB value, not the fixture.
     const db = await raidRepository.loadCatalog();
-    expect(db.lockoutRaids.map((row) => row.id)).toEqual([VENOMOUS_ABYSS_RAID_ID]);
+    // Tide was admin-disabled; Kith'ix remains tracked from the catalog seed.
+    expect(db.lockoutRaids.map((row) => row.id)).toEqual([VENOMOUS_ABYSS_RAID_ID, UNBINDING_KITHIX_RAID_ID]);
     expect(db.raidIdByWclEncounterId.get(2)).toBe(VENOMOUS_ABYSS_RAID_ID);
   });
 

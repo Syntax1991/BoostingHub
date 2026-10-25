@@ -312,7 +312,7 @@ export function RosterBuilderDialog({
         <button
           type="button"
           disabled={!canApply || applying || pending}
-          className="inline-flex h-8 items-center rounded-md bg-accent px-3 text-xs font-medium text-black hover:bg-[#d8b436] disabled:opacity-50"
+          className="inline-flex h-8 items-center rounded-md bg-accent px-3 text-xs font-medium text-accent-foreground hover:bg-accent-hover disabled:opacity-50"
           onClick={handleApply}
         >
           {applying ? "Applying…" : "Apply Roster"}
@@ -360,7 +360,7 @@ export function RosterBuilderTrigger({
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button type="button" variant="secondary" onClick={() => setOpen(true)}>
+      <Button type="button" size="sm" variant="secondary" onClick={() => setOpen(true)}>
         Auto Build Roster
       </Button>
       {open ? (

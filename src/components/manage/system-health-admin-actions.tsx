@@ -39,7 +39,7 @@ export function SystemHealthAdminActions() {
             }
             run(adminSystemForceRefreshAllAction);
           }}
-          className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-black hover:bg-[#d8b436] disabled:opacity-60"
+          className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-accent-foreground hover:bg-accent-hover disabled:opacity-60"
         >
           Force eligible Character refresh
         </button>

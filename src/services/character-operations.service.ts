@@ -133,7 +133,11 @@ export type OperationsSummary = {
 };
 
 function currentRaidDescriptors(catalog: RaidCatalog) {
-  return catalog.lockoutRaids.map((raid) => ({ id: raid.id, name: raidContentDisplayName(raid.id, raid.name) }));
+  return catalog.lockoutRaids.map((raid) => ({
+    id: raid.id,
+    name: raidContentDisplayName(raid.id, raid.name),
+    bosses: raid.bosses.map((boss) => ({ name: boss.name })),
+  }));
 }
 
 function lockoutRows(record: OperationsCharacterRecord, catalog: RaidCatalog): LockoutDisplayRow[] {

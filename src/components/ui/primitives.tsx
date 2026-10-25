@@ -4,12 +4,25 @@ import { cn } from "@/lib/cn";
 export function Card({
   children,
   className,
+  flush = false,
+  borderless = false,
 }: {
   children: ReactNode;
   className?: string;
+  /** Drop default padding assumptions for nested dense content. */
+  flush?: boolean;
+  /** Soft surface without a heavy border (section-inside-workspace). */
+  borderless?: boolean;
 }) {
   return (
-    <section className={cn("rounded-md border border-border bg-surface", className)}>
+    <section
+      className={cn(
+        "rounded-md bg-surface",
+        !borderless && "border border-border",
+        flush && "overflow-hidden",
+        className,
+      )}
+    >
       {children}
     </section>
   );
@@ -19,18 +32,25 @@ export function CardHeader({
   title,
   description,
   action,
+  className,
 }: {
   title: ReactNode;
   description?: string;
   action?: ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
-      <div>
+    <div
+      className={cn(
+        "flex items-start justify-between gap-3 border-b border-border px-3 py-2",
+        className,
+      )}
+    >
+      <div className="min-w-0">
         <h2 className="text-sm font-semibold tracking-wide text-foreground">{title}</h2>
         {description ? <p className="mt-0.5 text-xs text-muted">{description}</p> : null}
       </div>
-      {action}
+      {action ? <div className="shrink-0">{action}</div> : null}
     </div>
   );
 }
@@ -39,27 +59,39 @@ export function PageHeader({
   title,
   description,
   actions,
+  className,
 }: {
   title: ReactNode;
-  description: string;
+  description?: string;
   actions?: ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted">{description}</p>
+    <div className={cn("mb-3 flex flex-wrap items-end justify-between gap-2", className)}>
+      <div className="min-w-0">
+        <h1 className="text-lg font-semibold tracking-tight text-foreground">{title}</h1>
+        {description ? <p className="mt-0.5 max-w-2xl text-xs text-muted">{description}</p> : null}
       </div>
-      {actions}
+      {actions ? (
+        <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">{actions}</div>
+      ) : null}
     </div>
   );
 }
 
-export function EmptyState({ title, description }: { title: string; description: string }) {
+export function EmptyState({
+  title,
+  description,
+  className,
+}: {
+  title: string;
+  description: string;
+  className?: string;
+}) {
   return (
-    <div className="px-4 py-8 text-center">
+    <div className={cn("px-3 py-4 text-center", className)}>
       <p className="text-sm font-medium">{title}</p>
-      <p className="mt-1 text-sm text-muted">{description}</p>
+      <p className="mt-0.5 text-xs text-muted">{description}</p>
     </div>
   );
 }

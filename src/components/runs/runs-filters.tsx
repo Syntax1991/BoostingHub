@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { RAID_DIFFICULTIES, RUN_STATUSES } from "@/models/enums";
 import { DIFFICULTY_LABELS, RUN_STATUS_LABELS } from "@/lib/labels";
+import { Toolbar, ToolbarField, toolbarControlClassName } from "@/components/ui/toolbar";
 
 /**
  * Filter controls are the only client island on the runs page so the table
@@ -27,52 +28,37 @@ export function RunsFilters({
   }
 
   return (
-    <div className="mb-4 flex flex-wrap gap-2">
-      <FilterSelect
-        label="Difficulty"
-        value={difficulty ?? ""}
-        options={RAID_DIFFICULTIES.map((value) => ({ value, label: DIFFICULTY_LABELS[value] }))}
-        onChange={(value) => updateFilter("difficulty", value)}
-      />
-      <FilterSelect
-        label="Run status"
-        value={status ?? ""}
-        options={RUN_STATUSES.filter((value) => value !== "DRAFT" && value !== "CANCELLED").map((value) => ({
-          value,
-          label: RUN_STATUS_LABELS[value],
-        }))}
-        onChange={(value) => updateFilter("status", value)}
-      />
-    </div>
-  );
-}
-
-function FilterSelect({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: Array<{ value: string; label: string }>;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="flex items-center gap-2 text-sm">
-      <span className="text-muted">{label}</span>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-9 rounded-md border border-border bg-surface px-2"
-      >
-        <option value="">All</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
+    <Toolbar>
+      <ToolbarField label="Difficulty">
+        <select
+          value={difficulty ?? ""}
+          onChange={(event) => updateFilter("difficulty", event.target.value)}
+          className={toolbarControlClassName}
+          aria-label="Difficulty"
+        >
+          <option value="">All</option>
+          {RAID_DIFFICULTIES.map((value) => (
+            <option key={value} value={value}>
+              {DIFFICULTY_LABELS[value]}
+            </option>
+          ))}
+        </select>
+      </ToolbarField>
+      <ToolbarField label="Run status">
+        <select
+          value={status ?? ""}
+          onChange={(event) => updateFilter("status", event.target.value)}
+          className={toolbarControlClassName}
+          aria-label="Run status"
+        >
+          <option value="">All</option>
+          {RUN_STATUSES.filter((value) => value !== "DRAFT" && value !== "CANCELLED").map((value) => (
+            <option key={value} value={value}>
+              {RUN_STATUS_LABELS[value]}
+            </option>
+          ))}
+        </select>
+      </ToolbarField>
+    </Toolbar>
   );
 }

@@ -294,6 +294,69 @@ describe("resolveRosterWclPerformance", () => {
     expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ characterId: "char-1", bestPct: 91, avgPct: 70 }));
   });
 
+  it("falls back to role-wide cache when the spec-scoped row has no percentiles", async () => {
+    listForCharacters.mockResolvedValue([
+      {
+        id: "cache-base",
+        characterId: "char-tank",
+        zoneId: 53,
+        encounterId: 0,
+        difficulty: 4,
+        metricKey: "tank-dps@raid",
+        bestPct: 72,
+        avgPct: 54,
+        fetchedAt: "2026-09-20T11:00:00.000Z",
+      },
+      {
+        id: "cache-spec",
+        characterId: "char-tank",
+        zoneId: 53,
+        encounterId: 0,
+        difficulty: 4,
+        metricKey: "tank-dps:Protection@raid",
+        bestPct: null,
+        avgPct: null,
+        fetchedAt: "2026-09-20T11:00:00.000Z",
+      },
+    ]);
+
+    const { resolveRosterWclPerformance } = await import("@/services/character-wcl-performance.service");
+    const map = await resolveRosterWclPerformance({
+      difficulty: "HEROIC",
+      contents: [
+        {
+          raidId: VENOMOUS_ABYSS_RAID_ID,
+          raidName: "The Venomous Abyss",
+          sortOrder: 1,
+        },
+      ],
+      boosters: [
+        {
+          signupId: "signup-tank",
+          offeredRoles: ["TANK"],
+          character: {
+            id: "char-tank",
+            wowClass: "WARRIOR",
+            specialization: "Protection",
+            primaryRole: "TANK",
+            playableSpecs: [],
+            warcraftLogsId: "444",
+          },
+        },
+      ],
+      now: new Date("2026-09-20T12:00:00.000Z"),
+      allowRemoteFetch: false,
+    });
+
+    expect(map.get("signup-tank")?.[0]?.roles[0]).toMatchObject({
+      role: "TANK",
+      specLabel: "Protection",
+      bestPct: 72,
+      avgPct: 54,
+    });
+    expect(fetchZoneRankings).not.toHaveBeenCalled();
+  });
+
   it("deferred: a fresh cache schedules no refresh", async () => {
     listForCharacters.mockResolvedValue([
       { id: "c", characterId: "char-1", zoneId: 53, encounterId: 0, difficulty: 4, metricKey: "dps@raid", bestPct: 91, avgPct: 70, fetchedAt: "2026-09-20T11:00:00.000Z" },

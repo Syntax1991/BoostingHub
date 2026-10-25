@@ -130,7 +130,7 @@ export function RosterWarningConfirmDialog({
         </button>
         <button
           type="button"
-          className="inline-flex h-8 items-center rounded-md bg-accent px-3 text-xs font-medium text-black hover:bg-[#d8b436] disabled:opacity-50"
+          className="inline-flex h-8 items-center rounded-md bg-accent px-3 text-xs font-medium text-accent-foreground hover:bg-accent-hover disabled:opacity-50"
           disabled={pending}
           onClick={onConfirm}
         >

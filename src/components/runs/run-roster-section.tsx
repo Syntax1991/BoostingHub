@@ -1,12 +1,28 @@
+import type { ReactNode } from "react";
 import { formatDateTime } from "@/lib/datetime";
 import { Card, CardHeader, EmptyState } from "@/components/ui/primitives";
 import { ClassBadge, ParticipationBadge, RoleBadge } from "@/components/ui/badges";
 import { RosterBuilderView } from "@/components/manage/roster-builder";
 import type { RunDetailView } from "@/services/run-detail.service";
 
-export function RunRosterSection({ data }: { data: RunDetailView }) {
+export function RunRosterSection({
+  data,
+  afterContext = null,
+}: {
+  data: RunDetailView;
+  /** Manager Roster tab: Run configuration / administration between context chips and Signups. */
+  afterContext?: ReactNode;
+}) {
   if (data.permissions.canManageRun && data.manager) {
-    return <RosterBuilderView data={data.manager} embedded />;
+    const preflightAttention = data.preflight?.attentionCount ?? 0;
+    return (
+      <RosterBuilderView
+        data={data.manager}
+        embedded
+        preflightAttentionCount={preflightAttention}
+        afterContext={afterContext}
+      />
+    );
   }
 
   if (!data.publishedRoster) {

@@ -11,6 +11,7 @@ export type DashboardPersonalCommitment = {
   participationType: ParticipationType;
   characterId: string | null;
   characterName: string | null;
+  characterRealm: string | null;
   publishedRole: CharacterRole | null;
   isBackup: boolean;
   lootbuddyClass: WowClass | null;
@@ -66,6 +67,7 @@ function toCommitment(item: MyRunSignupItem): DashboardPersonalCommitment {
     participationType: item.participationType,
     characterId: item.characterId,
     characterName: item.characterName,
+    characterRealm: item.characterRealm,
     /** Authoritative selected role (draft selectedRole or publishedRole). */
     publishedRole: item.displayRole ?? item.publishedRole,
     isBackup: item.isBackup,

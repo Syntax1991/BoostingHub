@@ -110,6 +110,27 @@ describe("rolesRelevantForWclPerformance", () => {
       }),
     ).toEqual(["RANGED_DPS"]);
   });
+
+  it("keeps offered DPS when a playable spec is real DPS (Restoration + Elemental)", () => {
+    expect(
+      rolesRelevantForWclPerformance({
+        offeredRoles: ["HEALER", "RANGED_DPS"],
+        wowClass: "SHAMAN",
+        specialization: "Restoration",
+        primaryRole: "HEALER",
+        playableSpecs: ["Elemental"],
+      }),
+    ).toEqual(["HEALER", "RANGED_DPS"]);
+  });
+});
+
+describe("specsForOfferedRole", () => {
+  it("returns primary and matching playable specs for the offered role", async () => {
+    const { specsForOfferedRole } = await import("@/services/character-wcl-performance.service");
+    expect(specsForOfferedRole("SHAMAN", "Restoration", ["Elemental"], "HEALER")).toEqual(["Restoration"]);
+    expect(specsForOfferedRole("SHAMAN", "Restoration", ["Elemental"], "RANGED_DPS")).toEqual(["Elemental"]);
+    expect(specsForOfferedRole("PRIEST", "Holy", ["Discipline"], "HEALER")).toEqual(["Holy", "Discipline"]);
+  });
 });
 
 describe("formatWclPerformanceRaidLine", () => {

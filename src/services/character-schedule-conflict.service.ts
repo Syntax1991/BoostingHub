@@ -37,18 +37,20 @@ export async function getScheduleConflictsForCharacters(input: {
   const byId = new Map(characters.map((row) => [row.id, row]));
   const uniqueCharacters = characterIds.map((id) => byId.get(id)!);
 
-  const [reservations, unavailableIds] = await Promise.all([
-    signupRepository.findAllReservationConflicts({
-      characterIds,
-      excludeRunId: input.targetRunId,
-      scheduledStartAt: input.scheduledStartAt,
-    }),
-    characterWeeklyAvailabilityService.listUnavailableForRun(
-      uniqueCharacters,
-      input.scheduledStartAt,
-      input.difficulty,
-    ),
-  ]);
+  // Sequential on the shared pool (max 5): parallel acquire here competed with
+  // Auth + the rest of Run Detail and surfaced as "timeout exceeded when trying
+  // to connect" under concurrent page load. Still exactly two batched reads —
+  // never per-Character.
+  const reservations = await signupRepository.findAllReservationConflicts({
+    characterIds,
+    excludeRunId: input.targetRunId,
+    scheduledStartAt: input.scheduledStartAt,
+  });
+  const unavailableIds = await characterWeeklyAvailabilityService.listUnavailableForRun(
+    uniqueCharacters,
+    input.scheduledStartAt,
+    input.difficulty,
+  );
 
   const weeklyUnavailableByCharacterId = new Map<string, WeeklyUnavailableConflictInput>();
   for (const character of uniqueCharacters) {

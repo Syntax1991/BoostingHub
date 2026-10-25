@@ -9,6 +9,7 @@ export function Button({
   disabled,
   type = "button",
   variant = "primary",
+  size = "md",
   onClick,
   "aria-label": ariaLabel,
 }: {
@@ -17,6 +18,7 @@ export function Button({
   disabled?: boolean;
   type?: "button" | "submit";
   variant?: "primary" | "secondary" | "ghost" | "danger";
+  size?: "sm" | "md" | "icon";
   onClick?: () => void;
   "aria-label"?: string;
 }) {
@@ -27,9 +29,14 @@ export function Button({
       onClick={onClick}
       aria-label={ariaLabel}
       className={cn(
-        "inline-flex h-9 items-center justify-center rounded-md px-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-        variant === "primary" && "bg-accent text-black hover:bg-[#d8b436]",
-        variant === "secondary" && "border border-border bg-surface-raised hover:bg-[#222a3b]",
+        "inline-flex items-center justify-center rounded-md font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+        size === "sm" && "h-8 gap-1 px-2.5 text-sm",
+        size === "md" && "h-9 gap-1.5 px-3 text-sm",
+        size === "icon" && "h-9 w-9 text-sm",
+        variant === "primary" &&
+          "bg-accent text-accent-foreground hover:bg-accent-hover",
+        variant === "secondary" &&
+          "border border-border bg-surface-raised hover:bg-[#222a3b]",
         variant === "ghost" && "text-muted hover:bg-surface-raised hover:text-foreground",
         variant === "danger" && "bg-danger text-white hover:opacity-90",
         className,

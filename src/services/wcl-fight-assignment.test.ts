@@ -195,7 +195,8 @@ describe("RunRaidContent validation", () => {
   it("keeps an encounter unknown to the catalog when time matches", () => {
     const result = assignReportFights({
       raidIdByWclEncounter: WCL_ENCOUNTERS,
-      report: { ...report, fights: [fight(1, "14:08", { encounterId: 3513, name: "Kith'ix" })] },
+      // 999901 is intentionally absent from the catalog (3513 is Kith'ix now).
+      report: { ...report, fights: [fight(1, "14:08", { encounterId: 999901, name: "Unknown Boss" })] },
       target: run({ ...runA, contents: [{ id: "mfo", raidId: MANAFORGE_OMEGA_RAID_ID }] }),
       others: [],
     });

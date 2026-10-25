@@ -14,6 +14,8 @@ import { listManagedRunOperationalHandoffs } from "@/services/managed-run-operat
 import { isSignupWindowOpen } from "@/services/run-state";
 import { signupService } from "@/services/signup.service";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
+import { deriveBlizzardSyncState } from "@/lib/blizzard/sync-state";
+import { resolveSyncHealthStaleMinutes } from "@/lib/blizzard/sync-health";
 
 /**
  * Role-aware operational attention Dashboard.
@@ -24,14 +26,19 @@ export const dashboardService = {
     const showOperations = hasRaidLeadAccess(user.accountRole);
     const isAdmin = hasAdminAccess(user.accountRole);
 
-    const [runs, myRuns, characters, activity, managedOps, catalog] = await Promise.all([
-      runRepository.listUpcoming(),
+    // Bound peak pool acquisitions (shared max=5). Personal + catalog/characters
+    // first; heavy upcoming + managed handoffs second — avoid overlapping two
+    // full Run-graph loads with getMyRuns conflict batches.
+    const [myRuns, characters, activity, catalog] = await Promise.all([
       signupService.getMyRuns(user),
       characterRepository.listByUserId(user.id),
       // Community-wide operational events are for Raid Leads and Admins only.
       showOperations ? activityRepository.listRecent() : Promise.resolve([]),
-      showOperations ? listManagedRunOperationalHandoffs(user) : Promise.resolve([]),
       raidRepository.loadCatalog(),
+    ]);
+    const [runs, managedOps] = await Promise.all([
+      runRepository.listUpcoming(),
+      showOperations ? listManagedRunOperationalHandoffs(user) : Promise.resolve([]),
     ]);
 
     const personal = projectPersonalDashboardAttention(myRuns);
@@ -65,6 +72,14 @@ export const dashboardService = {
         }));
     });
 
+    const now = new Date();
+    const staleMinutes = resolveSyncHealthStaleMinutes();
+    const activeCharacters = characters.filter((character) => character.isActive);
+    const syncIssueCount = activeCharacters.filter((character) => {
+      const state = deriveBlizzardSyncState(character, { now, staleMinutes });
+      return state.kind === "STALE" || state.kind === "PROFILE_UNAVAILABLE";
+    }).length;
+
     return {
       personal,
       operations: showOperations ? operations : [],
@@ -82,10 +97,12 @@ export const dashboardService = {
         status: run.status,
       })),
       characters: {
-        activeCount: characters.filter((character) => character.isActive).length,
+        activeCount: activeCharacters.length,
+        readyCount: activeCharacters.length - syncIssueCount,
         totalCount: characters.length,
         boosterEligibleCount: approvedCharacterIds.size,
         lockoutAttentionCount: lockoutAttention.length,
+        syncIssueCount,
         lockoutAttention,
       },
       showRecentActivity: showOperations,

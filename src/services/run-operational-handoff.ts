@@ -63,7 +63,7 @@ export function projectRunOperationalHandoff(input: {
     return {
       attendance,
       attention: "NONE",
-      nextAction: { kind: "MANAGE", label: "Manage", mode: "link", tab: "overview" },
+      nextAction: { kind: "MANAGE", label: "Manage", mode: "link", tab: "operations" },
     };
   }
 
@@ -149,7 +149,7 @@ export function projectRunOperationalHandoff(input: {
   return {
     attendance,
     attention: "NONE",
-    nextAction: { kind: "VIEW", label: "View", mode: "link", tab: "overview" },
+    nextAction: { kind: "VIEW", label: "View", mode: "link", tab: "operations" },
   };
 }
 

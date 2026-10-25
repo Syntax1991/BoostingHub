@@ -73,8 +73,8 @@ function baseDetails(overrides: Partial<Details> = {}): Details {
     discordTicketUrl: null,
     currentReset: "2026-W38",
     currentLockoutRaids: [
-      { id: "venomous", name: "The Venomous Abyss" },
-      { id: "tidebound", name: "Tide" },
+      { id: "venomous", name: "The Venomous Abyss", bosses: [] },
+      { id: "tidebound", name: "Tide", bosses: [] },
     ],
     lockouts: [],
     weeklyAvailability: {

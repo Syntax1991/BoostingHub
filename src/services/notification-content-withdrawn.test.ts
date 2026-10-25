@@ -51,7 +51,7 @@ describe("roster withdrawal notification (to the Raid Lead)", () => {
     });
     expect(copy.title).toBe("Player withdrew");
     expect(copy.message).toBe("Kiri (Kirilight-Thrall) withdrew from the roster for Fri HC. Reason: Sick");
-    expect(copy.href).toBe("/runs/r1?tab=roster");
+    expect(copy.href).toBe("/runs/r1");
   });
 });
 

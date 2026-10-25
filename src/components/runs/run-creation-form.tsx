@@ -3,8 +3,14 @@
 import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createManyRunsAction } from "@/controllers/run.actions";
+import { createCommunitySchedulePlanAction } from "@/controllers/community-schedule.actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/primitives";
+import {
+  DEFAULT_SCHEDULE_START,
+  ScheduleStartField,
+  type ScheduleStartState,
+} from "@/components/manage/community-schedule-start-fields";
 import { fromDatetimeLocalValue, toDatetimeLocalValue } from "@/lib/datetime";
 import { DIFFICULTY_LABELS, ROLE_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
 import { selectionCoveragePreview, type ProductSelection } from "@/lib/product-selection";
@@ -15,9 +21,34 @@ import {
 } from "@/components/runs/product-content-picker";
 import { buildRunTitle } from "@/lib/run-title";
 import { runCreateSuccessPath } from "@/lib/run-routes";
+import {
+  buildCreateSchedulePlanFromCreateRun,
+  defaultRecurringSetupName,
+} from "@/lib/create-run-recurring";
+import {
+  CREATE_RUN_OPT_IN_DEFAULTS,
+  createRunOptInInitialState,
+} from "@/lib/create-run-form-defaults";
 import { isLootTypeAllowedForDifficulty } from "@/services/run-state";
-import { RAID_DIFFICULTIES, RUN_LOOT_TYPES, type RaidDifficulty, type RunLootType } from "@/models/enums";
+import {
+  COMMUNITY_WEEKDAYS,
+  RAID_DIFFICULTIES,
+  RUN_LOOT_TYPES,
+  type CommunityWeekday,
+  type RaidDifficulty,
+  type RunLootType,
+} from "@/models/enums";
 import type { CreateManyRunsForm } from "@/services/run.service";
+
+const WEEKDAY_LABELS: Record<CommunityWeekday, string> = {
+  MONDAY: "Monday",
+  TUESDAY: "Tuesday",
+  WEDNESDAY: "Wednesday",
+  THURSDAY: "Thursday",
+  FRIDAY: "Friday",
+  SATURDAY: "Saturday",
+  SUNDAY: "Sunday",
+};
 
 type RowOverrides = {
   /** Row product + counts override (both together: counts belong to one product). */
@@ -74,7 +105,19 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
   const [desiredHealerCount, setDesiredHealerCount] = useState(form.defaults.desiredHealerCount);
   const [desiredDpsCount, setDesiredDpsCount] = useState(form.defaults.desiredDpsCount);
   const [desiredLootbuddyCount, setDesiredLootbuddyCount] = useState(form.defaults.desiredLootbuddyCount ?? 0);
-  const [discordRolePing, setDiscordRolePing] = useState(form.defaults.discordRolePing ?? true);
+  // Independent opt-ins: both OFF unless the user checks them (or form.defaults says otherwise).
+  const [discordRolePing, setDiscordRolePing] = useState(
+    () => createRunOptInInitialState(form.defaults.discordRolePing ?? CREATE_RUN_OPT_IN_DEFAULTS.discordRolePing)
+      .discordRolePing,
+  );
+
+  /** ADMIN/OWNER: create a weekly Schedule instead of concrete draft Runs. */
+  const [asRecurring, setAsRecurring] = useState<boolean>(CREATE_RUN_OPT_IN_DEFAULTS.asRecurring);
+  const [recurringWeekday, setRecurringWeekday] = useState<CommunityWeekday>("FRIDAY");
+  const [recurringTime, setRecurringTime] = useState("19:45");
+  const [recurringStart, setRecurringStart] = useState<ScheduleStartState>(DEFAULT_SCHEDULE_START);
+  const [recurringAutoCreate, setRecurringAutoCreate] = useState(false);
+  const [setupName, setSetupName] = useState("");
 
   const [rows, setRows] = useState<Row[]>([
     {
@@ -84,6 +127,26 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
       expanded: false,
     },
   ]);
+
+  function setRecurringChecked(checked: boolean) {
+    setAsRecurring(checked);
+    if (!checked) {
+      // Drop recurrence-only state so one-time create cannot leak weekday/time/start.
+      setRecurringWeekday("FRIDAY");
+      setRecurringTime("19:45");
+      setRecurringStart(DEFAULT_SCHEDULE_START);
+      setRecurringAutoCreate(false);
+      setSetupName("");
+    } else if (!setupName.trim()) {
+      setSetupName(
+        defaultRecurringSetupName({
+          productName: productName(form, product.productId),
+          difficulty,
+          lootType,
+        }),
+      );
+    }
+  }
 
   function applyTemplate(nextTemplateId: string) {
     setTemplateId(nextTemplateId);
@@ -228,6 +291,45 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
     event.preventDefault();
     setError(null);
 
+    if (asRecurring) {
+      if (!form.canCreateSchedule) {
+        setError("Admin permission is required to create a recurring schedule.");
+        return;
+      }
+      const built = buildCreateSchedulePlanFromCreateRun({
+        templateId,
+        setupName,
+        product,
+        difficulty,
+        lootType,
+        raidLeadId: form.canAssignRaidLead ? raidLeadId : form.defaultRaidLeadId,
+        notes,
+        desiredTankCount,
+        desiredHealerCount,
+        desiredDpsCount,
+        desiredLootbuddyCount,
+        discordRolePing,
+        weekday: recurringWeekday,
+        localStartTime: recurringTime,
+        start: recurringStart,
+        autoCreateRun: recurringAutoCreate,
+      });
+      if (!built.ok) {
+        setError(built.message);
+        return;
+      }
+      startTransition(async () => {
+        const result = await createCommunitySchedulePlanAction(built.payload);
+        if (!result.ok) {
+          setError(result.message);
+          return;
+        }
+        router.push("/manage/schedule?created=1");
+        router.refresh();
+      });
+      return;
+    }
+
     let scheduledByRow: string[];
     try {
       scheduledByRow = rows.map((row) => fromDatetimeLocalValue(row.scheduledLocal));
@@ -277,8 +379,15 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
     });
   }
 
-  const canSubmit =
+  const canSubmitOneTime =
     form.products.length > 0 && Boolean(product.productId) && rows.length >= 1 && rows.length <= form.maxRuns;
+  const canSubmitRecurring =
+    form.canCreateSchedule &&
+    form.products.length > 0 &&
+    Boolean(product.productId) &&
+    Boolean(form.canAssignRaidLead ? raidLeadId : form.defaultRaidLeadId) &&
+    (Boolean(templateId) || Boolean(setupName.trim()));
+  const canSubmit = asRecurring ? canSubmitRecurring : canSubmitOneTime;
 
   return (
     <form className="space-y-4" onSubmit={submit}>
@@ -321,8 +430,33 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
       ) : null}
 
       <Card>
-        <CardHeader title="Shared defaults" description="Applied to every run below unless a row overrides it." />
+        <CardHeader
+          title="Shared defaults"
+          description={
+            asRecurring
+              ? "Becomes the Run Setup (WHAT) for the weekly Schedule. Composition is inherited by the slot unless you edit it later on Schedule."
+              : "Applied to every run below unless a row overrides it."
+          }
+        />
         <div className="space-y-3 px-4 py-4">
+          {form.canCreateSchedule ? (
+            <label className="flex items-start gap-2 rounded-md border border-border/70 bg-surface-raised/40 px-3 py-2.5 text-sm">
+              <input
+                type="checkbox"
+                checked={asRecurring}
+                onChange={(event) => setRecurringChecked(event.target.checked)}
+                className="mt-1"
+                aria-label="Create as recurring schedule"
+              />
+              <span>
+                <span className="block font-medium text-foreground">Create as recurring schedule</span>
+                <span className="mt-0.5 block text-xs text-muted">
+                  Creates a weekly Schedule (Europe/Berlin). Concrete Runs follow the existing Schedule release
+                  path — not the one-time draft list below.
+                </span>
+              </span>
+            </label>
+          ) : null}
           <ProductContentPicker products={form.products} value={product} onChange={setProduct} ariaPrefix="Shared" />
           <div className="grid grid-cols-2 gap-2">
             <label className="block text-sm">
@@ -467,6 +601,82 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
         </div>
       </Card>
 
+      {asRecurring ? (
+        <Card>
+          <CardHeader
+            title="Weekly schedule"
+            description="One Schedule slot: weekday + local time in Europe/Berlin. Runs materialize through the existing Schedule release path."
+          />
+          <div className="space-y-3 px-4 py-4">
+            {!templateId ? (
+              <label className="block text-sm">
+                <span className="mb-1 block text-muted">Run Setup name</span>
+                <input
+                  value={setupName}
+                  onChange={(event) => setSetupName(event.target.value)}
+                  maxLength={80}
+                  required
+                  className="h-9 w-full rounded-md border border-border bg-surface px-2"
+                  aria-label="Run Setup name"
+                />
+                <span className="mt-1 block text-xs text-muted">
+                  Creates a new Run Setup from the shared defaults above. Pick a template instead to reuse one.
+                </span>
+              </label>
+            ) : (
+              <p className="text-sm text-muted">
+                Using the selected template as the Run Setup. Raid Lead stays on the Schedule slot.
+              </p>
+            )}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block text-sm">
+                <span className="mb-1 block text-muted">Day</span>
+                <select
+                  value={recurringWeekday}
+                  onChange={(event) => setRecurringWeekday(event.target.value as CommunityWeekday)}
+                  className="h-9 w-full rounded-md border border-border bg-surface px-2"
+                  aria-label="Weekly weekday"
+                >
+                  {COMMUNITY_WEEKDAYS.map((day) => (
+                    <option key={day} value={day}>
+                      {WEEKDAY_LABELS[day]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-sm">
+                <span className="mb-1 block text-muted">Time (Europe/Berlin)</span>
+                <input
+                  type="time"
+                  value={recurringTime}
+                  onChange={(event) => setRecurringTime(event.target.value)}
+                  required
+                  className="h-9 w-full rounded-md border border-border bg-surface px-2"
+                  aria-label="Weekly local start time"
+                />
+              </label>
+            </div>
+            <ScheduleStartField value={recurringStart} onChange={setRecurringStart} />
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={recurringAutoCreate}
+                onChange={(event) => setRecurringAutoCreate(event.target.checked)}
+                className="mt-1"
+                aria-label="Automatically create weekly Run"
+              />
+              <span>
+                <span className="block">Automatically create weekly Run (open for signups)</span>
+                <span className="mt-0.5 block text-xs text-muted">
+                  Release: Monday 12:00 (Europe/Berlin). Off = planning only — same as Create Schedule on Manage →
+                  Schedule.
+                </span>
+              </span>
+            </label>
+            <p className="text-xs text-muted">Times shown in Europe/Berlin. Recurrence is weekly until deactivated.</p>
+          </div>
+        </Card>
+      ) : (
       <Card>
         <CardHeader
           title={`Runs (${rows.length}/${form.maxRuns})`}
@@ -713,13 +923,18 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
           })}
         </ul>
       </Card>
+      )}
 
       <div className="flex flex-wrap justify-end gap-2">
         <Button type="button" variant="secondary" onClick={() => router.push("/runs")}>
           Cancel
         </Button>
         <Button type="submit" disabled={pending || !canSubmit}>
-          {pending ? "Creating…" : `Create ${rows.length} Draft${rows.length === 1 ? "" : "s"}`}
+          {pending
+            ? "Creating…"
+            : asRecurring
+              ? "Create Schedule"
+              : `Create ${rows.length} Draft${rows.length === 1 ? "" : "s"}`}
         </Button>
       </div>
     </form>

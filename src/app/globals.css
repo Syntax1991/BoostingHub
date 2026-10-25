@@ -1,18 +1,36 @@
 @import "tailwindcss";
 
 :root {
+  /* Surface hierarchy: page → workspace panel → raised control */
   --background: #0c0e12;
   --foreground: #e8edf4;
   --surface: #141821;
   --surface-raised: #1b2130;
   --border: #2a3346;
   --muted: #8b95a8;
-  --accent: #c9a227;
-  --accent-soft: #c9a22722;
+  /* Cool steel-blue UI accent — operational, not theme-heavy */
+  --accent: #6d8fad;
+  --accent-soft: #6d8fad24;
+  --accent-hover: #7fa0bb;
+  --accent-foreground: #f2f6fa;
+  /* Mythic difficulty only — not the generic UI accent */
+  --mythic: #8b7cf8;
+  --mythic-soft: #8b7cf822;
   --danger: #d15c5c;
   --success: #5dba83;
   --info: #5b8def;
   --warning: #d39b4a;
+  /* Density scale (conceptual; use Tailwind utilities aligned to these) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --workspace-max: 72rem;
+  --workspace-wide: 90rem;
 }
 
 @theme inline {
@@ -23,12 +41,19 @@
   --color-border: var(--border);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-mythic: var(--mythic);
+  --color-mythic-soft: var(--mythic-soft);
   --color-danger: var(--danger);
   --color-success: var(--success);
   --color-info: var(--info);
   --color-warning: var(--warning);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
 }
 
 * {
@@ -82,6 +107,34 @@ a {
   input:not([type="checkbox"]):not([type="radio"]) {
     min-width: 0;
     max-width: 100%;
+  }
+
+  /* Visible keyboard focus for dense ops UI */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
+
+/*
+ * Dashboard board — ONE shared 60/40 column track for every module row so
+ * Control Center / Characters share a left rail and Next Run / Upcoming /
+ * Recent Activity share a right rail.
+ */
+.dashboard-board {
+  display: grid;
+  gap: 0.875rem; /* 14px between modules */
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 1024px) {
+  .dashboard-board {
+    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  }
+  .dashboard-board-primary {
+    grid-column: 1;
+  }
+  .dashboard-board-secondary {
+    grid-column: 2;
   }
 }
 
