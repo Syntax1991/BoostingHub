@@ -167,7 +167,8 @@ export const runDetailService = {
 
     let manager: RosterManagementView | null = null;
     if (manage) {
-      manager = await rosterService.getRosterManagementView(user, runId);
+      // Reuse the Run graph already loaded above — avoids a second findById.
+      manager = await rosterService.getRosterManagementView(user, runId, run);
     }
 
     const ownAttendance = manage ? [] : await attendanceService.getOwnAttendance(user, runId);

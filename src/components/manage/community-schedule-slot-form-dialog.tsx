@@ -182,7 +182,7 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
         onClick={() => setOpen(true)}
         className={
           props.mode === "create"
-            ? "inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-black hover:bg-[#d8b436]"
+            ? "inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-accent-foreground hover:bg-accent-hover"
             : "inline-flex h-8 items-center rounded-md border border-border bg-surface-raised px-2 text-xs font-medium hover:bg-[#222a3b]"
         }
       >
@@ -406,7 +406,7 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
               <button
                 type="submit"
                 disabled={pending}
-                className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-black disabled:opacity-60"
+                className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-accent-foreground disabled:opacity-60"
               >
                 {pending ? "Saving…" : "Save"}
               </button>

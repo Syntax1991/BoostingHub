@@ -277,7 +277,10 @@ describe("character offspec display", () => {
       }),
     );
     expect(html).toContain("Marksmanship");
-    expect(html).not.toMatch(/Offspec/);
+    // Column header always says Offspec; empty value is an em dash, not a label.
+    expect(html).toContain("Offspec");
+    expect(html).toMatch(/text-muted">—</);
+    expect(html).not.toMatch(/Offspec:/);
   });
 
   it("2. user list shows one offspec", () => {
@@ -290,7 +293,9 @@ describe("character offspec display", () => {
         playableSpecs: ["Elemental"],
       }),
     );
-    expect(html).toContain("Restoration · Offspec: Elemental");
+    expect(html).toContain("Restoration");
+    expect(html).toContain("Elemental");
+    expect(html).toContain("Offspec");
   });
 
   it("3. user list uses Offspecs and catalog order", () => {
@@ -304,7 +309,11 @@ describe("character offspec display", () => {
         itemLevel: 326,
       }),
     );
-    expect(html).toContain("Holy · Offspecs: Discipline, Shadow");
+    // Offspec column: first catalog offspec + remaining count (Discipline before Shadow).
+    expect(html).toContain("Holy");
+    expect(html).toContain("Discipline");
+    expect(html).toContain("(+1)");
+    expect(html).toContain("Also: Shadow");
   });
 
   it("4. character detail lists every additional spec in catalog order", () => {
@@ -358,8 +367,9 @@ describe("character offspec display", () => {
       playableSpecs: ["Restoration", "Elemental"],
     });
     const list = renderUserList(character);
-    expect(list).toContain("Restoration · Offspec: Elemental");
-    expect(list).not.toContain("Offspecs:");
+    expect(list).toContain("Restoration");
+    expect(list).toContain("Elemental");
+    expect(list).not.toContain("(+1)");
     const detail = renderToStaticMarkup(createElement(CharacterDetailsView, { data: details(character) }));
     expect(detail).toContain(">Elemental<");
     expect(detail).not.toContain("Restoration, Elemental");
@@ -397,7 +407,10 @@ describe("character offspec display", () => {
         playableSpecs: ["Enhancement", "Elemental"],
       }),
     );
-    expect(html).toContain("Restoration · Offspecs: Elemental, Enhancement");
+    expect(html).toContain("Restoration");
+    expect(html).toContain("Elemental");
+    expect(html).toContain("(+1)");
+    expect(html).toContain("Also: Enhancement");
     expect(resolveSignupAssignableRoles(signup)).toEqual(before);
     expect(before).toEqual(["HEALER", "RANGED_DPS"]);
     expect(signup.offeredRoles).toEqual(["HEALER", "RANGED_DPS"]);

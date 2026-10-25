@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState, useTransition } from "react";
+import { useId, useRef, useState, useTransition, type Ref } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { deleteCharacterAction } from "@/controllers/character.actions";
@@ -17,6 +17,7 @@ export function DeleteCharacterButton({
   mode,
   redirectTo,
   compact = false,
+  buttonRef,
 }: {
   characterId: string;
   characterLabel: string;
@@ -25,6 +26,8 @@ export function DeleteCharacterButton({
   redirectTo?: string;
   /** Row-action size used in the management lists. */
   compact?: boolean;
+  /** Optional ref to the trigger — used when Delete is opened from an overflow menu host. */
+  buttonRef?: Ref<HTMLButtonElement>;
 }) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -51,6 +54,7 @@ export function DeleteCharacterButton({
   return (
     <>
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => {
           setError(null);

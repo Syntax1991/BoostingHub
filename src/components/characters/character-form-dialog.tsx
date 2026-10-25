@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type Ref,
+} from "react";
 import { useRouter } from "next/navigation";
 import {
   createCharactersAction,
@@ -173,11 +181,14 @@ export function CharacterFormDialog({
   initial,
   triggerLabel,
   triggerClassName,
+  triggerRef,
 }: {
   mode: FormMode;
   initial?: CharacterFormValues;
   triggerLabel: string;
   triggerClassName?: string;
+  /** Optional ref to the trigger — used when Edit is opened from an overflow menu host. */
+  triggerRef?: Ref<HTMLButtonElement>;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -617,6 +628,7 @@ export function CharacterFormDialog({
   return (
     <>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => {
           resetFromInitial();
@@ -626,7 +638,7 @@ export function CharacterFormDialog({
         }}
         className={
           triggerClassName ??
-          "inline-flex h-8 items-center rounded-md bg-accent px-2 text-xs font-medium text-black hover:bg-[#d8b436]"
+          "inline-flex h-8 items-center rounded-md bg-accent px-2 text-xs font-medium text-accent-foreground hover:bg-accent-hover"
         }
       >
         {triggerLabel}

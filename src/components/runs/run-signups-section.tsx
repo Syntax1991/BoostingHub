@@ -211,19 +211,19 @@ function ManagerSignupList({
 }) {
   const groups = groupSignupsByUser(signups);
   return (
-    <Card>
+    <Card flush>
       <CardHeader
         title="Signups"
-        description="Operational list for rostering, grouped by User. Draft selection happens on the Roster tab."
+        description={`${groups.length} player${groups.length === 1 ? "" : "s"} · draft selection on Roster`}
       />
       {groups.length === 0 ? (
         <EmptyState title="No signups yet." description="New offers appear while the signup window is open." />
       ) : (
         <ul className="divide-y divide-border">
           {groups.map((group) => (
-            <li key={group.userId} className="px-4 py-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
+            <li key={group.userId} className="px-3 py-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-sm font-semibold">{group.userName}</span>
                   {group.participationTypes.map((type) => (
                     <ParticipationBadge key={type} type={type} />
@@ -234,21 +234,21 @@ function ManagerSignupList({
                 </div>
                 <AddStrikeButton runId={runId} userId={group.userId} userName={group.userName} />
               </div>
-              <ul className="mt-2 space-y-1.5">
+              <ul className="mt-1 space-y-0.5">
                 {group.signups.map((signup) => {
                   const wowClass = resolvedClass(signup);
                   const lockoutLines = boosterLockoutLines(signup);
                   const lockoutAttention = signup.contentSaves?.some((row) => row.label.attention) ?? false;
                   return (
-                  <li key={signup.id} className="flex flex-wrap items-center gap-2 text-sm">
-                    <span>{characterLabel(signup)}</span>
+                  <li key={signup.id} className="flex flex-wrap items-center gap-1.5 text-xs">
+                    <span className="font-medium text-sm">{characterLabel(signup)}</span>
                     {wowClass ? <ClassBadge wowClass={wowClass} /> : null}
                     <OfferedRolesBadges roles={signup.offeredRoles} />
                     {signup.selectedRole ? (
-                      <span className="text-xs text-muted">Rostered as {CHARACTER_ROLE_LABELS[signup.selectedRole]}</span>
+                      <span className="text-[11px] text-muted">→ {CHARACTER_ROLE_LABELS[signup.selectedRole]}</span>
                     ) : null}
                     {signup.participationType === "LOOTBUDDY" ? (
-                      <span className="text-xs text-muted">
+                      <span className="text-[11px] text-muted">
                         {signup.lootbuddyMode ? LOOTBUDDY_MODE_LABELS[signup.lootbuddyMode] : "Lootbuddy"}
                         {signup.lootbuddyVerification && signup.lootbuddyVerification !== "NONE"
                           ? ` · ${LOOTBUDDY_VERIFICATION_LABELS[signup.lootbuddyVerification]}`
@@ -258,13 +258,13 @@ function ManagerSignupList({
                     <SignupStatusBadge status={signup.status} />
                     {lockoutLines.length > 0 ? (
                       <span
-                        className={`cursor-help text-xs underline decoration-dotted underline-offset-2 ${lockoutAttention ? "text-warning" : "text-muted"}`}
+                        className={`cursor-help text-[11px] underline decoration-dotted underline-offset-2 ${lockoutAttention ? "text-warning" : "text-muted"}`}
                         title={formatContentLockoutTooltip(signup.contentSaves ?? [])}
                       >
                         {lockoutLines.join(" · ")}
                       </span>
                     ) : null}
-                    {signup.issue ? <span className="text-xs text-danger">{signup.issue}</span> : null}
+                    {signup.issue ? <span className="text-[11px] text-danger">{signup.issue}</span> : null}
                   </li>
                   );
                 })}

@@ -100,23 +100,26 @@ export const signupService = {
       }
     }
 
+    // Schedule-conflict batches are sequential: each call already uses multiple
+    // pool acquires, and Promise.all across runs contended the shared max=5 pool
+    // (Dashboard + My Runs under concurrent load). Draft roles can overlap the
+    // first conflict batch safely (single query).
     const conflictsByRunCharacter = new Map<string, CharacterScheduleConflict[]>();
-    const [draftBySignupId] = await Promise.all([
-      rosterRepository.listDraftSelectedRolesBySignupIds(upcomingSignups.map((signup) => signup.id)),
-      Promise.all(
-        [...byRun.entries()].map(async ([runId, meta]) => {
-          const map = await getScheduleConflictsForCharacters({
-            targetRunId: runId,
-            scheduledStartAt: meta.scheduledStartAt,
-            difficulty: meta.difficulty,
-            characters: meta.characters,
-          });
-          for (const [characterId, conflicts] of map) {
-            conflictsByRunCharacter.set(`${runId}:${characterId}`, conflicts);
-          }
-        }),
-      ),
-    ]);
+    const draftPromise = rosterRepository.listDraftSelectedRolesBySignupIds(
+      upcomingSignups.map((signup) => signup.id),
+    );
+    for (const [runId, meta] of byRun.entries()) {
+      const map = await getScheduleConflictsForCharacters({
+        targetRunId: runId,
+        scheduledStartAt: meta.scheduledStartAt,
+        difficulty: meta.difficulty,
+        characters: meta.characters,
+      });
+      for (const [characterId, conflicts] of map) {
+        conflictsByRunCharacter.set(`${runId}:${characterId}`, conflicts);
+      }
+    }
+    const draftBySignupId = await draftPromise;
 
     const items = upcomingSignups.map((signup) => {
       const draftSelected = draftBySignupId.has(signup.id);

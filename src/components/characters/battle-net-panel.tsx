@@ -77,7 +77,7 @@ export function BattleNetPanel({
     : undefined;
 
   return (
-    <Card className="mb-4">
+    <Card className="mb-5 border-border/45 bg-surface/35">
       <CardHeader
         title="Battle.net Accounts"
         description="Optional. Connect a region to import or link owned characters from Blizzard."

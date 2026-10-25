@@ -39,6 +39,11 @@ const NAV = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
+/** Quiet active nav — raised surface + thin cool accent rail (not a saturated fill). */
+const NAV_ACTIVE =
+  "bg-surface-raised text-foreground shadow-[inset_2px_0_0_0_var(--accent)]";
+const NAV_IDLE = "text-muted hover:bg-surface-raised hover:text-foreground";
+
 function isPrimaryNavActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -115,10 +120,7 @@ export function AppShell({
               <Link
                 key={item.href}
                 href={item.href}
-                className={cn(
-                  "flex items-center gap-2 rounded-md px-2.5 py-2 text-sm",
-                  active ? "bg-accent/15 text-accent" : "text-muted hover:bg-surface-raised hover:text-foreground",
-                )}
+                className={cn("flex items-center gap-2 rounded-md px-2.5 py-2 text-sm", active ? NAV_ACTIVE : NAV_IDLE)}
                 aria-current={active ? "page" : undefined}
               >
                 <Icon className="h-4 w-4" />
@@ -132,9 +134,7 @@ export function AppShell({
                 href="/manage"
                 className={cn(
                   "flex items-center gap-2 rounded-md px-2.5 py-2 text-sm",
-                  onManageRoute
-                    ? "bg-accent/15 text-accent"
-                    : "text-muted hover:bg-surface-raised hover:text-foreground",
+                  onManageRoute ? NAV_ACTIVE : NAV_IDLE,
                 )}
                 aria-current={onManageRoute && pathname === "/manage" ? "page" : undefined}
               >
@@ -148,12 +148,7 @@ export function AppShell({
                     <Link
                       key={item.href}
                       href={item.href}
-                      className={cn(
-                        "rounded-md px-2 py-1.5 text-xs",
-                        active
-                          ? "bg-accent/10 text-accent"
-                          : "text-muted hover:bg-surface-raised hover:text-foreground",
-                      )}
+                      className={cn("rounded-md px-2 py-1.5 text-xs", active ? NAV_ACTIVE : NAV_IDLE)}
                       aria-current={active ? "page" : undefined}
                     >
                       {item.label}
@@ -227,7 +222,7 @@ export function AppShell({
                   href={item.href}
                   className={cn(
                     "shrink-0 rounded-md px-2 py-1 text-xs",
-                    active ? "bg-accent/15 text-accent" : "text-muted",
+                    active ? "bg-surface-raised text-foreground ring-1 ring-inset ring-accent/40" : "text-muted",
                   )}
                   aria-current={active ? "page" : undefined}
                 >
@@ -291,9 +286,7 @@ export function AppShell({
                         onClick={closeMobileNav}
                         className={cn(
                           "flex min-h-11 items-center gap-2 rounded-md px-2.5 py-2.5 text-sm",
-                          active
-                            ? "bg-accent/15 text-accent"
-                            : "text-muted hover:bg-surface-raised hover:text-foreground",
+                          active ? NAV_ACTIVE : NAV_IDLE,
                         )}
                         aria-current={active ? "page" : undefined}
                       >
@@ -320,9 +313,7 @@ export function AppShell({
                           onClick={closeMobileNav}
                           className={cn(
                             "flex min-h-11 items-center rounded-md px-2.5 py-2.5 text-sm",
-                            active
-                              ? "bg-accent/15 text-accent"
-                              : "text-muted hover:bg-surface-raised hover:text-foreground",
+                            active ? NAV_ACTIVE : NAV_IDLE,
                           )}
                           aria-current={active ? "page" : undefined}
                         >

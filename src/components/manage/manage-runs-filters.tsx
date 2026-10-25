@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { RUN_STATUSES } from "@/models/enums";
 import { RUN_STATUS_LABELS } from "@/lib/labels";
+import { Toolbar, ToolbarField, toolbarControlClassName } from "@/components/ui/toolbar";
 
 export function ManageRunsFilters({
   status,
@@ -29,14 +30,13 @@ export function ManageRunsFilters({
   }
 
   return (
-    <div className="mb-4 flex flex-wrap gap-2">
-      <label className="flex items-center gap-2 text-sm">
-        <span className="text-muted">Status</span>
+    <Toolbar>
+      <ToolbarField label="Status">
         <select
           aria-label="Run status"
           value={status ?? ""}
           onChange={(event) => push({ status: event.target.value, raidLeadId, timeframe, archived })}
-          className="h-9 rounded-md border border-border bg-surface px-2"
+          className={toolbarControlClassName}
         >
           <option value="">All</option>
           {RUN_STATUSES.map((value) => (
@@ -45,28 +45,26 @@ export function ManageRunsFilters({
             </option>
           ))}
         </select>
-      </label>
-      <label className="flex items-center gap-2 text-sm">
-        <span className="text-muted">Schedule</span>
+      </ToolbarField>
+      <ToolbarField label="Schedule">
         <select
           aria-label="Schedule timeframe"
           value={timeframe ?? ""}
           onChange={(event) => push({ status, raidLeadId, timeframe: event.target.value, archived })}
-          className="h-9 rounded-md border border-border bg-surface px-2"
+          className={toolbarControlClassName}
         >
           <option value="">All</option>
           <option value="upcoming">Upcoming</option>
           <option value="past">Past</option>
         </select>
-      </label>
+      </ToolbarField>
       {raidLeads.length > 0 ? (
-        <label className="flex items-center gap-2 text-sm">
-          <span className="text-muted">Raid Lead</span>
+        <ToolbarField label="Raid Lead">
           <select
             aria-label="Raid Lead"
             value={raidLeadId ?? ""}
             onChange={(event) => push({ status, raidLeadId: event.target.value, timeframe, archived })}
-            className="h-9 max-w-[12rem] rounded-md border border-border bg-surface px-2"
+            className={toolbarControlClassName}
           >
             <option value="">All</option>
             {raidLeads.map((lead) => (
@@ -75,21 +73,20 @@ export function ManageRunsFilters({
               </option>
             ))}
           </select>
-        </label>
+        </ToolbarField>
       ) : null}
-      <label className="flex items-center gap-2 text-sm">
-        <span className="text-muted">Archive</span>
+      <ToolbarField label="Archive">
         <select
           aria-label="Archive filter"
           value={archived ?? "active"}
           onChange={(event) => push({ status, raidLeadId, timeframe, archived: event.target.value })}
-          className="h-9 rounded-md border border-border bg-surface px-2"
+          className={toolbarControlClassName}
         >
           <option value="active">Active</option>
           <option value="archived">Archived</option>
           <option value="all">All</option>
         </select>
-      </label>
-    </div>
+      </ToolbarField>
+    </Toolbar>
   );
 }

@@ -2,6 +2,7 @@ import type { AuthenticatedUser } from "@/auth/authorization";
 import {
   assertCanManageRun,
   canManageRun,
+  canManageCommunitySchedule,
   hasAdminAccess,
   hasRaidLeadAccess,
   isEligibleRaidLead,
@@ -561,7 +562,8 @@ export const runService = {
         desiredHealerCount: 4,
         desiredDpsCount: 14,
         desiredLootbuddyCount: 0,
-        discordRolePing: true,
+        // Create Run UI: Discord role ping is explicit opt-in (unchecked by default).
+        discordRolePing: false,
       },
     };
   },
@@ -828,6 +830,8 @@ export const runService = {
     return {
       actorRole: user.accountRole,
       canAssignRaidLead: hasAdminAccess(user.accountRole),
+      /** ADMIN/OWNER only — Create Run may offer "Create as recurring schedule". */
+      canCreateSchedule: canManageCommunitySchedule(user.accountRole),
       defaultRaidLeadId: hasAdminAccess(user.accountRole) ? (raidLeads[0]?.id ?? "") : user.id,
       defaultRaidLeadName: await ownRaidLeadDisplayName(user),
       products,
@@ -843,7 +847,8 @@ export const runService = {
         desiredHealerCount: 4,
         desiredDpsCount: 14,
         desiredLootbuddyCount: 0,
-        discordRolePing: true,
+        // Create Run UI: Discord role ping is explicit opt-in (unchecked by default).
+        discordRolePing: false,
       },
     };
   },

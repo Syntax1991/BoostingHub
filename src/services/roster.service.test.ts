@@ -556,6 +556,8 @@ describe("rosterService publish and republish", () => {
       runId: ids.lab,
       signupId: ids.labAelira,
       selected: true,
+      // Multi-role Mistweaver/Windwalker fixture — concrete role required.
+      selectedRole: "HEALER",
       version: view.roster.version,
     });
     view = await rosterService.getRosterManagementView(thorne, ids.lab);

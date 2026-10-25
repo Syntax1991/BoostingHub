@@ -1,24 +1,26 @@
 import Link from "next/link";
-import { formatDateTime } from "@/lib/datetime";
-import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { formatDate, formatTime } from "@/lib/datetime";
+import { EmptyState, PageHeader } from "@/components/ui/primitives";
+import { PageWorkspace } from "@/components/ui/layout";
 import { runDetailPath } from "@/lib/run-routes";
-import {
-  DifficultyBadge,
-  ParticipationBadge,
-  OfferedRolesBadges,
-  SignupStatusBadge,
-} from "@/components/ui/badges";
+import { DifficultyBadge } from "@/components/ui/badges";
+import { LootbuddyIcon, RoleIcon } from "@/components/ui/ops-icons";
 import { WithdrawButton } from "@/components/my-runs/withdraw-button";
 import {
   CHARACTER_ROLE_LABELS,
   CLASS_LABELS,
   LOOTBUDDY_MODE_LABELS,
   LOOTBUDDY_VERIFICATION_LABELS,
+  SIGNUP_STATUS_LABELS,
 } from "@/lib/labels";
+import { cn } from "@/lib/cn";
+import type { CharacterRole } from "@/models/enums";
 import type { signupService } from "@/services/signup.service";
 
 type MyRuns = Awaited<ReturnType<typeof signupService.getMyRuns>>;
 type SignupItem = MyRuns["pending"][number];
+
+type SectionTone = "emphasis" | "default" | "quiet";
 
 /** A characterless Lootbuddy has no Character — its own Class snapshot stands in for display. */
 function characterLabel(item: Pick<SignupItem, "characterName" | "characterRealm" | "lootbuddyClass">): string {
@@ -31,41 +33,61 @@ function characterLabel(item: Pick<SignupItem, "characterName" | "characterRealm
   return "Unknown character";
 }
 
+function selectionPhrase(offer: SignupItem): string {
+  if (offer.selectionState === "PUBLISHED") return "Selected · Confirmed";
+  if (offer.selectionState === "DRAFT") return "Selected · Draft";
+  return SIGNUP_STATUS_LABELS[offer.status];
+}
+
+function selectionTone(offer: SignupItem): string {
+  if (offer.selectionState === "PUBLISHED") return "text-success";
+  if (offer.selectionState === "DRAFT" || offer.status === "SELECTED") return "text-success";
+  if (offer.status === "PENDING") return "text-warning";
+  return "text-muted";
+}
+
 export function MyRunsView({ data, timeZone }: { data: MyRuns; timeZone: string }) {
   const hasAnySignup =
     data.selected.length + data.pending.length + data.notSelected.length + data.withdrawn.length > 0;
 
   return (
-    <div>
+    <PageWorkspace width="wide">
       <PageHeader
         title="My Runs"
-        description="Your signup relationships, grouped by status. BOOSTER and LOOTBUDDY are participation types for a run, not account identities."
+        description="Your participation across runs — selected, pending, not selected, and withdrawn."
       />
       {!hasAnySignup ? (
-        <Card>
-          <EmptyState
-            title="You have not signed up for any runs."
-            description="Signups from /runs appear here, grouped by pending, selected, not selected, and withdrawn."
-          />
-        </Card>
+        <EmptyState
+          title="You have not signed up for any runs."
+          description="Signups from /runs appear here, grouped by pending, selected, not selected, and withdrawn."
+        />
       ) : (
-      <div className="grid gap-4">
-        <SignupGroup title="Selected" items={data.selected} empty="No selected signups." timeZone={timeZone} />
-        <SignupGroup title="Pending" items={data.pending} empty="No pending signups." timeZone={timeZone} />
-        <SignupGroup title="Not Selected" items={data.notSelected} empty="No declined signups." timeZone={timeZone} />
-        <details className="rounded-md border border-border bg-surface">
-          <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">
-            Withdrawn ({data.withdrawn.length})
-          </summary>
-          {data.withdrawn.length === 0 ? (
-            <EmptyState title="No withdrawn signups" description="Withdrawn records stay persisted for audit." />
-          ) : (
-            <SignupTable items={data.withdrawn} timeZone={timeZone} />
-          )}
-        </details>
-      </div>
+        <div className="space-y-3.5">
+          <SignupGroup
+            title="Selected"
+            items={data.selected}
+            empty="No selected signups."
+            timeZone={timeZone}
+            tone="emphasis"
+          />
+          <SignupGroup
+            title="Pending"
+            items={data.pending}
+            empty="No pending signups."
+            timeZone={timeZone}
+            tone="default"
+          />
+          <SignupGroup
+            title="Not Selected"
+            items={data.notSelected}
+            empty="No declined signups."
+            timeZone={timeZone}
+            tone="quiet"
+          />
+          <WithdrawnSection items={data.withdrawn} timeZone={timeZone} />
+        </div>
       )}
-    </div>
+    </PageWorkspace>
   );
 }
 
@@ -74,21 +96,51 @@ function SignupGroup({
   items,
   empty,
   timeZone,
+  tone,
 }: {
   title: string;
   items: SignupItem[];
   empty: string;
   timeZone: string;
+  tone: SectionTone;
 }) {
   return (
-    <Card>
-      <CardHeader title={title} description={`${items.length} signup${items.length === 1 ? "" : "s"}`} />
-      {items.length === 0 ? (
-        <EmptyState title={empty} description="Status groups stay visible so pending, selected, and not selected never collapse together." />
-      ) : (
-        <SignupTable items={items} timeZone={timeZone} />
+    <section
+      className={cn(
+        "rounded-lg border p-4",
+        tone === "emphasis" && "border-border bg-surface-raised",
+        tone === "default" && "border-border bg-surface",
+        tone === "quiet" && "border-border/80 bg-surface/80",
       )}
-    </Card>
+    >
+      <h2 className="mb-3 text-sm font-semibold tracking-tight text-foreground">
+        {title}
+        <span className="ml-1.5 font-normal text-muted">· {items.length}</span>
+      </h2>
+      {items.length === 0 ? (
+        <p className="text-xs text-muted">{empty}</p>
+      ) : (
+        <RunOfferList items={items} timeZone={timeZone} />
+      )}
+    </section>
+  );
+}
+
+function WithdrawnSection({ items, timeZone }: { items: SignupItem[]; timeZone: string }) {
+  return (
+    <details className="group rounded-lg border border-border/80 bg-surface/80">
+      <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold tracking-tight text-foreground marker:content-none [&::-webkit-details-marker]:hidden">
+        Withdrawn
+        <span className="ml-1.5 font-normal text-muted">· {items.length}</span>
+      </summary>
+      <div className="border-t border-border/60 px-4 pb-4 pt-3">
+        {items.length === 0 ? (
+          <p className="text-xs text-muted">No withdrawn signups.</p>
+        ) : (
+          <RunOfferList items={items} timeZone={timeZone} />
+        )}
+      </div>
+    </details>
   );
 }
 
@@ -99,14 +151,9 @@ type RunGroup = {
   contentSummary?: string;
   difficulty: SignupItem["difficulty"];
   scheduledStartAt: string;
-  participationTypes: Array<SignupItem["participationType"]>;
   offers: SignupItem[];
 };
 
-/**
- * Group by runId so one Run renders as one card. A User may hold Booster + N
- * Lootbuddy rows on the same Run — each offer keeps its own type badge.
- */
 function groupByRun(items: SignupItem[]): RunGroup[] {
   const groups: RunGroup[] = [];
   for (const item of items) {
@@ -119,130 +166,117 @@ function groupByRun(items: SignupItem[]): RunGroup[] {
         contentSummary: item.contentSummary,
         difficulty: item.difficulty,
         scheduledStartAt: item.scheduledStartAt,
-        participationTypes: [],
         offers: [],
       };
       groups.push(group);
     }
     group.offers.push(item);
-    if (!group.participationTypes.includes(item.participationType)) {
-      group.participationTypes.push(item.participationType);
-    }
   }
   return groups;
 }
 
-function SignupTable({ items, timeZone }: { items: SignupItem[]; timeZone: string }) {
+function RunOfferList({ items, timeZone }: { items: SignupItem[]; timeZone: string }) {
   const groups = groupByRun(items);
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[980px] text-left text-sm">
-        <thead className="text-xs uppercase tracking-wide text-muted">
-          <tr>
-            <th className="px-4 py-2 font-medium">Run</th>
-            <th className="px-4 py-2 font-medium">Schedule</th>
-            <th className="px-4 py-2 font-medium">Participations</th>
-            <th className="px-4 py-2 font-medium">Type</th>
-            <th className="px-4 py-2 font-medium">Offers</th>
-          </tr>
-        </thead>
-        <tbody>
-          {groups.map((group) => {
-            const selected = group.offers.find(
-              (offer) => offer.selectionState === "DRAFT" || offer.selectionState === "PUBLISHED",
-            );
-            const stillOffered = group.offers.some((offer) => offer.selectionState === "OFFERED");
-            const selectedLabel = selected
-              ? [
-                  characterLabel(selected),
-                  selected.displayRole ? CHARACTER_ROLE_LABELS[selected.displayRole] : null,
-                  selected.selectionState === "DRAFT"
-                    ? "Draft"
-                    : selected.selectionState === "PUBLISHED"
-                      ? "Confirmed"
-                      : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")
-              : stillOffered
-                ? "Pending"
-                : "Not selected";
-            return (
-              <tr key={group.runId} className="border-t border-border align-top">
-                <td className="px-4 py-3">
-                  <Link href={runDetailPath(group.runId)} className="max-w-[220px] truncate font-medium text-accent hover:underline">
-                    {group.runTitle}
-                  </Link>
-                  <div className="mt-1 flex items-center gap-2 text-xs text-muted">
-                    <span className="max-w-[200px] truncate">
-                      {group.productLabel}
-                      {group.contentSummary ? ` · ${group.contentSummary}` : ""}
-                    </span>
-                    <DifficultyBadge difficulty={group.difficulty} />
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-muted">{formatDateTime(group.scheduledStartAt, timeZone)}</td>
-                <td className="px-4 py-3">
-                  <p className="max-w-[240px] truncate">
-                    <span className="text-muted">Offered:</span> {group.offers.map(characterLabel).join(", ")}
-                  </p>
-                  <p className="mt-1 max-w-[280px] truncate text-xs text-muted">Selected: {selectedLabel}</p>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-wrap gap-1">
-                    {group.participationTypes.map((type) => (
-                      <ParticipationBadge key={type} type={type} />
-                    ))}
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <ul className="space-y-1.5">
-                    {group.offers.map((offer) => (
-                      <li key={offer.id} className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs text-muted">{characterLabel(offer)}</span>
-                        {offer.participationType === "LOOTBUDDY" ? (
-                          <span className="text-xs text-muted">
-                            {offer.lootbuddyMode ? LOOTBUDDY_MODE_LABELS[offer.lootbuddyMode] : "Lootbuddy"}
-                            {offer.lootbuddyVerification && offer.lootbuddyVerification !== "NONE"
-                              ? ` · ${LOOTBUDDY_VERIFICATION_LABELS[offer.lootbuddyVerification]}`
-                              : ""}
-                          </span>
-                        ) : (
-                          <OfferedRolesBadges roles={offer.offeredRoles} />
-                        )}
-                        <SignupStatusBadge status={offer.status} />
-                        {offer.selectionState === "DRAFT" ? (
-                          <span className="rounded-md bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent">
-                            Selected · Draft
-                          </span>
-                        ) : null}
-                        {offer.selectionState === "PUBLISHED" ? (
-                          <span className="rounded-md bg-success/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-success">
-                            Selected · Confirmed
-                          </span>
-                        ) : null}
-                        {offer.scheduleConflicts.length > 0 ? (
-                          <span
-                            className="text-xs text-warning"
-                            title={offer.scheduleConflicts.map((row) => row.message).join("\n")}
-                          >
-                            Schedule conflict
-                          </span>
-                        ) : null}
-                        {offer.canWithdrawWithReason ? (
-                          <WithdrawButton signupId={offer.id} requireReason />
-                        ) : offer.canWithdraw ? (
-                          <WithdrawButton signupId={offer.id} />
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <ul className="divide-y divide-border/60">
+      {groups.map((group) => (
+        <li key={group.runId} className="py-3 first:pt-0 last:pb-0">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(7.5rem,0.55fr)_minmax(0,1.7fr)] lg:items-start lg:gap-4">
+            {/* Run identity */}
+            <div className="min-w-0">
+              <Link
+                href={runDetailPath(group.runId)}
+                className="block truncate text-[15px] font-semibold leading-snug text-foreground hover:text-accent"
+              >
+                {group.runTitle}
+              </Link>
+              <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px] leading-snug text-muted">
+                <span className="truncate">
+                  {group.productLabel}
+                  {group.contentSummary ? ` · ${group.contentSummary}` : ""}
+                </span>
+                <DifficultyBadge difficulty={group.difficulty} />
+              </p>
+            </div>
+
+            {/* When — quiet, no column banner */}
+            <div className="min-w-0 lg:pt-0.5">
+              <p className="text-[13px] leading-snug text-foreground/90">
+                {formatDate(group.scheduledStartAt, timeZone)}
+              </p>
+              <p className="text-[12px] leading-snug text-muted">{formatTime(group.scheduledStartAt, timeZone)}</p>
+            </div>
+
+            {/* Participations + per-offer Withdraw */}
+            <ul className="min-w-0 space-y-2">
+              {group.offers.map((offer) => (
+                <OfferRow key={offer.id} offer={offer} />
+              ))}
+            </ul>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function OfferRow({ offer }: { offer: SignupItem }) {
+  const isLootbuddy = offer.participationType === "LOOTBUDDY";
+  const primaryRole: CharacterRole | null =
+    offer.displayRole ?? (offer.offeredRoles.length === 1 ? offer.offeredRoles[0] : null);
+  const canWithdraw = offer.canWithdrawWithReason || offer.canWithdraw;
+
+  return (
+    <div className="flex items-start gap-3">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {isLootbuddy ? (
+            <LootbuddyIcon size={16} />
+          ) : primaryRole ? (
+            <RoleIcon role={primaryRole} size={16} />
+          ) : null}
+          <span className="truncate text-[13px] font-medium leading-snug text-foreground">
+            {characterLabel(offer)}
+          </span>
+        </div>
+        <p className="mt-0.5 text-[12px] leading-snug text-muted">
+          {isLootbuddy ? (
+            <>
+              Lootbuddy
+              {offer.lootbuddyMode ? ` · ${LOOTBUDDY_MODE_LABELS[offer.lootbuddyMode]}` : ""}
+              {offer.lootbuddyVerification && offer.lootbuddyVerification !== "NONE"
+                ? ` · ${LOOTBUDDY_VERIFICATION_LABELS[offer.lootbuddyVerification]}`
+                : ""}
+            </>
+          ) : primaryRole ? (
+            CHARACTER_ROLE_LABELS[primaryRole]
+          ) : offer.offeredRoles.length > 0 ? (
+            offer.offeredRoles.map((role) => CHARACTER_ROLE_LABELS[role]).join(" · ")
+          ) : (
+            "Booster"
+          )}
+        </p>
+        <p className={cn("mt-0.5 text-[12px] font-medium leading-snug", selectionTone(offer))}>
+          {selectionPhrase(offer)}
+          {offer.scheduleConflicts.length > 0 ? (
+            <span
+              className="ml-1.5 font-normal text-warning"
+              title={offer.scheduleConflicts.map((row) => row.message).join("\n")}
+            >
+              · Conflict
+            </span>
+          ) : null}
+        </p>
+      </div>
+      {canWithdraw ? (
+        <div className="shrink-0 pt-0.5">
+          {offer.canWithdrawWithReason ? (
+            <WithdrawButton signupId={offer.id} requireReason />
+          ) : (
+            <WithdrawButton signupId={offer.id} />
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

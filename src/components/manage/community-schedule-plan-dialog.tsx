@@ -304,7 +304,7 @@ export function CommunitySchedulePlanDialog({
           setOpenKey((key) => key + 1);
           setOpen(true);
         }}
-        className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-black hover:bg-[#d8b436]"
+        className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-accent-foreground hover:bg-accent-hover"
       >
         Create Schedule
       </button>
@@ -870,7 +870,7 @@ export function CommunitySchedulePlanDialog({
                   (byBasis && !basisRunId) ||
                   (!adoptSetup && setupMode === "existing" && !templateId)
                 }
-                className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-black disabled:opacity-60"
+                className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-accent-foreground disabled:opacity-60"
               >
                 {pending ? "Saving…" : "Create Schedule"}
               </button>

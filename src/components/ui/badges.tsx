@@ -23,6 +23,10 @@ import type {
   SignupStatus,
   WowClass,
 } from "@/models/enums";
+import { RunStatusGlyph } from "@/components/ui/ops-icons";
+
+/** Re-export: ops role / lootbuddy icons live with the shared line-icon language. */
+export { LootbuddyIcon, RoleIcon } from "@/components/ui/ops-icons";
 
 export function Badge({
   children,
@@ -34,7 +38,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
+        "inline-flex h-5 items-center rounded px-1.5 text-[11px] font-semibold uppercase leading-none tracking-wide",
         className,
       )}
     >
@@ -57,10 +61,18 @@ export function DifficultyBadge({ difficulty }: { difficulty: RaidDifficulty }) 
   );
 }
 
+/**
+ * Compact icon-led Run status — short label kept for clarity.
+ * Semantic colors preserved; Mythic difficulty stays on DifficultyBadge, not here.
+ */
 export function RunStatusBadge({ status }: { status: RunStatus }) {
+  const label = RUN_STATUS_LABELS[status];
   return (
-    <Badge
+    <span
+      title={label}
+      aria-label={label}
       className={cn(
+        "inline-flex h-5 max-w-full items-center gap-1 rounded px-1.5 text-[11px] font-medium leading-none tracking-wide",
         status === "OPEN" && "bg-success/15 text-success",
         status === "ROSTERING" && "bg-warning/15 text-warning",
         status === "PUBLISHED" && "bg-info/15 text-info",
@@ -70,8 +82,9 @@ export function RunStatusBadge({ status }: { status: RunStatus }) {
         status === "CANCELLED" && "bg-danger/15 text-danger",
       )}
     >
-      {RUN_STATUS_LABELS[status]}
-    </Badge>
+      <RunStatusGlyph status={status} size={12} />
+      <span className="truncate">{label}</span>
+    </span>
   );
 }
 

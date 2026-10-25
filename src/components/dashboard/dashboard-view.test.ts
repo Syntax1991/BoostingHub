@@ -20,20 +20,26 @@ const emptyDashboard = {
   upcomingRuns: [],
   characters: {
     activeCount: 0,
+    readyCount: 0,
     totalCount: 0,
     boosterEligibleCount: 0,
     lockoutAttentionCount: 0,
+    syncIssueCount: 0,
     lockoutAttention: [],
   },
   recentActivity: [],
+  showRecentActivity: false,
 };
 
 describe("DashboardView", () => {
   it("renders calm empty personal state for a brand-new USER", () => {
-    const html = renderToStaticMarkup(createElement(DashboardView, { data: emptyDashboard as never, timeZone: "Europe/Berlin" }));
-    expect(html).toContain("No personal conflicts need attention.");
+    const html = renderToStaticMarkup(
+      createElement(DashboardView, { data: emptyDashboard as never, timeZone: "Europe/Berlin" }),
+    );
+    expect(html).toContain("No conflicts");
     expect(html).toContain("No selected upcoming run.");
-    expect(html).toContain("Pending: 0");
+    expect(html).toContain("Pending");
+    expect(html).toContain(">0</span>");
     expect(html).not.toContain("Boosting Control Center");
     expect(html).not.toContain("Admin attention");
     expect(html).not.toContain("My Upcoming Runs");
@@ -41,7 +47,8 @@ describe("DashboardView", () => {
 
   it("renders next selected published role and conflict attention", () => {
     const html = renderToStaticMarkup(
-      createElement(DashboardView, { timeZone: "Europe/Berlin",
+      createElement(DashboardView, {
+        timeZone: "Europe/Berlin",
         data: {
           ...emptyDashboard,
           personal: {
@@ -71,6 +78,7 @@ describe("DashboardView", () => {
                   participationType: "BOOSTER",
                   characterId: "c1",
                   characterName: "Synlight",
+                  characterRealm: "Ravencrest",
                   publishedRole: "HEALER",
                   isBackup: false,
                   lootbuddyClass: null,
@@ -92,17 +100,21 @@ describe("DashboardView", () => {
         } as never,
       }),
     );
-    expect(html).toContain("Synlight · Healer");
+    expect(html).toContain("Synlight-Ravencrest");
+    expect(html).toContain("Healer");
     expect(html).toContain("Schedule conflict");
-    expect(html).toContain("Pending: 2");
+    expect(html).toContain("Pending");
+    expect(html).toContain(">2</span>");
     expect(html).toContain("/runs/run-1");
     expect(html).toContain("/my-runs");
+    expect(html).toContain("Next Run");
     expect(html).not.toContain("HEALER + DPS");
   });
 
   it("renders RAID_LEAD operations and no financial attention for ADMIN", () => {
     const html = renderToStaticMarkup(
-      createElement(DashboardView, { timeZone: "Europe/Berlin",
+      createElement(DashboardView, {
+        timeZone: "Europe/Berlin",
         data: {
           ...emptyDashboard,
           showOperations: true,
@@ -124,11 +136,33 @@ describe("DashboardView", () => {
       }),
     );
     expect(html).toContain("Boosting Control Center");
-    expect(html).toContain("View all");
-    expect(html).not.toContain("View all operations");
+    expect(html).toContain("Manage runs");
     expect(html).toContain("Mark Attendance");
-    expect(html).toContain("2 unmarked");
+    expect(html).toContain("2 attendance entries unmarked");
     expect(html).toContain("tab=attendance");
     expect(html).not.toMatch(/mark paid|payout|settlement/i);
+  });
+
+  it("renders quiet operational empty state for leads with no handoffs", () => {
+    const html = renderToStaticMarkup(
+      createElement(DashboardView, {
+        timeZone: "Europe/Berlin",
+        data: {
+          ...emptyDashboard,
+          showOperations: true,
+          characters: {
+            ...emptyDashboard.characters,
+            activeCount: 1,
+            readyCount: 1,
+            totalCount: 1,
+          },
+        } as never,
+      }),
+    );
+    expect(html).toContain("Boosting Control Center");
+    expect(html).toContain("No operational issues");
+    expect(html).toMatch(/>1<\/span>\s*ready/);
+    expect(html).toMatch(/>0<\/span>\s*lockout conflicts/);
+    expect(html).toMatch(/>0<\/span>\s*sync errors/);
   });
 });

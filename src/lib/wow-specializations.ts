@@ -223,6 +223,16 @@ export function specializationById(
   return entry && role ? { ...entry, role } : null;
 }
 
+/** Blizzard ChrSpecialization.ID for a catalog class + name, or null. */
+export function specializationIdFor(wowClass: WowClass, specialization: string): number | null {
+  const match = findSpecialization(wowClass, specialization);
+  if (!match) return null;
+  for (const [id, entry] of Object.entries(WOW_SPECIALIZATION_IDS)) {
+    if (entry.wowClass === wowClass && entry.name === match.name) return Number(id);
+  }
+  return null;
+}
+
 /** Every catalogued specialization id (tests / diagnostics). */
 export function knownSpecializationIds(): number[] {
   return Object.keys(WOW_SPECIALIZATION_IDS).map(Number);

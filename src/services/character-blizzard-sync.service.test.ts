@@ -48,6 +48,7 @@ import { raidRepository } from "@/repositories/raid.repository";
 import { warcraftLogsApiClient } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
 import {
   TIDEBOUND_GROTTO_RAID_ID,
+  UNBINDING_KITHIX_RAID_ID,
   VENOMOUS_ABYSS_RAID_ID,
   WOW_RAID_CATALOG,
 } from "@/lib/wow-raid-catalog";
@@ -704,7 +705,8 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
     const current = lockouts.filter(
       (row) => String(row.resetIdentifier) === reset.resetIdentifier,
     );
-    expect(current).toHaveLength(6);
+    // Three lockout raids × three difficulties.
+    expect(current).toHaveLength(9);
 
     const byKey = (raidId: string, difficulty: string) =>
       current.find(
@@ -717,6 +719,9 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
     expect(Number(byKey(TIDEBOUND_GROTTO_RAID_ID, "NORMAL")?.bossesDefeated)).toBe(0);
     expect(Number(byKey(TIDEBOUND_GROTTO_RAID_ID, "HEROIC")?.bossesDefeated)).toBe(1);
     expect(Number(byKey(TIDEBOUND_GROTTO_RAID_ID, "MYTHIC")?.bossesDefeated)).toBe(0);
+    expect(Number(byKey(UNBINDING_KITHIX_RAID_ID, "NORMAL")?.bossesDefeated)).toBe(0);
+    expect(Number(byKey(UNBINDING_KITHIX_RAID_ID, "HEROIC")?.bossesDefeated)).toBe(0);
+    expect(Number(byKey(UNBINDING_KITHIX_RAID_ID, "MYTHIC")?.bossesDefeated)).toBe(0);
   });
 
   it("keeps prior lockouts when encounters fail but still updates item level", async () => {

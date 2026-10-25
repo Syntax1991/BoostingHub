@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { formatDateTime } from "@/lib/datetime";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { PageWorkspace } from "@/components/ui/layout";
+import { DataTable, DataTd, DataTh, DataThead, MobileDataCard } from "@/components/ui/data-table";
 import { DifficultyBadge, RunStatusBadge } from "@/components/ui/badges";
 import { runDetailPath } from "@/lib/run-routes";
 import { ManageRunsFilters } from "@/components/manage/manage-runs-filters";
@@ -14,15 +16,15 @@ export function ManageRunsView({ data, massCreatedCount }: { data: ManagedRunsPa
   );
 
   return (
-    <div>
+    <PageWorkspace width="wide">
       {massCreatedCount ? (
-        <p className="mb-4 rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-sm">
+        <p className="mb-3 rounded-md border border-accent/40 bg-accent/10 px-3 py-1.5 text-sm">
           Created {massCreatedCount} run draft{massCreatedCount === 1 ? "" : "s"}.
         </p>
       ) : null}
       <PageHeader
         title="Manage runs"
-        description="Open signups, roster, and archive existing runs. Raid leads see assigned runs. Admins see every run."
+        description="Open signups, roster, and archive existing runs."
       />
       <ManageRunsFilters
         status={data.filters.status}
@@ -31,7 +33,7 @@ export function ManageRunsView({ data, massCreatedCount }: { data: ManagedRunsPa
         archived={data.filters.archived}
         raidLeads={data.raidLeads}
       />
-      <Card>
+      <Card flush>
         {data.runs.length === 0 ? (
           <EmptyState
             title={filtered ? "No runs match these filters." : "No runs created yet."}
@@ -42,100 +44,138 @@ export function ManageRunsView({ data, massCreatedCount }: { data: ManagedRunsPa
             }
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[960px] text-left text-sm">
-              <thead className="text-xs uppercase tracking-wide text-muted">
-                <tr>
-                  <th className="px-4 py-2 font-medium">Run</th>
-                  <th className="px-4 py-2 font-medium">Schedule</th>
-                  <th className="px-4 py-2 font-medium">Lead</th>
-                  <th className="px-4 py-2 font-medium">Status</th>
-                  <th className="px-4 py-2 font-medium">Signups</th>
-                  <th className="px-4 py-2 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.runs.map((run) => {
-                  const attentionHint = formatOperationalAttentionHint({
-                    attendance: run.attendance,
-                    attention: run.attention,
-                    nextAction: run.nextAction,
-                  });
-                  return (
-                    <tr key={run.id} className="border-t border-border align-top">
-                      <td className="px-4 py-3">
-                        <Link href={runDetailPath(run.id)} className="max-w-[240px] truncate font-medium text-accent hover:underline">
-                          {run.title}
-                        </Link>
-                        <div className="mt-1 flex items-center gap-2 text-xs text-muted">
-                          <span>
-                            {run.productLabel}
-                            {run.contentSummary ? ` · ${run.contentSummary}` : ""}
-                          </span>
-                          <DifficultyBadge difficulty={run.difficulty} />
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-muted">{formatDateTime(run.scheduledStartAt)}</td>
-                      <td className="px-4 py-3">{run.raidLeadDisplayName}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <RunStatusBadge status={run.status} />
-                          {run.archivedAt ? (
-                            <span className="inline-flex items-center rounded-full border border-border bg-surface-raised px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted">
-                              Archived
+          <>
+            <div className="hidden md:block">
+              <DataTable minWidth="56rem">
+                <DataThead>
+                  <tr>
+                    <DataTh>Run</DataTh>
+                    <DataTh>Schedule</DataTh>
+                    <DataTh>Lead</DataTh>
+                    <DataTh>Status</DataTh>
+                    <DataTh>Signups</DataTh>
+                    <DataTh>Actions</DataTh>
+                  </tr>
+                </DataThead>
+                <tbody>
+                  {data.runs.map((run) => {
+                    const attentionHint = formatOperationalAttentionHint({
+                      attendance: run.attendance,
+                      attention: run.attention,
+                      nextAction: run.nextAction,
+                    });
+                    return (
+                      <tr key={run.id} className="hover:bg-surface-raised/40">
+                        <DataTd>
+                          <Link
+                            href={runDetailPath(run.id)}
+                            className="max-w-[220px] truncate font-medium text-accent hover:underline"
+                          >
+                            {run.title}
+                          </Link>
+                          <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted">
+                            <span className="truncate">
+                              {run.productLabel}
+                              {run.contentSummary ? ` · ${run.contentSummary}` : ""}
                             </span>
-                          ) : null}
-                          {attentionHint ? (
-                            <span className="inline-flex items-center rounded-full border border-border bg-surface-raised px-2 py-0.5 text-[11px] font-medium text-muted">
-                              {attentionHint}
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-muted">
-                        {run.signupCount} active · {run.selectedCount} selected
-                        <div>{run.signupWindowOpen ? "Open" : "Closed"}</div>
-                        <div className="mt-1">
-                          Draft {run.draftSelectedCount}
-                          {run.publishedAt ? " · published" : ""}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <RunQuickActions
-                          run={{
-                            id: run.id,
-                            title: run.title,
-                            status: run.status,
-                            archivedAt: run.archivedAt,
-                            nextAction: run.nextAction,
-                            unmarkedCount: run.attendance.unmarkedCount,
-                            capabilities: run.capabilities,
-                          }}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                            <DifficultyBadge difficulty={run.difficulty} />
+                          </div>
+                        </DataTd>
+                        <DataTd className="whitespace-nowrap text-muted text-xs">
+                          {formatDateTime(run.scheduledStartAt)}
+                        </DataTd>
+                        <DataTd className="whitespace-nowrap">{run.raidLeadDisplayName}</DataTd>
+                        <DataTd>
+                          <div className="flex flex-wrap items-center gap-1">
+                            <RunStatusBadge status={run.status} />
+                            {run.archivedAt ? (
+                              <span className="inline-flex h-5 items-center rounded px-1.5 text-[11px] font-semibold uppercase text-muted">
+                                Archived
+                              </span>
+                            ) : null}
+                            {attentionHint ? (
+                              <span className="inline-flex h-5 items-center rounded bg-surface-raised px-1.5 text-[11px] text-muted">
+                                {attentionHint}
+                              </span>
+                            ) : null}
+                          </div>
+                        </DataTd>
+                        <DataTd className="text-[11px] text-muted">
+                          <span className="tabular-nums text-foreground">{run.signupCount}</span> ·{" "}
+                          {run.selectedCount} sel · {run.signupWindowOpen ? "open" : "closed"}
+                          <div>
+                            Draft {run.draftSelectedCount}
+                            {run.publishedAt ? " · published" : ""}
+                          </div>
+                        </DataTd>
+                        <DataTd>
+                          <RunQuickActions
+                            run={{
+                              id: run.id,
+                              title: run.title,
+                              status: run.status,
+                              archivedAt: run.archivedAt,
+                              nextAction: run.nextAction,
+                              unmarkedCount: run.attendance.unmarkedCount,
+                              capabilities: run.capabilities,
+                            }}
+                          />
+                        </DataTd>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </DataTable>
+            </div>
+            <ul className="flex flex-col gap-2 p-2 md:hidden">
+              {data.runs.map((run) => (
+                <li key={run.id}>
+                  <MobileDataCard>
+                    <Link href={runDetailPath(run.id)} className="text-sm font-medium text-accent hover:underline">
+                      {run.title}
+                    </Link>
+                    <p className="mt-0.5 text-[11px] text-muted">
+                      {formatDateTime(run.scheduledStartAt)} · {run.raidLeadDisplayName}
+                    </p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                      <RunStatusBadge status={run.status} />
+                      <DifficultyBadge difficulty={run.difficulty} />
+                    </div>
+                    <div className="mt-2">
+                      <RunQuickActions
+                        run={{
+                          id: run.id,
+                          title: run.title,
+                          status: run.status,
+                          archivedAt: run.archivedAt,
+                          nextAction: run.nextAction,
+                          unmarkedCount: run.attendance.unmarkedCount,
+                          capabilities: run.capabilities,
+                        }}
+                      />
+                    </div>
+                  </MobileDataCard>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </Card>
-    </div>
+    </PageWorkspace>
   );
 }
 
 export function RosterUnavailable({ title, description }: { title: string; description: string }) {
   return (
-    <div>
+    <PageWorkspace>
       <PageHeader title={title} description={description} />
       <Card>
-        <div className="px-4 py-4 text-sm">
+        <div className="px-3 py-3 text-sm">
           <Link href="/manage/runs" className="text-accent hover:underline">
             Back to manage runs
           </Link>
         </div>
       </Card>
-    </div>
+    </PageWorkspace>
   );
 }

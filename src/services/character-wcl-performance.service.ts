@@ -42,6 +42,8 @@ type BoosterPerfInput = {
     wowClass: WowClass;
     specialization: string | null;
     primaryRole: CharacterRole;
+    /** Additional playable specs — each may own its own cached WCL metric. */
+    playableSpecs?: readonly string[];
     warcraftLogsId: string | null;
   };
 };
@@ -108,11 +110,41 @@ export function rolesRelevantForWclPerformance(input: {
   wowClass: WowClass;
   specialization: string | null;
   primaryRole: CharacterRole;
+  playableSpecs?: readonly string[];
 }): CharacterRole[] {
   const offered = [...new Set(input.offeredRoles)];
   const base = offered.length > 0 ? offered : [input.primaryRole];
-  const allowDps = characterIsRealDpsSpec(input);
+  const playableIsDps = (input.playableSpecs ?? []).some((spec) => {
+    const match = findSpecialization(input.wowClass, spec);
+    return match != null && (match.role === "MELEE_DPS" || match.role === "RANGED_DPS");
+  });
+  const allowDps = characterIsRealDpsSpec(input) || playableIsDps;
   return base.filter((role) => (role === "DPS" || role === "MELEE_DPS" || role === "RANGED_DPS" ? allowDps : true));
+}
+
+/**
+ * Catalog specs (primary ∪ playable) that map to this offered role.
+ * Empty → role-only metric key (historic / no matching spec configured).
+ */
+export function specsForOfferedRole(
+  wowClass: WowClass,
+  specialization: string | null,
+  playableSpecs: readonly string[] | undefined,
+  offeredRole: CharacterRole,
+): string[] {
+  const names: string[] = [];
+  const seen = new Set<string>();
+  const consider = (raw: string | null | undefined) => {
+    if (!raw?.trim()) return;
+    const match = findSpecialization(wowClass, raw);
+    if (!match || match.role !== offeredRole) return;
+    if (seen.has(match.name)) return;
+    seen.add(match.name);
+    names.push(match.name);
+  };
+  consider(specialization);
+  for (const spec of playableSpecs ?? []) consider(spec);
+  return names;
 }
 
 export function buildMetricKey(metricKeyBase: string, specName: string | null): string {
@@ -319,7 +351,13 @@ export async function resolveRosterWclPerformance(input: {
     raids: Array<{
       raidId: string;
       raidName: string;
-      roles: Array<{ role: CharacterRole; specLabel: string | null; key: string }>;
+      roles: Array<{
+        role: CharacterRole;
+        specLabel: string | null;
+        key: string;
+        /** Cache-only role-wide metric key when the spec-scoped row is empty (no extra remote fetch). */
+        fallbackCacheKey: Omit<FetchKey, "warcraftLogsId" | "metric" | "role" | "specName"> | null;
+      }>;
     }>;
   }> = [];
 
@@ -332,48 +370,66 @@ export async function resolveRosterWclPerformance(input: {
       wowClass: booster.character.wowClass,
       specialization: booster.character.specialization,
       primaryRole: booster.character.primaryRole,
+      playableSpecs: booster.character.playableSpecs,
     });
     if (rolesToQuery.length === 0) continue;
 
     const raids: (typeof signupPlans)[number]["raids"] = [];
     for (const content of contentsWithWcl) {
       const roles: (typeof raids)[number]["roles"] = [];
+      const scopeSuffix = content.scopeEncounterIds ? RAID_SCOPED_METRIC_SUFFIX : "";
       for (const offeredRole of rolesToQuery) {
         const { metric, role, metricKeyBase } = metricForRole(offeredRole);
-        const specName = specNameForOfferedRole(
+        const specNames = specsForOfferedRole(
           booster.character.wowClass,
           booster.character.specialization,
+          booster.character.playableSpecs,
           offeredRole,
         );
-        // Raid-scoped values get their own cache key (never mixed with zone-wide rows).
-        const metricKey =
-          buildMetricKey(metricKeyBase, specName) + (content.scopeEncounterIds ? RAID_SCOPED_METRIC_SUFFIX : "");
-        const keyId = [
-          booster.character.id,
-          content.zoneId,
-          content.encounterId,
-          wclDifficulty,
-          metricKey,
-        ].join("|");
-        if (!fetchKeys.has(keyId)) {
-          fetchKeys.set(keyId, {
-            characterId: booster.character.id,
-            warcraftLogsId: wclId,
-            zoneId: content.zoneId,
-            encounterId: content.encounterId,
-            scopeEncounterIds: content.scopeEncounterIds,
-            difficulty: wclDifficulty,
+        const labels = specNames.length > 0 ? specNames : [null];
+        const baseMetricKey = buildMetricKey(metricKeyBase, null) + scopeSuffix;
+        const fallbackCacheKey =
+          specNames.length > 0
+            ? {
+                characterId: booster.character.id,
+                zoneId: content.zoneId,
+                encounterId: content.encounterId,
+                scopeEncounterIds: content.scopeEncounterIds,
+                difficulty: wclDifficulty,
+                metricKey: baseMetricKey,
+              }
+            : null;
+        for (const specName of labels) {
+          // Raid-scoped values get their own cache key (never mixed with zone-wide rows).
+          const metricKey = buildMetricKey(metricKeyBase, specName) + scopeSuffix;
+          const keyId = [
+            booster.character.id,
+            content.zoneId,
+            content.encounterId,
+            wclDifficulty,
             metricKey,
-            metric,
-            role,
-            specName: specName ?? undefined,
+          ].join("|");
+          if (!fetchKeys.has(keyId)) {
+            fetchKeys.set(keyId, {
+              characterId: booster.character.id,
+              warcraftLogsId: wclId,
+              zoneId: content.zoneId,
+              encounterId: content.encounterId,
+              scopeEncounterIds: content.scopeEncounterIds,
+              difficulty: wclDifficulty,
+              metricKey,
+              metric,
+              role,
+              specName: specName ?? undefined,
+            });
+          }
+          roles.push({
+            role: offeredRole,
+            specLabel: specName,
+            key: keyId,
+            fallbackCacheKey: specName ? fallbackCacheKey : null,
           });
         }
-        roles.push({
-          role: offeredRole,
-          specLabel: specName,
-          key: keyId,
-        });
       }
       if (roles.length > 0) {
         raids.push({
@@ -425,9 +481,8 @@ export async function resolveRosterWclPerformance(input: {
     for (const raid of plan.raids) {
       const roles: WclPerformanceRoleSegment[] = [];
       for (const rolePlan of raid.roles) {
-        const values = resolved.get(rolePlan.key);
+        const values = pickResolvedPerformance(resolved, cached, rolePlan.key, rolePlan.fallbackCacheKey);
         if (!values) continue;
-        if (values.bestPct == null && values.avgPct == null) continue;
         roles.push({
           role: rolePlan.role,
           specLabel: rolePlan.specLabel,
@@ -445,4 +500,25 @@ export async function resolveRosterWclPerformance(input: {
   }
 
   return result;
+}
+
+/**
+ * Prefer the spec-scoped resolved row; fall back to a role-wide CharacterWclPerformance
+ * cache hit when that row is missing or empty. Cache-only — does not schedule a remote fetch.
+ */
+function pickResolvedPerformance(
+  resolved: Map<string, { bestPct: number | null; avgPct: number | null }>,
+  cached: CharacterWclPerformanceRecord[],
+  primaryKey: string,
+  fallbackCacheKey: Omit<FetchKey, "warcraftLogsId" | "metric" | "role" | "specName"> | null,
+): { bestPct: number | null; avgPct: number | null } | null {
+  const primary = resolved.get(primaryKey);
+  if (primary && (primary.bestPct != null || primary.avgPct != null)) return primary;
+  if (fallbackCacheKey) {
+    const hit = cacheLookup(cached, fallbackCacheKey);
+    if (hit && (hit.bestPct != null || hit.avgPct != null)) {
+      return { bestPct: hit.bestPct, avgPct: hit.avgPct };
+    }
+  }
+  return null;
 }

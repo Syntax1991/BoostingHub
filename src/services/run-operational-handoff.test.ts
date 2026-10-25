@@ -121,7 +121,7 @@ describe("projectRunOperationalHandoff", () => {
         attendance: { total: 5, unmarkedCount: 0 },
       });
       expect(handoff.attention).toBe("NONE");
-      expect(handoff.nextAction).toEqual({ kind: "VIEW", label: "View", mode: "link", tab: "overview" });
+      expect(handoff.nextAction).toEqual({ kind: "VIEW", label: "View", mode: "link", tab: "operations" });
       expect(formatOperationalAttentionHint(handoff)).toBeNull();
     }
   });

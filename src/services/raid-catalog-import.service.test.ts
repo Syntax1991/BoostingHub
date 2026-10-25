@@ -125,7 +125,11 @@ async function cleanup() {
     raid.blizzardInstanceId.in(QA_INSTANCE_IDS),
   ).all()) as Array<Record<string, unknown>>;
   const raidIds = raids.map((row) => asString(row.id));
-  if (raidIds.length === 0) return;
+  if (raidIds.length === 0) {
+    // Still drop a warm memo — a prior test may have deleted via raw orm.
+    raidRepository.invalidateCatalogMemo();
+    return;
+  }
   await orm.RunRaidContent.where((row) => row.raidId.in(raidIds)).delete();
   await orm.Run.where((row) => row.title.like("QA Import %")).delete();
   await orm.RunTemplateRaidContent.where((row) => row.raidId.in(raidIds)).delete();
@@ -134,6 +138,7 @@ async function cleanup() {
   await orm.Product.where((row) => row.name.like("QA Import %")).delete();
   await orm.CharacterRaidLockout.where((row) => row.raidId.in(raidIds)).delete();
   for (const id of raidIds) await orm.Raid.where({ id }).delete();
+  raidRepository.invalidateCatalogMemo();
 }
 
 beforeEach(async () => {
@@ -236,6 +241,7 @@ describe("Import Raid", () => {
       ["Third Coil", [995003]],
     ]);
     await orm.Raid.where({ id: raidId }).delete();
+    raidRepository.invalidateCatalogMemo();
   });
 
   it("a failed or invalid Blizzard response writes nothing and explains why", async () => {

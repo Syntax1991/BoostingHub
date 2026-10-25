@@ -3,6 +3,11 @@ import { db, orm } from "@/lib/prisma";
 import { asNumber, asString } from "@/lib/persistence";
 import type { ProductBossCountMode } from "@/lib/product-catalog";
 import { serializeEncounterIds } from "@/lib/raid-catalog";
+import { raidRepository } from "@/repositories/raid.repository";
+
+function bumpCatalogMemo() {
+  raidRepository.invalidateCatalogMemo();
+}
 
 /**
  * Write-side + reference reads for the Raid Catalog admin (/manage/raid-catalog).
@@ -198,6 +203,7 @@ export const raidCatalogRepository = {
         }
       }
     });
+    bumpCatalogMemo();
   },
 
   /** Distinct non-empty `Raid.season` values for the Season selector (newest / lexical order). */
@@ -281,6 +287,7 @@ export const raidCatalogRepository = {
       createdAt: input.now,
       updatedAt: input.now,
     });
+    bumpCatalogMemo();
   },
 
   async updateRaid(
@@ -297,6 +304,7 @@ export const raidCatalogRepository = {
   ): Promise<void> {
     const { now, ...values } = input;
     await orm.Raid.where({ id: raidId }).update({ ...values, updatedAt: now });
+    bumpCatalogMemo();
   },
 
   /** Persist Warcraft Logs raid-level mapping (or clear with nulls). Does not touch Blizzard ids. */
@@ -309,16 +317,19 @@ export const raidCatalogRepository = {
       wclRankingEncounterId: input.wclRankingEncounterId,
       updatedAt: input.now,
     });
+    bumpCatalogMemo();
   },
 
   /** Persist the discovered Blizzard journal instance id. Touches nothing else. */
   async updateRaidBlizzardInstance(raidId: string, input: { blizzardInstanceId: number; now: string }): Promise<void> {
     await orm.Raid.where({ id: raidId }).update({ blizzardInstanceId: input.blizzardInstanceId, updatedAt: input.now });
+    bumpCatalogMemo();
   },
 
   /** Hard delete — callers must have proven the Raid unreferenced. Its RaidBoss rows go with it. */
   async deleteRaid(raidId: string): Promise<void> {
     await orm.Raid.where({ id: raidId }).delete();
+    bumpCatalogMemo();
   },
 
   async createEncounter(input: {
@@ -337,6 +348,7 @@ export const raidCatalogRepository = {
       blizzardEncounterIds: serializeEncounterIds(input.blizzardEncounterIds),
       wclEncounterIds: serializeEncounterIds(input.wclEncounterIds),
     });
+    bumpCatalogMemo();
   },
 
   /** Identity-preserving edit: id, raidId and sortOrder are never written here. */
@@ -349,6 +361,7 @@ export const raidCatalogRepository = {
       blizzardEncounterIds: serializeEncounterIds(input.blizzardEncounterIds),
       wclEncounterIds: serializeEncounterIds(input.wclEncounterIds),
     });
+    bumpCatalogMemo();
   },
 
   /** Rewrite one raid's encounter order (ids unchanged). */
@@ -359,6 +372,7 @@ export const raidCatalogRepository = {
         await txOrm.RaidBoss.where({ id }).update({ sortOrder: index + 1 });
       }
     });
+    bumpCatalogMemo();
   },
 
   async deleteEncounter(bossId: string, remainingOrderedBossIds: readonly string[]): Promise<void> {
@@ -369,6 +383,7 @@ export const raidCatalogRepository = {
         await txOrm.RaidBoss.where({ id }).update({ sortOrder: index + 1 });
       }
     });
+    bumpCatalogMemo();
   },
 
   async findProductIdByKey(key: string): Promise<string | null> {

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Card, PageHeader } from "@/components/ui/primitives";
+import { PageWorkspace } from "@/components/ui/layout";
 import {
   INTEGRATION_EVENT_STATUSES,
   INTEGRATION_PROVIDERS,
@@ -52,31 +53,31 @@ export function ManageSystemHealthView({ page }: { page: SystemHealthPage }) {
   const hasNext = page.events.length >= filters.limit;
 
   return (
-    <div>
+    <PageWorkspace width="wide">
       <PageHeader
         title="System Health"
-        description="Aggregate integration health and recent structured telemetry. Character-level Blizzard troubleshooting stays on Character Operations."
+        description="Integration health and structured telemetry. Character Blizzard issues stay on Character Operations."
       />
 
       <SystemHealthAdminActions />
 
-      <section aria-labelledby="provider-health-heading" className="mb-8">
-        <h2 id="provider-health-heading" className="mb-3 text-sm font-semibold">
+      <section aria-labelledby="provider-health-heading" className="mb-3">
+        <h2 id="provider-health-heading" className="mb-2 text-sm font-semibold">
           Providers
         </h2>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
           {page.providers.map((card) => (
-            <Card key={card.provider} className="px-4 py-3">
-              <div className="flex items-start justify-between gap-3">
+            <Card key={card.provider} className="px-3 py-2" flush>
+              <div className="flex items-start justify-between gap-2">
                 <div>
                   <h3 className="text-sm font-semibold">{card.label}</h3>
-                  <p className="mt-1 text-xs text-muted">
+                  <p className="mt-0.5 text-[11px] text-muted">
                     {card.configured ? "Configured" : "Not configured"} · {card.recentEventCount} recent
                     event{card.recentEventCount === 1 ? "" : "s"}
                   </p>
                 </div>
                 <span
-                  className={`rounded-md px-2 py-1 text-xs font-medium ${STATE_STYLES[card.state]}`}
+                  className={`rounded px-1.5 py-0.5 text-[11px] font-medium uppercase ${STATE_STYLES[card.state]}`}
                 >
                   {card.state.replaceAll("_", " ")}
                 </span>
@@ -226,7 +227,7 @@ export function ManageSystemHealthView({ page }: { page: SystemHealthPage }) {
             </label>
             <button
               type="submit"
-              className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-black hover:bg-[#d8b436]"
+              className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-accent-foreground hover:bg-accent-hover"
             >
               Filter
             </button>
@@ -313,6 +314,6 @@ export function ManageSystemHealthView({ page }: { page: SystemHealthPage }) {
           </div>
         </div>
       </section>
-    </div>
+    </PageWorkspace>
   );
 }

@@ -295,7 +295,7 @@ export function CommunityScheduleAddTimesDialog({
               <button
                 type="submit"
                 disabled={pending}
-                className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-black disabled:opacity-60"
+                className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-accent-foreground disabled:opacity-60"
               >
                 {pending ? "Saving…" : "Add times"}
               </button>

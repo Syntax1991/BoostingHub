@@ -3,15 +3,25 @@ import {
   formatCompactLockoutProgress,
   formatCompactMultiRaidLockoutProgress,
   projectCurrentRaidLockoutSlots,
+  shortRaidLockoutLabel,
 } from "@/lib/lockout-display";
 import {
   TIDEBOUND_GROTTO_RAID_ID,
+  UNBINDING_KITHIX_RAID_ID,
   VENOMOUS_ABYSS_RAID_ID,
 } from "@/lib/wow-raid-catalog";
 
 const CURRENT = [
-  { id: VENOMOUS_ABYSS_RAID_ID, name: "The Venomous Abyss" },
-  { id: TIDEBOUND_GROTTO_RAID_ID, name: "Tide" },
+  {
+    id: VENOMOUS_ABYSS_RAID_ID,
+    name: "The Venomous Abyss",
+    bosses: Array.from({ length: 8 }, (_, i) => ({ name: `Boss ${i + 1}` })),
+  },
+  {
+    id: TIDEBOUND_GROTTO_RAID_ID,
+    name: "Tide",
+    bosses: [{ name: "Tide Boss" }],
+  },
 ] as const;
 
 describe("formatCompactLockoutProgress", () => {
@@ -201,10 +211,16 @@ describe("projectCurrentRaidLockoutSlots", () => {
       CURRENT,
     );
     expect(slots).toEqual([
-      { raidId: VENOMOUS_ABYSS_RAID_ID, raidName: "The Venomous Abyss", status: "UNKNOWN" },
+      {
+        raidId: VENOMOUS_ABYSS_RAID_ID,
+        raidName: "The Venomous Abyss",
+        bosses: CURRENT[0].bosses,
+        status: "UNKNOWN",
+      },
       {
         raidId: TIDEBOUND_GROTTO_RAID_ID,
         raidName: "Tide",
+        bosses: CURRENT[1].bosses,
         status: "VERIFIED",
         rows: [
           {
@@ -216,5 +232,13 @@ describe("projectCurrentRaidLockoutSlots", () => {
         ],
       },
     ]);
+  });
+});
+
+describe("shortRaidLockoutLabel", () => {
+  it("uses product short names and stable abbreviations without inventing ids", () => {
+    expect(shortRaidLockoutLabel(TIDEBOUND_GROTTO_RAID_ID, "The Tidebound Grotto")).toBe("Tide");
+    expect(shortRaidLockoutLabel(VENOMOUS_ABYSS_RAID_ID, "The Venomous Abyss")).toBe("Venomous");
+    expect(shortRaidLockoutLabel(UNBINDING_KITHIX_RAID_ID, "The Unbinding of Kith'ix")).toBe("Kith'ix");
   });
 });

@@ -5,6 +5,7 @@ import type { BlizzardCharacterRaidEncounters } from "@/lib/blizzard/types";
 import {
   MANAFORGE_OMEGA_RAID_ID,
   TIDEBOUND_GROTTO_RAID_ID,
+  UNBINDING_KITHIX_RAID_ID,
   VENOMOUS_ABYSS_RAID_ID,
   WOW_RAID_CATALOG,
 } from "@/lib/wow-raid-catalog";
@@ -83,10 +84,10 @@ function progressOf(
 }
 
 describe("current raid catalog selection", () => {
-  it("marks Venomous and Tidebound as current lockout raids with verified Blizzard ids", () => {
+  it("marks Venomous, Tidebound, and Kith'ix as current lockout raids with verified Blizzard ids", () => {
     const currentRaids = catalog.lockoutRaids;
     expect(currentRaids.map((raid) => raid.id).sort()).toEqual(
-      [TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID].sort(),
+      [TIDEBOUND_GROTTO_RAID_ID, UNBINDING_KITHIX_RAID_ID, VENOMOUS_ABYSS_RAID_ID].sort(),
     );
 
     const venomousRaid = currentRaids.find((raid) => raid.id === VENOMOUS_ABYSS_RAID_ID)!;

@@ -31,7 +31,7 @@ import {
   type CharacterRunCommitment,
 } from "@/services/character-run-commitment";
 import { rosterRepository, type RosterSelection, type RosterSignupRow } from "@/repositories/roster.repository";
-import { runRepository } from "@/repositories/run.repository";
+import { runRepository, type RunListRecord } from "@/repositories/run.repository";
 import { signupRepository } from "@/repositories/signup.repository";
 import { userRepository } from "@/repositories/user.repository";
 import { characterRepository } from "@/repositories/character.repository";
@@ -766,8 +766,19 @@ export const rosterService = {
     };
   },
 
-  async getRosterManagementView(user: AuthenticatedUser, runId: string) {
-    const run = await runRepository.findById(runId);
+  /**
+   * @param preloadedRun — optional already-loaded Run graph from the caller
+   *   (e.g. Run Detail). Skips a second heavy findById when ids match.
+   */
+  async getRosterManagementView(
+    user: AuthenticatedUser,
+    runId: string,
+    preloadedRun?: RunListRecord | null,
+  ) {
+    const run =
+      preloadedRun && preloadedRun.id === runId
+        ? preloadedRun
+        : await runRepository.findById(runId);
     if (!run) {
       throw new DomainError("NOT_FOUND", "Run was not found.", 404);
     }
@@ -810,6 +821,7 @@ export const rosterService = {
             wowClass: signup.character!.wowClass,
             specialization: signup.character!.specialization,
             primaryRole: signup.character!.primaryRole,
+            playableSpecs: signup.character!.playableSpecs,
             warcraftLogsId: signup.character!.warcraftLogsId,
           },
         })),

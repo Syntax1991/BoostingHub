@@ -124,17 +124,19 @@ describe("owner /characters list", () => {
 
     const html = renderToStaticMarkup(createElement(CharactersView, { data }));
 
+    // Desktop unit + mobile card each mount a Delete confirmation dialog.
     for (const character of [first, second]) {
-      expect(count(html, dialogTitle(character))).toBe(1);
+      expect(count(html, dialogTitle(character))).toBe(2);
     }
     expect(html).toContain("This permanently removes the Character from Manawyrm Hub");
     expect(html).toContain("Historical completed-run records are preserved.");
     expect(html).toContain("Characters with active run signups cannot be deleted.");
-    expect(count(html, ">Delete permanently<")).toBe(2);
-    expect(count(html, ">Cancel<")).toBeGreaterThanOrEqual(2);
-    // Deactivate (retire) stays its own action next to Delete.
-    expect(count(html, ">Deactivate<")).toBe(2);
-    expect(count(html, ">Delete<")).toBe(2);
+    // Desktop + mobile each mount confirm dialogs and overflow Delete triggers.
+    expect(count(html, ">Delete permanently<")).toBe(4);
+    expect(count(html, ">Cancel<")).toBeGreaterThanOrEqual(4);
+    // Deactivate (retire) stays its own overflow action next to Delete (desktop + mobile).
+    expect(count(html, ">Deactivate<")).toBe(4);
+    expect(count(html, ">Delete<")).toBe(4);
   });
 
   it("the owner action can never target someone else's Character", async () => {

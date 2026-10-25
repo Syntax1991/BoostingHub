@@ -50,16 +50,18 @@ const aelira = asUser(ids.aelira, "Aelira Nightwatch", "ADMIN");
 describe("canonical run routes", () => {
   it("builds /runs/[runId] as the entity URL and maps manage actions to tabs", () => {
     expect(runDetailPath(ids.weekend)).toBe(`/runs/${ids.weekend}`);
-    expect(runDetailPath(ids.weekend, "roster")).toBe(`/runs/${ids.weekend}?tab=roster`);
+    expect(runDetailPath(ids.weekend, "roster")).toBe(`/runs/${ids.weekend}`);
     expect(runDetailPath(ids.weekend, "attendance")).toBe(`/runs/${ids.weekend}?tab=attendance`);
     expect(parseRunDetailTab(["roster"])).toBe("roster");
     expect(parseRunDetailTab("attendance")).toBe("attendance");
-    // The removed Payout tab: old links fall back to Overview.
-    expect(parseRunDetailTab("payout")).toBe("overview");
-    expect(parseRunDetailTab("unknown")).toBe("overview");
+    // Unknown / removed tabs fall back to the operational Roster workspace.
+    expect(parseRunDetailTab("payout")).toBe("roster");
+    expect(parseRunDetailTab("unknown")).toBe("roster");
     expect(runDetailPath("run-1")).toBe("/runs/run-1");
     expect(runDetailPath("run-1", "attendance")).toBe("/runs/run-1?tab=attendance");
-    expect(runDetailPath("run-1", "overview")).toBe("/runs/run-1");
+    expect(runDetailPath("run-1", "overview")).toBe("/runs/run-1?tab=operations");
+    expect(runDetailPath("run-1", "operations")).toBe("/runs/run-1?tab=operations");
+    expect(runDetailPath("run-1", "history")).toBe("/runs/run-1?tab=history");
   });
 });
 

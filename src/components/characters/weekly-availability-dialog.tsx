@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition, type Ref } from "react";
 import { useRouter } from "next/navigation";
 import { setCharacterCurrentResetAvailabilityAction } from "@/controllers/character-weekly-availability.actions";
 import { Button } from "@/components/ui/button";
@@ -20,12 +20,15 @@ export function WeeklyAvailabilityDialog({
   weeklyAvailability,
   triggerLabel,
   triggerClassName,
+  triggerRef,
 }: {
   characterId: string;
   characterName: string;
   weeklyAvailability: WeeklyAvailabilityState;
   triggerLabel: string;
   triggerClassName?: string;
+  /** Optional ref to the trigger — used when Availability is opened from an overflow menu host. */
+  triggerRef?: Ref<HTMLButtonElement>;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -92,7 +95,7 @@ export function WeeklyAvailabilityDialog({
 
   return (
     <>
-      <button type="button" className={triggerClassName} onClick={openDialog}>
+      <button ref={triggerRef} type="button" className={triggerClassName} onClick={openDialog}>
         {triggerLabel}
       </button>
       <dialog
@@ -127,7 +130,7 @@ export function WeeklyAvailabilityDialog({
                 className={cn(
                   "inline-flex h-9 items-center rounded-md px-3 text-sm font-medium",
                   available
-                    ? "bg-accent text-black"
+                    ? "border border-accent/45 bg-surface-raised text-foreground"
                     : "border border-border hover:bg-surface-raised",
                 )}
               >
@@ -143,7 +146,7 @@ export function WeeklyAvailabilityDialog({
                 className={cn(
                   "inline-flex h-9 items-center rounded-md px-3 text-sm font-medium",
                   !available
-                    ? "bg-accent text-black"
+                    ? "border border-accent/45 bg-surface-raised text-foreground"
                     : "border border-border hover:bg-surface-raised",
                 )}
               >

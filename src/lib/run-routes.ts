@@ -5,10 +5,19 @@ import type { RunStatus } from "@/models/enums";
  * path, not a /manage-only URL.
  */
 /**
- * "consumables" is only rendered when the viewer's payload carries the audit
- * (ADMIN / the Run's RAID_LEAD); for anyone else it falls back to Overview.
+ * Primary tabs: Roster (ops workspace), Operations, Attendance, History.
+ * "signups" is a legacy alias for Roster. "overview" redirects to Operations.
+ * "consumables" remains for managers with audit payload.
  */
-export const RUN_DETAIL_TABS = ["overview", "signups", "roster", "attendance", "consumables"] as const;
+export const RUN_DETAIL_TABS = [
+  "roster",
+  "operations",
+  "attendance",
+  "history",
+  "overview",
+  "signups",
+  "consumables",
+] as const;
 
 export type RunDetailTab = (typeof RUN_DETAIL_TABS)[number];
 
@@ -38,20 +47,37 @@ export function parseRunDetailTab(value: unknown): RunDetailTab {
     return parseRunDetailTab(value[0]);
   }
   if (
-    value === "signups" ||
     value === "roster" ||
+    value === "operations" ||
     value === "attendance" ||
+    value === "history" ||
+    value === "overview" ||
+    value === "signups" ||
     value === "consumables"
   ) {
     return value;
   }
-  return "overview";
+  return "roster";
+}
+
+/** Normalize legacy / alias tabs to the tab the UI actually selects. */
+export function resolveRunDetailTab(tab: RunDetailTab, hasConsumables: boolean): RunDetailTab {
+  if (tab === "consumables" && !hasConsumables) return "roster";
+  if (tab === "signups") return "roster";
+  if (tab === "overview") return "operations";
+  return tab;
 }
 
 export function runDetailPath(runId: string, tab?: RunDetailTab): string {
   const base = `/runs/${runId}`;
-  if (!tab || tab === "overview") {
+  if (!tab || tab === "roster") {
     return base;
+  }
+  if (tab === "signups") {
+    return base;
+  }
+  if (tab === "overview") {
+    return `${base}?tab=operations`;
   }
   return `${base}?tab=${tab}`;
 }

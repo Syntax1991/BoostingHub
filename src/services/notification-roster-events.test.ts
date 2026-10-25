@@ -865,7 +865,7 @@ describe("picked player withdraws with a reason", () => {
     );
     expect(leadNotes).toHaveLength(1);
     expect(leadNotes[0].message).toContain("Reason: Sick, sorry");
-    expect(leadNotes[0].href).toBe(`/runs/${runId}?tab=roster`);
+    expect(leadNotes[0].href).toBe(`/runs/${runId}`);
     // The player left on their own — no "removed from roster" DM for them.
     const playerRemoved = (await userNotificationRepository.listForUser(ids.player, 50)).filter(
       (note) => note.runId === runId && note.type === "ROSTER_REMOVED",
@@ -892,7 +892,7 @@ describe("picked player withdraws with a reason", () => {
       const dm = work.notificationDms.find((item) => item.runId === runId && item.type === "ROSTER_WITHDRAWN");
       expect(dm?.discordUserId).toBe("900000000000000099");
       expect(dm?.withdrawal).toMatchObject({ playerName: "Notify Player", reason: "Work came up" });
-      expect(dm?.withdrawal?.rosterUrl?.endsWith(`/runs/${runId}?tab=roster`)).toBe(true);
+      expect(dm?.withdrawal?.rosterUrl?.endsWith(`/runs/${runId}`)).toBe(true);
     } finally {
       await orm.User.where({ id: ids.lead }).update({ discordUserId: null, updatedAt: new Date().toISOString() });
     }

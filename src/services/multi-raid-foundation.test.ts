@@ -7,6 +7,7 @@ import {
   MANAFORGE_OMEGA_RAID_ID,
   NYMRISSA_WAVECALLER_BOSS_ID,
   TIDEBOUND_GROTTO_RAID_ID,
+  UNBINDING_KITHIX_RAID_ID,
   VENOMOUS_ABYSS_RAID_ID,
   findRaidCatalogById,
 } from "@/lib/wow-raid-catalog";
@@ -91,12 +92,14 @@ describe("Tidebound / Nymrissa catalog (verified Blizzard ids)", () => {
     expect(tidebound.bosses[0]?.blizzardEncounterIds).toEqual([2849]);
   });
 
-  it("keeps Venomous tracked for lockouts and the DB lockout set includes both", async () => {
+  it("keeps Venomous tracked for lockouts and the DB lockout set includes Venomous, Tidebound, and Kith'ix", async () => {
     const venomous = findRaidCatalogById(VENOMOUS_ABYSS_RAID_ID)!;
     expect(venomous.trackLockouts).toBe(true);
     await raidRepository.ensureReferenceRaids();
     const idsInLockouts = (await raidRepository.loadCatalog()).lockoutRaids.map((raid) => raid.id).sort();
-    expect(idsInLockouts).toEqual([TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID].sort());
+    expect(idsInLockouts).toEqual(
+      [TIDEBOUND_GROTTO_RAID_ID, UNBINDING_KITHIX_RAID_ID, VENOMOUS_ABYSS_RAID_ID].sort(),
+    );
   });
 
   it("bootstrap upserts Tidebound without changing Venomous/Manaforge identities", async () => {

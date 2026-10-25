@@ -116,8 +116,8 @@ describe("multi-raid character lockout compact display", () => {
       },
       ],
       [
-        { id: VENOMOUS_ABYSS_RAID_ID, name: "The Venomous Abyss" },
-        { id: TIDEBOUND_GROTTO_RAID_ID, name: "Tide" },
+        { id: VENOMOUS_ABYSS_RAID_ID, name: "The Venomous Abyss", bosses: [] },
+        { id: TIDEBOUND_GROTTO_RAID_ID, name: "Tide", bosses: [] },
       ],
     );
 

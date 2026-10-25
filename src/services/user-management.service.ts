@@ -139,6 +139,7 @@ export const userManagementService = {
     const currentLockoutRaids = currentRaids.map((raid) => ({
       id: raid.id,
       name: raidContentDisplayName(raid.id, raid.name),
+      bosses: raid.bosses.map((boss) => ({ name: boss.name })),
     }));
 
     return {

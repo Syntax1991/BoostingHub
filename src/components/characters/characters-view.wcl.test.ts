@@ -63,8 +63,8 @@ function basePage(characters: CharacterRow[]): Page {
     activeCharacters: characters.filter((row) => row.isActive).length,
     currentResetByRegion: { EU: "2026-W38", US: "2026-W38" },
     currentLockoutRaids: [
-      { id: "venomous", name: "The Venomous Abyss" },
-      { id: "tidebound", name: "Tide" },
+      { id: "venomous", name: "The Venomous Abyss", bosses: [] },
+      { id: "tidebound", name: "Tide", bosses: [] },
     ],
     battleNet: {
       configured: false,
@@ -132,7 +132,7 @@ describe("CharactersView Warcraft Logs discovery", () => {
     expect(html).toContain("https://www.warcraftlogs.com/character/id/12345678");
     expect(html).toContain('target="_blank"');
     expect(html).toContain('rel="noopener noreferrer"');
-    expect(html).toContain(">WCL<");
+    expect(html).toContain(">Profile<");
     expect(html).not.toContain("Find WCL");
     expect(html).not.toContain("Find missing Warcraft Logs");
   });
@@ -140,9 +140,8 @@ describe("CharactersView Warcraft Logs discovery", () => {
   it("renders Find WCL and omits WCL link when warcraftLogsId is missing", () => {
     const html = renderToStaticMarkup(createElement(CharactersView, { data: basePage([baseCharacter]) }));
     expect(html).not.toContain("warcraftlogs.com");
-    expect(html).not.toContain(">WCL<");
+    expect(html).not.toContain(">Profile<");
     expect(html).toContain("Find WCL");
-    expect(html).toContain('data-character-id="char-1"');
     expect(html).toContain("Find missing Warcraft Logs");
   });
 

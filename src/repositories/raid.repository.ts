@@ -160,7 +160,17 @@ async function ensureReferenceRaids(now = new Date().toISOString()): Promise<voi
       });
     }
   }
+  // Inserts (or a no-op after external admin edits) must not leave a warm memo.
+  raidRepository.invalidateCatalogMemo();
 }
+
+/** Short-lived process memo for stable Raid Catalog reference data only. */
+const CATALOG_TTL_MS = 30_000;
+let catalogMemo: { value: RaidCatalog; expiresAt: number } | null = null;
+let catalogInflight: Promise<RaidCatalog> | null = null;
+let catalogInflightEpoch = 0;
+/** Bumped on invalidate so a pre-invalidation in-flight load cannot re-poison memo. */
+let catalogEpoch = 0;
 
 export const raidRepository = {
   ensureReferenceRaids,
@@ -168,10 +178,42 @@ export const raidRepository = {
   /**
    * The runtime raid catalog (raids, bosses, Blizzard / WCL ids, lockout
    * tracking) — one query (`Raid` with its bosses), historical raids included.
+   *
+   * Memoized briefly (30s) with single-flight coalescing: many page entries
+   * call this per request wave. Invalidate via `invalidateCatalogMemo()` after
+   * Raid Catalog admin writes. Never caches mutable Run/signup/roster state.
    */
   async loadCatalog(): Promise<RaidCatalog> {
-    const rows = (await orm.Raid.include("bosses").all()) as Array<Record<string, unknown>>;
-    return buildRaidCatalog(rows.map(mapCatalogRaid));
+    const now = Date.now();
+    if (catalogMemo && catalogMemo.expiresAt > now) {
+      return catalogMemo.value;
+    }
+    if (catalogInflight && catalogInflightEpoch === catalogEpoch) {
+      return catalogInflight;
+    }
+    const epoch = catalogEpoch;
+    let pending!: Promise<RaidCatalog>;
+    pending = (async () => {
+      try {
+        const rows = (await orm.Raid.include("bosses").all()) as Array<Record<string, unknown>>;
+        const value = buildRaidCatalog(rows.map(mapCatalogRaid));
+        if (epoch === catalogEpoch) {
+          catalogMemo = { value, expiresAt: Date.now() + CATALOG_TTL_MS };
+        }
+        return value;
+      } finally {
+        if (catalogInflight === pending) catalogInflight = null;
+      }
+    })();
+    catalogInflight = pending;
+    catalogInflightEpoch = epoch;
+    return pending;
+  },
+
+  /** Drop catalog memo after Raid Catalog mutations (create/update/import). */
+  invalidateCatalogMemo() {
+    catalogMemo = null;
+    catalogEpoch += 1;
   },
 
   /** Raids selectable for a NEW Run. Historical raids are deliberately excluded. */

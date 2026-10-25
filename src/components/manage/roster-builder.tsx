@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -12,45 +12,55 @@ import {
 } from "@/controllers/roster.actions";
 import { Button } from "@/components/ui/button";
 import { AddBoosterDialog } from "@/components/manage/add-booster-dialog";
-import {
-  RosterRunCommitmentsBlock,
-  RosterScheduleConflictAlert,
-} from "@/components/manage/roster-run-commitments";
+import { RosterBuilderTrigger } from "@/components/manage/roster-builder-dialog";
 import { setRosterHasUnsavedEdits } from "@/components/manage/roster-unsaved-store";
 import { resolveRosterActions } from "@/components/manage/roster-actions";
 import {
-  ClassBadge,
   ClassIcon,
   DifficultyBadge,
-  ParticipationBadge,
-  OfferedRolesBadges,
   RunStatusBadge,
-  SignupStatusBadge,
-  AccessBadge,
 } from "@/components/ui/badges";
-import { WarcraftLogsLink } from "@/components/characters/warcraft-logs-link";
-import { Card, CardHeader, EmptyState } from "@/components/ui/primitives";
+import {
+  BuffCoveredIcon,
+  BuffMissingIcon,
+  DraftCheckIcon,
+  LockoutIcon,
+  LootbuddyIcon,
+  QuietOkIcon,
+  RoleIcon,
+  WarningIcon,
+} from "@/components/ui/ops-icons";
+import { ChooseSpecOption } from "@/components/manage/choose-spec-option";
+import { SpecIcon } from "@/components/ui/spec-icon";
+import { WclBestLink } from "@/components/ui/wcl-best-link";
+import { Card, CardHeader } from "@/components/ui/primitives";
 import { formatDateTime } from "@/lib/datetime";
 import { runDetailPath } from "@/lib/run-routes";
 import {
   CHARACTER_ROLE_LABELS,
   CLASS_COLORS,
   CLASS_LABELS,
-  LOOTBUDDY_MODE_LABELS,
-  LOOTBUDDY_VERIFICATION_LABELS,
 } from "@/lib/labels";
-import { formatCharacterRosterMetadata } from "@/lib/character-roster-metadata";
 import { formatContentLockoutLines, formatContentLockoutTooltip } from "@/lib/run-content-lockouts";
 import { isConcreteCharacterRole } from "@/lib/character-roles";
-import { countRolesByBucket, externalBoosterRosterBucket } from "@/lib/roster-role-buckets";
+import { countRolesByBucket } from "@/lib/roster-role-buckets";
 import {
-  filterWclPerformanceForGroupRole,
+  resolveDisplaySpecForSelectedRole,
+  resolveOfferedSpecs,
+  type OfferedSpecChoice,
+} from "@/lib/signup-offered-specs";
+import {
+  signupMatchesRoleFilter,
+  tileVisibleSpecs,
+  uniqueSignupTiles,
+} from "@/lib/signup-tile-invariants";
+import { resolveSignupTileWclBest } from "@/lib/wcl-spec-performance";
+import {
   compareByWclPerf,
   matchesWclPerfFilter,
-  wclPerformanceRaidLineParts,
-  wclPercentileColor,
   type WclPerfFilter,
   type WclPerfSort,
+  type WclPerformanceRaidSegment,
 } from "@/lib/wcl-performance-display";
 import { buildRosterSavedSelectionKey, applyRoleCopyToggle, applyUnassignedDpsToggle, isRoleCopyChecked as roleCopyIsChecked, isUnassignedDpsCopyChecked } from "@/components/manage/roster-staged-selection";
 import type { rosterService } from "@/services/roster.service";
@@ -104,6 +114,58 @@ function domainSignupsFrom(data: RosterView): SignupRow[] {
 
 /** A draft slot is a signup plus the role the raid lead assigned it, so both take part in dirty detection. */
 type StagedSelections = Map<string, CharacterRole | null>;
+/** Client-only chosen specialization per signup (domain persists selectedRole only). */
+type StagedSpecs = Map<string, string | null>;
+
+/** Presentation-only roster group cell (does not change domain storage). */
+type DraftRosterSlot = {
+  signup: SignupRow | null;
+  role: CharacterRole | null;
+  /** Chosen playable spec for display; null when unknown / lootbuddy / external. */
+  specialization: string | null;
+  name: string;
+  wowClass: WowClass | null;
+  warning: boolean;
+  external?: boolean;
+};
+
+function signupOfferedSpecInput(signup: SignupRow) {
+  return {
+    wowClass: signup.character?.wowClass ?? null,
+    primarySpecialization: signup.character?.specialization ?? null,
+    playableSpecs: signup.character?.playableSpecs ?? [],
+    offeredRoles: signup.assignableRoles.length > 0 ? signup.assignableRoles : signup.offeredRoles,
+  };
+}
+
+function collectInitialStagedSpecs(data: RosterView, selections: StagedSelections): StagedSpecs {
+  const specs: StagedSpecs = new Map();
+  for (const signup of domainSignupsFrom(data)) {
+    if (!selections.has(signup.id)) continue;
+    const role = selections.get(signup.id) ?? null;
+    specs.set(signup.id, resolveDisplaySpecForSelectedRole(signupOfferedSpecInput(signup), role));
+  }
+  return specs;
+}
+
+/** Pack draft slots into Group 1–4 for Raid Hub–style density (view-only layout). */
+function packDraftIntoGroups(
+  slots: DraftRosterSlot[],
+  groupCount: number,
+  slotsPerGroup: number,
+): Array<Array<DraftRosterSlot | null>> {
+  const groups: Array<Array<DraftRosterSlot | null>> = Array.from({ length: groupCount }, () =>
+    Array.from({ length: slotsPerGroup }, () => null),
+  );
+  slots.forEach((slot, index) => {
+    const groupIndex = index % groupCount;
+    const rowIndex = Math.floor(index / groupCount);
+    if (rowIndex < slotsPerGroup) {
+      groups[groupIndex][rowIndex] = slot;
+    }
+  });
+  return groups;
+}
 
 function selectionEntries(selections: StagedSelections): string[] {
   return [...selections].map(([signupId, role]) => `${signupId}:${role ?? ""}`);
@@ -128,7 +190,19 @@ function collectSavedSelections(data: RosterView): StagedSelections {
  * (version and/or saved selected ids). Harmless parent rerenders keep local staged
  * edits and filters because the key stays stable.
  */
-export function RosterBuilderView({ data, embedded = false }: { data: RosterView; embedded?: boolean }) {
+export function RosterBuilderView({
+  data,
+  embedded = false,
+  preflightAttentionCount = 0,
+  afterContext = null,
+}: {
+  data: RosterView;
+  embedded?: boolean;
+  /** From Run Detail preflight — status chip only (no checklist on Roster). */
+  preflightAttentionCount?: number;
+  /** Rendered after Validation/Preflight chips and before Signups (Roster tab composition). */
+  afterContext?: ReactNode;
+}) {
   const savedSelections = collectSavedSelections(data);
   const savedSelectionKey = buildRosterSavedSelectionKey(data.roster.version, selectionEntries(savedSelections));
   return (
@@ -137,6 +211,8 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
       data={data}
       embedded={embedded}
       savedSelections={savedSelections}
+      preflightAttentionCount={preflightAttentionCount}
+      afterContext={afterContext}
     />
   );
 }
@@ -145,10 +221,14 @@ function RosterBuilderEditor({
   data,
   embedded = false,
   savedSelections,
+  preflightAttentionCount = 0,
+  afterContext = null,
 }: {
   data: RosterView;
   embedded?: boolean;
   savedSelections: StagedSelections;
+  preflightAttentionCount?: number;
+  afterContext?: ReactNode;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -180,13 +260,21 @@ function RosterBuilderEditor({
    * acknowledgements were missing or stale.
    */
   const [warningPrompt, setWarningPrompt] = useState<
-    | { kind: "pick"; signup: SignupRow; items: RosterWarningDialogItem[] }
+    | {
+        kind: "pick";
+        signup: SignupRow;
+        items: RosterWarningDialogItem[];
+        /** Spec-aware tile pick — applied on confirm instead of groupRole copy. */
+        pendingRole?: CharacterRole;
+        pendingSpec?: string | null;
+      }
     | { kind: "server"; action: "save" | "update"; pending: PendingRosterSelectionWarning[] }
     | null
   >(null);
 
   const domainSignups = useMemo(() => domainSignupsFrom(data), [data]);
   const [stagedSelections, setStagedSelections] = useState<StagedSelections>(() => new Map(savedSelections));
+  const [stagedSpecs, setStagedSpecs] = useState<StagedSpecs>(() => collectInitialStagedSpecs(data, savedSelections));
   // Edited in the Run header's External Boosters dialog; counted here as saved.
   const externalBoosters = data.roster.externalBoosters;
 
@@ -196,16 +284,6 @@ function RosterBuilderEditor({
     setRosterHasUnsavedEdits(data.run.id, isDirty);
   }, [data.run.id, isDirty]);
   useEffect(() => () => setRosterHasUnsavedEdits(data.run.id, false), [data.run.id]);
-  const unsavedChangeCount = useMemo(() => {
-    let count = 0;
-    for (const [id, role] of stagedSelections) {
-      if (!savedSelections.has(id) || savedSelections.get(id) !== role) count += 1;
-    }
-    for (const id of savedSelections.keys()) {
-      if (!stagedSelections.has(id)) count += 1;
-    }
-    return count;
-  }, [stagedSelections, savedSelections]);
 
   /** Live Class Buff coverage from the staged draft — updates immediately on select/deselect. */
   const liveRaidBuffCoverage = useMemo(() => {
@@ -350,7 +428,10 @@ function RosterBuilderEditor({
     if (search && !haystack.includes(search.toLowerCase())) return false;
     if (participation === "LOOTBUDDY") return false;
     if (participation !== "ALL" && participation !== "BOOSTER") return false;
-    if (roleFilter !== "ALL" && !signup.assignableRoles.includes(roleFilter as (typeof signup.assignableRoles)[number])) {
+    if (
+      roleFilter !== "ALL" &&
+      !signupMatchesRoleFilter(signup.assignableRoles, roleFilter as CharacterRole)
+    ) {
       return false;
     }
     if (backupFilter === "BACKUP" && !signup.isBackup) return false;
@@ -379,19 +460,90 @@ function RosterBuilderEditor({
     );
   }
 
-  const filteredTanks = sortByPerf(data.groups.tanks.filter(matchesProjection));
-  const filteredHealers = sortByPerf(data.groups.healers.filter(matchesProjection));
-  const filteredMeleeDps = sortByPerf(
-    (data.groups.meleeDps ?? []).filter(matchesProjection),
-  );
-  const filteredRangedDps = sortByPerf(
-    (data.groups.rangedDps ?? []).filter(matchesProjection),
-  );
-  const filteredUnassignedDps = sortByPerf(
-    (data.groups.unassignedDps ?? data.groups.legacyDps ?? []).filter(matchesProjection),
-  );
-  const filteredLootbuddies = data.groups.lootbuddies.filter(matchesProjection);
-  const uniqueFilteredBoosters = data.boosters.filter(matchesCanonicalBooster).length;
+  /** Unified signup grid — one tile per signup identity (not per role projection). */
+  const gridSignups = useMemo(() => {
+    const boosters = uniqueSignupTiles(data.boosters.filter(matchesCanonicalBooster));
+    const lootbuddies =
+      participation === "BOOSTER" ? [] : uniqueSignupTiles(data.groups.lootbuddies.filter(matchesProjection));
+    return sortByPerf([...boosters, ...lootbuddies]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- filter helpers close over filter state
+  }, [
+    data.boosters,
+    data.groups.lootbuddies,
+    search,
+    participation,
+    roleFilter,
+    backupFilter,
+    selectedFilter,
+    perfFilter,
+    perfSort,
+    stagedSelections,
+  ]);
+
+  const rosterCapacity =
+    data.run.desiredTankCount +
+    data.run.desiredHealerCount +
+    data.run.desiredDpsCount +
+    data.run.desiredLootbuddyCount;
+
+  const draftSlots = useMemo(() => {
+    const roleOrder: Record<string, number> = {
+      TANK: 0,
+      HEALER: 1,
+      MELEE_DPS: 2,
+      RANGED_DPS: 3,
+      DPS: 4,
+    };
+    const slots: DraftRosterSlot[] = [];
+    for (const signup of domainSignups) {
+      if (!stagedSelections.has(signup.id)) continue;
+      const role = stagedSelections.get(signup.id) ?? null;
+      const lockoutAttention = signup.contentSaves?.some((row) => row.label.attention) ?? false;
+      const hasConflict = (signup.scheduleConflicts?.length ?? 0) > 0;
+      slots.push({
+        signup,
+        role,
+        specialization: stagedSpecs.get(signup.id) ?? null,
+        name: signupDisplayName(signup),
+        wowClass: lootbuddyDisplayClass(signup) ?? signup.character?.wowClass ?? null,
+        warning: lockoutAttention || hasConflict || Boolean(signup.issue),
+      });
+    }
+    for (const booster of externalBoosters) {
+      slots.push({
+        signup: null,
+        role: booster.role,
+        specialization: null,
+        name: `@${booster.name}`,
+        wowClass: booster.wowClass,
+        warning: false,
+        external: true,
+      });
+    }
+    slots.sort((a, b) => (roleOrder[a.role ?? ""] ?? 9) - (roleOrder[b.role ?? ""] ?? 9));
+    return slots;
+  }, [domainSignups, stagedSelections, stagedSpecs, externalBoosters]);
+
+  const draftSlotCount = draftSlots.length;
+  const draftGroups = useMemo(() => packDraftIntoGroups(draftSlots, 4, Math.max(5, Math.ceil(rosterCapacity / 4) || 5)), [draftSlots, rosterCapacity]);
+
+  function deselectSignup(signup: SignupRow) {
+    if (!data.roster.canEdit || data.roster.needsPublishSeed || pending) return;
+    setError(null);
+    setErrorCode(null);
+    setStagedSelections((previous) => {
+      if (!previous.has(signup.id)) return previous;
+      const next = new Map(previous);
+      next.delete(signup.id);
+      return next;
+    });
+    setStagedSpecs((previous) => {
+      if (!previous.has(signup.id)) return previous;
+      const next = new Map(previous);
+      next.delete(signup.id);
+      return next;
+    });
+  }
 
   /**
    * Role-section click: assign this groupRole, reassign if already selected as
@@ -459,13 +611,30 @@ function RosterBuilderEditor({
         replaceBoosterSignupIds,
       });
     });
+    setStagedSpecs((previous) => {
+      const next = new Map(previous);
+      for (const otherId of replaceBoosterSignupIds) {
+        if (otherId !== signup.id) next.delete(otherId);
+      }
+      if (!checked) {
+        next.delete(signup.id);
+        return next;
+      }
+      const role = signup.unassignedDps ? null : signup.groupRole;
+      next.set(
+        signup.id,
+        role ? resolveDisplaySpecForSelectedRole(signupOfferedSpecInput(signup), role) : null,
+      );
+      return next;
+    });
   }
 
-  /** Reassigning a selected slot's role is its own edit — it never deselects the slot. */
-  function assignRole(signup: SignupRow, role: CharacterRole) {
+  /** Reassign selected slot: role + optional chosen specialization (client display). */
+  function assignRole(signup: SignupRow, role: CharacterRole, specialization: string | null = null) {
     if (!isConcreteCharacterRole(role)) return;
     if (!data.roster.canEdit || data.roster.needsPublishSeed || pending) return;
     if (!signup.assignableRoles.includes(role)) return;
+    if (!stagedSelections.has(signup.id)) return;
     setError(null);
     setErrorCode(null);
     setStagedSelections((previous) => {
@@ -474,12 +643,90 @@ function RosterBuilderEditor({
       next.set(signup.id, role);
       return next;
     });
+    setStagedSpecs((previous) => {
+      const next = new Map(previous);
+      next.set(
+        signup.id,
+        specialization ?? resolveDisplaySpecForSelectedRole(signupOfferedSpecInput(signup), role),
+      );
+      return next;
+    });
+  }
+
+  /**
+   * Click-to-draft with an explicit role (+ optional spec from the Choose-spec modal).
+   * Spec is client-stage only; domain persists selectedRole.
+   */
+  function selectWithRole(
+    signup: SignupRow,
+    role: CharacterRole,
+    specialization: string | null = null,
+  ) {
+    if (!isConcreteCharacterRole(role)) return;
+    if (!data.roster.canEdit || data.roster.needsPublishSeed || pending) return;
+    if (!signup.assignableRoles.includes(role)) return;
+    if (signup.status === "WITHDRAWN") return;
+    if (!stagedSelections.has(signup.id) && (signup.scheduleConflicts?.length ?? 0) > 0) return;
+    if (!stagedSelections.has(signup.id)) {
+      const unconfirmed = warningsNeedingConfirmation(signup);
+      if (unconfirmed.length > 0) {
+        setWarningPrompt({
+          kind: "pick",
+          signup,
+          pendingRole: role,
+          pendingSpec: specialization,
+          items: [{ key: signup.id, characterLabel: signupDisplayName(signup), warnings: unconfirmed }],
+        });
+        return;
+      }
+    }
+    commitSelectWithRole(signup, role, specialization);
+  }
+
+  function commitSelectWithRole(
+    signup: SignupRow,
+    role: CharacterRole,
+    specialization: string | null = null,
+  ) {
+    setError(null);
+    setErrorCode(null);
+    const replaceBoosterSignupIds =
+      signup.participationType === "BOOSTER"
+        ? domainSignups
+            .filter(
+              (other) =>
+                other.userId === signup.userId &&
+                other.participationType === "BOOSTER" &&
+                other.id !== signup.id,
+            )
+            .map((other) => other.id)
+        : [];
+    setStagedSelections((previous) => {
+      const next = new Map(previous);
+      for (const otherId of replaceBoosterSignupIds) {
+        if (otherId !== signup.id) next.delete(otherId);
+      }
+      next.set(signup.id, role);
+      return next;
+    });
+    setStagedSpecs((previous) => {
+      const next = new Map(previous);
+      for (const otherId of replaceBoosterSignupIds) {
+        if (otherId !== signup.id) next.delete(otherId);
+      }
+      next.set(
+        signup.id,
+        specialization ?? resolveDisplaySpecForSelectedRole(signupOfferedSpecInput(signup), role),
+      );
+      return next;
+    });
   }
 
   function discardChanges() {
     setError(null);
     setErrorCode(null);
     setStagedSelections(new Map(savedSelections));
+    setStagedSpecs(collectInitialStagedSpecs(data, savedSelections));
   }
 
   /** Acknowledgements for the currently staged slots only — a deselected pick's confirmation is not sent. */
@@ -547,7 +794,11 @@ function RosterBuilderEditor({
       withConfirmedWarnings(
         prompt.items.flatMap((item) => confirmedWarningsFor(prompt.signup.id, item.warnings)),
       );
-      stageRoleCopy(prompt.signup, true);
+      if (prompt.pendingRole && isConcreteCharacterRole(prompt.pendingRole)) {
+        commitSelectWithRole(prompt.signup, prompt.pendingRole, prompt.pendingSpec ?? null);
+      } else {
+        stageRoleCopy(prompt.signup, true);
+      }
       return;
     }
     const confirmed = withConfirmedWarnings(
@@ -628,6 +879,8 @@ function RosterBuilderEditor({
   });
   const canRepost = actions.repost;
 
+  const validationIssueCount = liveValidation.blockers.length + liveValidation.warnings.length;
+
   return (
     <div className="space-y-4">
       {error ? (
@@ -658,7 +911,7 @@ function RosterBuilderEditor({
             </div>
           }
         />
-        <div className="grid gap-3 px-4 py-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-2 px-3 py-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <Stat label="Signups" value={`${data.run.activeSignupCount} active`} />
           <Stat label="Published selected" value={String(data.run.publishedSelectedCount)} />
           <Stat label="Backups" value={String(data.run.backupCount)} />
@@ -668,303 +921,262 @@ function RosterBuilderEditor({
           />
         </div>
         {data.roster.publishedAt ? (
-          <p className="border-t border-border px-4 py-3 text-xs text-muted">
+          <p className="border-t border-border px-3 py-2 text-sm text-muted">
             Published by {data.roster.publishedByName ?? "Unknown"} · {formatDateTime(data.roster.publishedAt)}
           </p>
         ) : null}
       </Card>
       )}
 
-      <Card>
-        <CardHeader
-          title="Composition"
-          description="Targets come from this run. Over/under is a warning, not a hard block."
-        />
-        <div className="grid grid-cols-2 gap-3 px-4 py-4 text-sm md:grid-cols-4">
-          <CompositionMeter label="Tanks" slot={liveComposition.tanks} />
-          <CompositionMeter label="Healers" slot={liveComposition.healers} />
-          <CompositionMeter label="DPS" slot={liveComposition.dps} />
-          {/* Its own target, separate from the booster roles: a shortage here is never a DPS shortage. */}
-          <CompositionMeter label="Lootbuddies" slot={liveComposition.lootbuddies} />
-        </div>
-        <p className="border-t border-border px-4 py-3 text-xs text-muted">
-          Melee {roleBreakdown.meleeDps} · Ranged {roleBreakdown.rangedDps}
-          {roleBreakdown.legacyDps > 0 ? ` · Unassigned DPS ${roleBreakdown.legacyDps}` : ""}
-          {" · "}
-          DPS {liveComposition.dps.selected} (target {liveComposition.dps.target})
-        </p>
-        {liveValidation.blockers.length > 0 ? (
-          <div role="alert" className="space-y-1 border-t border-border px-4 py-3 text-xs text-danger">
-            {liveValidation.blockers.map((issue) => (
-              <p key={`${issue.code}:${issue.signupId ?? issue.message}`}>{issue.message}</p>
-            ))}
-          </div>
-        ) : null}
-      </Card>
-
-      <ClassBuffChecker coverage={liveRaidBuffCoverage} />
-
-      <Card>
-        <CardHeader title="Filters" />
-        <div className="grid gap-2 px-4 py-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-          <label className="text-sm">
-            <span className="mb-1 block text-xs text-muted">Search</span>
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              className="h-9 w-full rounded-md border border-border bg-surface px-2"
-              placeholder="Player or character"
-            />
-          </label>
-          <FilterSelect label="Participation" value={participation} onChange={setParticipation} options={["ALL", "BOOSTER", "LOOTBUDDY"]} />
-          <FilterSelect
-            label="Role"
-            value={roleFilter}
-            onChange={setRoleFilter}
-            options={["ALL", "TANK", "HEALER", "MELEE_DPS", "RANGED_DPS"]}
-          />
-          <FilterSelect label="Offer" value={backupFilter} onChange={setBackupFilter} options={["ALL", "PRIMARY", "BACKUP"]} />
-          <FilterSelect label="Draft" value={selectedFilter} onChange={setSelectedFilter} options={["ALL", "SELECTED", "UNSELECTED"]} />
-          <FilterSelect
-            label="Perf %"
-            value={perfFilter}
-            onChange={(value) => setPerfFilter(value as WclPerfFilter)}
-            options={[
-              { value: "ALL", label: "All" },
-              { value: "HAS", label: "Has logs" },
-              { value: "NONE", label: "No logs" },
-              { value: "GE_25", label: "Best ≥ 25%" },
-              { value: "GE_50", label: "Best ≥ 50%" },
-              { value: "GE_75", label: "Best ≥ 75%" },
-              { value: "GE_95", label: "Best ≥ 95%" },
-            ]}
-          />
-          <FilterSelect
-            label="Sort"
-            value={perfSort}
-            onChange={(value) => setPerfSort(value as WclPerfSort)}
-            options={[
-              { value: "DEFAULT", label: "Default" },
-              { value: "BEST_DESC", label: "Best % ↓" },
-              { value: "BEST_ASC", label: "Best % ↑" },
-              { value: "AVG_DESC", label: "Avg % ↓" },
-              { value: "AVG_ASC", label: "Avg % ↑" },
-            ]}
-          />
-        </div>
-      </Card>
-
-      <Card>
-        <CardHeader
-          title="Boosters"
-          description={`${uniqueFilteredBoosters} signup${uniqueFilteredBoosters === 1 ? "" : "s"}`}
-          action={
-            data.roster.canEdit ? (
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={pending || isDirty}
-                onClick={() => setAddBoosterOpen(true)}
-              >
-                Add Booster
-              </Button>
-            ) : null
-          }
-        />
-        {data.roster.canEdit && isDirty ? (
-          <p className="border-t border-border px-4 py-2 text-xs text-muted">
-            Save your current roster changes before adding a booster.
-          </p>
-        ) : null}
-        <p className="border-t border-border px-4 py-3 text-xs text-muted">
-          Unique Booster signups. Multi-role offers appear in every matching role section below — section
-          counts are role offers and may sum higher than this total.
-        </p>
-      </Card>
-
-      <SignupSection
-        title="Tanks"
-        empty="No tank signups"
-        signups={filteredTanks}
-        externals={externalBoosters.filter((booster) => booster.role === "TANK")}
-        editing={editing}
-        locked={togglesLocked}
-        isRoleCopyChecked={isRoleCopyChecked}
-        stagedRole={stagedRole}
-        onToggle={toggleRoleCopy}
-        onAssignRole={assignRole}
-      />
-      <SignupSection
-        title="Healers"
-        empty="No healer signups"
-        signups={filteredHealers}
-        externals={externalBoosters.filter((booster) => booster.role === "HEALER")}
-        editing={editing}
-        locked={togglesLocked}
-        isRoleCopyChecked={isRoleCopyChecked}
-        stagedRole={stagedRole}
-        onToggle={toggleRoleCopy}
-        onAssignRole={assignRole}
-      />
-      <SignupSection
-        title="Melee DPS"
-        empty="No melee DPS signups"
-        signups={filteredMeleeDps}
-        externals={externalBoosters.filter(
-          (booster) => externalBoosterRosterBucket(booster.role) === "MELEE_DPS",
-        )}
-        editing={editing}
-        locked={togglesLocked}
-        isRoleCopyChecked={isRoleCopyChecked}
-        stagedRole={stagedRole}
-        onToggle={toggleRoleCopy}
-        onAssignRole={assignRole}
-      />
-      <SignupSection
-        title="Ranged DPS"
-        empty="No ranged DPS signups"
-        signups={filteredRangedDps}
-        externals={externalBoosters.filter(
-          (booster) => externalBoosterRosterBucket(booster.role) === "RANGED_DPS",
-        )}
-        editing={editing}
-        locked={togglesLocked}
-        isRoleCopyChecked={isRoleCopyChecked}
-        stagedRole={stagedRole}
-        onToggle={toggleRoleCopy}
-        onAssignRole={assignRole}
-      />
-      {filteredUnassignedDps.length > 0 ||
-      externalBoosters.some((booster) => externalBoosterRosterBucket(booster.role) === "LEGACY_DPS") ? (
-        <SignupSection
-          title="Unassigned DPS"
-          empty="No unassigned DPS signups"
-          signups={filteredUnassignedDps}
-          externals={externalBoosters.filter(
-            (booster) => externalBoosterRosterBucket(booster.role) === "LEGACY_DPS",
+      {embedded ? (
+        <div className="flex flex-wrap items-center gap-1.5 text-sm">
+          {validationIssueCount > 0 ? (
+            <Link
+              href={runDetailPath(data.run.id, "operations") + "#operations-validation"}
+              className="inline-flex items-center gap-1 rounded-md border border-warning/35 bg-warning/10 px-2 py-1 text-warning hover:bg-warning/15"
+            >
+              <WarningIcon label="Validation" size={14} />
+              Validation · {validationIssueCount}
+            </Link>
+          ) : (
+            <Link
+              href={runDetailPath(data.run.id, "operations") + "#operations-validation"}
+              className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-muted hover:text-foreground"
+            >
+              <QuietOkIcon label="Validation OK" size={14} />
+              Validation
+            </Link>
           )}
-          editing={editing}
-          locked={togglesLocked}
-          isRoleCopyChecked={isRoleCopyChecked}
-          stagedRole={stagedRole}
-          onToggle={toggleRoleCopy}
-          onAssignRole={assignRole}
-        />
+          {preflightAttentionCount > 0 ? (
+            <Link
+              href={runDetailPath(data.run.id, "operations") + "#operations-preflight"}
+              className="inline-flex items-center gap-1 rounded-md border border-warning/35 bg-warning/10 px-2 py-1 text-warning hover:bg-warning/15"
+            >
+              <WarningIcon label="Preflight" size={14} />
+              Preflight · {preflightAttentionCount}
+            </Link>
+          ) : (
+            <Link
+              href={runDetailPath(data.run.id, "operations") + "#operations-preflight"}
+              className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-muted hover:text-foreground"
+            >
+              <QuietOkIcon label="Preflight OK" size={14} />
+              Preflight
+            </Link>
+          )}
+        </div>
       ) : null}
-      <SignupSection
-        title="Lootbuddies"
-        empty="No lootbuddy signups"
-        signups={filteredLootbuddies}
-        externals={externalBoosters.filter((booster) => booster.participationType === "LOOTBUDDY")}
-        editing={editing}
-        locked={togglesLocked}
-        isRoleCopyChecked={isRoleCopyChecked}
-        stagedRole={stagedRole}
-        onToggle={toggleRoleCopy}
-        onAssignRole={assignRole}
-      />
 
-      <Card>
-        <CardHeader
-          title="Roster validation"
-          description={
-            data.roster.canEdit
-              ? isPublished
-                ? "Published · Editable until Start"
-                : undefined
-              : isPublished
-                ? "Locked · The run has started"
-                : undefined
-          }
-          action={
-            data.roster.canEdit && data.roster.hasUnpublishedChanges ? (
-              <span className="rounded border border-warning/40 bg-warning/10 px-2 py-0.5 text-xs text-warning">
-                Unpublished changes
-              </span>
-            ) : null
-          }
+      {afterContext}
+
+      {/* —— SIGNUPS: readable tile grid (4–5 / row at 1440) —— */}
+      <section className="space-y-2">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h3 className="text-base font-semibold text-foreground">
+              Signups{" "}
+              <span className="font-normal tabular-nums text-muted">{gridSignups.length}</span>
+            </h3>
+            <p className="text-sm text-muted">Click a tile to add/remove draft</p>
+          </div>
+          {data.roster.canEdit ? (
+            <Button
+              type="button"
+              size="md"
+              variant="secondary"
+              disabled={pending || isDirty}
+              onClick={() => setAddBoosterOpen(true)}
+            >
+              Add Booster
+            </Button>
+          ) : null}
+        </div>
+
+        <CompactRosterFilters
+          search={search}
+          setSearch={setSearch}
+          roleFilter={roleFilter}
+          setRoleFilter={setRoleFilter}
+          selectedFilter={selectedFilter}
+          setSelectedFilter={setSelectedFilter}
+          participation={participation}
+          setParticipation={setParticipation}
+          backupFilter={backupFilter}
+          setBackupFilter={setBackupFilter}
+          perfFilter={perfFilter}
+          setPerfFilter={setPerfFilter}
+          perfSort={perfSort}
+          setPerfSort={setPerfSort}
         />
-        <div className="space-y-2 px-4 py-4 text-sm">
-          {isDirty ? (
-            <p className="text-warning">
-              Unsaved roster changes
-              {unsavedChangeCount > 0 ? ` · ${unsavedChangeCount} change${unsavedChangeCount === 1 ? "" : "s"}` : ""}
-              . {isPublished ? "Update the roster to accept them." : "Save roster to persist."}
-            </p>
-          ) : null}
-          {liveValidation.blockers.length === 0 && liveValidation.warnings.length === 0 ? (
-            <p className="text-muted">No blockers or composition warnings.</p>
-          ) : null}
-          {liveValidation.blockers.map((issue) => (
-            <p key={`${issue.code}-${issue.signupId ?? issue.message}`} className="text-danger">
-              Cannot publish — {issue.message}
-            </p>
-          ))}
-          {liveValidation.warnings.map((issue) => (
-            <p key={`${issue.code}-${issue.message}`} className="text-warning">
-              Warning — {issue.message}
-            </p>
-          ))}
-          <div className="flex flex-wrap items-center gap-2 pt-2">
+
+        {gridSignups.length === 0 && externalBoosters.length === 0 ? (
+          <p className="py-3 text-sm text-muted">No signups match these filters.</p>
+        ) : (
+          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 [&>li]:h-[54px]">
+            {externalBoosters.map((booster) => (
+              <li key={`ext-${booster.id}`}>
+                <div
+                  className="flex h-full items-center gap-2 rounded-md border border-accent/30 bg-accent/5 px-2.5 text-sm"
+                  title="External · edit via External Boosters"
+                >
+                  <ClassIcon wowClass={booster.wowClass} size={24} />
+                  <span className="min-w-0 truncate text-sm font-semibold" style={{ color: CLASS_COLORS[booster.wowClass] }}>
+                    @{booster.name}
+                  </span>
+                  <span className="ml-auto shrink-0 text-xs text-accent">EXT</span>
+                </div>
+              </li>
+            ))}
+            {gridSignups.map((signup) => (
+              <li key={signup.id}>
+                <SignupTile
+                  signup={signup}
+                  editing={editing}
+                  locked={togglesLocked}
+                  selected={isStagedSelected(signup.id)}
+                  assignedRole={stagedRole(signup.id)}
+                  assignedSpec={stagedSpecs.get(signup.id) ?? null}
+                  onToggle={toggleRoleCopy}
+                  onSelectWithRole={selectWithRole}
+                  onChangeRole={assignRole}
+                  onDeselect={() => deselectSignup(signup)}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* —— ROSTER: 4-group grid + actions —— */}
+      <section className="space-y-2 border-t border-border pt-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-base font-semibold text-foreground">
+            Roster{" "}
+            <span className="font-normal tabular-nums text-muted">
+              {draftSlotCount}/{rosterCapacity}
+            </span>
+            {isDirty ? (
+              <span className="ml-2 text-sm font-normal text-warning">Unsaved</span>
+            ) : null}
+            {data.roster.canEdit && data.roster.hasUnpublishedChanges && !isDirty ? (
+              <span className="ml-2 text-sm font-normal text-warning">Unpublished</span>
+            ) : null}
+          </h3>
+          <div className="flex flex-wrap items-center gap-2">
+            {data.roster.canEdit ? <RosterBuilderTrigger runId={data.run.id} /> : null}
             {actions.seed ? (
-              <Button type="button" disabled={pending} onClick={seedPublished}>
-                {pending ? "Loading…" : "Edit Published Roster"}
+              <Button type="button" size="md" disabled={pending} onClick={seedPublished}>
+                {pending ? "Loading…" : "Edit Published"}
               </Button>
             ) : null}
             {actions.save ? (
-              <Button type="button" disabled={pending || !editing} onClick={() => saveRoster()}>
-                {pending ? "Saving…" : "Save Roster"}
+              <Button type="button" size="md" disabled={pending || !editing} onClick={() => saveRoster()}>
+                {pending ? "Saving…" : "Save"}
               </Button>
             ) : null}
             {actions.update ? (
               <Button
                 type="button"
+                size="md"
                 disabled={pending || !data.roster.canEdit || !liveValidation.canPublish}
                 onClick={() => openDialog("update")}
               >
-                Update Roster
-              </Button>
-            ) : null}
-            {actions.discard ? (
-              <Button type="button" variant="ghost" disabled={pending} onClick={discardChanges}>
-                Discard changes
+                Update
               </Button>
             ) : null}
             {actions.publish ? (
               <Button
                 type="button"
+                size="md"
                 disabled={pending || !data.roster.canEdit || !liveValidation.canPublish}
                 onClick={() => openDialog("publish")}
               >
-                Publish Roster
+                Publish
               </Button>
             ) : null}
             {canRepost ? (
-              <Button type="button" variant="secondary" disabled={pending || !data.roster.canEdit} onClick={() => openDialog("repost")}>
-                Publish Roster
+              <Button
+                type="button"
+                size="md"
+                variant="secondary"
+                disabled={pending || !data.roster.canEdit}
+                onClick={() => openDialog("repost")}
+              >
+                Publish
+              </Button>
+            ) : null}
+            {actions.discard ? (
+              <Button type="button" size="md" variant="ghost" disabled={pending} onClick={discardChanges}>
+                Discard
               </Button>
             ) : null}
           </div>
-          {!isPublished && isDirty ? (
-            <p className="text-xs text-muted">Save roster changes before publishing.</p>
-          ) : null}
-          {data.roster.canEdit && data.roster.runChangedSinceAck ? (
-            <p className="text-xs text-warning">
-              Run details changed since the roster was last published. Update the roster before starting the run.
-            </p>
-          ) : !isDirty && data.roster.canEdit && data.roster.hasUnpublishedChanges ? (
-            <p className="text-xs text-warning">
-              The saved roster differs from the published one. Update the roster before starting the run.
-            </p>
-          ) : null}
-          {canRepost ? (
-            <p className="text-xs text-muted">
-              Publish Roster posts the roster to Discord again as a new message — Save and Update only refresh the
-              current post.
-            </p>
-          ) : null}
         </div>
-      </Card>
+
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {draftGroups.map((group, groupIndex) => (
+            <div key={groupIndex} className="min-w-0">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
+                Group {groupIndex + 1}
+              </p>
+              <ul className="space-y-1">
+                {group.map((slot, slotIndex) => (
+                  <li key={`${groupIndex}-${slotIndex}`}>
+                    {slot ? (
+                      <button
+                        type="button"
+                        disabled={!editing || togglesLocked || !slot.signup}
+                        onClick={() => {
+                          if (slot.signup) deselectSignup(slot.signup);
+                        }}
+                        title={slot.external ? "External — edit via External Boosters" : "Remove from draft"}
+                        className="flex min-h-[40px] w-full items-center gap-2 rounded-md border border-border/80 bg-surface-raised/40 px-2.5 py-2 text-left text-sm hover:border-danger/50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {slot.wowClass ? <ClassIcon wowClass={slot.wowClass} size={22} /> : null}
+                        <span
+                          className="min-w-0 flex-1 truncate text-[13px] font-semibold"
+                          style={slot.wowClass ? { color: CLASS_COLORS[slot.wowClass] } : undefined}
+                        >
+                          {slot.name}
+                        </span>
+                        {slot.wowClass && slot.specialization ? (
+                          <SpecIcon wowClass={slot.wowClass} specialization={slot.specialization} size={18} />
+                        ) : null}
+                        {slot.role && isConcreteScanRole(slot.role) ? <RoleIcon role={slot.role} size={18} /> : null}
+                        {slot.warning ? <WarningIcon label="Needs attention" size={16} /> : null}
+                      </button>
+                    ) : (
+                      <div className="flex min-h-[40px] items-center rounded-md border border-dashed border-border/50 px-2.5 py-2 text-sm text-muted/70">
+                        Empty
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
+          <CompositionMeter label="T" slot={liveComposition.tanks} compact />
+          <CompositionMeter label="H" slot={liveComposition.healers} compact />
+          <CompositionMeter label="D" slot={liveComposition.dps} compact />
+          <CompositionMeter label="LB" slot={liveComposition.lootbuddies} compact />
+          <span>
+            Melee {roleBreakdown.meleeDps} · Ranged {roleBreakdown.rangedDps}
+            {roleBreakdown.legacyDps > 0 ? ` · Unassigned ${roleBreakdown.legacyDps}` : ""}
+          </span>
+        </div>
+
+        {data.roster.canEdit && data.roster.runChangedSinceAck ? (
+          <p className="text-sm text-warning">
+            Run details changed since last publish — Update before starting.
+          </p>
+        ) : null}
+      </section>
+
+      {/* —— BUFFS: compact strip —— */}
+      <ClassBuffChecker coverage={liveRaidBuffCoverage} />
 
       <dialog
         ref={dialogRef}
@@ -1093,123 +1305,164 @@ function RosterBuilderEditor({
   );
 }
 
-function SignupSection({
-  title,
-  empty,
-  signups,
-  externals = [],
-  editing,
-  locked,
-  isRoleCopyChecked,
-  stagedRole,
-  onToggle,
-  onAssignRole,
+function CompactRosterFilters({
+  search,
+  setSearch,
+  roleFilter,
+  setRoleFilter,
+  selectedFilter,
+  setSelectedFilter,
+  participation,
+  setParticipation,
+  backupFilter,
+  setBackupFilter,
+  perfFilter,
+  setPerfFilter,
+  perfSort,
+  setPerfSort,
 }: {
-  title: string;
-  empty: string;
-  signups: SignupRow[];
-  /** Saved external boosters in this role — read-only here (edit via the Run header dialog). */
-  externals?: RosterView["roster"]["externalBoosters"];
-  editing: boolean;
-  locked: boolean;
-  isRoleCopyChecked: (signup: SignupRow) => boolean;
-  stagedRole: (signupId: string) => CharacterRole | null;
-  onToggle: (signup: SignupRow, selected: boolean) => void;
-  onAssignRole: (signup: SignupRow, role: CharacterRole) => void;
+  search: string;
+  setSearch: (value: string) => void;
+  roleFilter: string;
+  setRoleFilter: (value: string) => void;
+  selectedFilter: string;
+  setSelectedFilter: (value: string) => void;
+  participation: string;
+  setParticipation: (value: string) => void;
+  backupFilter: string;
+  setBackupFilter: (value: string) => void;
+  perfFilter: WclPerfFilter;
+  setPerfFilter: (value: WclPerfFilter) => void;
+  perfSort: WclPerfSort;
+  setPerfSort: (value: WclPerfSort) => void;
 }) {
-  const grouped = groupByUser(signups);
   return (
-    <Card>
-      <CardHeader
-        title={title}
-        description={`${signups.length} signup${signups.length === 1 ? "" : "s"}${
-          externals.length > 0 ? ` · ${externals.length} external` : ""
-        }`}
-      />
-      {externals.length > 0 ? (
-        <ul className="divide-y divide-border border-b border-border">
-          {externals.map((booster) => (
-            <li key={booster.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
-              <ClassIcon wowClass={booster.wowClass} size={18} />
-              <span className="font-medium" style={{ color: CLASS_COLORS[booster.wowClass] }}>
-                @{booster.name}
-              </span>
-              <span className="rounded border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-xs text-accent">
-                External · Selected
-              </span>
-              <span className="text-xs text-muted">Edit via External Boosters at the top</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {signups.length === 0 ? (
-        <EmptyState title={empty} description="New signups appear here after refresh while the window is open." />
-      ) : (
-        <ul className="divide-y divide-border">
-          {grouped.map((group) => (
-            <li key={group.userId} className="px-4 py-3">
-              <p className="mb-2 text-sm font-semibold">{group.userName}</p>
-              <div className="space-y-2">
-                {group.signups.map((signup) => (
-                  <SignupRowCard
-                    key={`${signup.id}:${signup.groupRole ?? "lootbuddy"}`}
-                    signup={signup}
-                    editing={editing}
-                    locked={locked}
-                    selected={isRoleCopyChecked(signup)}
-                    assignedRole={stagedRole(signup.id)}
-                    onToggle={onToggle}
-                    onAssignRole={onAssignRole}
-                  />
-                ))}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
+    <div className="flex flex-wrap items-end gap-2">
+      <label className="min-w-[10rem] flex-1 text-sm sm:max-w-[16rem]">
+        <span className="mb-1 block text-xs text-muted">Search</span>
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          className="h-9 w-full rounded-md border border-border bg-surface px-2.5 text-sm"
+          placeholder="Player or character"
+        />
+      </label>
+      <label className="text-sm">
+        <span className="mb-1 block text-xs text-muted">Role</span>
+        <select
+          value={roleFilter}
+          onChange={(event) => setRoleFilter(event.target.value)}
+          className="h-9 rounded-md border border-border bg-surface px-2 text-sm"
+        >
+          <option value="ALL">All</option>
+          <option value="TANK">Tank</option>
+          <option value="HEALER">Healer</option>
+          <option value="MELEE_DPS">Melee</option>
+          <option value="RANGED_DPS">Ranged</option>
+        </select>
+      </label>
+      <label className="text-sm">
+        <span className="mb-1 block text-xs text-muted">Draft</span>
+        <select
+          value={selectedFilter}
+          onChange={(event) => setSelectedFilter(event.target.value)}
+          className="h-9 rounded-md border border-border bg-surface px-2 text-sm"
+        >
+          <option value="ALL">All</option>
+          <option value="SELECTED">In draft</option>
+          <option value="UNSELECTED">Available</option>
+        </select>
+      </label>
+      <details className="text-sm">
+        <summary className="cursor-pointer list-none py-2 text-sm text-muted hover:text-foreground">
+          More filters
+        </summary>
+        <div className="mt-1 flex flex-wrap gap-2 rounded border border-border/70 bg-surface-raised/30 p-2">
+          <FilterSelect
+            label="Participation"
+            value={participation}
+            onChange={setParticipation}
+            options={["ALL", "BOOSTER", "LOOTBUDDY"]}
+          />
+          <FilterSelect
+            label="Offer"
+            value={backupFilter}
+            onChange={setBackupFilter}
+            options={["ALL", "PRIMARY", "BACKUP"]}
+          />
+          <FilterSelect
+            label="Perf %"
+            value={perfFilter}
+            onChange={(value) => setPerfFilter(value as WclPerfFilter)}
+            options={[
+              { value: "ALL", label: "All" },
+              { value: "HAS", label: "Has logs" },
+              { value: "NONE", label: "No logs" },
+              { value: "GE_25", label: "Best ≥ 25%" },
+              { value: "GE_50", label: "Best ≥ 50%" },
+              { value: "GE_75", label: "Best ≥ 75%" },
+              { value: "GE_95", label: "Best ≥ 95%" },
+            ]}
+          />
+          <FilterSelect
+            label="Sort"
+            value={perfSort}
+            onChange={(value) => setPerfSort(value as WclPerfSort)}
+            options={[
+              { value: "DEFAULT", label: "Default" },
+              { value: "BEST_DESC", label: "Best % ↓" },
+              { value: "BEST_ASC", label: "Best % ↑" },
+              { value: "AVG_DESC", label: "Avg % ↓" },
+              { value: "AVG_ASC", label: "Avg % ↑" },
+            ]}
+          />
+        </div>
+      </details>
+    </div>
   );
 }
 
-function SignupRoleBadges({ signup }: { signup: SignupRow }) {
-  const historic = signup.offeredRoles.includes("DPS");
-  if (!historic) return <OfferedRolesBadges roles={signup.offeredRoles} />;
-  const dpsRoles = signup.assignableRoles.filter((role) => role === "MELEE_DPS" || role === "RANGED_DPS");
-  if (dpsRoles.length > 1) {
-    const others = signup.assignableRoles.filter((role) => role !== "MELEE_DPS" && role !== "RANGED_DPS");
-    return (
-      <>
-        <OfferedRolesBadges roles={others} />
-        <span className="rounded border border-border px-1.5 py-0.5 text-xs text-muted">Unassigned DPS</span>
-      </>
-    );
-  }
-  return (
-    <>
-      <OfferedRolesBadges roles={signup.assignableRoles} />
-      <span className="text-xs text-muted">historic signup</span>
-    </>
-  );
+function isConcreteScanRole(role: CharacterRole): role is Exclude<CharacterRole, "DPS"> {
+  return role === "TANK" || role === "HEALER" || role === "MELEE_DPS" || role === "RANGED_DPS";
 }
 
-function SignupRowCard({
+/**
+ * Role shown on the tile / roster.
+ * Drafted: only the selected role. Undrafted single-offer: that role.
+ * Undrafted multi-offer: no presumed role (chooser decides).
+ */
+function tileScanRole(signup: SignupRow, assignedRole: CharacterRole | null): CharacterRole | null {
+  if (signup.participationType === "LOOTBUDDY") return null;
+  if (assignedRole && isConcreteScanRole(assignedRole)) return assignedRole;
+  const concrete = signup.assignableRoles.filter(isConcreteScanRole);
+  if (concrete.length === 1) return concrete[0];
+  return null;
+}
+
+function SignupTile({
   signup,
   editing,
   locked,
   selected,
   assignedRole,
+  assignedSpec,
   onToggle,
-  onAssignRole,
+  onSelectWithRole,
+  onChangeRole,
+  onDeselect,
 }: {
   signup: SignupRow;
   editing: boolean;
   locked: boolean;
   selected: boolean;
   assignedRole: CharacterRole | null;
+  assignedSpec: string | null;
   onToggle: (signup: SignupRow, selected: boolean) => void;
-  onAssignRole: (signup: SignupRow, role: CharacterRole) => void;
+  onSelectWithRole: (signup: SignupRow, role: CharacterRole, specialization?: string | null) => void;
+  onChangeRole: (signup: SignupRow, role: CharacterRole, specialization?: string | null) => void;
+  onDeselect: () => void;
 }) {
-  const checkboxId = `signup-${signup.id}-${signup.groupRole ?? "lootbuddy"}`;
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const character = signup.character;
   const displayClass = lootbuddyDisplayClass(signup);
   const lockoutLines = boosterLockoutLines(signup);
@@ -1217,246 +1470,247 @@ function SignupRowCard({
   const scheduleConflicts = signup.scheduleConflicts ?? [];
   const scheduleBlocked = !selected && scheduleConflicts.length > 0;
   const disabled = !editing || locked || signup.status === "WITHDRAWN" || scheduleBlocked;
-  const needsRoleChoice = signup.participationType === "BOOSTER" && signup.assignableRoles.length > 1;
-  const assignableRoles = signup.assignableRoles;
-  const rowPointer = disabled ? "cursor-not-allowed" : "cursor-pointer";
-  const wclForColumn = filterWclPerformanceForGroupRole(signup.wclPerformance, signup.groupRole);
-  const showWcl = Boolean(character?.warcraftLogsId) || wclForColumn.length > 0;
-  return (
-    <div
-      className={`flex flex-wrap items-start gap-x-3 gap-y-2 rounded-md border px-3 py-2 xl:flex-nowrap ${
-        selected ? "border-accent bg-accent/10" : "border-border bg-transparent"
-      } ${disabled ? "opacity-70" : ""}`}
-    >
-      <input
-        id={checkboxId}
-        type="checkbox"
-        className="mt-1"
-        checked={selected}
-        disabled={disabled}
-        onChange={(event) => onToggle(signup, event.target.checked)}
-      />
-      <div className="min-w-0 flex-1 text-sm">
-        <div className="flex flex-wrap items-center gap-2">
-          <label htmlFor={checkboxId} className={`font-medium ${rowPointer}`}>
-            {signupDisplayName(signup)}
-          </label>
-          {displayClass ? <ClassBadge wowClass={displayClass} /> : null}
-          <SignupRoleBadges signup={signup} />
-          <ParticipationBadge type={signup.participationType} />
-          <SignupStatusBadge status={signup.status} />
-          {signup.isBackup ? <span className="text-xs text-warning">Backup</span> : <span className="text-xs text-muted">Primary</span>}
-        </div>
-        <label
-          htmlFor={checkboxId}
-          className={`mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted ${rowPointer}`}
-        >
-          {character ? (
-            <span>
-              {formatCharacterRosterMetadata({
-                itemLevel: character.itemLevel,
-                specialization: character.specialization,
-                primaryRole: character.primaryRole,
-                wowClass: character.wowClass,
-                playableSpecs: character.playableSpecs,
-              })}
-            </span>
-          ) : null}
-          {signup.participationType === "BOOSTER" && signup.boosterApproved ? (
-            <AccessBadge status="APPROVED" />
-          ) : null}
-          {signup.participationType === "LOOTBUDDY" ? (
-            <span>
-              {signup.lootbuddyMode ? LOOTBUDDY_MODE_LABELS[signup.lootbuddyMode] : "Lootbuddy"}
-              {signup.lootbuddyVerification && signup.lootbuddyVerification !== "NONE"
-                ? ` · ${LOOTBUDDY_VERIFICATION_LABELS[signup.lootbuddyVerification]}`
-                : ""}
-            </span>
-          ) : null}
-          {lockoutLines.length > 0 ? (
-            <span
-              className={`cursor-help underline decoration-dotted underline-offset-2 ${lockoutAttention ? "text-warning" : ""}`}
-              title={formatContentLockoutTooltip(signup.contentSaves ?? [])}
-            >
-              {lockoutLines.join(" · ")}
-            </span>
-          ) : null}
-        </label>
-        {selected && needsRoleChoice ? (
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted">Assigned role:</span>
-            <select
-              aria-label={`Assigned role for ${signupDisplayName(signup)}`}
-              value={assignedRole ?? ""}
-              disabled={!editing || locked}
-              onChange={(event) => onAssignRole(signup, event.target.value as CharacterRole)}
-              className="h-8 rounded-md border border-border bg-surface px-2 text-xs"
-            >
-              <option value="">Choose assigned role…</option>
-              {assignableRoles.map((role) => (
-                <option key={role} value={role}>
-                  {CHARACTER_ROLE_LABELS[role]}
-                </option>
-              ))}
-            </select>
-            {assignedRole && character ? (
-              <span className="text-xs text-muted">
-                {character.primaryRole === assignedRole ? "Main" : "Offspec"}
-              </span>
-            ) : null}
-          </div>
-        ) : selected && assignedRole && character ? (
-          <div className="mt-2 text-xs text-muted">
-            {character.primaryRole === assignedRole ? "Main" : "Offspec"}
-          </div>
-        ) : null}
-        {(() => {
-          const runCommitments = signup.runCommitments ?? [];
-          if (runCommitments.length === 0) return null;
-          return <RosterRunCommitmentsBlock commitments={runCommitments} className={rowPointer} />;
-        })()}
-        {scheduleConflicts.length > 0 ? (
-          <RosterScheduleConflictAlert conflicts={scheduleConflicts} htmlFor={checkboxId} className={rowPointer} />
-        ) : null}
-        {signup.issue ? (
-          <label htmlFor={checkboxId} className={`mt-1 block text-xs text-danger ${rowPointer}`}>
-            {signup.issue}
-          </label>
-        ) : null}
-      </div>
-      {showWcl ? (
-        // Below xl the performance lines get their own row under the details
-        // (they are long and would squeeze / overflow the card on phones).
-        <div
-          className="basis-full pl-7 text-left text-xs xl:ml-auto xl:basis-auto xl:shrink-0 xl:self-start xl:pl-0 xl:text-right"
-          aria-label="Warcraft Logs performance"
-        >
-          {character?.warcraftLogsId ? (
-            <WarcraftLogsLink
-              warcraftLogsId={character.warcraftLogsId}
-              className="inline-flex items-center gap-1 text-accent hover:underline"
-            />
-          ) : null}
-          {wclForColumn.length > 0 ? (
-            <div className={`space-y-0.5 text-muted ${character?.warcraftLogsId ? "mt-1" : ""}`}>
-              {wclForColumn.map((segment) => (
-                <div key={segment.raidId}>
-                  {wclPerformanceRaidLineParts(segment).map((part, index) =>
-                    part.kind === "text" ? (
-                      <span key={index}>{part.text}</span>
-                    ) : (
-                      <span
-                        key={index}
-                        className="font-medium tabular-nums"
-                        style={{ color: wclPercentileColor(part.value) }}
-                      >
-                        {part.value}%
-                      </span>
-                    ),
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
+  const offeredSpecs: OfferedSpecChoice[] =
+    signup.participationType === "BOOSTER" ? resolveOfferedSpecs(signupOfferedSpecInput(signup)) : [];
+  const needsSpecChoice = offeredSpecs.length > 1;
+  const scanRole = tileScanRole(signup, assignedRole);
+  const wclSegments: WclPerformanceRaidSegment[] = signup.wclPerformance ?? [];
+  const displaySpecs = tileVisibleSpecs(offeredSpecs, selected, assignedSpec);
+  const tileWcl = resolveSignupTileWclBest({
+    segments: wclSegments,
+    offeredSpecs,
+    selected,
+    assignedRole,
+    assignedSpec,
+  });
+  const bestWcl = tileWcl.bestPct;
+  const wclTooltip = tileWcl.tooltip;
+  const characterLabel = character?.name ?? signupDisplayName(signup);
+  const itemLevel = typeof character?.itemLevel === "number" ? character.itemLevel : null;
 
-function groupByUser(signups: SignupRow[]) {
-  const order: Array<{ userId: string; userName: string; signups: SignupRow[] }> = [];
-  for (const signup of signups) {
-    const existing = order.find((group) => group.userId === signup.userId);
-    if (existing) {
-      existing.signups.push(signup);
+  function openSpecModal() {
+    dialogRef.current?.showModal();
+  }
+
+  function closeSpecModal() {
+    dialogRef.current?.close();
+  }
+
+  function activate() {
+    if (disabled) return;
+    if (selected) {
+      onDeselect();
+      return;
+    }
+    if (signup.participationType === "LOOTBUDDY") {
+      onToggle(signup, true);
+      return;
+    }
+    if (offeredSpecs.length === 1) {
+      const only = offeredSpecs[0]!;
+      onSelectWithRole(signup, only.role, only.name);
+      return;
+    }
+    if (needsSpecChoice) {
+      openSpecModal();
+      return;
+    }
+    onToggle(signup, true);
+  }
+
+  function pickSpec(choice: OfferedSpecChoice) {
+    closeSpecModal();
+    if (selected) {
+      onChangeRole(signup, choice.role, choice.name);
     } else {
-      order.push({ userId: signup.userId, userName: signup.userName, signups: [signup] });
+      onSelectWithRole(signup, choice.role, choice.name);
     }
   }
-  return order;
-}
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-xs uppercase tracking-wide text-muted">{label}</p>
-      <p className="mt-1 font-medium">{value}</p>
-    </div>
-  );
-}
+  // Quiet unknown lockouts stay off the tile; only show progress / saved / attention.
+  const lockoutShort = (() => {
+    const raw = lockoutLines[0]?.replace(/^[^:]+:\s*/, "") ?? null;
+    if (!raw) return null;
+    if (/\bUnknown\b/i.test(raw) && !lockoutAttention) return null;
+    return raw.replace(/\s*[·\-–]\s*Unknown\b/gi, "").trim() || null;
+  })();
 
-/**
- * Class Buff Checker — one tile per provider class (Mage, Priest, Warlock, …).
- * Coverage means a selected composition contains that class — not that the
- * aura is cast or talented in-game.
- */
-function ClassBuffChecker({ coverage }: { coverage: RaidBuffCoverage }) {
-  const byClass = summarizeRaidBuffCoverageByClass(coverage);
+  const canChangeSpec = selected && needsSpecChoice && !disabled;
+
   return (
-    <Card>
-      <CardHeader
-        title="Class Buffs"
-        description={`${byClass.coveredCount} / ${byClass.totalCount} covered${
-          byClass.missingCount > 0 ? ` · ${byClass.missingCount} missing` : ""
-        }. Class availability only — not live aura verification.`}
-      />
-      <ul className="grid gap-1.5 px-4 pb-4 text-sm sm:grid-cols-2 lg:grid-cols-3" aria-label="Class buff coverage">
-        {byClass.classes.map((item) => {
-          const classLabel = CLASS_LABELS[item.wowClass];
-          const providerName = item.providers[0]?.characterName ?? item.providers[0]?.userName ?? null;
-          return (
-            <li
-              key={item.wowClass}
-              className={`flex items-start gap-2 rounded-md border px-2.5 py-1.5 ${
-                item.covered ? "border-border" : "border-danger/40 bg-danger/5"
+    <div className="relative h-full">
+      <div
+        role="button"
+        tabIndex={disabled ? -1 : 0}
+        aria-disabled={disabled || undefined}
+        aria-pressed={selected}
+        aria-label={characterLabel}
+        onClick={() => {
+          if (!disabled) activate();
+        }}
+        onKeyDown={(event) => {
+          if (disabled) return;
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            activate();
+          }
+        }}
+        className={`flex h-full w-full flex-col justify-center gap-0.5 overflow-hidden rounded-md border px-2.5 py-1.5 text-left transition-colors ${
+          disabled ? "cursor-not-allowed opacity-55" : "cursor-pointer"
+        } ${
+          selected
+            ? "border-success/70 bg-success/15 ring-1 ring-success/30"
+            : scheduleBlocked || lockoutAttention
+              ? "border-warning/45 bg-warning/5 hover:border-warning/65"
+              : "border-border bg-surface hover:bg-surface-raised/50"
+        }`}
+      >
+        {/* Row 1 — identity: class · name · ilvl | role · check/warn */}
+        <div className="flex h-6 items-center gap-1.5">
+          {displayClass ? <ClassIcon wowClass={displayClass} size={24} /> : <span className="h-6 w-6 shrink-0" />}
+          <span
+            className="min-w-0 truncate text-sm font-semibold leading-none"
+            style={displayClass ? { color: CLASS_COLORS[displayClass] } : undefined}
+          >
+            {characterLabel}
+          </span>
+          {itemLevel != null ? (
+            <span className="shrink-0 tabular-nums text-[12px] font-normal leading-none text-muted">
+              {itemLevel}
+            </span>
+          ) : null}
+          <span className="min-w-0 flex-1" aria-hidden />
+          {scanRole ? (
+            canChangeSpec ? (
+              <button
+                type="button"
+                title="Change spec"
+                aria-label={`Change spec (${CHARACTER_ROLE_LABELS[scanRole]})`}
+                className="inline-flex shrink-0 rounded-sm ring-offset-1 hover:ring-2 hover:ring-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  openSpecModal();
+                }}
+              >
+                <RoleIcon role={scanRole} size={20} />
+              </button>
+            ) : (
+              <RoleIcon role={scanRole} size={20} />
+            )
+          ) : needsSpecChoice && !selected ? (
+            <span className="inline-block w-5 shrink-0" aria-hidden title="Multiple specs — click to choose" />
+          ) : signup.participationType === "LOOTBUDDY" ? (
+            <LootbuddyIcon size={20} />
+          ) : null}
+          {selected ? (
+            <DraftCheckIcon size={16} />
+          ) : scheduleBlocked ? (
+            <WarningIcon label="Schedule conflict" size={16} />
+          ) : lockoutAttention || signup.issue ? (
+            <WarningIcon label={signup.issue ?? "Lockout attention"} size={16} />
+          ) : (
+            <span className="inline-block w-4 shrink-0" aria-hidden />
+          )}
+        </div>
+        {/* Row 2 — spec icons · Best WCL link · lockout (fixed height; missing data stays empty) */}
+        <div className="flex h-5 items-center gap-x-2 overflow-hidden pl-8 text-[12px] leading-none text-foreground/75">
+          <span className="inline-flex shrink-0 items-center gap-1">
+            {character?.wowClass && displaySpecs.length > 0
+              ? displaySpecs.map((spec) =>
+                  canChangeSpec && assignedSpec === spec.name ? (
+                    <button
+                      key={spec.name}
+                      type="button"
+                      className="inline-flex rounded-sm ring-offset-1 hover:ring-2 hover:ring-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                      title={`Change spec (${spec.name})`}
+                      aria-label={`Change spec (${spec.name})`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openSpecModal();
+                      }}
+                    >
+                      <SpecIcon wowClass={character.wowClass} specialization={spec.name} size={14} />
+                    </button>
+                  ) : (
+                    <SpecIcon
+                      key={spec.name}
+                      wowClass={character.wowClass}
+                      specialization={spec.name}
+                      size={14}
+                    />
+                  ),
+                )
+              : null}
+          </span>
+          {typeof bestWcl === "number" ? (
+            <WclBestLink
+              bestPct={bestWcl}
+              warcraftLogsId={character?.warcraftLogsId}
+              tooltip={wclTooltip}
+              accessibleName={`Open ${characterLabel}${tileWcl.specName ? ` ${tileWcl.specName}` : ""} on Warcraft Logs`}
+            />
+          ) : null}
+          {lockoutShort ? (
+            <span
+              className={`inline-flex max-w-[7.5rem] shrink-0 items-center gap-1 truncate ${
+                lockoutAttention ? "font-medium text-warning" : "text-foreground/70"
               }`}
+              title={formatContentLockoutTooltip(signup.contentSaves ?? [])}
             >
-              <span className="mt-0.5 font-medium" aria-hidden="true">
-                {item.covered ? "✓" : "✕"}
+              <span aria-hidden className="text-foreground/45">
+                ·
               </span>
-              <ClassIcon
-                wowClass={item.wowClass}
-                size={20}
-                className={item.covered ? undefined : "opacity-50 grayscale"}
+              <LockoutIcon
+                attention={lockoutAttention}
+                label={lockoutAttention ? "Saved / lockout attention" : "Lockout"}
+                size={13}
               />
-              <span className="min-w-0">
-                <span className="sr-only">{item.covered ? "Covered: " : "Missing: "}</span>
-                <span
-                  className={item.covered ? "font-medium" : "font-medium text-danger"}
-                  style={item.covered ? { color: CLASS_COLORS[item.wowClass] } : undefined}
-                >
-                  {classLabel}
-                </span>
-                {item.covered && providerName ? (
-                  <span className="mt-0.5 block truncate text-xs text-muted">— {providerName}</span>
-                ) : (
-                  <span className="mt-0.5 block text-xs text-danger">Missing</span>
-                )}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-    </Card>
-  );
-}
+              {lockoutShort}
+            </span>
+          ) : null}
+          {signup.isBackup ? (
+            <span className="shrink-0 text-foreground/60" title="Backup offer">
+              B
+            </span>
+          ) : null}
+        </div>
+      </div>
 
-function CompositionMeter({
-  label,
-  slot,
-}: {
-  label: string;
-  slot: { selected: number; target: number; delta: number };
-}) {
-  return (
-    <div>
-      <p className="text-xs uppercase tracking-wide text-muted">{label}</p>
-      <p className="mt-1 font-medium">
-        {slot.selected} / {slot.target}
-      </p>
-      {slot.delta > 0 ? <p className="text-xs text-warning">{slot.delta} over target</p> : null}
-      {slot.delta < 0 ? <p className="text-xs text-warning">{Math.abs(slot.delta)} under target</p> : null}
+      <dialog
+        ref={dialogRef}
+        aria-labelledby={`spec-pick-title-${signup.id}`}
+        className="fixed left-1/2 top-[12vh] m-0 w-[min(22rem,calc(100vw-1.5rem))] -translate-x-1/2 rounded-lg border border-border bg-surface p-0 text-foreground shadow-xl backdrop:bg-black/55"
+        onClose={() => undefined}
+        onClick={(event) => {
+          if (event.target === dialogRef.current) closeSpecModal();
+        }}
+      >
+        <div className="border-b border-border px-4 py-3">
+          <h2 id={`spec-pick-title-${signup.id}`} className="text-base font-semibold">
+            Choose spec for {characterLabel}
+          </h2>
+          <p className="mt-0.5 text-sm text-muted">Playable specs offered for this signup</p>
+        </div>
+        <div className="flex flex-col gap-2 p-3" role="listbox" aria-label="Choose spec">
+          {offeredSpecs.map((choice) => (
+            <ChooseSpecOption
+              key={choice.name}
+              choice={choice}
+              characterLabel={characterLabel}
+              wowClass={character?.wowClass ?? null}
+              warcraftLogsId={character?.warcraftLogsId}
+              wclSegments={wclSegments}
+              isCurrent={Boolean(selected && assignedSpec === choice.name)}
+              onSelect={pickSpec}
+            />
+          ))}
+        </div>
+        <div className="border-t border-border px-3 py-2">
+          <Button type="button" size="md" variant="ghost" className="w-full" onClick={closeSpecModal}>
+            Cancel
+          </Button>
+        </div>
+      </dialog>
     </div>
   );
 }
@@ -1483,7 +1737,7 @@ function FilterSelect({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-9 w-full rounded-md border border-border bg-surface px-2"
+        className="h-9 rounded-md border border-border bg-surface px-2 text-sm"
       >
         {normalized.map((option) => (
           <option key={option.value} value={option.value}>
@@ -1492,5 +1746,95 @@ function FilterSelect({
         ))}
       </select>
     </label>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs uppercase tracking-wide text-muted">{label}</p>
+      <p className="mt-1 font-medium">{value}</p>
+    </div>
+  );
+}
+
+function ClassBuffChecker({ coverage }: { coverage: RaidBuffCoverage }) {
+  const byClass = summarizeRaidBuffCoverageByClass(coverage);
+  return (
+    <div className="border-t border-border pt-3">
+      <div className="mb-1.5 flex flex-wrap items-center gap-2">
+        <span className="text-sm font-semibold text-foreground">Buffs</span>
+        <span className="text-sm text-muted">
+          {byClass.coveredCount}/{byClass.totalCount}
+          {byClass.missingCount > 0 ? ` · ${byClass.missingCount} missing` : " covered"}
+        </span>
+      </div>
+      <ul className="flex flex-wrap items-center gap-1" aria-label="Class buff coverage">
+        {byClass.classes.map((item) => {
+          const classLabel = CLASS_LABELS[item.wowClass];
+          const providerName = item.providers[0]?.characterName ?? item.providers[0]?.userName ?? null;
+          return (
+            <li
+              key={item.wowClass}
+              title={
+                item.covered
+                  ? `${classLabel}${providerName ? ` — ${providerName}` : ""}`
+                  : `${classLabel} missing`
+              }
+              className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 ${
+                item.covered ? "opacity-90" : "bg-danger/10 ring-1 ring-danger/30"
+              }`}
+            >
+              <ClassIcon
+                wowClass={item.wowClass}
+                size={18}
+                className={item.covered ? undefined : "opacity-70 grayscale"}
+              />
+              <span className="sr-only">{item.covered ? "Covered: " : "Missing: "}</span>
+              {item.covered ? (
+                <BuffCoveredIcon size={12} className="opacity-70" />
+              ) : (
+                <BuffMissingIcon size={12} />
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function CompositionMeter({
+  label,
+  slot,
+  compact = false,
+}: {
+  label: string;
+  slot: { selected: number; target: number; delta: number };
+  compact?: boolean;
+}) {
+  if (compact) {
+    return (
+      <span className="inline-flex items-center gap-1 text-sm">
+        <span className="text-muted">{label}</span>
+        <span
+          className={
+            slot.delta !== 0 ? "font-semibold tabular-nums text-warning" : "font-semibold tabular-nums"
+          }
+        >
+          {slot.selected}/{slot.target}
+        </span>
+      </span>
+    );
+  }
+  return (
+    <div>
+      <p className="text-xs text-muted">{label}</p>
+      <p className="font-medium tabular-nums">
+        {slot.selected} / {slot.target}
+      </p>
+      {slot.delta > 0 ? <p className="text-xs text-warning">{slot.delta} over target</p> : null}
+      {slot.delta < 0 ? <p className="text-xs text-warning">{Math.abs(slot.delta)} under target</p> : null}
+    </div>
   );
 }

@@ -98,7 +98,7 @@ describe("AppShell mobile navigation drawer", () => {
 
   it("marks active routes with aria-current and visible active styling", () => {
     expect(shell).toContain('aria-current={active ? "page" : undefined}');
-    expect(shell).toContain("bg-accent/15 text-accent");
+    expect(shell).toContain("bg-surface-raised text-foreground shadow-[inset_2px_0_0_0_var(--accent)]");
     expect(shell).toContain("min-h-11");
   });
 });

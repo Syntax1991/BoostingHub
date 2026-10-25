@@ -1,120 +1,222 @@
 import Link from "next/link";
-import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { EmptyState, PageHeader } from "@/components/ui/primitives";
+import { PageWorkspace } from "@/components/ui/layout";
 import { ClassIcon } from "@/components/ui/badges";
 import { CLASS_COLORS, CLASS_LABELS } from "@/lib/labels";
 import { formatCharacterPageSpecLine } from "@/lib/character-roster-metadata";
 import { formatRetryIn } from "@/lib/blizzard/sync-backoff";
 import { formatDateTime } from "@/lib/datetime";
+import { cn } from "@/lib/cn";
 import { WOW_CLASSES, WOW_REGIONS } from "@/models/enums";
 import type { managementController } from "@/controllers/app.controller";
 import { SYNC_INELIGIBLE_COPY, type OperationsRow } from "@/services/character-operations.service";
-import { CharacterSyncButtons } from "@/components/manage/character-operations/character-sync-buttons";
+import { ManageCharacterRowActions } from "@/components/manage/character-operations/manage-character-row-actions";
 import { ForceRefreshAllButton } from "@/components/manage/character-operations/force-refresh-all-button";
 import { ReconcileLinksButton } from "@/components/manage/character-operations/reconcile-links-button";
-import { DeleteCharacterButton } from "@/components/characters/delete-character-button";
 import {
   LinkageBadge,
   LockoutSlotsCompact,
   StatusBadge,
-  SummaryStat,
   SyncHealthBadge,
   Timestamp,
 } from "@/components/manage/character-operations/status";
 
 type Page = Awaited<ReturnType<typeof managementController.getCharactersPage>>;
 
-const selectClass = "h-9 rounded-md border border-border bg-surface px-2";
+const selectClass = "h-8 rounded-md border border-border bg-surface px-2 text-sm";
+const moduleClass = "rounded-lg border border-border bg-surface";
 
 function CharacterCell({ row }: { row: OperationsRow }) {
   return (
     <div className="flex min-w-0 items-center gap-2">
-      <ClassIcon wowClass={row.wowClass} size={20} />
+      <ClassIcon wowClass={row.wowClass} size={22} />
       <div className="min-w-0">
         <Link
           href={`/manage/characters/${row.id}`}
-          className="block truncate font-medium hover:underline"
+          className="block truncate text-[13px] font-semibold leading-tight hover:underline"
           style={{ color: CLASS_COLORS[row.wowClass] }}
         >
           {row.name}
         </Link>
-        <div className="text-xs text-muted tabular-nums">
-          {row.itemLevel != null ? `ilvl ${row.itemLevel}` : "ilvl Unknown"}
-        </div>
-        <div className="text-xs text-muted">
+        <p className="truncate text-[11px] leading-tight text-muted">
+          <span className="tabular-nums">{row.itemLevel != null ? row.itemLevel : "—"}</span>
+          <span className="text-muted/50"> · </span>
           {formatCharacterPageSpecLine({
             specialization: row.specialization,
             wowClass: row.wowClass,
             playableSpecs: row.playableSpecs,
           })}
-        </div>
+        </p>
       </div>
     </div>
   );
 }
 
-function ApiCell({ row }: { row: OperationsRow }) {
+/**
+ * Compact SYNC column — health primary, last success secondary, source tertiary.
+ * Lifecycle (Retired) stays in Status; never duplicate it here.
+ */
+function SyncCell({ row }: { row: OperationsRow }) {
+  const linkage = <LinkageBadge linkage={row.linkage} />;
+  const errorDetail =
+    row.health === "ERROR" && row.lastSyncErrorLabel ? (
+      <span className="truncate text-danger" title={row.lastSyncErrorLabel}>
+        {row.lastSyncErrorLabel}
+        {row.syncFailureCount > 1 ? ` ×${row.syncFailureCount}` : ""}
+      </span>
+    ) : null;
+  const retry = row.autoRetryAt ? (
+    <p
+      className="text-muted"
+      title={`Automatic sync paused until ${formatDateTime(row.autoRetryAt)}. Sync now still works.`}
+    >
+      Retry {formatRetryIn(row.autoRetryInMs)}
+    </p>
+  ) : null;
+
+  if (row.retired) {
+    return (
+      <div className="min-w-0 space-y-0.5 text-[11px] leading-snug">
+        {row.lastSyncedAt ? (
+          <p className="text-muted">
+            Last sync <Timestamp value={row.lastSyncedAt} />
+          </p>
+        ) : (
+          <p className="text-muted">No sync history</p>
+        )}
+        <div>{linkage}</div>
+      </div>
+    );
+  }
+
+  if (row.health === "NEVER_SYNCED") {
+    return (
+      <div className="min-w-0 space-y-0.5 text-[11px] leading-snug">
+        <SyncHealthBadge health={row.health} retired={false} />
+        <div>{linkage}</div>
+        {retry}
+      </div>
+    );
+  }
+
+  if (row.health === "ERROR") {
+    return (
+      <div className="min-w-0 space-y-0.5 text-[11px] leading-snug">
+        <SyncHealthBadge health={row.health} retired={false} />
+        {row.lastSyncedAt ? (
+          <p className="text-muted">
+            Last success <Timestamp value={row.lastSyncedAt} />
+          </p>
+        ) : null}
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          {linkage}
+          {errorDetail}
+        </div>
+        {retry}
+      </div>
+    );
+  }
+
+  // HEALTHY | STALE — compose health · relative time on one primary line
   return (
-    <div className="flex flex-col items-start gap-1">
-      <LinkageBadge linkage={row.linkage} />
-      {row.health === "ERROR" && row.lastSyncErrorLabel ? (
-        <span className="text-xs text-danger">
-          {row.lastSyncErrorLabel}
-          {row.syncFailureCount > 1 ? ` ×${row.syncFailureCount}` : ""}
-        </span>
-      ) : null}
-      {row.autoRetryAt ? (
-        <span className="text-xs text-muted" title={`Automatic sync paused until ${formatDateTime(row.autoRetryAt)}. Sync now still works.`}>
-          Auto retry in {formatRetryIn(row.autoRetryInMs)}
-        </span>
-      ) : null}
+    <div className="min-w-0 space-y-0.5 text-[11px] leading-snug">
+      <div className="flex min-w-0 flex-nowrap items-center gap-1 overflow-hidden">
+        <SyncHealthBadge health={row.health} retired={false} />
+        {row.lastSyncedAt ? (
+          <span className="truncate text-muted">
+            <span className="text-muted/40" aria-hidden>
+              ·{" "}
+            </span>
+            <Timestamp value={row.lastSyncedAt} />
+          </span>
+        ) : null}
+      </div>
+      <div>{linkage}</div>
+      {retry}
     </div>
   );
 }
 
-type ListRow = Page["rows"][number];
-
-function Actions({ row }: { row: ListRow }) {
-  return (
-    <div className="flex flex-wrap items-start gap-1.5">
-      <Link
-        href={`/manage/characters/${row.id}`}
-        className="inline-flex h-7 items-center rounded-md border border-border px-2 text-xs hover:bg-surface-raised"
-      >
-        Open
-      </Link>
-      <CharacterSyncButtons
-        characterId={row.id}
-        characterLabel={`${row.name}-${row.realm}`}
-        ineligibleCopy={row.syncIneligibleReason ? SYNC_INELIGIBLE_COPY[row.syncIneligibleReason] : null}
-        cooldownRemainingMs={row.cooldownRemainingMs}
-        compact
-      />
-      {row.deleteBlockedReason ? (
+function HealthStrip({ summary }: { summary: Page["summary"] }) {
+  const healthHref = (health: string) => `/manage/characters?status=active&health=${health}`;
+  const item = (
+    href: string | null,
+    label: string,
+    value: number,
+    tone?: "success" | "warning" | "danger" | "info",
+  ) => {
+    const body = (
+      <span className="inline-flex items-baseline gap-1">
         <span
-          className="inline-flex h-7 cursor-help items-center text-xs text-muted"
-          title={row.deleteBlockedReason}
+          className={cn(
+            "tabular-nums font-semibold",
+            value > 0 && tone === "success" && "text-success",
+            value > 0 && tone === "warning" && "text-warning",
+            value > 0 && tone === "danger" && "text-danger",
+            value > 0 && tone === "info" && "text-info",
+            !(value > 0 && tone) && "text-foreground",
+          )}
         >
-          Delete protected
+          {value}
         </span>
-      ) : (
-        <DeleteCharacterButton characterId={row.id} characterLabel={`${row.name}-${row.realm}`} mode="admin" compact />
-      )}
+        <span className="text-muted">{label}</span>
+      </span>
+    );
+    if (!href) return <span key={label}>{body}</span>;
+    return (
+      <Link key={label} href={href} className="hover:underline underline-offset-2">
+        {body}
+      </Link>
+    );
+  };
+
+  return (
+    <div className={cn(moduleClass, "mb-3 px-3.5 py-2.5")}>
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+        {item(null, `total (${summary.retired} retired)`, summary.total)}
+        <span className="text-muted/40" aria-hidden>
+          ·
+        </span>
+        {item(healthHref("HEALTHY"), "healthy", summary.healthy, "success")}
+        <span className="text-muted/40" aria-hidden>
+          ·
+        </span>
+        {item(healthHref("STALE"), "stale", summary.stale, "warning")}
+        <span className="text-muted/40" aria-hidden>
+          ·
+        </span>
+        {item(healthHref("ERROR"), "sync errors", summary.errors, "danger")}
+        <span className="text-muted/40" aria-hidden>
+          ·
+        </span>
+        {item(healthHref("NEVER_SYNCED"), "never synced", summary.neverSynced, "info")}
+        <span className="text-muted/40" aria-hidden>
+          ·
+        </span>
+        {item("/manage/characters?status=active&linkage=LINKED", "Blizzard linked", summary.linked)}
+        <span className="text-muted/40" aria-hidden>
+          ·
+        </span>
+        {item("/manage/characters?status=active&linkage=NOT_LINKED", "Public API", summary.notLinked, "info")}
+      </div>
+      <p className="mt-1 text-[11px] text-muted">
+        Active characters only in health counts. Public API = manual / no Battle.net — ownership unverified.
+      </p>
     </div>
   );
 }
 
 export function ManageCharactersView({ data }: { data: Page }) {
   const { filters, rows, summary, bulkEligibleCount } = data;
-  const healthHref = (health: string) => `/manage/characters?status=active&health=${health}`;
 
   return (
-    <div className="min-w-0 overflow-x-hidden">
+    <PageWorkspace width="full" className="min-w-0 overflow-x-hidden">
       <PageHeader
         title="Characters"
-        description="All characters with Blizzard sync health, linkage and current lockouts."
+        description="Blizzard sync health, linkage, and current lockouts."
         actions={
-          <div className="flex flex-wrap items-center gap-3">
-            <Link href="/manage" className="text-sm text-accent hover:underline">
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/manage" className="text-xs text-accent hover:underline">
               Management
             </Link>
             <ReconcileLinksButton />
@@ -123,28 +225,11 @@ export function ManageCharactersView({ data }: { data: Page }) {
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
-        <SummaryStat label={`Total (${summary.retired} retired)`} value={summary.total} />
-        <SummaryStat label="Healthy" value={summary.healthy} tone="success" href={healthHref("HEALTHY")} />
-        <SummaryStat label="Stale" value={summary.stale} tone="warning" href={healthHref("STALE")} />
-        <SummaryStat label="Sync errors" value={summary.errors} tone="danger" href={healthHref("ERROR")} />
-        <SummaryStat label="Never synced" value={summary.neverSynced} tone="info" href={healthHref("NEVER_SYNCED")} />
-        <SummaryStat label="Blizzard linked" value={summary.linked} href="/manage/characters?status=active&linkage=LINKED" />
-        <SummaryStat
-          label="Public API (manual)"
-          value={summary.notLinked}
-          tone="info"
-          href="/manage/characters?status=active&linkage=NOT_LINKED"
-        />
-      </div>
-      <p className="-mt-2 mb-4 text-xs text-muted">
-        Counts cover active characters; retired characters never count as problems. Public API = manually added (or no
-        owner Battle.net connection): item level and lockouts sync from the public Blizzard API, ownership unverified.
-      </p>
+      <HealthStrip summary={summary} />
 
-      <Card className="mb-4">
-        <form className="flex flex-wrap items-end gap-3 px-4 py-3" method="get">
-          <label className="min-w-[10rem] flex-1 text-xs">
+      <div className={cn(moduleClass, "mb-3")}>
+        <form className="flex flex-wrap items-end gap-2 px-3 py-2.5" method="get">
+          <label className="min-w-[12rem] flex-[2] text-xs">
             <span className="mb-1 block text-muted">Character / realm</span>
             <input
               name="query"
@@ -154,7 +239,7 @@ export function ManageCharactersView({ data }: { data: Page }) {
               className="h-9 w-full rounded-md border border-border bg-surface px-2"
             />
           </label>
-          <label className="min-w-[9rem] text-xs">
+          <label className="min-w-[9rem] flex-1 text-xs">
             <span className="mb-1 block text-muted">Owner</span>
             <input
               name="owner"
@@ -222,73 +307,72 @@ export function ManageCharactersView({ data }: { data: Page }) {
               <option value="health">Sync health (problems first)</option>
             </select>
           </label>
-          <button type="submit" className="h-9 rounded-md border border-border px-3 text-xs hover:bg-surface-raised">
+          <button type="submit" className="h-8 rounded-md border border-border px-2.5 text-xs hover:bg-surface-raised">
             Filter
           </button>
-          <Link href="/manage/characters" className="h-9 px-1 text-xs leading-9 text-muted hover:text-foreground">
+          <Link href="/manage/characters" className="h-8 px-1 text-xs leading-8 text-muted hover:text-foreground">
             Reset
           </Link>
         </form>
-        <p className="border-t border-border px-4 py-2 text-xs text-muted">
-          {rows.length} of {summary.total} characters. A health filter shows active characters only.
+        <p className="border-t border-border/70 px-3.5 py-1.5 text-[11px] text-muted">
+          {rows.length} of {summary.total} characters. Health filters show active only.
         </p>
-      </Card>
+      </div>
 
-      <Card>
+      <div className={cn(moduleClass, "overflow-hidden")}>
         {rows.length === 0 ? (
           <EmptyState title="No characters match." description="Adjust or reset the filters." />
         ) : (
           <>
             <div className="hidden overflow-x-auto lg:block">
-              <table className="w-full min-w-[1180px] text-left text-sm">
-                <thead className="text-xs uppercase tracking-wide text-muted">
-                  <tr>
+              <table className="w-full min-w-[1040px] text-left text-sm">
+                <thead className="text-[10px] uppercase tracking-wide text-muted">
+                  <tr className="border-b border-border/80">
                     <th className="px-3 py-2 font-medium">Character</th>
                     <th className="px-3 py-2 font-medium">Owner</th>
-                    <th className="px-3 py-2 font-medium">Class</th>
-                    <th className="px-3 py-2 font-medium">Region / Realm</th>
+                    <th className="px-3 py-2 font-medium">Realm</th>
                     <th className="px-3 py-2 font-medium">Status</th>
-                    <th className="px-3 py-2 font-medium">Last success</th>
-                    <th className="px-3 py-2 font-medium">Sync health</th>
-                    <th className="px-3 py-2 font-medium">Blizzard/API</th>
+                    <th className="px-3 py-2 font-medium">Sync</th>
                     <th className="px-3 py-2 font-medium">Lockouts</th>
                     <th className="px-3 py-2 font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((row) => (
-                    <tr key={row.id} className="border-t border-border align-top">
-                      <td className="px-3 py-2.5">
+                    <tr key={row.id} className="border-t border-border/70 align-middle hover:bg-surface-raised/25">
+                      <td className="px-3 py-2">
                         <CharacterCell row={row} />
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className="px-3 py-2 text-[13px]">
                         <Link href={`/manage/users/${row.owner.id}`} className="hover:underline">
                           {row.owner.name}
                         </Link>
                       </td>
-                      <td className="px-3 py-2.5 text-xs" style={{ color: CLASS_COLORS[row.wowClass] }}>
-                        {CLASS_LABELS[row.wowClass]}
+                      <td className="px-3 py-2 text-[12px] text-muted">
+                        <span className="font-medium text-foreground/80">{row.region}</span> · {row.realm}
                       </td>
-                      <td className="px-3 py-2.5 text-xs">
-                        <span className="font-medium">{row.region}</span> · {row.realm}
-                      </td>
-                      <td className="px-3 py-2.5">
+                      <td className="px-3 py-2">
                         <StatusBadge retired={row.retired} />
                       </td>
-                      <td className="px-3 py-2.5 text-xs">
-                        <Timestamp value={row.lastSyncedAt} />
+                      <td className="px-3 py-2">
+                        <SyncCell row={row} />
                       </td>
-                      <td className="px-3 py-2.5">
-                        <SyncHealthBadge health={row.health} retired={row.retired} />
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <ApiCell row={row} />
-                      </td>
-                      <td className="px-3 py-2.5">
+                      <td className="px-3 py-2">
                         <LockoutSlotsCompact slots={row.lockoutSlots} />
                       </td>
-                      <td className="px-3 py-2.5">
-                        <Actions row={row} />
+                      <td className="relative px-3 py-2">
+                        <ManageCharacterRowActions
+                          row={{
+                            id: row.id,
+                            name: row.name,
+                            realm: row.realm,
+                            cooldownRemainingMs: row.cooldownRemainingMs,
+                            ineligibleCopy: row.syncIneligibleReason
+                              ? SYNC_INELIGIBLE_COPY[row.syncIneligibleReason]
+                              : null,
+                            deleteBlockedReason: row.deleteBlockedReason,
+                          }}
+                        />
                       </td>
                     </tr>
                   ))}
@@ -297,10 +381,10 @@ export function ManageCharactersView({ data }: { data: Page }) {
             </div>
             <ul className="divide-y divide-border lg:hidden">
               {rows.map((row) => (
-                <li key={row.id} className="space-y-2 px-4 py-3">
+                <li key={row.id} className="space-y-2.5 px-3.5 py-3">
                   <div className="flex items-start justify-between gap-3">
                     <CharacterCell row={row} />
-                    <SyncHealthBadge health={row.health} retired={row.retired} />
+                    <StatusBadge retired={row.retired} />
                   </div>
                   <dl className="grid grid-cols-2 gap-2 text-xs">
                     <div>
@@ -312,37 +396,44 @@ export function ManageCharactersView({ data }: { data: Page }) {
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-muted">Region / Realm</dt>
+                      <dt className="text-muted">Realm</dt>
                       <dd>
                         {row.region} · {row.realm}
                       </dd>
                     </div>
-                    <div>
-                      <dt className="text-muted">Last success</dt>
+                    <div className="col-span-2">
+                      <dt className="text-muted">Sync</dt>
                       <dd>
-                        <Timestamp value={row.lastSyncedAt} />
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-muted">Blizzard/API</dt>
-                      <dd>
-                        <ApiCell row={row} />
+                        <SyncCell row={row} />
                       </dd>
                     </div>
                     <div className="col-span-2">
-                      <dt className="text-muted">Lockouts</dt>
+                      <dt className="mb-1 text-muted">Lockouts</dt>
                       <dd>
                         <LockoutSlotsCompact slots={row.lockoutSlots} />
                       </dd>
                     </div>
                   </dl>
-                  <Actions row={row} />
+                  <div className="relative">
+                    <ManageCharacterRowActions
+                      row={{
+                        id: row.id,
+                        name: row.name,
+                        realm: row.realm,
+                        cooldownRemainingMs: row.cooldownRemainingMs,
+                        ineligibleCopy: row.syncIneligibleReason
+                          ? SYNC_INELIGIBLE_COPY[row.syncIneligibleReason]
+                          : null,
+                        deleteBlockedReason: row.deleteBlockedReason,
+                      }}
+                    />
+                  </div>
                 </li>
               ))}
             </ul>
           </>
         )}
-      </Card>
-    </div>
+      </div>
+    </PageWorkspace>
   );
 }

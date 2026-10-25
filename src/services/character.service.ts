@@ -30,6 +30,7 @@ import { characterWeeklyAvailabilityService } from "@/services/character-weekly-
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
 import { lockoutService } from "@/services/lockout.service";
+import { lockoutBossBreakdown } from "@/lib/lockout-bosses";
 import { deriveBlizzardSyncState, needsBattleNetIdentityRepair } from "@/lib/blizzard/sync-state";
 import { resolveSyncHealthStaleMinutes } from "@/lib/blizzard/sync-health";
 
@@ -141,6 +142,8 @@ function characterLabel(character: { name: string; realm: string; region: WowReg
 
 export const characterService = {
   async getCharacterPage(user: AuthenticatedUser) {
+    // Insert-only bootstrap so newly catalogued lockout raids (e.g. Kith'ix) appear.
+    await raidRepository.ensureReferenceRaids();
     const [characters, boostingRoles, catalog] = await Promise.all([
       characterRepository.listByUserId(user.id),
       userRepository.findBoostingRoles(user.id),
@@ -160,6 +163,7 @@ export const characterService = {
       currentLockoutRaids: currentRaids.map((raid) => ({
         id: raid.id,
         name: raidContentDisplayName(raid.id, raid.name),
+        bosses: raid.bosses.map((boss) => ({ name: boss.name })),
       })),
       /** Account-level Boosting Roles — shown once for the account, not per Character. */
       boostingRoles: boostingRoles ?? {
@@ -180,12 +184,27 @@ export const characterService = {
                 lockout.resetIdentifier === currentReset && currentRaidIds.has(lockout.raidId),
             ),
           )
-          .map((lockout) => ({
-            ...lockout,
-            raidName: raidContentDisplayName(lockout.raidId, lockout.raidName),
-            bossTotal: catalog.bossTotal(lockout.raidId),
-            verified: true,
-          }));
+          .map((lockout) => {
+            const source = character.lockouts.find(
+              (row) =>
+                row.raidId === lockout.raidId &&
+                row.difficulty === lockout.difficulty &&
+                row.resetIdentifier === lockout.resetIdentifier,
+            );
+            const raid = catalog.findById(lockout.raidId);
+            const bossRefs = raid?.bosses.map((boss) => ({
+              id: boss.id,
+              name: boss.name,
+              sortOrder: boss.sortOrder,
+            }));
+            return {
+              ...lockout,
+              raidName: raidContentDisplayName(lockout.raidId, lockout.raidName),
+              bossTotal: catalog.bossTotal(lockout.raidId),
+              verified: true as const,
+              bossStates: lockoutBossBreakdown(bossRefs, source?.killedBossIds ?? null),
+            };
+          });
 
         return {
           id: character.id,
@@ -230,6 +249,7 @@ export const characterService = {
     assertOwned(user, character);
 
     const currentReset = getRegionalWeeklyReset(character.region).resetIdentifier;
+    await raidRepository.ensureReferenceRaids();
     const catalog = await raidRepository.loadCatalog();
     const currentRaids = catalog.lockoutRaids;
     const currentRaidIds = new Set(currentRaids.map((raid) => raid.id));
@@ -281,6 +301,7 @@ export const characterService = {
       currentLockoutRaids: currentRaids.map((raid) => ({
         id: raid.id,
         name: raidContentDisplayName(raid.id, raid.name),
+        bosses: raid.bosses.map((boss) => ({ name: boss.name })),
       })),
       lockouts: currentLockouts,
       weeklyAvailability,

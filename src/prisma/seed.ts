@@ -87,22 +87,28 @@ const FILLER_BOOSTERS: FillerBooster[] = FILLER_BOOSTER_DEFS.map((def, index) =>
 }));
 
 /**
- * Every seeded BOOSTER offer volunteers exactly the one role its fixture
- * names, so seeded data keeps the single-role shape the older fixtures
- * described while still living on RunSignupRole. Roster entries then read the
- * same role back as their `selectedRole` via `seededRoleBySignupId`.
+ * Most seeded BOOSTER offers volunteer one role. Multi-role fixtures call
+ * `seedOfferedRoles` with several roles; `seededRoleBySignupId` still records
+ * the primary (first) role for default roster assignment.
  */
 const seededRoleBySignupId = new Map<string, FillerBoosterRole>();
 
 async function seedOfferedRole(signupId: string, role: FillerBoosterRole | null) {
   if (!role) return;
-  seededRoleBySignupId.set(signupId, role);
-  await orm.RunSignupRole.create({
-    id: crypto.randomUUID(),
-    signupId,
-    role,
-    createdAt: SEED_NOW,
-  });
+  await seedOfferedRoles(signupId, [role]);
+}
+
+async function seedOfferedRoles(signupId: string, roles: readonly FillerBoosterRole[]) {
+  if (roles.length === 0) return;
+  seededRoleBySignupId.set(signupId, roles[0]!);
+  for (const role of roles) {
+    await orm.RunSignupRole.create({
+      id: crypto.randomUUID(),
+      signupId,
+      role,
+      createdAt: SEED_NOW,
+    });
+  }
 }
 
 /** The role a seeded roster slot is assigned — the fixture's own offered role, or none for a Lootbuddy. */
@@ -313,11 +319,18 @@ async function seed() {
     wowClass: "SHAMAN",
     specialization: "Restoration",
     primaryRole: "HEALER",
-    itemLevel: 701,
+    itemLevel: 688,
     isActive: true,
     lastSyncedAt: SEED_NOW,
     createdAt: SEED_NOW,
     updatedAt: SEED_NOW,
+  });
+  // Multi-spec QA: one Stormhowl Character offers Restoration + Elemental (not two Signups).
+  await orm.CharacterPlayableSpec.create({
+    id: crypto.randomUUID(),
+    characterId: ids.characters.kaelResto,
+    specialization: "Elemental",
+    createdAt: SEED_NOW,
   });
   await orm.Character.create({
     id: ids.characters.kaelEle,
@@ -825,22 +838,14 @@ async function seed() {
       lootbuddyVerification: "TRIAL",
     },
     {
-      id: ids.signups.sunKaelEle,
-      runId: ids.runs.heroicRostering,
-      userId: ids.users.kael,
-      characterId: ids.characters.kaelEle,
-      participationType: "BOOSTER",
-      role: "RANGED_DPS",
-      isBackup: false,
-      status: "PENDING",
-    },
-    {
       id: ids.signups.sunKaelResto,
       runId: ids.runs.heroicRostering,
       userId: ids.users.kael,
       characterId: ids.characters.kaelResto,
       participationType: "BOOSTER",
+      /** Multi-spec QA: one Stormhowl tile — Restoration + Elemental. */
       role: "HEALER",
+      offeredRoles: ["HEALER", "RANGED_DPS"] as const,
       isBackup: false,
       status: "PENDING",
     },
@@ -880,7 +885,9 @@ async function seed() {
       userId: ids.users.aelira,
       characterId: ids.characters.aeliraMonk,
       participationType: "BOOSTER",
+      /** Multi-role QA: Healer + Melee on Sunday Heroic (screenshot / UX run). */
       role: "HEALER",
+      offeredRoles: ["HEALER", "MELEE_DPS"] as const,
       isBackup: false,
       status: "PENDING",
     },
@@ -1048,7 +1055,9 @@ async function seed() {
       userId: ids.users.aelira,
       characterId: ids.characters.aeliraMonk,
       participationType: "BOOSTER",
+      /** Multi-role QA fixture: Mistweaver + Windwalker offers. */
       role: "HEALER",
+      offeredRoles: ["HEALER", "MELEE_DPS"] as const,
       isBackup: true,
       status: "PENDING",
     },
@@ -1350,7 +1359,11 @@ async function seed() {
       createdAt: SEED_NOW,
       updatedAt: SEED_NOW,
     });
-    await seedOfferedRole(signup.id, signup.role);
+    if ("offeredRoles" in signup && signup.offeredRoles && signup.offeredRoles.length > 0) {
+      await seedOfferedRoles(signup.id, signup.offeredRoles);
+    } else {
+      await seedOfferedRole(signup.id, signup.role);
+    }
   }
 
   // Large completed: 16 extra SELECTED Boosters so named 4 + fillers 16 = 20 full Cuts.
