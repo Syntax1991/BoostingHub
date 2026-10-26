@@ -197,8 +197,9 @@ describe("buildSignupEmbed — hierarchy", () => {
     expect(buildSignupEmbed(emptyData({ contentTitle: undefined, productLabel: "Venom" })).toJSON().title).toBe("Venom");
   });
 
-  it("summary: Raid Lead, run type, selected/target, date, time, relative start — no admin block", () => {
+  it("summary: Raid Lead, run type, signup count (not selection), date, time, relative start — no admin block", () => {
     const data = emptyData({
+      uniqueSignupCount: 13,
       roleStatus: {
         tank: { signed: 3, picked: 2, target: 2 },
         healer: { signed: 5, picked: 4, target: 4 },
@@ -210,7 +211,10 @@ describe("buildSignupEmbed — hierarchy", () => {
     const seconds = Math.floor(Date.parse(data.scheduledStartAt) / 1000);
     expect(summary).toContain("<@999000111222333444>");
     expect(summary).toContain("💎 HC VIP");
-    expect(summary).toContain("👥 16/20 selected");
+    // Distinct signed-up Users (the old "Signed users"), never picked/target.
+    expect(summary).toContain("👥 13 signed");
+    expect(summary).not.toMatch(/selected/i);
+    expect(summary).not.toContain("16/20");
     expect(summary).toContain(`<t:${seconds}:D>`);
     expect(summary).toContain(`<t:${seconds}:t>`);
     expect(summary).toContain(`<t:${seconds}:R>`);
@@ -226,13 +230,13 @@ describe("buildSignupEmbed — hierarchy", () => {
     expect(buildSignupSummary(emptyData({ runStatus: "COMPLETED", signupWindowOpen: false }))).toContain("Run ended");
   });
 
-  it("roster-first fields: Tanks | Healers | DPS inline with signed/target, Lootbuddies, Open Run", () => {
+  it("roster-first fields: Tanks | Healers | DPS inline with signup counts only, Lootbuddies, Open Run", () => {
     const json = buildSignupEmbed(rosterData(10, 2), { classIndicators: INDICATORS, runUrl: RUN_URL }).toJSON();
     const fields = json.fields ?? [];
     expect(fields.map((field) => field.name)).toEqual([
-      "🛡 Tanks 2/2",
-      "✚ Healers 4/4",
-      "⚔ DPS 4/14",
+      "🛡 Tanks 2",
+      "✚ Healers 4",
+      "⚔ DPS 4",
       "💰 Lootbuddies 2",
       "​",
     ]);
@@ -253,14 +257,27 @@ describe("buildSignupEmbed — hierarchy", () => {
       roleIndicators: { tank: "<:tank:1>", healer: "<:healer:2>", dps: "<:dps:3>", lootbuddy: "<:lb:5>", raidlead: "<:rl:4>" },
     }).toJSON();
     const names = (json.fields ?? []).map((field) => field.name);
-    expect(names.slice(0, 4)).toEqual(["<:tank:1> Tanks 0/2", "<:healer:2> Healers 0/4", "<:dps:3> DPS 0/14", "<:lb:5> Lootbuddies 0"]);
+    // Real WoW role artwork (Guild emojis), once per heading — never `<emoji> Tanks <emoji>`.
+    expect(names.slice(0, 4)).toEqual(["<:tank:1> Tanks 0", "<:healer:2> Healers 0", "<:dps:3> DPS 0", "<:lb:5> Lootbuddies 0"]);
     expect(json.description).toContain("<:rl:4> <@999000111222333444>");
   });
 
-  it("Lootbuddy target shows when set", () => {
-    const data = rosterData(0, 3);
-    data.roleStatus.lootbuddy.target = 4;
-    expect((buildSignupEmbed(data).toJSON().fields ?? []).some((field) => field.name === "💰 Lootbuddies 3/4")).toBe(true);
+  it("signup demand may exceed the composition target: 5 Healer signups for 3 slots reads `Healers 5`, never `5/3`", () => {
+    const data = emptyData({
+      uniqueSignupCount: 13,
+      roleStatus: {
+        tank: { signed: 1, picked: 0, target: 2 },
+        healer: { signed: 5, picked: 0, target: 3 },
+        dps: { signed: 7, picked: 0, target: 11 },
+        lootbuddy: { signed: 1, picked: 0, target: 2 },
+      },
+    });
+    const json = buildSignupEmbed(data, { runUrl: null }).toJSON();
+    expect((json.fields ?? []).map((field) => field.name)).toEqual(["🛡 Tanks 1", "✚ Healers 5", "⚔ DPS 7", "💰 Lootbuddies 1"]);
+    const text = JSON.stringify({ description: json.description, fields: json.fields });
+    for (const ratio of ["5/3", "1/2", "7/11", "0/16"]) expect(text).not.toContain(ratio);
+    expect(text).not.toMatch(/selected/i); // only the footer explains that signup is not selection
+    expect(json.footer?.text).toBe("Signup does not mean selected.");
   });
 });
 

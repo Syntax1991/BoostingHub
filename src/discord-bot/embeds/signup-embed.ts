@@ -52,14 +52,15 @@ type RoleColumnSpec = {
   label: string;
   members: SignupEmbedMember[];
   signed: number;
-  target: number;
 };
 
 function roleEmoji(key: RoleDiscordEmojiKey, roleIndicators?: GuildRoleIndicators): string {
   return roleIndicators?.[key] ?? ROLE_EMOJI_FALLBACK[key];
 }
 
-function mentionFor(member: Pick<SignupEmbedMember, "discordUserId" | "discordUsername" | "userName">): string {
+function mentionFor(
+  member: Pick<SignupEmbedMember, "discordUserId" | "discordUsername" | "userName">,
+): string {
   return member.discordUserId
     ? `<@${member.discordUserId}>`
     : `@${(member.discordUsername?.trim() || member.userName).replace(/^@/, "")}`;
@@ -104,7 +105,9 @@ function signupMemberUserKey(member: SignupEmbedMember): string {
 }
 
 /** Collapses multiple offers from the same User into one group (first-seen order). */
-export function groupSignupMembersByUser(members: readonly SignupEmbedMember[]): SignupEmbedMember[][] {
+export function groupSignupMembersByUser(
+  members: readonly SignupEmbedMember[],
+): SignupEmbedMember[][] {
   const order: string[] = [];
   const groups = new Map<string, SignupEmbedMember[]>();
   for (const member of members) {
@@ -130,17 +133,22 @@ function unixSeconds(iso: string): number {
   return Math.floor(new Date(iso).getTime() / 1000);
 }
 
-/** Heading count: listed signups / composition target (`Tanks 3/2`); no target → signups only. */
-function countLabel(signed: number, target: number): string {
-  return target > 0 ? `${signed}/${target}` : String(signed);
-}
-
 function roleColumns(data: SignupEmbedData): RoleColumnSpec[] {
   const { roleStatus, members } = data;
   return [
-    { emojiKey: "tank", label: "Tanks", members: members.signed.tanks, ...roleStatus.tank },
-    { emojiKey: "healer", label: "Healers", members: members.signed.healers, ...roleStatus.healer },
-    { emojiKey: "dps", label: "DPS", members: members.signed.dps, ...roleStatus.dps },
+    {
+      emojiKey: "tank",
+      label: "Tanks",
+      members: members.signed.tanks,
+      signed: roleStatus.tank.signed,
+    },
+    {
+      emojiKey: "healer",
+      label: "Healers",
+      members: members.signed.healers,
+      signed: roleStatus.healer.signed,
+    },
+    { emojiKey: "dps", label: "DPS", members: members.signed.dps, signed: roleStatus.dps.signed },
   ];
 }
 
@@ -150,7 +158,6 @@ function lootbuddyColumn(data: SignupEmbedData): RoleColumnSpec {
     label: "Lootbuddies",
     members: data.members.signed.lootbuddies,
     signed: data.roleStatus.lootbuddy.signed,
-    target: data.roleStatus.lootbuddy.target ?? 0,
   };
 }
 
@@ -164,7 +171,9 @@ function buildColumnFields(
   const lines = groupSignupMembersByUser(column.members).map((group) =>
     formatSignupParticipantGroupLine(group, classIndicators),
   );
-  const heading = `${emoji} ${column.label} ${countLabel(column.signed, column.target)}`;
+  // Signup demand only (`Healers 5`) — never `/target`: five Healer signups for three
+  // roster slots is valid, and selection progress lives on the Roster message.
+  const heading = `${emoji} ${column.label} ${column.signed}`;
   return chunkEmbedFieldLines(lines).map((chunk, index) => ({
     name: index === 0 ? heading : `${emoji} ${column.label} (cont.)`,
     value: chunk.length > 0 ? chunk.join("\n") : EMPTY_FIELD_VALUE,
@@ -181,7 +190,9 @@ function buildRoleFields(
   classIndicators: Partial<Record<WowClass, string>> | null | undefined,
   roleIndicators: GuildRoleIndicators | undefined,
 ): EmbedField[] {
-  const built = roleColumns(data).map((column) => buildColumnFields(column, classIndicators, roleIndicators, true));
+  const built = roleColumns(data).map((column) =>
+    buildColumnFields(column, classIndicators, roleIndicators, true),
+  );
   return [...built.map((fields) => fields[0]!), ...built.flatMap((fields) => fields.slice(1))];
 }
 
@@ -190,7 +201,10 @@ function truncate(text: string, max: number): string {
   return singleLine.length <= max ? singleLine : `${singleLine.slice(0, max - 1)}…`;
 }
 
-export function formatSignupNoteLine(note: SignupEmbedNote, max: number = SIGNUP_NOTE_DISPLAY_MAX): string {
+export function formatSignupNoteLine(
+  note: SignupEmbedNote,
+  max: number = SIGNUP_NOTE_DISPLAY_MAX,
+): string {
   return `${mentionFor(note)} — ${truncate(note.note, max)}`;
 }
 
@@ -204,19 +218,20 @@ function buildNotesFields(notes: readonly SignupEmbedNote[], maxNoteChars: numbe
   }));
 }
 
-function selectedSummary(data: SignupEmbedData): string | null {
-  const { tank, healer, dps } = data.roleStatus;
-  const target = tank.target + healer.target + dps.target;
-  if (target <= 0) return null;
-  return `👥 ${tank.picked + healer.picked + dps.picked}/${target} selected`;
+/** Distinct signed-up Users (the existing "Signed users" meaning), never selection progress. */
+function signedSummary(data: SignupEmbedData): string {
+  return `👥 ${data.uniqueSignupCount} signed`;
 }
 
 /** Compact Run summary under the title: who / what / when, without admin wording. */
-export function buildSignupSummary(data: SignupEmbedData, roleIndicators?: GuildRoleIndicators): string {
+export function buildSignupSummary(
+  data: SignupEmbedData,
+  roleIndicators?: GuildRoleIndicators,
+): string {
   const leadLine = [
     `${roleEmoji("raidlead", roleIndicators)} ${formatRaidLeadFieldValue(data)}`,
     `${LOOT_EMOJIS[data.lootType]} ${DIFFICULTY_ABBREVIATIONS[data.difficulty]} ${RUN_LOOT_TYPE_LABELS[data.lootType]}`,
-    selectedSummary(data),
+    signedSummary(data),
   ]
     .filter(Boolean)
     .join("  ");
@@ -241,7 +256,9 @@ export function measureEmbedJsonSize(embed: ReturnType<EmbedBuilder["toJSON"]>):
 } {
   const fields = embed.fields ?? [];
   let totalChars =
-    (embed.title?.length ?? 0) + (embed.description?.length ?? 0) + (embed.footer?.text?.length ?? 0);
+    (embed.title?.length ?? 0) +
+    (embed.description?.length ?? 0) +
+    (embed.footer?.text?.length ?? 0);
   let maxFieldChars = 0;
   for (const field of fields) {
     totalChars += field.name.length + field.value.length;
@@ -256,12 +273,21 @@ type RenderStep = {
   maxNoteChars: number;
 };
 
-function assemble(data: SignupEmbedData, options: SignupEmbedRenderOptions | undefined, step: RenderStep): EmbedBuilder {
+function assemble(
+  data: SignupEmbedData,
+  options: SignupEmbedRenderOptions | undefined,
+  step: RenderStep,
+): EmbedBuilder {
   const runUrl = options?.runUrl === undefined ? absoluteRunUrl(data.runId) : options.runUrl;
   const title = (data.contentTitle?.trim() || data.productLabel).slice(0, 256);
   const fields: EmbedField[] = [
     ...buildRoleFields(data, step.classIndicators, options?.roleIndicators),
-    ...buildColumnFields(lootbuddyColumn(data), step.classIndicators, options?.roleIndicators, false),
+    ...buildColumnFields(
+      lootbuddyColumn(data),
+      step.classIndicators,
+      options?.roleIndicators,
+      false,
+    ),
     ...buildNotesFields(data.notes ?? [], step.maxNoteChars),
   ];
   if (runUrl) fields.push({ name: ZERO_WIDTH, value: `🔗 [Open Run](${runUrl})`, inline: false });
@@ -295,7 +321,10 @@ function fitsDiscordLimits(embed: EmbedBuilder): boolean {
  * icons are dropped (mentions stay), then note lines are shortened. Roster
  * names are never dropped.
  */
-export function buildSignupEmbed(data: SignupEmbedData, options?: SignupEmbedRenderOptions): EmbedBuilder {
+export function buildSignupEmbed(
+  data: SignupEmbedData,
+  options?: SignupEmbedRenderOptions,
+): EmbedBuilder {
   const steps: RenderStep[] = [
     { classIndicators: options?.classIndicators, maxNoteChars: SIGNUP_NOTE_DISPLAY_MAX },
     { classIndicators: null, maxNoteChars: SIGNUP_NOTE_DISPLAY_MAX },
