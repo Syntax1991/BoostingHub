@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { markAllPresentAction, replaceParticipantAction, setAttendanceAction } from "@/controllers/attendance.actions";
 import { Button } from "@/components/ui/button";
 import { AttendanceStatusBadge, ClassBadge, ParticipationBadge, RoleBadge } from "@/components/ui/badges";
@@ -23,6 +24,18 @@ import { RunCompleteDialog } from "@/components/runs/run-complete-dialog";
 import { RunStartDialog } from "@/components/runs/run-start-dialog";
 import { AttendanceCorrectionDialog } from "@/components/runs/attendance-correction-dialog";
 import type { RunDetailView } from "@/services/run-detail.service";
+import {
+  ATTENDANCE_ROLE_FILTER_OPTIONS,
+  ATTENDANCE_SORTS,
+  ATTENDANCE_SORT_LABELS,
+  DEFAULT_ATTENDANCE_FILTERS,
+  DEFAULT_ATTENDANCE_SORT,
+  attendanceFilterAvailability,
+  isDefaultAttendanceFilters,
+  viewAttendanceRows,
+  type AttendanceFilters,
+  type AttendanceSort,
+} from "@/lib/attendance-view";
 
 const SUMMARY_ORDER: AttendanceStatus[] = [
   "PRESENT",
@@ -135,8 +148,16 @@ function ManagerAttendancePanel({
   const [noteRowId, setNoteRowId] = useState<string | null>(null);
   const [replaceRowId, setReplaceRowId] = useState<string | null>(null);
   const [correctionOpen, setCorrectionOpen] = useState(false);
+  const [sort, setSort] = useState<AttendanceSort>(DEFAULT_ATTENDANCE_SORT);
+  const [filters, setFilters] = useState<AttendanceFilters>(DEFAULT_ATTENDANCE_FILTERS);
+  const router = useRouter();
   const canMutate = manager.canMutate;
+  // Authoritative: the whole attendance set, never only the filtered rows.
   const unmarked = manager.summary.unmarked;
+  const filtersActive = !isDefaultAttendanceFilters(filters);
+  // Local view of the loaded rows: filter first, then sort — no request per change.
+  const visibleRows = useMemo(() => viewAttendanceRows(manager.rows, filters, sort), [manager.rows, filters, sort]);
+  const availability = useMemo(() => attendanceFilterAvailability(manager.rows), [manager.rows]);
 
   function runMutation(action: () => Promise<{ ok: boolean; message: string }>) {
     setError(null);
@@ -146,7 +167,8 @@ function ManagerAttendancePanel({
         setError(result.message);
         return;
       }
-      window.location.reload();
+      // Re-render with fresh server data; local sort / filter state stays.
+      router.refresh();
     });
   }
 
@@ -164,7 +186,7 @@ function ManagerAttendancePanel({
                 disabled={pending || unmarked === 0}
                 onClick={() => runMutation(() => markAllPresentAction({ runId }))}
               >
-                Mark all unmarked as Present
+                {filtersActive ? `Mark all ${unmarked} unmarked as Present` : "Mark all unmarked as Present"}
               </Button>
             ) : null}
             {manager.canCorrect ? (
@@ -197,6 +219,15 @@ function ManagerAttendancePanel({
           ))}
         </div>
       ) : null}
+      <AttendanceToolbar
+        filters={filters}
+        sort={sort}
+        availability={availability}
+        shown={visibleRows.length}
+        total={manager.rows.length}
+        onFilters={setFilters}
+        onSort={setSort}
+      />
       {/*
         `relative`: the rows' sr-only status labels are absolutely positioned;
         without a positioned ancestor they escape this scroll container and
@@ -216,7 +247,14 @@ function ManagerAttendancePanel({
             </tr>
           </thead>
           <tbody>
-            {manager.rows.map((row) => (
+            {visibleRows.length === 0 ? (
+              <tr>
+                <td colSpan={canMutate ? 7 : 6} className="px-4 py-6 text-center text-sm text-muted">
+                  No players match these filters.
+                </td>
+              </tr>
+            ) : null}
+            {visibleRows.map((row) => (
               <tr key={row.id} className="border-b border-border/70">
                 <td className="px-4 py-2">
                   <div className="font-medium">{row.characterName}</div>
@@ -350,6 +388,134 @@ function ManagerAttendancePanel({
         <RunCompleteDialog runId={runId} unmarkedCount={unmarked} onClose={onCompleteClose} />
       ) : null}
     </Card>
+  );
+}
+
+const FILTER_CONTROL = "h-8 rounded-md border border-border bg-surface-raised px-2 text-xs";
+
+const PARTICIPATION_FILTER_LABELS: Record<AttendanceFilters["type"], string> = {
+  ALL: "Type: All",
+  BOOSTER: "Booster",
+  LOOTBUDDY: "Lootbuddy",
+};
+
+/**
+ * One light row above the table: search, Status / Role / Type (/ Backup) filters
+ * and the sort. Filters only change which loaded rows show; the Unmarked count
+ * and bulk actions keep using the whole attendance set.
+ */
+function AttendanceToolbar({
+  filters,
+  sort,
+  availability,
+  shown,
+  total,
+  onFilters,
+  onSort,
+}: {
+  filters: AttendanceFilters;
+  sort: AttendanceSort;
+  availability: ReturnType<typeof attendanceFilterAvailability>;
+  shown: number;
+  total: number;
+  onFilters: (next: AttendanceFilters) => void;
+  onSort: (next: AttendanceSort) => void;
+}) {
+  const active = !isDefaultAttendanceFilters(filters);
+  const set = (patch: Partial<AttendanceFilters>) => onFilters({ ...filters, ...patch });
+  return (
+    <div
+      className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2"
+      role="group"
+      aria-label="Filter and sort attendance"
+    >
+      <input
+        type="search"
+        value={filters.search}
+        onChange={(event) => set({ search: event.target.value })}
+        placeholder="Search character / player"
+        aria-label="Search character or player"
+        className={`${FILTER_CONTROL} w-full min-w-0 sm:w-52`}
+      />
+      <select
+        aria-label="Status"
+        className={FILTER_CONTROL}
+        value={filters.status}
+        onChange={(event) => set({ status: event.target.value as AttendanceFilters["status"] })}
+      >
+        <option value="ALL">Status: All</option>
+        {ATTENDANCE_STATUSES.map((status) => (
+          <option key={status} value={status}>
+            {ATTENDANCE_STATUS_LABELS[status]}
+          </option>
+        ))}
+      </select>
+      <select
+        aria-label="Role"
+        className={FILTER_CONTROL}
+        value={filters.role}
+        onChange={(event) => set({ role: event.target.value as AttendanceFilters["role"] })}
+      >
+        <option value="ALL">Role: All</option>
+        {ATTENDANCE_ROLE_FILTER_OPTIONS.map((role) => (
+          <option key={role} value={role}>
+            {CHARACTER_ROLE_LABELS[role]}
+          </option>
+        ))}
+      </select>
+      {availability.types.length > 1 ? (
+        <select
+          aria-label="Type"
+          className={FILTER_CONTROL}
+          value={filters.type}
+          onChange={(event) => set({ type: event.target.value as AttendanceFilters["type"] })}
+        >
+          {(["ALL", ...availability.types] as const).map((type) => (
+            <option key={type} value={type}>
+              {PARTICIPATION_FILTER_LABELS[type]}
+            </option>
+          ))}
+        </select>
+      ) : null}
+      {availability.hasBackups ? (
+        <select
+          aria-label="Backup"
+          className={FILTER_CONTROL}
+          value={filters.backup}
+          onChange={(event) => set({ backup: event.target.value as AttendanceFilters["backup"] })}
+        >
+          <option value="ALL">Backup: All</option>
+          <option value="MAIN">Main roster</option>
+          <option value="BACKUP">Backup</option>
+        </select>
+      ) : null}
+      <select
+        aria-label="Sort by"
+        className={FILTER_CONTROL}
+        value={sort}
+        onChange={(event) => onSort(event.target.value as AttendanceSort)}
+      >
+        {ATTENDANCE_SORTS.map((option) => (
+          <option key={option} value={option}>
+            Sort: {ATTENDANCE_SORT_LABELS[option]}
+          </option>
+        ))}
+      </select>
+      {active ? (
+        <>
+          <span className="text-xs text-muted" aria-live="polite">
+            {shown} of {total} shown
+          </span>
+          <button
+            type="button"
+            className="text-xs text-accent hover:underline"
+            onClick={() => onFilters(DEFAULT_ATTENDANCE_FILTERS)}
+          >
+            Reset
+          </button>
+        </>
+      ) : null}
+    </div>
   );
 }
 
