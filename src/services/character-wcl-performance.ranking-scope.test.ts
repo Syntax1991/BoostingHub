@@ -19,6 +19,7 @@ function raid(overrides: Partial<CatalogRaid> & Pick<CatalogRaid, "id" | "name">
     blizzardInstanceId: null,
     wclZoneId: ZONE,
     wclRankingEncounterId: null,
+    archivedAt: null,
     bosses: [],
     ...overrides,
   };

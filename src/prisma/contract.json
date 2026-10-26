@@ -3712,6 +3712,13 @@
           },
           "Raid": {
             "fields": {
+              "archivedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
               "blizzardInstanceId": {
                 "nullable": true,
                 "type": {
@@ -3869,6 +3876,9 @@
             },
             "storage": {
               "fields": {
+                "archivedAt": {
+                  "column": "archivedAt"
+                },
                 "blizzardInstanceId": {
                   "column": "blizzardInstanceId"
                 },
@@ -12126,6 +12136,11 @@
             },
             "raid": {
               "columns": {
+                "archivedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
                 "blizzardInstanceId": {
                   "codecId": "pg/int4@1",
                   "nativeType": "int4",
@@ -16992,7 +17007,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "61b92f9402f7825de761de9d22b7ce30c0a3a4d6e59f9c54d21f64583fd27260"
+    "storageHash": "8d62cbc3da30bdeac418ac71f1d705e04e5c2526b0161bec92c1f5458054568f"
   },
   "execution": {
     "executionHash": "b27b9239312d18e407528e2d06057d2da4f3e67bdff7bffe5f827471950c2fa6",

@@ -45,6 +45,7 @@ function mapPlanningContent(row: Record<string, unknown>): PlanningProductConten
     minBossCount: asNumberOrNull(row.minBossCount),
     defaultBossCount: asNumberOrNull(row.defaultBossCount),
     totalBossCount: bosses.length,
+    raidArchived: raid.archivedAt != null,
   };
 }
 

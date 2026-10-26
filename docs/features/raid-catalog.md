@@ -110,3 +110,35 @@ Unused raids follow Blizzard (new bosses added, missing bosses removed).
 - **Warcraft Logs** — mapped (zone + every boss) or needs mapping.
 
 Raw ids are shown only in the expanded details.
+
+## Page sections
+
+`/manage/raid-catalog?tab=raids` (default; missing / unknown values fall back here) shows
+the imports and the raid list; `?tab=presets` shows Run Presets (Products). The tab is a
+real link, so refresh, back / forward and copied URLs keep it.
+
+## Raid lifecycle
+
+**Identity** is the Blizzard journal instance id. Import / refresh reuse the Raid holding
+that id (one Raid per instance, serialized by an advisory lock), and the insert-only
+bootstrap (`ensureReferenceRaids`) skips a fixture raid whose instance already belongs to
+another Raid row. Before 2026-10-26 the bootstrap only compared fixture UUIDs: when #271
+added The Unbinding of Kith'ix (`eeeeeeee-…`, instance 1324) as a fixture, production
+already had the admin-created Kith'ix (`feac9fd9-…`, same instance), so a second copy was
+inserted and the lockout sync wrote every Kith'ix lockout twice.
+
+Raid → Manage offers exactly the action the server accepts in the current state:
+
+| State | Action |
+| --- | --- |
+| No Run, Run Setup, Product or lockout reference, not a bootstrap fixture | **Delete** — removed with its bosses |
+| Shares its Blizzard instance with a Raid that outranks it (more Run / Run Setup / Product references, then lockouts) and has no Run / Run Setup / Product reference itself | **Remove duplicate** — its lockouts move to the kept Raid (exact copies for the same Character / difficulty / reset are dropped, killed boss ids re-mapped), then it is deleted, in one transaction |
+| Referenced, or a bootstrap fixture | **Archive** (`Raid.archivedAt`) |
+| Archived | **Restore** |
+
+An archived Raid stays valid for existing Runs, lockouts and Warcraft Logs (rows and
+foreign keys untouched; lockout sync still follows *Lockout tracking*). It is never
+offered for new planning: not available for new Runs (`availableForRuns` is false), a
+Run Setup with it is unusable, a product holding it is closed to new Runs / Run Setups,
+and it cannot be added to a product (a product that already holds it stays editable).
+Run / Run Setup / Product references are never re-pointed or deleted by any of these actions.

@@ -24,6 +24,8 @@ export type PlanningProductContent = {
   defaultBossCount: number | null;
   /** The raid's current encounter count — the maximum for every content. */
   totalBossCount: number;
+  /** The content raid is archived (`Raid.archivedAt`): the product is closed to new planning. */
+  raidArchived?: boolean;
 };
 
 export type PlanningProduct = {

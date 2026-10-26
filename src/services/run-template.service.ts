@@ -14,6 +14,7 @@ import {
 import { raidRepository } from "@/repositories/raid.repository";
 import {
   expandSelectionOrThrow,
+  isPlanningActiveProduct,
   isSelectableProduct,
   productPlanningService,
   requireSelectableProduct,
@@ -133,10 +134,8 @@ export function computeUsability(
   }
 
   const coveredByProduct =
-    matchProductForContents(
-      activeProducts.filter((product) => product.active),
-      contents,
-    ) !== null;
+    // A product holding an archived Raid no longer covers a setup.
+    matchProductForContents(activeProducts.filter(isPlanningActiveProduct), contents) !== null;
   for (const content of contents) {
     if (!coveredByProduct && !content.raidAvailableForRuns) {
       return {

@@ -1,0 +1,44 @@
+[
+  {
+    "id": "column.public.raid.archivedAt",
+    "label": "Add column \"archivedAt\" to \"raid\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "archivedAt",
+        "table": "raid"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"archivedAt\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "raid",
+          "archivedAt"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"archivedAt\"",
+        "sql": "ALTER TABLE \"public\".\"raid\" ADD COLUMN \"archivedAt\" timestamptz"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"archivedAt\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "raid",
+          "archivedAt"
+        ]
+      }
+    ]
+  }
+]

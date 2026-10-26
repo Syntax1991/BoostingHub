@@ -12,6 +12,7 @@ const kithix: CatalogRaid = {
   blizzardInstanceId: 1324,
   wclZoneId: 53,
   wclRankingEncounterId: null,
+  archivedAt: null,
   bosses: [
     {
       id: "boss-kithix",

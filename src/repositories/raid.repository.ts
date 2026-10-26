@@ -1,5 +1,5 @@
 import { orm } from "@/lib/prisma";
-import { asBoolean, asNumber, asNumberOrNull, asString } from "@/lib/persistence";
+import { asBoolean, asNumber, asNumberOrNull, asString, asStringOrNull } from "@/lib/persistence";
 import { PRODUCT_CATALOG_FIXTURE } from "@/lib/product-catalog";
 import {
   buildRaidCatalog,
@@ -21,7 +21,8 @@ export type RaidRecord = {
    * be historical (availableForRuns: false) while its data, bosses, and
    * every historical Run/lockout relation referencing it remain intact and
    * fully readable forever. Never inferred by callers; always read from here.
-   * Persisted on the `Raid.isActive` column (no separate column/migration).
+   * Persisted on the `Raid.isActive` column; an archived Raid
+   * (`Raid.archivedAt`) is never available for new Runs either.
    */
   availableForRuns: boolean;
   /** Computed from RaidBoss rows — never a separate stored total. */
@@ -34,7 +35,7 @@ function mapRaid(row: Record<string, unknown>): RaidRecord {
     id: asString(row.id),
     name: asString(row.name),
     season: asString(row.season),
-    availableForRuns: asBoolean(row.isActive, true),
+    availableForRuns: asBoolean(row.isActive, true) && row.archivedAt == null,
     totalBossCount: bosses.length,
   };
 }
@@ -62,6 +63,7 @@ function mapCatalogRaid(row: Record<string, unknown>): CatalogRaid {
     blizzardInstanceId: asNumberOrNull(row.blizzardInstanceId),
     wclZoneId: asNumberOrNull(row.wclZoneId),
     wclRankingEncounterId: asNumberOrNull(row.wclRankingEncounterId),
+    archivedAt: asStringOrNull(row.archivedAt),
     bosses: bosses.map(mapCatalogBoss),
   };
 }
@@ -72,10 +74,17 @@ function mapCatalogRaid(row: Record<string, unknown>): CatalogRaid {
  * UUIDs; existing rows are NEVER updated — the database is the authority once
  * a row exists (future admin edits must survive every write path that calls
  * this). Two read queries when nothing is missing.
+ *
+ * Identity is the Blizzard journal instance id, not only the fixture UUID: a
+ * fixture raid whose instance id already belongs to another Raid row (an admin
+ * import / manual raid) is that raid — it is never inserted a second time.
  */
 async function ensureReferenceRaids(now = new Date().toISOString()): Promise<void> {
   const raidRows = (await orm.Raid.include("bosses").all()) as Array<Record<string, unknown>>;
   const existingRaidIds = new Set(raidRows.map((row) => asString(row.id)));
+  const ownedInstanceIds = new Set(
+    raidRows.map((row) => asNumberOrNull(row.blizzardInstanceId)).filter((id): id is number => id != null),
+  );
   const existingBossIds = new Set<string>();
   const existingBossNames = new Set<string>();
   for (const raid of raidRows) {
@@ -88,6 +97,7 @@ async function ensureReferenceRaids(now = new Date().toISOString()): Promise<voi
 
   for (const raid of WOW_RAID_CATALOG) {
     if (!existingRaidIds.has(raid.id)) {
+      if (raid.blizzardInstanceId != null && ownedInstanceIds.has(raid.blizzardInstanceId)) continue;
       await orm.Raid.create({
         id: raid.id,
         name: raid.name,
@@ -101,6 +111,7 @@ async function ensureReferenceRaids(now = new Date().toISOString()): Promise<voi
         createdAt: now,
         updatedAt: now,
       });
+      existingRaidIds.add(raid.id);
     }
     for (const boss of raid.bosses) {
       // A same-named boss under another id is an existing identity — never duplicate it.
@@ -146,6 +157,8 @@ async function ensureReferenceRaids(now = new Date().toISOString()): Promise<voi
     }
     for (const content of product.contents) {
       if (existingContentIds.has(content.id)) continue;
+      // The fixture raid was not inserted (its Blizzard instance belongs to another Raid row).
+      if (!existingRaidIds.has(content.raidId)) continue;
       if (occupiedContentSlots.has(`${product.id}\u0000raid\u0000${content.raidId}`)) continue;
       if (occupiedContentSlots.has(`${product.id}\u0000order\u0000${content.sortOrder}`)) continue;
       await orm.ProductRaidContent.create({

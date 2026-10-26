@@ -9,10 +9,13 @@ import {
 } from "@/components/manage/raid-catalog/raid-catalog-format";
 import { RaidFormDialog } from "@/components/manage/raid-catalog/raid-form-dialog";
 import { RefreshRaidDialog } from "@/components/manage/raid-catalog/raid-import-dialogs";
-import { RaidStatusBadges } from "@/components/manage/raid-catalog/raid-status-badges";
+import {
+  RaidLifecycleNotice,
+  RaidStatusBadges,
+} from "@/components/manage/raid-catalog/raid-status-badges";
 import { RaidWclIntegration } from "@/components/manage/raid-catalog/raid-wcl-integration";
 import { effectiveWclRankingEncounterId } from "@/lib/raid-catalog";
-import { DeleteRaidButton } from "@/components/manage/raid-catalog/delete-raid-button";
+import { RaidLifecycleButtons } from "@/components/manage/raid-catalog/raid-lifecycle-actions";
 import {
   DeleteEncounterButton,
   EncounterFormDialog,
@@ -40,7 +43,6 @@ export function ManageRaidCatalogRaidView({
   seasons: readonly string[];
 }) {
   const usage = referenceLines(raid);
-  const canDelete = !raid.referenced && !raid.seeded;
   // Blizzard owns the boss list of an imported raid: no manual encounter editing.
   const blizzardLinked = raid.blizzardInstanceId != null;
   const encountersEditable = !blizzardLinked && !raid.structureLocked;
@@ -48,7 +50,7 @@ export function ManageRaidCatalogRaidView({
   return (
     <div>
       <Link
-        href="/manage/raid-catalog"
+        href="/manage/raid-catalog?tab=raids"
         className="mb-3 inline-block text-xs text-muted hover:text-foreground"
       >
         ← Raid Catalog
@@ -71,11 +73,19 @@ export function ManageRaidCatalogRaidView({
                 blizzardInstanceId: raid.blizzardInstanceId,
               }}
             />
-            {canDelete ? <DeleteRaidButton raidId={raid.id} name={raid.name} /> : null}
+            <RaidLifecycleButtons
+              raidId={raid.id}
+              name={raid.name}
+              bossCount={raid.bosses.length}
+              actions={raid.actions}
+              duplicateOf={raid.duplicateOf}
+              lockoutCount={raid.references.lockouts}
+            />
           </div>
         }
       />
 
+      <RaidLifecycleNotice raid={raid} className="mb-3" />
       <RaidStatusBadges status={raid.status} className="mb-4" />
 
       <div className="mb-6 grid gap-4 md:grid-cols-3">
@@ -126,8 +136,10 @@ export function ManageRaidCatalogRaidView({
                   ? "Encounters cannot be added, removed or reordered: boss counts and stored lockouts depend on them. Names and integration ids stay editable."
                   : "Core catalog raid: encounters cannot be added, removed or reordered. Names and integration ids stay editable."
                 : "Unused raid: encounters can be added, edited, reordered and deleted."}
-            {raid.referenced || raid.seeded
-              ? " This raid cannot be deleted; turn off “Available for new Runs” instead."
+            {raid.actions.archive
+              ? raid.referenced
+                ? " Because it is in use, this raid cannot be deleted — archive it to retire it."
+                : " Core catalog raid: it cannot be deleted — archive it to retire it."
               : null}
           </p>
         </Card>
