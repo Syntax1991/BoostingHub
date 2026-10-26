@@ -37,19 +37,19 @@ function renderOption(
 }
 
 describe("ChooseSpecOption — multi-spec modal WCL links", () => {
-  it("renders a WCL link per spec with Best + Avg when data exists", () => {
+  it("renders a WCL link per spec with Best Perf. Avg + Median when data exists", () => {
     const elemental = renderOption({ name: "Elemental", role: "RANGED_DPS" });
     const restoration = renderOption({ name: "Restoration", role: "HEALER" });
 
-    expect(elemental).toContain("Best ");
+    expect(elemental).toContain("Best Perf. Avg ");
     expect(elemental).toContain("97");
-    expect(elemental).toContain("Avg 82");
+    expect(elemental).toContain("Median 82");
     expect(elemental).toContain(getWarcraftLogsCharacterUrl(wclId)!);
     expect(elemental).toContain("Open Stormhowl Elemental on Warcraft Logs");
 
-    expect(restoration).toContain("Best ");
+    expect(restoration).toContain("Best Perf. Avg ");
     expect(restoration).toContain("61");
-    expect(restoration).toContain("Avg 54");
+    expect(restoration).toContain("Median 54");
     expect(restoration).toContain(getWarcraftLogsCharacterUrl(wclId)!);
     expect(restoration).toContain("Open Stormhowl Restoration on Warcraft Logs");
   });
@@ -77,7 +77,7 @@ describe("ChooseSpecOption — multi-spec modal WCL links", () => {
       { wclSegments: [] },
     );
     expect(noData).not.toContain("warcraftlogs.com");
-    expect(noData).not.toContain("Best ");
+    expect(noData).not.toContain("Best Perf. Avg ");
     expect(noData).not.toContain("N/A");
     expect(noData).not.toContain("WCL —");
 
@@ -86,9 +86,10 @@ describe("ChooseSpecOption — multi-spec modal WCL links", () => {
       vi.fn(),
       { warcraftLogsId: null },
     );
-    expect(noId).toContain("Best ");
+    expect(noId).toContain("Best Perf. Avg ");
     expect(noId).toContain("97");
     expect(noId).not.toContain("warcraftlogs.com");
     expect(noId).not.toContain("↗");
   });
 });
+

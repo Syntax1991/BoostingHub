@@ -13,9 +13,11 @@ export type SignupTileWclChoice = {
 };
 
 /**
- * Compact Signup-tile Best percentile.
- * Selected/alternate spec → that spec's Best. Single offered → that Best.
- * Undrafted multi-spec → peak across offered specs (never invents a primary).
+ * Compact Signup-tile Best Perf. Avg (`zoneRankings.bestPerformanceAverage`).
+ * Selected/alternate spec → that spec's value on the first matching Run content
+ * raid (RunRaidContent order). Single offered → that value. Undrafted multi-spec
+ * → peak across offered specs, each resolved in content order (never invents a
+ * primary; never takes another raid's higher score for the tile).
  * Quiet when no cached percentiles exist.
  */
 export function resolveSignupTileWclBest(input: {
@@ -69,7 +71,7 @@ export function resolveSignupTileWclBest(input: {
     };
   }
 
-  // No offered-spec catalog — role-scoped peak, else any cached Best.
+  // No offered-spec catalog — first content raid for the assigned role.
   const bestPct = wclPerformanceMetricValue(segments, assignedRole, "best");
   return {
     bestPct,
@@ -79,14 +81,32 @@ export function resolveSignupTileWclBest(input: {
   };
 }
 
-function peakForMetric(
+/**
+ * Prefer multi-boss zone Best Perf. Avg (all bosses) over single-boss encounter
+ * Best %. Bundle runs list Tide before Venomous — Tide's one-boss 100 must not
+ * win over Venomous zone Best Perf. Avg 94.4.
+ */
+function preferredSegmentsForSpec(
+  segments: WclPerformanceRaidSegment[],
+  role: CharacterRole,
+): WclPerformanceRaidSegment[] {
+  const scoped = filterWclPerformanceForGroupRole(segments, role);
+  const zone = scoped.filter((segment) => segment.rankingKind !== "encounter");
+  return zone.length > 0 ? zone : scoped;
+}
+
+/**
+ * Cached Best Perf. Avg / Median Perf. Avg for a role + optional spec.
+ * Prefers zone (all-bosses) segments, then RunRaidContent order — never max()
+ * across raids or individual boss parses.
+ */
+function firstContentMetric(
   segments: WclPerformanceRaidSegment[],
   role: CharacterRole,
   specName: string | null,
   metric: "best" | "avg",
 ): number | null {
-  const scoped = filterWclPerformanceForGroupRole(segments, role);
-  let peak: number | null = null;
+  const scoped = preferredSegmentsForSpec(segments, role);
   for (const segment of scoped) {
     for (const row of segment.roles) {
       if (specName) {
@@ -95,32 +115,32 @@ function peakForMetric(
       }
       const value = metric === "best" ? row.bestPct : row.avgPct;
       if (value == null || !Number.isFinite(value)) continue;
-      if (peak == null || value > peak) peak = value;
+      return value;
     }
   }
-  // Spec label miss: fall back to role peak (cached data may omit specLabel).
-  if (peak == null && specName) {
-    return peakForMetric(segments, role, null, metric);
+  // Spec label miss: fall back to role row on the preferred content raid (cache may omit specLabel).
+  if (specName) {
+    return firstContentMetric(segments, role, null, metric);
   }
-  return peak;
+  return null;
 }
 
-/** Best percentile for a concrete role + optional specialization label. */
+/** Best Perf. Avg for a concrete role + optional specialization label. */
 export function wclBestForSpec(
   segments: WclPerformanceRaidSegment[],
   role: CharacterRole,
   specName: string | null,
 ): number | null {
-  return peakForMetric(segments, role, specName, "best");
+  return firstContentMetric(segments, role, specName, "best");
 }
 
-/** Average percentile for a concrete role + optional specialization label. */
+/** Median Perf. Avg for a concrete role + optional specialization label. */
 export function wclAvgForSpec(
   segments: WclPerformanceRaidSegment[],
   role: CharacterRole,
   specName: string | null,
 ): number | null {
-  return peakForMetric(segments, role, specName, "avg");
+  return firstContentMetric(segments, role, specName, "avg");
 }
 
 export function formatWclSpecChip(pct: number | null): { text: string; color: string } | null {
@@ -132,11 +152,11 @@ export function formatWclSpecChip(pct: number | null): { text: string; color: st
 }
 
 function formatPct(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(0);
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
 /**
- * Hover/focus tooltip for the visible Best link — spec, raid, Best, Average.
+ * Hover/focus tooltip — per raid Best Perf. Avg / Median Perf. Avg for the spec.
  * Never invents percentiles; empty when no cached data for that spec.
  */
 export function formatWclSpecTooltip(
@@ -151,9 +171,9 @@ export function formatWclSpecTooltip(
       const label = row.specLabel?.trim().toLocaleLowerCase("en-US") ?? "";
       if (label && label !== specName.trim().toLocaleLowerCase("en-US")) continue;
       if (row.bestPct == null && row.avgPct == null) continue;
-      const lines = [specName, segment.raidName];
-      if (row.bestPct != null) lines.push(`Best: ${formatPct(row.bestPct)}`);
-      if (row.avgPct != null) lines.push(`Average: ${formatPct(row.avgPct)}`);
+      const lines = [segment.raidName];
+      if (row.bestPct != null) lines.push(`Best Perf. Avg: ${formatPct(row.bestPct)}`);
+      if (row.avgPct != null) lines.push(`Median Perf. Avg: ${formatPct(row.avgPct)}`);
       blocks.push(lines.join("\n"));
     }
   }
@@ -162,10 +182,10 @@ export function formatWclSpecTooltip(
     const best = wclBestForSpec(segments, role, specName);
     const avg = wclAvgForSpec(segments, role, specName);
     if (best == null && avg == null) return null;
-    const lines = [specName];
+    const lines: string[] = [];
     if (scoped[0]?.raidName) lines.push(scoped[0].raidName);
-    if (best != null) lines.push(`Best: ${formatPct(best)}`);
-    if (avg != null) lines.push(`Average: ${formatPct(avg)}`);
+    if (best != null) lines.push(`Best Perf. Avg: ${formatPct(best)}`);
+    if (avg != null) lines.push(`Median Perf. Avg: ${formatPct(avg)}`);
     return lines.join("\n");
   }
   return blocks.join("\n\n");

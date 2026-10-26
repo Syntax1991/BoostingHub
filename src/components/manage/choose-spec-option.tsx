@@ -14,7 +14,7 @@ import type { WclPerformanceRaidSegment } from "@/lib/wcl-performance-display";
 import type { WowClass } from "@/models/enums";
 
 /**
- * One Choose-spec modal row: select button + separate WCL Best link.
+ * One Choose-spec modal row: select button + separate WCL Best Perf. Avg link.
  * The link must never select the spec or close the dialog.
  */
 export function ChooseSpecOption({
@@ -71,14 +71,14 @@ export function ChooseSpecOption({
             bestPct={best}
             warcraftLogsId={warcraftLogsId}
             tooltip={tooltip}
-            labelPrefix="Best "
+            labelPrefix="Best Perf. Avg "
             accessibleName={`Open ${characterLabel} ${choice.name} on Warcraft Logs`}
             className="min-h-9 min-w-[3.25rem] justify-end px-1.5 text-sm"
           />
         ) : null}
         {avg != null ? (
           <span className="px-1.5 text-xs tabular-nums text-muted">
-            Avg {Number.isInteger(avg) ? avg : avg.toFixed(0)}
+            Median {Number.isInteger(avg) ? avg : avg.toFixed(0)}
           </span>
         ) : null}
       </div>

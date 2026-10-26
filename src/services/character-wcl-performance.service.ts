@@ -322,12 +322,17 @@ export async function resolveRosterWclPerformance(input: {
       const raid = catalog.findById(content.raidId);
       if (!raid?.wclZoneId) return null;
       const encounterId = effectiveWclRankingEncounterId(raid) ?? 0;
+      // Multi-boss raids: zoneRankings.bestPerformanceAverage over ALL bosses in the
+      // WCL zone (matches WCL "Best Perf. Avg"). Single-boss lairs stay encounter-scoped.
+      // Raid-scoped encounter filtering is kept so shared-zone averages can exclude
+      // other catalog raids' bosses when the payload includes per-encounter rows.
       return {
         raidId: content.raidId,
         raidName: raidContentDisplayName(content.raidId, content.raidName),
         zoneId: raid.wclZoneId,
         encounterId,
         scopeEncounterIds: encounterId > 0 ? null : sharedZoneEncounterScope(raid, catalog),
+        rankingKind: (encounterId > 0 ? "encounter" : "zone") as "encounter" | "zone",
       };
     })
     .filter((row): row is NonNullable<typeof row> => row != null);
@@ -491,7 +496,13 @@ export async function resolveRosterWclPerformance(input: {
         });
       }
       if (roles.length > 0) {
-        segments.push({ raidId: raid.raidId, raidName: raid.raidName, roles });
+        const contentMeta = contentsWithWcl.find((row) => row.raidId === raid.raidId);
+        segments.push({
+          raidId: raid.raidId,
+          raidName: raid.raidName,
+          rankingKind: contentMeta?.rankingKind ?? "zone",
+          roles,
+        });
       }
     }
     if (segments.length > 0) {

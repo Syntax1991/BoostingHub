@@ -13,6 +13,13 @@ export type WclPerformanceRoleSegment = {
 export type WclPerformanceRaidSegment = {
   raidId: string;
   raidName: string;
+  /**
+   * `zone` = multi-boss Best Perf. Avg (`zoneRankings.bestPerformanceAverage` over
+   * all bosses). `encounter` = single-boss lair Best % (e.g. Tide / Kith'ix).
+   * Tile resolution prefers `zone` so a Bundle with Tide-first does not show a
+   * lone boss 100 over Venomous 94.4.
+   */
+  rankingKind?: "zone" | "encounter";
   roles: WclPerformanceRoleSegment[];
 };
 
@@ -57,7 +64,11 @@ export function wclPerformanceRaidLineParts(segment: WclPerformanceRaidSegment):
     if (role.avgPct != null) stats.push({ label: "avg", value: role.avgPct });
     stats.forEach((stat, statIndex) => {
       if (statIndex > 0) parts.push({ kind: "text", text: " · " });
-      parts.push({ kind: "text", text: `${stat.label} ` });
+      // Display names match WCL: Best Perf. Avg / Median Perf. Avg (not a single-boss "Best").
+      parts.push({
+        kind: "text",
+        text: `${stat.label === "best" ? "Best Perf. Avg" : "Median Perf. Avg"} `,
+      });
       parts.push({ kind: "pct", label: stat.label, value: stat.value });
     });
   });
@@ -97,26 +108,40 @@ export function filterWclPerformanceForGroupRole(
     .filter((segment) => segment.roles.length > 0);
 }
 
-/** Best/avg percentile for sort/filter — max across raids for the column role (or all roles). */
+/**
+ * Prefer multi-boss zone Best Perf. Avg over single-boss encounter Best %.
+ * Within each kind, keep RunRaidContent order. Never take max across raids.
+ */
+function segmentsForMetricPreference(
+  segments: WclPerformanceRaidSegment[],
+): WclPerformanceRaidSegment[] {
+  const zone = segments.filter((segment) => segment.rankingKind !== "encounter");
+  return zone.length > 0 ? zone : segments;
+}
+
+/**
+ * Best Perf. Avg / Median Perf. Avg for sort/filter.
+ * Prefer zone (all-bosses) Best Perf. Avg over a single-boss lair parse when
+ * both appear on a Bundle run (Tide-first must not replace Venomous 94.4 with 100).
+ */
 export function wclPerformanceMetricValue(
   segments: WclPerformanceRaidSegment[],
   groupRole: CharacterRole | null,
   metric: "best" | "avg",
 ): number | null {
-  const scoped = filterWclPerformanceForGroupRole(segments, groupRole);
-  let peak: number | null = null;
+  const scoped = segmentsForMetricPreference(filterWclPerformanceForGroupRole(segments, groupRole));
   for (const segment of scoped) {
     for (const role of segment.roles) {
       const value = metric === "best" ? role.bestPct : role.avgPct;
       if (value == null || !Number.isFinite(value)) continue;
-      if (peak == null || value > peak) peak = value;
+      return value;
     }
   }
-  return peak;
+  return null;
 }
 
 /**
- * Multi-line tooltip for Signup tiles — raid, spec, metric, best/avg.
+ * Multi-line tooltip for Signup tiles — per raid Best Perf. Avg / Median Perf. Avg.
  * Empty segments → quiet “no data” copy (never invent percentiles).
  */
 export function formatWclPerformanceTooltip(
@@ -133,8 +158,8 @@ export function formatWclPerformanceTooltip(
       const lines = [segment.raidName];
       if (role.specLabel) lines.push(role.specLabel);
       lines.push(wclMetricLabel(role.role, null));
-      if (role.bestPct != null) lines.push(`best ${formatPct(role.bestPct)}`);
-      if (role.avgPct != null) lines.push(`avg ${formatPct(role.avgPct)}`);
+      if (role.bestPct != null) lines.push(`Best Perf. Avg: ${formatPct(role.bestPct)}`);
+      if (role.avgPct != null) lines.push(`Median Perf. Avg: ${formatPct(role.avgPct)}`);
       if (role.bestPct == null && role.avgPct == null) lines.push("no percentile");
       blocks.push(lines.join("\n"));
     }

@@ -5,7 +5,7 @@ import { formatWclSpecChip } from "@/lib/wcl-spec-performance";
 import { cn } from "@/lib/cn";
 
 /**
- * Compact Best percentile as the Warcraft Logs character-profile link.
+ * Compact Best Perf. Avg as the Warcraft Logs character-profile link.
  * Click must not bubble into Signup tile draft selection / Choose Spec.
  */
 export function WclBestLink({
@@ -14,7 +14,7 @@ export function WclBestLink({
   tooltip,
   accessibleName,
   className,
-  /** Optional visible prefix (e.g. "Best " in the Choose Spec modal). */
+  /** Optional visible prefix (e.g. "Best Perf. Avg " in the Choose Spec modal). */
   labelPrefix = "",
 }: {
   bestPct: number;

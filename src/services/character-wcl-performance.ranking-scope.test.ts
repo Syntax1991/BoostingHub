@@ -146,8 +146,55 @@ describe("sharedZoneEncounterScope", () => {
       now: new Date("2026-10-22T12:00:00.000Z"),
     });
 
-    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ metricKey: `dps:Fire${RAID_SCOPED_METRIC_SUFFIX}`, bestPct: 65 }));
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ metricKey: `dps:Fire${RAID_SCOPED_METRIC_SUFFIX}`, bestPct: 65 }),
+    );
     expect(JSON.stringify(result.get("s1"))).toContain("65");
     expect(JSON.stringify(result.get("s1"))).not.toContain("99");
+  });
+});
+
+describe("roster segments mark zone vs encounter ranking", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("Venomous is zone (all bosses); Kith'ix is encounter (single boss)", async () => {
+    vi.spyOn(warcraftLogsApiClient, "isConfigured").mockReturnValue(true);
+    vi.spyOn(warcraftLogsApiClient, "fetchZoneRankings").mockResolvedValue({
+      status: "SUCCESS",
+      rankings: { bestPerformanceAverage: 94.4, medianPerformanceAverage: 66.2 },
+    } as Awaited<ReturnType<typeof warcraftLogsApiClient.fetchZoneRankings>>);
+    vi.spyOn(characterWclPerformanceRepository, "listForCharacters").mockResolvedValue([]);
+    vi.spyOn(characterWclPerformanceRepository, "upsert").mockResolvedValue(undefined as never);
+
+    const result = await resolveRosterWclPerformance({
+      difficulty: "HEROIC",
+      contents: [
+        { raidId: TIDEBOUND.id, raidName: TIDEBOUND.name, sortOrder: 1 },
+        { raidId: VENOMOUS.id, raidName: VENOMOUS.name, sortOrder: 2 },
+        { raidId: KITHIX.id, raidName: KITHIX.name, sortOrder: 3 },
+      ],
+      boosters: [
+        {
+          signupId: "s1",
+          offeredRoles: ["HEALER"],
+          character: {
+            id: "c1",
+            wowClass: "DRUID",
+            specialization: "Restoration",
+            primaryRole: "HEALER",
+            warcraftLogsId: "123",
+          },
+        },
+      ],
+      catalog: buildRaidCatalog([VENOMOUS, KITHIX, TIDEBOUND]),
+      now: new Date("2026-10-22T12:00:00.000Z"),
+    });
+
+    const segments = result.get("s1") ?? [];
+    expect(segments.map((s) => [s.raidId, s.rankingKind])).toEqual([
+      [TIDEBOUND.id, "encounter"],
+      [VENOMOUS.id, "zone"],
+      [KITHIX.id, "encounter"],
+    ]);
   });
 });

@@ -192,8 +192,9 @@ export const raidRepository = {
       return catalogInflight;
     }
     const epoch = catalogEpoch;
-    let pending!: Promise<RaidCatalog>;
-    pending = (async () => {
+    // Self-referential promise: clear inflight only if this load is still the active one.
+    const pending: { current: Promise<RaidCatalog> | null } = { current: null };
+    pending.current = (async () => {
       try {
         const rows = (await orm.Raid.include("bosses").all()) as Array<Record<string, unknown>>;
         const value = buildRaidCatalog(rows.map(mapCatalogRaid));
@@ -202,12 +203,12 @@ export const raidRepository = {
         }
         return value;
       } finally {
-        if (catalogInflight === pending) catalogInflight = null;
+        if (catalogInflight === pending.current) catalogInflight = null;
       }
     })();
-    catalogInflight = pending;
+    catalogInflight = pending.current;
     catalogInflightEpoch = epoch;
-    return pending;
+    return pending.current;
   },
 
   /** Drop catalog memo after Raid Catalog mutations (create/update/import). */

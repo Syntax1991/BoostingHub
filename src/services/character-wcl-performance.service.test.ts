@@ -144,7 +144,7 @@ describe("formatWclPerformanceRaidLine", () => {
       ],
     });
     expect(line).toContain("The Venomous Abyss");
-    expect(line).toContain("Tank (Protection) best 88% · avg 62%");
-    expect(line).toContain("HPS best 75% · avg 58%");
+    expect(line).toContain("Tank (Protection) Best Perf. Avg 88% · Median Perf. Avg 62%");
+    expect(line).toContain("HPS Best Perf. Avg 75% · Median Perf. Avg 58%");
   });
 });

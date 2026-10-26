@@ -4,12 +4,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { WclBestLink } from "@/components/ui/wcl-best-link";
 
 describe("WclBestLink", () => {
-  it("renders Best as a Warcraft Logs character link when id is present", () => {
+  it("renders Best Perf. Avg as a Warcraft Logs character link when id is present", () => {
     const html = renderToStaticMarkup(
       createElement(WclBestLink, {
         bestPct: 97,
         warcraftLogsId: "12345678",
-        tooltip: "Elemental\nThe Venomous Abyss\nBest: 97\nAverage: 82",
+        tooltip:
+          "The Venomous Abyss\nBest Perf. Avg: 97\nMedian Perf. Avg: 82",
         accessibleName: "Open Stormhowl Elemental on Warcraft Logs",
       }),
     );
@@ -34,19 +35,20 @@ describe("WclBestLink", () => {
     expect(html).not.toContain("↗");
   });
 
-  it("supports Best prefix used by the Choose Spec modal", () => {
+  it("supports Best Perf. Avg prefix used by the Choose Spec modal", () => {
     const html = renderToStaticMarkup(
       createElement(WclBestLink, {
         bestPct: 97,
         warcraftLogsId: "12345678",
         tooltip: null,
         accessibleName: "Open Stormhowl Elemental on Warcraft Logs",
-        labelPrefix: "Best ",
+        labelPrefix: "Best Perf. Avg ",
       }),
     );
-    expect(html).toContain("Best ");
+    expect(html).toContain("Best Perf. Avg ");
     expect(html).toContain("97");
     expect(html).toContain("↗");
     expect(html).toContain("https://www.warcraftlogs.com/character/id/12345678");
   });
 });
+

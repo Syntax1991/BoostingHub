@@ -349,11 +349,15 @@ function averageOf(values: number[]): number | null {
 }
 
 /**
- * Best / Avg restricted to `encounterIds` — for a multi-boss raid whose WCL
- * zone also holds other raids' encounters (zone-wide averages would mix them
- * in). Same averaging as WCL's zone averages: mean over the encounters with a
- * value. Returns the zone-wide values unchanged when the payload carries no
- * per-encounter rows.
+ * Filter per-encounter rows to a raid's bosses inside a shared WCL zone.
+ *
+ * Best Perf. Avg / Median Perf. Avg stay the authoritative zone fields from
+ * Warcraft Logs (`bestPerformanceAverage` / `medianPerformanceAverage`) — the
+ * all-boss averages shown on the character page. Never replace those with a
+ * single boss Best % or max(rankPercent).
+ *
+ * Only when WCL omitted the zone averages do we derive a mean over the raid's
+ * encounter rows (still mean, never max).
  */
 export function scopeZoneRankingsToEncounters(
   rankings: WarcraftLogsZoneRankings,
@@ -362,9 +366,13 @@ export function scopeZoneRankingsToEncounters(
   if (rankings.encounters == null || encounterIds.length === 0) return rankings;
   const wanted = new Set(encounterIds);
   const rows = rankings.encounters.filter((row) => wanted.has(row.encounterId));
+  const derivedBest = averageOf(rows.flatMap((row) => (row.rankPercent == null ? [] : [row.rankPercent])));
+  const derivedMedian = averageOf(
+    rows.flatMap((row) => (row.medianPercent == null ? [] : [row.medianPercent])),
+  );
   return {
-    bestPerformanceAverage: averageOf(rows.flatMap((row) => (row.rankPercent == null ? [] : [row.rankPercent]))),
-    medianPerformanceAverage: averageOf(rows.flatMap((row) => (row.medianPercent == null ? [] : [row.medianPercent]))),
+    bestPerformanceAverage: rankings.bestPerformanceAverage ?? derivedBest,
+    medianPerformanceAverage: rankings.medianPerformanceAverage ?? derivedMedian,
     encounters: rows,
   };
 }

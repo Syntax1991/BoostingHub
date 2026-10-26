@@ -76,26 +76,30 @@ describe("wclPercentileColor", () => {
   });
 });
 
+/** Bundle order: Tide (encounter 100) first, Venomous (zone 70) second. */
 const multiRoleSegments: WclPerformanceRaidSegment[] = [
   {
     raidId: TIDEBOUND_GROTTO_RAID_ID,
     raidName: "Tide",
+    rankingKind: "encounter",
     roles: [
       { role: "TANK", specLabel: null, bestPct: 40, avgPct: 30 },
-      { role: "HEALER", specLabel: "Restoration", bestPct: 80, avgPct: 55 },
+      { role: "HEALER", specLabel: "Restoration", bestPct: 100, avgPct: 55 },
     ],
   },
   {
     raidId: VENOMOUS_ABYSS_RAID_ID,
     raidName: "The Venomous Abyss",
+    rankingKind: "zone",
     roles: [{ role: "HEALER", specLabel: "Restoration", bestPct: 70, avgPct: 50 }],
   },
 ];
 
 describe("wclPerformanceMetricValue / matchesWclPerfFilter / compareByWclPerf", () => {
-  it("takes max best/avg for the column role across raids", () => {
-    expect(wclPerformanceMetricValue(multiRoleSegments, "HEALER", "best")).toBe(80);
-    expect(wclPerformanceMetricValue(multiRoleSegments, "HEALER", "avg")).toBe(55);
+  it("prefers zone all-boss Best Perf. Avg over Tide single-boss Best % — not max across raids", () => {
+    expect(wclPerformanceMetricValue(multiRoleSegments, "HEALER", "best")).toBe(70);
+    expect(wclPerformanceMetricValue(multiRoleSegments, "HEALER", "avg")).toBe(50);
+    expect(wclPerformanceMetricValue(multiRoleSegments, "HEALER", "best")).not.toBe(100);
     expect(wclPerformanceMetricValue(multiRoleSegments, "TANK", "best")).toBe(40);
     expect(wclPerformanceMetricValue(multiRoleSegments, "DPS", "best")).toBeNull();
   });
@@ -105,7 +109,9 @@ describe("wclPerformanceMetricValue / matchesWclPerfFilter / compareByWclPerf", 
     expect(matchesWclPerfFilter(multiRoleSegments, "DPS", "HAS")).toBe(false);
     expect(matchesWclPerfFilter(multiRoleSegments, "DPS", "NONE")).toBe(true);
     expect(matchesWclPerfFilter(multiRoleSegments, "TANK", "GE_50")).toBe(false);
-    expect(matchesWclPerfFilter(multiRoleSegments, "HEALER", "GE_75")).toBe(true);
+    // Zone HEALER is 70 — GE_75 uses that, not Tide's encounter 100.
+    expect(matchesWclPerfFilter(multiRoleSegments, "HEALER", "GE_75")).toBe(false);
+    expect(matchesWclPerfFilter(multiRoleSegments, "HEALER", "GE_50")).toBe(true);
     expect(matchesWclPerfFilter(multiRoleSegments, "HEALER", "GE_95")).toBe(false);
   });
 

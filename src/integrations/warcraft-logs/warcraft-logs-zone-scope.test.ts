@@ -27,15 +27,35 @@ describe("zone rankings per encounter", () => {
     ]);
   });
 
-  it("restricts Best/Avg to the raid's own encounters (other raids in the zone excluded)", () => {
+  it("keeps WCL zone Best Perf. Avg (all bosses) — does not replace with a single-boss Best %", () => {
     const scoped = scopeZoneRankingsToEncounters(mapZoneRankings(ZONE_53)!, [3470, 3445, 3497]);
-    // Mean over encounters with a value: (70 + 60) / 2 and (50 + 40) / 2 — Nymrissa / Kith'ix not mixed in.
+    // Authoritative zone fields stay 80 / 60 even when filtering encounter rows.
+    expect(scoped.bestPerformanceAverage).toBe(80);
+    expect(scoped.medianPerformanceAverage).toBe(60);
+    expect(scoped.encounters?.map((row) => row.encounterId)).toEqual([3470, 3445, 3497]);
+    // Must not become max(boss Best %) = 70 or a one-boss parse.
+    expect(scoped.bestPerformanceAverage).not.toBe(99);
+    expect(scoped.bestPerformanceAverage).not.toBe(70);
+  });
+
+  it("derives mean over raid encounters only when WCL omitted zone averages", () => {
+    const mapped = mapZoneRankings({
+      bestPerformanceAverage: null,
+      medianPerformanceAverage: null,
+      rankings: ZONE_53.rankings,
+    })!;
+    const scoped = scopeZoneRankingsToEncounters(mapped, [3470, 3445, 3497]);
     expect(scoped.bestPerformanceAverage).toBe(65);
     expect(scoped.medianPerformanceAverage).toBe(45);
   });
 
-  it("no ranked kill on the raid's encounters → no values", () => {
-    const scoped = scopeZoneRankingsToEncounters(mapZoneRankings(ZONE_53)!, [3497, 4242]);
+  it("no ranked kill and no zone averages → no values", () => {
+    const mapped = mapZoneRankings({
+      bestPerformanceAverage: null,
+      medianPerformanceAverage: null,
+      rankings: ZONE_53.rankings,
+    })!;
+    const scoped = scopeZoneRankingsToEncounters(mapped, [3497, 4242]);
     expect(scoped.bestPerformanceAverage).toBeNull();
     expect(scoped.medianPerformanceAverage).toBeNull();
   });
