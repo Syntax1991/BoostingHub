@@ -495,13 +495,14 @@ function RosterBuilderEditor({
       const role = stagedSelections.get(signup.id) ?? null;
       const lockoutAttention = signup.contentSaves?.some((row) => row.label.attention) ?? false;
       const hasConflict = (signup.scheduleConflicts?.length ?? 0) > 0;
+      const plannedElsewhere = (signup.runCommitments?.length ?? 0) > 0;
       slots.push({
         signup,
         role,
         specialization: stagedSpecs.get(signup.id) ?? null,
         name: signupDisplayName(signup),
         wowClass: lootbuddyDisplayClass(signup) ?? signup.character?.wowClass ?? null,
-        warning: lockoutAttention || hasConflict || Boolean(signup.issue),
+        warning: lockoutAttention || hasConflict || plannedElsewhere || Boolean(signup.issue),
       });
     }
     for (const booster of externalBoosters) {
@@ -1464,8 +1465,42 @@ function SignupTile({
   const lockoutAttention = signup.contentSaves?.some((row) => row.label.attention) ?? false;
   const scheduleConflicts = signup.scheduleConflicts ?? [];
   const scheduleBlocked = !selected && scheduleConflicts.length > 0;
-  // Warning icon = schedule conflict only (runs < 2h apart / weekly unavailable).
-  // Saved lockout is already visible as HC X/10 — no extra triangle for that.
+  const runCommitments = signup.runCommitments ?? [];
+  const plannedElsewhere = runCommitments.length > 0;
+  // Warning icon: hard schedule conflict (<2h / weekly unavailable) OR already
+  // RESERVED/COMMITTED on another Run in this raid ID week. Saved lockout stays HC X/10 only.
+  const showScheduleOrCommitmentWarning = scheduleBlocked || plannedElsewhere;
+  const commitmentWarningLabel = plannedElsewhere
+    ? `Already planned: ${runCommitments
+        .map((row) => row.runTitle || formatDateTime(row.scheduledStartAt))
+        .join(" · ")}`
+    : "";
+  const scheduleOrCommitmentLabel = scheduleBlocked
+    ? scheduleConflicts.map((row) => row.message).join(" · ") || "Schedule conflict"
+    : commitmentWarningLabel;
+  // The warning text is a hover tooltip on desktop; touch devices have no hover,
+  // so the icon is also a button that toggles the text next to the tile.
+  const tileWarningLabel = showScheduleOrCommitmentWarning
+    ? scheduleOrCommitmentLabel
+    : !selected && signup.issue
+      ? signup.issue
+      : null;
+  const [warningOpen, setWarningOpen] = useState(false);
+  const warningRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!warningOpen) return;
+    const close = (event: PointerEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent ? event.key === "Escape" : !warningRef.current?.contains(event.target as Node)) {
+        setWarningOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [warningOpen]);
   const disabled = !editing || locked || signup.status === "WITHDRAWN" || scheduleBlocked;
   const offeredSpecs: OfferedSpecChoice[] =
     signup.participationType === "BOOSTER" ? resolveOfferedSpecs(signupOfferedSpecInput(signup)) : [];
@@ -1530,7 +1565,16 @@ function SignupTile({
   const canChangeSpec = selected && needsSpecChoice && !disabled;
 
   return (
-    <div className="relative h-full">
+    <div ref={warningRef} className="relative h-full">
+      {warningOpen && tileWarningLabel ? (
+        // Outside the tile body (it clips with overflow-hidden), anchored under the tile.
+        <div
+          role="status"
+          className="absolute right-0 top-full z-30 mt-1 w-64 max-w-[calc(100vw-2rem)] rounded-md border border-warning/45 bg-surface px-2.5 py-2 text-xs leading-snug text-foreground shadow-lg"
+        >
+          {tileWarningLabel}
+        </div>
+      ) : null}
       <div
         role="button"
         tabIndex={disabled ? -1 : 0}
@@ -1552,7 +1596,7 @@ function SignupTile({
         } ${
           selected
             ? "border-success/70 bg-success/15 ring-1 ring-success/30"
-            : scheduleBlocked
+            : showScheduleOrCommitmentWarning
               ? "border-warning/45 bg-warning/5 hover:border-warning/65"
               : "border-border bg-surface hover:bg-surface-raised/50"
         }`}
@@ -1594,20 +1638,25 @@ function SignupTile({
           ) : signup.participationType === "LOOTBUDDY" ? (
             <LootbuddyIcon size={20} />
           ) : null}
-          {selected ? (
-            <DraftCheckIcon size={16} />
-          ) : scheduleBlocked ? (
-            <WarningIcon
-              label={
-                scheduleConflicts.map((row) => row.message).join(" · ") || "Schedule conflict"
-              }
-              size={16}
-            />
-          ) : signup.issue ? (
-            <WarningIcon label={signup.issue} size={16} />
-          ) : (
+          {selected ? <DraftCheckIcon size={16} /> : null}
+          {tileWarningLabel ? (
+            <button
+              type="button"
+              aria-label={`Show warning: ${tileWarningLabel}`}
+              aria-expanded={warningOpen}
+              className="-m-1 inline-flex shrink-0 rounded-sm p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning"
+              onClick={(event) => {
+                // Reveal the text only — never toggles the tile's selection.
+                event.stopPropagation();
+                setWarningOpen((open) => !open);
+              }}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              <WarningIcon label={tileWarningLabel} size={16} />
+            </button>
+          ) : !selected ? (
             <span className="inline-block w-4 shrink-0" aria-hidden />
-          )}
+          ) : null}
         </div>
         {/* Row 2 — spec icons · Best WCL link · lockout (fixed height; missing data stays empty) */}
         <div className="flex h-5 items-center gap-x-2 overflow-hidden pl-8 text-[12px] leading-none text-foreground/75">
