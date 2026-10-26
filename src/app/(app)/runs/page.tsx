@@ -6,7 +6,7 @@ import { settingsRepository } from "@/repositories/settings.repository";
 export default async function RunsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ difficulty?: string | string[]; status?: string | string[] }>;
+  searchParams: Promise<{ difficulty?: string | string[]; status?: string | string[]; id?: string | string[] }>;
 }) {
   const user = await requireUser();
   const [data, timeZone] = await Promise.all([

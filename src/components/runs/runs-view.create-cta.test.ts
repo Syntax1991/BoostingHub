@@ -28,6 +28,7 @@ type RunsPage = Awaited<ReturnType<typeof runController.getRunsPage>>;
 
 const baseData: Omit<RunsPage, "canCreate"> = {
   filters: {},
+  raidId: "current",
   runs: [],
 };
 

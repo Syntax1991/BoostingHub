@@ -1,4 +1,5 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
+import { matchesRaidIdFilter, type RaidIdFilter } from "@/lib/raid-id-filter";
 import {
   assertCanManageRun,
   canManageRun,
@@ -403,9 +404,15 @@ export const runService = {
   async listRuns(
     user: AuthenticatedUser,
     filters: { difficulty?: RaidDifficulty; status?: RunStatus } = {},
+    /** Raid-ID week (`?id=`); independent of the status filter. */
+    raidId: RaidIdFilter = "all",
+    now: Date = new Date(),
   ) {
     const runs = await runRepository.listUpcoming(filters);
     const visible = runs.filter((run) => {
+      if (!matchesRaidIdFilter(run.scheduledStartAt, raidId, now)) {
+        return false;
+      }
       if (DISCOVERY_HIDDEN_STATUSES.includes(run.status)) {
         return false;
       }
