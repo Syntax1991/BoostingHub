@@ -381,7 +381,7 @@ export type SignupSyncWorkItem = {
  * Folded into `lastSignupSignature` so existing messages refresh once after
  * deploy — no schema migration.
  */
-export const SIGNUP_MESSAGE_FORMAT_VERSION = "v10-roster-first-notes";
+export const SIGNUP_MESSAGE_FORMAT_VERSION = "v11-signup-counts-only";
 
 /**
  * Bumped when Roster Discord embed presentation changes without a domain
@@ -919,21 +919,15 @@ function buildSignupEmbedSignature(
     runStatus: data.runStatus,
     signupWindowOpen: data.signupWindowOpen,
     uniqueSignupCount: data.uniqueSignupCount,
-    // Signed-only: roster picks refresh the separate Roster message.
+    // Signup state only: no picks, no composition targets — selection progress
+    // and targets refresh the separate Roster message, never this one.
     roleStatus: {
-      tank: { signed: data.roleStatus.tank.signed, target: data.roleStatus.tank.target },
-      healer: { signed: data.roleStatus.healer.signed, target: data.roleStatus.healer.target },
-      dps: { signed: data.roleStatus.dps.signed, target: data.roleStatus.dps.target },
-      lootbuddy: { signed: data.roleStatus.lootbuddy.signed, target: data.roleStatus.lootbuddy.target },
+      tank: { signed: data.roleStatus.tank.signed },
+      healer: { signed: data.roleStatus.healer.signed },
+      dps: { signed: data.roleStatus.dps.signed },
+      lootbuddy: { signed: data.roleStatus.lootbuddy.signed },
     },
     members: { signed: data.members.signed },
-    // The summary line shows selected / target, so picks refresh this message too.
-    picked: {
-      tank: data.roleStatus.tank.picked,
-      healer: data.roleStatus.healer.picked,
-      dps: data.roleStatus.dps.picked,
-      lootbuddy: data.roleStatus.lootbuddy.picked,
-    },
     contentTitle: data.contentTitle ?? "",
     notes: data.notes ?? [],
     channelName: extra.channelName,
