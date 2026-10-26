@@ -1,5 +1,6 @@
 import type { RaidDifficulty, RunLootType } from "@/models/enums";
 import type { SignupRaidSaveInfo } from "@/models/records";
+import { DIFFICULTY_ABBREVIATIONS } from "@/lib/labels";
 import {
   formatTargetRaidLockoutLabel,
   type RaidLockoutLabel,
@@ -10,7 +11,8 @@ import type { RunRaidContentRecord } from "@/repositories/run.repository";
 
 /**
  * Per-content informational lockout for a Run participant.
- * Bundle Runs expose one entry per RunRaidContent — never an aggregated 9/9.
+ * Tooltip / Discord keep one entry per RunRaidContent. Signup tiles use
+ * {@link formatSignupTileLockoutShort} to sum progress across the Bundle.
  */
 export type RunContentRaidSaveInfo = {
   raidId: string;
@@ -85,6 +87,38 @@ export function contentLockoutsNeedAttention(rows: readonly RunContentRaidSaveIn
 /** Compact multi-line or single-line secondary metadata for UI cards. */
 export function formatContentLockoutLines(rows: readonly RunContentRaidSaveInfo[]): string[] {
   return rows.map((row) => `${row.raidName}: ${row.label.text}`);
+}
+
+/**
+ * Compact Signup-tile lockout: summed progress across every RunRaidContent.
+ * Season Complete Bundle (Venomous 8 + Tide 1 + Kith'ix 1) → `HC 10/10`, not
+ * a single raid's `HC 8/8 · Fully saved`.
+ *
+ * - No "Unsaved" / "Saved" / "Fully saved" suffixes (too long; redundant).
+ * - All verified 0 kills → null (quiet; do not show `0/10 · Unsaved`).
+ * - All unknown → null (quiet unless the caller already flags attention).
+ * - Mixed unknown + known → known kills over the full content boss total.
+ */
+export function formatSignupTileLockoutShort(
+  rows: readonly RunContentRaidSaveInfo[],
+  difficulty: RaidDifficulty,
+): string | null {
+  if (rows.length === 0) return null;
+
+  let defeated = 0;
+  let total = 0;
+  let known = 0;
+  for (const row of rows) {
+    total += row.totalBossCount;
+    if (!row.raidSave) continue;
+    known += 1;
+    defeated += row.raidSave.bossesDefeated;
+  }
+
+  if (known === 0 || total <= 0) return null;
+  if (defeated === 0) return null;
+
+  return `${DIFFICULTY_ABBREVIATIONS[difficulty]} ${defeated}/${total}`;
 }
 
 /**

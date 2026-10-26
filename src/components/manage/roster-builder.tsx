@@ -41,7 +41,10 @@ import {
   CLASS_COLORS,
   CLASS_LABELS,
 } from "@/lib/labels";
-import { formatContentLockoutLines, formatContentLockoutTooltip } from "@/lib/run-content-lockouts";
+import {
+  formatContentLockoutTooltip,
+  formatSignupTileLockoutShort,
+} from "@/lib/run-content-lockouts";
 import { isConcreteCharacterRole } from "@/lib/character-roles";
 import { countRolesByBucket } from "@/lib/roster-role-buckets";
 import {
@@ -64,7 +67,7 @@ import {
 } from "@/lib/wcl-performance-display";
 import { buildRosterSavedSelectionKey, applyRoleCopyToggle, applyUnassignedDpsToggle, isRoleCopyChecked as roleCopyIsChecked, isUnassignedDpsCopyChecked } from "@/components/manage/roster-staged-selection";
 import type { rosterService } from "@/services/roster.service";
-import type { CharacterRole, WowClass } from "@/models/enums";
+import type { CharacterRole, RaidDifficulty, WowClass } from "@/models/enums";
 import type { RaidBuffCoverage } from "@/services/roster-raid-buffs";
 import {
   evaluateRaidBuffCoverage,
@@ -97,14 +100,6 @@ function signupDisplayName(signup: SignupRow): string {
   }
   const wowClass = lootbuddyDisplayClass(signup);
   return wowClass ? CLASS_LABELS[wowClass] : "Unknown character";
-}
-
-function boosterLockoutLines(signup: SignupRow): string[] {
-  if (signup.participationType !== "BOOSTER" || !signup.character) return [];
-  if (signup.contentSaves?.length) {
-    return formatContentLockoutLines(signup.contentSaves);
-  }
-  return [];
 }
 
 /** Canonical unique BOOSTERs + lootbuddies — never flatten role projections. */
@@ -1031,6 +1026,7 @@ function RosterBuilderEditor({
               <li key={signup.id}>
                 <SignupTile
                   signup={signup}
+                  difficulty={data.run.difficulty}
                   editing={editing}
                   locked={togglesLocked}
                   selected={isStagedSelected(signup.id)}
@@ -1441,6 +1437,7 @@ function tileScanRole(signup: SignupRow, assignedRole: CharacterRole | null): Ch
 
 function SignupTile({
   signup,
+  difficulty,
   editing,
   locked,
   selected,
@@ -1452,6 +1449,7 @@ function SignupTile({
   onDeselect,
 }: {
   signup: SignupRow;
+  difficulty: RaidDifficulty;
   editing: boolean;
   locked: boolean;
   selected: boolean;
@@ -1465,7 +1463,6 @@ function SignupTile({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const character = signup.character;
   const displayClass = lootbuddyDisplayClass(signup);
-  const lockoutLines = boosterLockoutLines(signup);
   const lockoutAttention = signup.contentSaves?.some((row) => row.label.attention) ?? false;
   const scheduleConflicts = signup.scheduleConflicts ?? [];
   const scheduleBlocked = !selected && scheduleConflicts.length > 0;
@@ -1527,13 +1524,8 @@ function SignupTile({
     }
   }
 
-  // Quiet unknown lockouts stay off the tile; only show progress / saved / attention.
-  const lockoutShort = (() => {
-    const raw = lockoutLines[0]?.replace(/^[^:]+:\s*/, "") ?? null;
-    if (!raw) return null;
-    if (/\bUnknown\b/i.test(raw) && !lockoutAttention) return null;
-    return raw.replace(/\s*[·\-–]\s*Unknown\b/gi, "").trim() || null;
-  })();
+  // Summed Bundle progress (e.g. HC 10/10) — no Unsaved/Fully saved suffixes.
+  const lockoutShort = formatSignupTileLockoutShort(signup.contentSaves ?? [], difficulty);
 
   const canChangeSpec = selected && needsSpecChoice && !disabled;
 

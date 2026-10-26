@@ -2,12 +2,14 @@
 import {
   contentLockoutsNeedAttention,
   formatContentLockoutLines,
+  formatSignupTileLockoutShort,
   projectRunContentLockouts,
 } from "@/lib/run-content-lockouts";
 import { formatCompactMultiRaidLockoutProgress } from "@/lib/lockout-display";
 import { projectRunContentDisplay } from "@/lib/run-content-display";
 import {
   TIDEBOUND_GROTTO_RAID_ID,
+  UNBINDING_KITHIX_RAID_ID,
   VENOMOUS_ABYSS_RAID_ID,
 } from "@/lib/wow-raid-catalog";
 import { fixtureRaidCatalog } from "@/lib/raid-catalog";
@@ -33,6 +35,91 @@ const venomous = {
   totalBossCount: 8,
   bosses: fixtureRaidCatalog().findById(VENOMOUS_ABYSS_RAID_ID)!.bosses,
 };
+
+const kithix = {
+  raidId: UNBINDING_KITHIX_RAID_ID,
+  raidName: "The Unbinding of Kith'ix",
+  sortOrder: 3,
+  plannedBossCount: 1,
+  totalBossCount: 1,
+  bosses: fixtureRaidCatalog().findById(UNBINDING_KITHIX_RAID_ID)!.bosses,
+};
+
+/** Season Complete Bundle: Venomous 8 + Tide 1 + Kith'ix 1 = 10. */
+const seasonComplete = [venomous, tidebound, kithix];
+
+describe("formatSignupTileLockoutShort — Bundle sum, no Fully saved", () => {
+  it("sums Season Complete Bundle to HC 10/10 without Fully saved", () => {
+    const rows = projectRunContentLockouts({
+      contents: seasonComplete,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      findSave: (content) => ({
+        raidId: content.raidId,
+        difficulty: "HEROIC",
+        resetIdentifier: "2026-W12",
+        bossesDefeated: content.totalBossCount,
+        totalBossCount: content.totalBossCount,
+        isComplete: true,
+      }),
+    });
+    expect(formatSignupTileLockoutShort(rows, "HEROIC")).toBe("HC 10/10");
+    expect(formatSignupTileLockoutShort(rows, "HEROIC")).not.toContain("Fully saved");
+    expect(formatSignupTileLockoutShort(rows, "HEROIC")).not.toBe("HC 8/8");
+  });
+
+  it("sums partial kills across all contents (e.g. Venomous 8 + empty lairs → HC 8/10)", () => {
+    const rows = projectRunContentLockouts({
+      contents: seasonComplete,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      findSave: (content) => ({
+        raidId: content.raidId,
+        difficulty: "HEROIC",
+        resetIdentifier: "2026-W12",
+        bossesDefeated: content.raidId === VENOMOUS_ABYSS_RAID_ID ? 8 : 0,
+        totalBossCount: content.totalBossCount,
+        isComplete: content.raidId === VENOMOUS_ABYSS_RAID_ID,
+      }),
+    });
+    expect(formatSignupTileLockoutShort(rows, "HEROIC")).toBe("HC 8/10");
+  });
+
+  it("hides fully unsaved (0 kills) — no Unsaved label on the tile", () => {
+    const rows = projectRunContentLockouts({
+      contents: seasonComplete,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      findSave: (content) => ({
+        raidId: content.raidId,
+        difficulty: "HEROIC",
+        resetIdentifier: "2026-W12",
+        bossesDefeated: 0,
+        totalBossCount: content.totalBossCount,
+        isComplete: false,
+      }),
+    });
+    expect(formatSignupTileLockoutShort(rows, "HEROIC")).toBeNull();
+  });
+
+  it("shows partial progress without Saved suffix", () => {
+    const rows = projectRunContentLockouts({
+      contents: seasonComplete,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      findSave: (content) => ({
+        raidId: content.raidId,
+        difficulty: "HEROIC",
+        resetIdentifier: "2026-W12",
+        bossesDefeated: content.raidId === VENOMOUS_ABYSS_RAID_ID ? 2 : 0,
+        totalBossCount: content.totalBossCount,
+        isComplete: false,
+      }),
+    });
+    expect(formatSignupTileLockoutShort(rows, "HEROIC")).toBe("HC 2/10");
+    expect(formatSignupTileLockoutShort(rows, "HEROIC")).not.toContain("Saved");
+  });
+});
 
 describe("run content lockout projection", () => {
   it("projects Bundle lockouts as two segments, never 4/9", () => {
