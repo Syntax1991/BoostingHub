@@ -117,6 +117,26 @@ Raw ids are shown only in the expanded details.
 the imports and the raid list; `?tab=presets` shows Run Presets (Products). The tab is a
 real link, so refresh, back / forward and copied URLs keep it.
 
+The Raids tab is scoped so the working catalog stays short after many seasons:
+
+- **Status** (`?status=`): *Active* (default, not archived), *Archived*, *All*.
+- **Season** (`?season=`): *Current season* (default for Active — the `RAID_SEASONS` entry marked
+  `current`), one persisted `Raid.season` value, or `all`. Options are the persisted
+  seasons, Blizzard seasons newest first (`RAID_SEASONS` order), then other values A–Z.
+  No season names are hard-coded in the UI.
+- Without a chosen season, Archived and All look across every season, so an archived raid of
+  an older season is one click away; an explicit season still narrows them.
+- Defaults are left out of the URL; unknown values fall back to Active / Current season.
+- The tab count is the number of raids the Raids tab shows; the status control shows
+  Active / Archived / All counts inside the chosen season.
+
+**No automatic archive on Import Season.** An import never changes lifecycle or
+availability of existing raids. Season membership is the editable `Raid.season` label plus
+the code-defined `RAID_SEASONS`, and an older-season raid may still be sold (bundles,
+Run Setups, already planned Runs). Archiving closes every product that contains the raid,
+so doing it implicitly could silently break live planning. Older seasons drop out of the
+default view anyway; archiving stays an explicit admin action.
+
 ## Raid lifecycle
 
 **Identity** is the Blizzard journal instance id. Import / refresh reuse the Raid holding
