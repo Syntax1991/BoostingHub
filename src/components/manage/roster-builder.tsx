@@ -495,13 +495,14 @@ function RosterBuilderEditor({
       const role = stagedSelections.get(signup.id) ?? null;
       const lockoutAttention = signup.contentSaves?.some((row) => row.label.attention) ?? false;
       const hasConflict = (signup.scheduleConflicts?.length ?? 0) > 0;
+      const plannedElsewhere = (signup.runCommitments?.length ?? 0) > 0;
       slots.push({
         signup,
         role,
         specialization: stagedSpecs.get(signup.id) ?? null,
         name: signupDisplayName(signup),
         wowClass: lootbuddyDisplayClass(signup) ?? signup.character?.wowClass ?? null,
-        warning: lockoutAttention || hasConflict || Boolean(signup.issue),
+        warning: lockoutAttention || hasConflict || plannedElsewhere || Boolean(signup.issue),
       });
     }
     for (const booster of externalBoosters) {
@@ -1464,8 +1465,19 @@ function SignupTile({
   const lockoutAttention = signup.contentSaves?.some((row) => row.label.attention) ?? false;
   const scheduleConflicts = signup.scheduleConflicts ?? [];
   const scheduleBlocked = !selected && scheduleConflicts.length > 0;
-  // Warning icon = schedule conflict only (runs < 2h apart / weekly unavailable).
-  // Saved lockout is already visible as HC X/10 — no extra triangle for that.
+  const runCommitments = signup.runCommitments ?? [];
+  const plannedElsewhere = runCommitments.length > 0;
+  // Warning icon: hard schedule conflict (<2h / weekly unavailable) OR already
+  // RESERVED/COMMITTED on another Run in this raid ID week. Saved lockout stays HC X/10 only.
+  const showScheduleOrCommitmentWarning = scheduleBlocked || plannedElsewhere;
+  const commitmentWarningLabel = plannedElsewhere
+    ? `Already planned: ${runCommitments
+        .map((row) => row.runTitle || formatDateTime(row.scheduledStartAt))
+        .join(" · ")}`
+    : "";
+  const scheduleOrCommitmentLabel = scheduleBlocked
+    ? scheduleConflicts.map((row) => row.message).join(" · ") || "Schedule conflict"
+    : commitmentWarningLabel;
   const disabled = !editing || locked || signup.status === "WITHDRAWN" || scheduleBlocked;
   const offeredSpecs: OfferedSpecChoice[] =
     signup.participationType === "BOOSTER" ? resolveOfferedSpecs(signupOfferedSpecInput(signup)) : [];
@@ -1552,7 +1564,7 @@ function SignupTile({
         } ${
           selected
             ? "border-success/70 bg-success/15 ring-1 ring-success/30"
-            : scheduleBlocked
+            : showScheduleOrCommitmentWarning
               ? "border-warning/45 bg-warning/5 hover:border-warning/65"
               : "border-border bg-surface hover:bg-surface-raised/50"
         }`}
@@ -1594,20 +1606,14 @@ function SignupTile({
           ) : signup.participationType === "LOOTBUDDY" ? (
             <LootbuddyIcon size={20} />
           ) : null}
-          {selected ? (
-            <DraftCheckIcon size={16} />
-          ) : scheduleBlocked ? (
-            <WarningIcon
-              label={
-                scheduleConflicts.map((row) => row.message).join(" · ") || "Schedule conflict"
-              }
-              size={16}
-            />
-          ) : signup.issue ? (
+          {selected ? <DraftCheckIcon size={16} /> : null}
+          {showScheduleOrCommitmentWarning ? (
+            <WarningIcon label={scheduleOrCommitmentLabel} size={16} />
+          ) : !selected && signup.issue ? (
             <WarningIcon label={signup.issue} size={16} />
-          ) : (
+          ) : !selected ? (
             <span className="inline-block w-4 shrink-0" aria-hidden />
-          )}
+          ) : null}
         </div>
         {/* Row 2 — spec icons · Best WCL link · lockout (fixed height; missing data stays empty) */}
         <div className="flex h-5 items-center gap-x-2 overflow-hidden pl-8 text-[12px] leading-none text-foreground/75">
