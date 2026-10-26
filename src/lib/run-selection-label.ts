@@ -38,7 +38,12 @@ export function runSetupSelectionLabel(input: {
     .split(" ")
     .filter((token) => !containsToken(name, token))
     .join(" ");
-  const content = name.toLocaleLowerCase("en").includes(input.contentTitle.toLocaleLowerCase("en")) ? "" : input.contentTitle;
+  // The name already names every raid of the content (any order: "Venom & Tide" covers "Tide & Venom").
+  const lowerName = name.toLocaleLowerCase("en");
+  const namesAllRaids = input.contentTitle
+    .split(" & ")
+    .every((raid) => lowerName.includes(raid.trim().toLocaleLowerCase("en")));
+  const content = namesAllRaids ? "" : input.contentTitle;
   return [name, content, meta].filter(Boolean).join(" · ");
 }
 

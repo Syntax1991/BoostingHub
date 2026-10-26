@@ -29,6 +29,15 @@ describe("run-selection-label", () => {
     ).toBe("Venom HC · Unsaved 8/8");
   });
 
+  it("a name that names every raid in another order is not followed by the content again", () => {
+    expect(
+      runSetupSelectionLabel({ name: "HC VIP 9/9 · Venom & Tide", contentTitle: "Tide & Venom", difficulty: "HEROIC", lootType: "VIP", titleCoverage: "9/9" }),
+    ).toBe("HC VIP 9/9 · Venom & Tide");
+    expect(
+      runSetupSelectionLabel({ name: "HC VIP 9/9 · Venom", contentTitle: "Tide & Venom", difficulty: "HEROIC", lootType: "VIP", titleCoverage: "9/9" }),
+    ).toBe("HC VIP 9/9 · Venom · Tide & Venom");
+  });
+
   it("default Run Setup names are compact", () => {
     expect(runSetupDefaultName({ contentTitle: "Venom & Tide & Kithix", difficulty: "HEROIC", lootType: "VIP", titleCoverage: "10/10" })).toBe(
       "HC VIP 10/10 · Venom & Tide & Kithix",
