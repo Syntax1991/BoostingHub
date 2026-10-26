@@ -34,7 +34,7 @@ const mistweaver: {
 };
 
 describe("buildCharacterSelectOptions", () => {
-  it("labels a fresh selection with its specialization-derived default role", () => {
+  it("label is Character-Realm; the secondary line is the default role and the other playable roles as offspec", () => {
     const options = buildCharacterSelectOptions([mistweaver], {
       characterIds: [],
       offeredRolesByCharacterId: {},
@@ -42,18 +42,20 @@ describe("buildCharacterSelectOptions", () => {
 
     expect(options).toHaveLength(1);
     expect(options[0]?.value).toBe("c-mist");
-    expect(options[0]?.label).toBe("Synmist-Antonidas — Healer (default)");
+    expect(options[0]?.label).toBe("Synmist-Antonidas");
+    expect(options[0]?.description).toBe("Healer (default) · Tank/Melee DPS offspec");
   });
 
-  it("labels an existing offer with its persisted role, not the specialization default, when they differ", () => {
+  it("an existing offer shows its persisted role, not the specialization default", () => {
     const options = buildCharacterSelectOptions([mistweaver], {
       characterIds: ["c-mist"],
       offeredRolesByCharacterId: { "c-mist": ["TANK"] },
     }).map((option) => option.toJSON());
-    expect(options[0]?.label).toBe("Synmist-Antonidas — Tank");
+    expect(options[0]?.label).toBe("Synmist-Antonidas");
+    expect(options[0]?.description).toBe("Tank · Healer/Melee DPS offspec");
   });
 
-  it("preselects a Character with an active booster offer", () => {
+  it("preselects a Character with an active booster offer (multi-select)", () => {
     const options = buildCharacterSelectOptions([mistweaver], {
       characterIds: ["c-mist"],
       offeredRolesByCharacterId: { "c-mist": ["HEALER"] },
@@ -61,12 +63,25 @@ describe("buildCharacterSelectOptions", () => {
     expect(options[0]?.default).toBe(true);
   });
 
-  it("shows no role suffix for a Character with neither an existing offer nor a specialization default", () => {
+  it("without a default role every playable role is listed as offspec", () => {
     const options = buildCharacterSelectOptions(
       [{ characterId: "c-1", characterName: "A", realm: "R", roles: ["HEALER", "RANGED_DPS"] as ("TANK" | "HEALER" | "MELEE_DPS" | "RANGED_DPS" | "DPS")[], defaultRole: null }],
       { characterIds: [], offeredRolesByCharacterId: {} },
     ).map((option) => option.toJSON());
     expect(options[0]?.label).toBe("A-R");
+    expect(options[0]?.description).toBe("Healer/Ranged DPS offspec");
+  });
+
+  it("uses the Guild class emoji as the option icon when known", () => {
+    const options = buildCharacterSelectOptions(
+      [{ ...mistweaver, wowClass: "MONK" as const }],
+      { characterIds: [], offeredRolesByCharacterId: {} },
+      null,
+      { MONK: "<:monk:1549226000000000001>" },
+    ).map((option) => option.toJSON());
+    expect(options[0]?.emoji).toMatchObject({ id: "1549226000000000001", name: "monk" });
+    const plain = buildCharacterSelectOptions([mistweaver], { characterIds: [], offeredRolesByCharacterId: {} }).map((option) => option.toJSON());
+    expect(plain[0]?.emoji).toBeUndefined();
   });
 });
 

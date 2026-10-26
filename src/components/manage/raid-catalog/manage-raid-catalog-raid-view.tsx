@@ -66,6 +66,7 @@ export function ManageRaidCatalogRaidView({
               raid={{
                 raidId: raid.id,
                 name: raid.name,
+                shortName: raid.shortName,
                 season: raid.season,
                 sortOrder: raid.sortOrder,
                 trackLockouts: raid.trackLockouts,

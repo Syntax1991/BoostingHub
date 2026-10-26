@@ -48,6 +48,7 @@ function raid(id: string, name: string, overrides: Partial<RaidCatalogRaidRow> =
     wclZoneId: 53,
     wclRankingEncounterId: null,
     archivedAt: null,
+    shortName: null,
     bosses: [],
     references: { runContents: 0, templateContents: 0, productContents: 0, lockouts: 0 },
     referenced: false,

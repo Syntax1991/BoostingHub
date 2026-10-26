@@ -1,68 +1,71 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from "discord.js";
-import { formatDiscordRunTitleLink } from "@/lib/discord-run-title-link";
+import { absoluteRunUrl } from "@/lib/app-url";
 import type {
   SignupEmbedData,
   SignupEmbedMember,
+  SignupEmbedNote,
   SignupEmbedRoleMembers,
 } from "@/services/discord-sync.service";
 import { buildCustomId } from "@/discord-bot/custom-ids";
 import type { GuildRoleIndicators, RoleDiscordEmojiKey } from "@/discord-bot/class-emoji-lookup";
-import { discordTimestamp } from "@/discord-bot/format";
-import { chunkEmbedFieldLines } from "@/lib/discord-embed-field-chunking";
+import { LOOT_EMOJIS } from "@/discord-bot/embeds/raidboost-announce";
+import {
+  DISCORD_EMBED_FIELD_COUNT_LIMIT,
+  DISCORD_EMBED_FIELD_VALUE_LIMIT,
+  chunkEmbedFieldLines,
+} from "@/lib/discord-embed-field-chunking";
 import { classIndicator } from "@/lib/run-start-message";
-import { DIFFICULTY_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
+import { DIFFICULTY_ABBREVIATIONS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
 import type { WowClass } from "@/models/enums";
 
-const RUN_STATUS_LABEL: Record<SignupEmbedData["runStatus"], string> = {
-  DRAFT: "Draft",
-  OPEN: "Open",
-  ROSTERING: "Rostering",
-  PUBLISHED: "Roster published",
-  IN_PROGRESS: "In progress",
-  COMPLETED: "Completed",
-  CANCELLED: "Cancelled",
-};
-
 const EMPTY_FIELD_VALUE = "—";
-/** Zero-width space — Discord requires a non-empty field value. */
-const SECTION_HEADING_VALUE = "\u200b";
+/** Zero-width space — Discord requires a non-empty field name / value. */
+const ZERO_WIDTH = "​";
 
 const ROLE_EMOJI_FALLBACK: Record<RoleDiscordEmojiKey, string> = {
   tank: "🛡",
   healer: "✚",
   dps: "⚔",
-  lootbuddy: "📦",
-  raidlead: "★",
+  lootbuddy: "💰",
+  raidlead: "⚔",
 };
 
-/**
- * Discord limit on combined embed text (title + description + field names/values
- * + footer + author) for a single Embed / message.
- */
+/** Discord limit on combined embed text (title + description + fields + footer). */
 export const DISCORD_EMBED_TOTAL_CHAR_LIMIT = 6000;
+
+/** One note line stays short so many notes still fit (the full note lives on the Run). */
+export const SIGNUP_NOTE_DISPLAY_MAX = 100;
 
 export type SignupEmbedRenderOptions = {
   /** Pre-resolved Guild custom emoji markup keyed by WowClass. */
   classIndicators?: Partial<Record<WowClass, string>>;
   /** Pre-resolved Guild custom emoji markup for tank/healer/dps/lootbuddy/raidlead. */
   roleIndicators?: GuildRoleIndicators;
+  /** Test seam for the Run link (defaults to the app URL from env). */
+  runUrl?: string | null;
 };
+
+type EmbedField = { name: string; value: string; inline: boolean };
 
 type RoleColumnSpec = {
   emojiKey: RoleDiscordEmojiKey;
   label: string;
-  countLabel: string;
   members: SignupEmbedMember[];
+  signed: number;
+  target: number;
 };
 
 function roleEmoji(key: RoleDiscordEmojiKey, roleIndicators?: GuildRoleIndicators): string {
   return roleIndicators?.[key] ?? ROLE_EMOJI_FALLBACK[key];
 }
 
-/** Discord mention + class indicator — Character-Realm lives in Final Setup / Web.
- * Mentions show the server nickname when set (`syntax_1991`); that is a real
- * ping. Plain `@discordUsername` is only the fallback when no Discord id is linked.
- */
+function mentionFor(member: Pick<SignupEmbedMember, "discordUserId" | "discordUsername" | "userName">): string {
+  return member.discordUserId
+    ? `<@${member.discordUserId}>`
+    : `@${(member.discordUsername?.trim() || member.userName).replace(/^@/, "")}`;
+}
+
+/** Class indicator + Discord mention. Mentions show the server nickname and are a real ping. */
 export function formatSignupParticipantLine(
   member: SignupEmbedMember,
   classIndicators?: Partial<Record<WowClass, string>>,
@@ -71,19 +74,17 @@ export function formatSignupParticipantLine(
 }
 
 /**
- * One line per User: mention once, then every distinct class icon for that
- * User's offers in this role column (e.g. `<@id> <:paladin:> <:mage:>`).
+ * One line per User: every distinct class icon of that User's offers in this
+ * column, then the mention once (e.g. `<:paladin:> <:mage:> <@id>`).
+ * `classIndicators === null` renders mentions only (compact fallback).
  */
 export function formatSignupParticipantGroupLine(
   members: readonly SignupEmbedMember[],
-  classIndicators?: Partial<Record<WowClass, string>>,
+  classIndicators?: Partial<Record<WowClass, string>> | null,
 ): string {
   const primary = members[0];
   if (!primary) return "";
-
-  const mention = primary.discordUserId
-    ? `<@${primary.discordUserId}>`
-    : `@${(primary.discordUsername?.trim() || primary.userName).replace(/^@/, "")}`;
+  if (classIndicators === null) return mentionFor(primary);
 
   const seenClasses = new Set<string>();
   const indicators: string[] = [];
@@ -94,8 +95,7 @@ export function formatSignupParticipantGroupLine(
     const indicator = classIndicator(wowClass, null, classIndicators);
     if (indicator) indicators.push(indicator);
   }
-
-  return [mention, ...indicators].join(" ");
+  return [...indicators, mentionFor(primary)].join(" ");
 }
 
 /** Stable User key for grouping — prefer Discord snowflake, else app userId. */
@@ -103,10 +103,7 @@ function signupMemberUserKey(member: SignupEmbedMember): string {
   return member.discordUserId ?? `user:${member.userId}`;
 }
 
-/**
- * Collapses multiple offers from the same User into one display group,
- * preserving first-seen User order and within-group member order.
- */
+/** Collapses multiple offers from the same User into one group (first-seen order). */
 export function groupSignupMembersByUser(members: readonly SignupEmbedMember[]): SignupEmbedMember[][] {
   const order: string[] = [];
   const groups = new Map<string, SignupEmbedMember[]>();
@@ -124,81 +121,113 @@ export function groupSignupMembersByUser(members: readonly SignupEmbedMember[]):
 }
 
 export function formatRaidLeadFieldValue(data: SignupEmbedData): string {
-  if (data.raidLeadDiscordUserId) {
-    return `<@${data.raidLeadDiscordUserId}>`;
-  }
+  if (data.raidLeadDiscordUserId) return `<@${data.raidLeadDiscordUserId}>`;
   const name = data.raidLeadName.trim();
   return name.length > 0 ? name : EMPTY_FIELD_VALUE;
 }
 
-function buildRoleColumnFields(
-  role: RoleColumnSpec,
-  classIndicators?: Partial<Record<WowClass, string>>,
-  roleIndicators?: GuildRoleIndicators,
-  emptyValue: string = EMPTY_FIELD_VALUE,
-): Array<{ name: string; value: string; inline: boolean }> {
-  const emoji = roleEmoji(role.emojiKey, roleIndicators);
-  const lines = groupSignupMembersByUser(role.members).map((group) =>
+function unixSeconds(iso: string): number {
+  return Math.floor(new Date(iso).getTime() / 1000);
+}
+
+/** Heading count: listed signups / composition target (`Tanks 3/2`); no target → signups only. */
+function countLabel(signed: number, target: number): string {
+  return target > 0 ? `${signed}/${target}` : String(signed);
+}
+
+function roleColumns(data: SignupEmbedData): RoleColumnSpec[] {
+  const { roleStatus, members } = data;
+  return [
+    { emojiKey: "tank", label: "Tanks", members: members.signed.tanks, ...roleStatus.tank },
+    { emojiKey: "healer", label: "Healers", members: members.signed.healers, ...roleStatus.healer },
+    { emojiKey: "dps", label: "DPS", members: members.signed.dps, ...roleStatus.dps },
+  ];
+}
+
+function lootbuddyColumn(data: SignupEmbedData): RoleColumnSpec {
+  return {
+    emojiKey: "lootbuddy",
+    label: "Lootbuddies",
+    members: data.members.signed.lootbuddies,
+    signed: data.roleStatus.lootbuddy.signed,
+    target: data.roleStatus.lootbuddy.target ?? 0,
+  };
+}
+
+function buildColumnFields(
+  column: RoleColumnSpec,
+  classIndicators: Partial<Record<WowClass, string>> | null | undefined,
+  roleIndicators: GuildRoleIndicators | undefined,
+  inline: boolean,
+): EmbedField[] {
+  const emoji = roleEmoji(column.emojiKey, roleIndicators);
+  const lines = groupSignupMembersByUser(column.members).map((group) =>
     formatSignupParticipantGroupLine(group, classIndicators),
   );
-  const chunks = chunkEmbedFieldLines(lines);
-  const primaryName = `${emoji} ${role.label} — ${role.countLabel}`;
-  const continuationName = `${emoji} ${role.label} (cont.)`;
-
-  return chunks.map((chunk, index) => ({
-    name: index === 0 ? primaryName : continuationName,
-    value: chunk.length > 0 ? chunk.join("\n") : emptyValue,
-    // Primary role columns stay inline so Tank|Healer|DPS share a row and
-    // Lootbuddy starts the next. Continuations are full-width so they do not
-    // scramble the following section's primary grid.
-    inline: index === 0,
+  const heading = `${emoji} ${column.label} ${countLabel(column.signed, column.target)}`;
+  return chunkEmbedFieldLines(lines).map((chunk, index) => ({
+    name: index === 0 ? heading : `${emoji} ${column.label} (cont.)`,
+    value: chunk.length > 0 ? chunk.join("\n") : EMPTY_FIELD_VALUE,
+    // Primary Tank | Healer | DPS columns share one row on desktop; continuations
+    // are full width so they never scramble that grid. Headings carry their own
+    // counts, so stacked columns on mobile still read on their own.
+    inline: inline && index === 0,
   }));
 }
 
-/**
- * Primary Tank|Healer|DPS|Lootbuddy fields first, then any continuations in
- * the same role order — keeps the role grid intact when one role overflows.
- */
-function buildRoleSectionFields(
-  roles: RoleColumnSpec[],
-  classIndicators?: Partial<Record<WowClass, string>>,
-  roleIndicators?: GuildRoleIndicators,
-  emptyValue: string = EMPTY_FIELD_VALUE,
-): Array<{ name: string; value: string; inline: boolean }> {
-  const built = roles.map((role) => buildRoleColumnFields(role, classIndicators, roleIndicators, emptyValue));
-  const primary = built.map((fields) => fields[0]!);
-  const continuations = built.flatMap((fields) => fields.slice(1));
-  return [...primary, ...continuations];
+/** Tank | Healer | DPS primaries first, then any continuations in the same order. */
+function buildRoleFields(
+  data: SignupEmbedData,
+  classIndicators: Partial<Record<WowClass, string>> | null | undefined,
+  roleIndicators: GuildRoleIndicators | undefined,
+): EmbedField[] {
+  const built = roleColumns(data).map((column) => buildColumnFields(column, classIndicators, roleIndicators, true));
+  return [...built.map((fields) => fields[0]!), ...built.flatMap((fields) => fields.slice(1))];
 }
 
-function signedRoleColumns(data: SignupEmbedData): RoleColumnSpec[] {
-  const { roleStatus, members } = data;
-  return [
-    {
-      emojiKey: "tank",
-      label: "Tanks",
-      countLabel: String(roleStatus.tank.signed),
-      members: members.signed.tanks,
-    },
-    {
-      emojiKey: "healer",
-      label: "Healers",
-      countLabel: String(roleStatus.healer.signed),
-      members: members.signed.healers,
-    },
-    {
-      emojiKey: "dps",
-      label: "DPS",
-      countLabel: String(roleStatus.dps.signed),
-      members: members.signed.dps,
-    },
-    {
-      emojiKey: "lootbuddy",
-      label: "Lootbuddies",
-      countLabel: String(roleStatus.lootbuddy.signed),
-      members: members.signed.lootbuddies,
-    },
-  ];
+function truncate(text: string, max: number): string {
+  const singleLine = text.replace(/\s+/g, " ").trim();
+  return singleLine.length <= max ? singleLine : `${singleLine.slice(0, max - 1)}…`;
+}
+
+export function formatSignupNoteLine(note: SignupEmbedNote, max: number = SIGNUP_NOTE_DISPLAY_MAX): string {
+  return `${mentionFor(note)} — ${truncate(note.note, max)}`;
+}
+
+function buildNotesFields(notes: readonly SignupEmbedNote[], maxNoteChars: number): EmbedField[] {
+  if (notes.length === 0) return [];
+  const lines = notes.map((note) => formatSignupNoteLine(note, maxNoteChars));
+  return chunkEmbedFieldLines(lines).map((chunk, index) => ({
+    name: index === 0 ? "📝 Notes" : "📝 Notes (cont.)",
+    value: chunk.join("\n"),
+    inline: false,
+  }));
+}
+
+function selectedSummary(data: SignupEmbedData): string | null {
+  const { tank, healer, dps } = data.roleStatus;
+  const target = tank.target + healer.target + dps.target;
+  if (target <= 0) return null;
+  return `👥 ${tank.picked + healer.picked + dps.picked}/${target} selected`;
+}
+
+/** Compact Run summary under the title: who / what / when, without admin wording. */
+export function buildSignupSummary(data: SignupEmbedData, roleIndicators?: GuildRoleIndicators): string {
+  const leadLine = [
+    `${roleEmoji("raidlead", roleIndicators)} ${formatRaidLeadFieldValue(data)}`,
+    `${LOOT_EMOJIS[data.lootType]} ${DIFFICULTY_ABBREVIATIONS[data.difficulty]} ${RUN_LOOT_TYPE_LABELS[data.lootType]}`,
+    selectedSummary(data),
+  ]
+    .filter(Boolean)
+    .join("  ");
+  const seconds = unixSeconds(data.scheduledStartAt);
+  const timeLine = `📅 <t:${seconds}:D>  🕒 <t:${seconds}:t>  ◷ <t:${seconds}:R>`;
+  const stateLine = isRunEnded(data)
+    ? "Run ended — Raid Lead / Admin can archive it below."
+    : data.signupWindowOpen
+      ? null
+      : "Signups are closed.";
+  return [leadLine, timeLine, stateLine].filter(Boolean).join("\n");
 }
 
 export function emptySignupEmbedMembers(): SignupEmbedRoleMembers {
@@ -221,45 +250,63 @@ export function measureEmbedJsonSize(embed: ReturnType<EmbedBuilder["toJSON"]>):
   return { fieldCount: fields.length, totalChars, maxFieldChars };
 }
 
-/**
- * One Signup Discord message → one Embed: run summary + volunteered Signups by role.
- * Selected lineup lives on the separate Roster message (`rosterMessageId`).
- * Continuations (if a role exceeds 1024 chars) stay inside this same Embed.
- * Designed for realistic Run capacity (~20–25 unique signup users).
- */
-export function buildSignupEmbed(
-  data: SignupEmbedData,
-  options?: SignupEmbedRenderOptions,
-): EmbedBuilder {
-  const classIndicators = options?.classIndicators;
-  const roleIndicators = options?.roleIndicators;
-  const color = data.signupWindowOpen ? 0xd4af37 : 0x555555;
-  const summary = data.contentSummary
-    ? `${DIFFICULTY_LABELS[data.difficulty]} · ${data.productLabel}\n${data.contentSummary}`
-    : `${DIFFICULTY_LABELS[data.difficulty]} · ${data.productLabel}`;
-  const description = `${formatDiscordRunTitleLink(data.runTitle, data.runId)}\n${summary}`;
-  const raidLeadEmoji = roleEmoji("raidlead", roleIndicators);
-  const emptyValue = data.uniqueSignupCount === 0 ? "No signups yet." : EMPTY_FIELD_VALUE;
-  const windowLine = isRunEnded(data)
-    ? "This run has ended — Raid Lead / Admin can archive it below."
-    : data.signupWindowOpen
-      ? "Signups are open."
-      : "Signups are closed.";
+type RenderStep = {
+  /** `null` = mentions only (class icons dropped). */
+  classIndicators: Partial<Record<WowClass, string>> | null | undefined;
+  maxNoteChars: number;
+};
 
-  return new EmbedBuilder()
-    .setTitle("Signups")
-    .setDescription(description)
-    .addFields(
-      { name: "Scheduled", value: discordTimestamp(data.scheduledStartAt), inline: true },
-      { name: "Signed users", value: String(data.uniqueSignupCount), inline: true },
-      { name: "Status", value: RUN_STATUS_LABEL[data.runStatus], inline: true },
-      { name: "Loot", value: RUN_LOOT_TYPE_LABELS[data.lootType], inline: true },
-      { name: `${raidLeadEmoji} Raid Lead`, value: formatRaidLeadFieldValue(data), inline: true },
-      { name: "Signups by role", value: SECTION_HEADING_VALUE, inline: false },
-      ...buildRoleSectionFields(signedRoleColumns(data), classIndicators, roleIndicators, emptyValue),
-    )
-    .setColor(color)
-    .setFooter({ text: isRunEnded(data) ? windowLine : `${windowLine} Signup does not mean selected.` });
+function assemble(data: SignupEmbedData, options: SignupEmbedRenderOptions | undefined, step: RenderStep): EmbedBuilder {
+  const runUrl = options?.runUrl === undefined ? absoluteRunUrl(data.runId) : options.runUrl;
+  const title = (data.contentTitle?.trim() || data.productLabel).slice(0, 256);
+  const fields: EmbedField[] = [
+    ...buildRoleFields(data, step.classIndicators, options?.roleIndicators),
+    ...buildColumnFields(lootbuddyColumn(data), step.classIndicators, options?.roleIndicators, false),
+    ...buildNotesFields(data.notes ?? [], step.maxNoteChars),
+  ];
+  if (runUrl) fields.push({ name: ZERO_WIDTH, value: `🔗 [Open Run](${runUrl})`, inline: false });
+
+  const embed = new EmbedBuilder()
+    .setTitle(title)
+    .setDescription(buildSignupSummary(data, options?.roleIndicators))
+    .addFields(fields)
+    .setColor(data.signupWindowOpen ? 0xd4af37 : 0x555555);
+  if (runUrl) embed.setURL(runUrl);
+  if (!isRunEnded(data)) embed.setFooter({ text: "Signup does not mean selected." });
+  return embed;
+}
+
+function fitsDiscordLimits(embed: EmbedBuilder): boolean {
+  const size = measureEmbedJsonSize(embed.toJSON());
+  return (
+    size.totalChars <= DISCORD_EMBED_TOTAL_CHAR_LIMIT &&
+    size.fieldCount <= DISCORD_EMBED_FIELD_COUNT_LIMIT &&
+    size.maxFieldChars <= DISCORD_EMBED_FIELD_VALUE_LIMIT
+  );
+}
+
+/**
+ * The Signup Discord message: `contentTitle` ("Venom & Tide & Kithix") linking
+ * to the Run, a compact summary, then the roster-first body — Tanks | Healers
+ * | DPS columns, Lootbuddies, Notes (only when someone left one), Open Run.
+ * The selected lineup stays on the separate Roster message.
+ *
+ * Deterministic fallback when Discord's limits would be exceeded: first class
+ * icons are dropped (mentions stay), then note lines are shortened. Roster
+ * names are never dropped.
+ */
+export function buildSignupEmbed(data: SignupEmbedData, options?: SignupEmbedRenderOptions): EmbedBuilder {
+  const steps: RenderStep[] = [
+    { classIndicators: options?.classIndicators, maxNoteChars: SIGNUP_NOTE_DISPLAY_MAX },
+    { classIndicators: null, maxNoteChars: SIGNUP_NOTE_DISPLAY_MAX },
+    { classIndicators: null, maxNoteChars: 40 },
+  ];
+  let embed: EmbedBuilder | null = null;
+  for (const step of steps) {
+    embed = assemble(data, options, step);
+    if (fitsDiscordLimits(embed)) return embed;
+  }
+  return embed!;
 }
 
 /** Completed / cancelled: the Run can be archived (same rule as the app: canArchiveRun). */
@@ -268,39 +315,53 @@ function isRunEnded(data: Pick<SignupEmbedData, "runStatus">): boolean {
 }
 
 /**
- * Buttons disable once the signup window is no longer open — the server remains the real gate either way.
- * An ended Run shows only "Archive Run" (Raid Lead / Admin; confirmed ephemerally, archived by the server).
+ * Two rows below the embed: Signup · Quick Sign · LB, then Unsign · Add / Edit
+ * Note. Signup buttons disable once the window closes (the server is the real
+ * gate either way); Unsign and the note stay available. An ended Run shows
+ * only "Archive Run".
  */
-export function buildSignupButtons(data: SignupEmbedData): ActionRowBuilder<ButtonBuilder> {
+export function buildSignupButtons(data: SignupEmbedData): ActionRowBuilder<ButtonBuilder>[] {
   if (isRunEnded(data)) {
-    return new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId(buildCustomId("archive", data.runId))
-        .setLabel("Archive Run")
-        .setEmoji("🗄️")
-        .setStyle(ButtonStyle.Secondary),
-    );
+    return [
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(buildCustomId("archive", data.runId))
+          .setLabel("Archive Run")
+          .setEmoji("🗄️")
+          .setStyle(ButtonStyle.Secondary),
+      ),
+    ];
   }
   const disabled = !data.signupWindowOpen;
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(buildCustomId("signup", data.runId))
-      .setLabel("Signup")
-      .setStyle(ButtonStyle.Primary)
-      .setDisabled(disabled),
-    new ButtonBuilder()
-      .setCustomId(buildCustomId("quick-signup", data.runId))
-      .setLabel("Quick Signup")
-      .setStyle(ButtonStyle.Success)
-      .setDisabled(disabled),
-    new ButtonBuilder()
-      .setCustomId(buildCustomId("lootbuddy", data.runId))
-      .setLabel("Sign as Lootbuddy")
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(disabled),
-    new ButtonBuilder()
-      .setCustomId(buildCustomId("cancel", data.runId))
-      .setLabel("Cancel Signup")
-      .setStyle(ButtonStyle.Danger),
-  );
+  return [
+    new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(buildCustomId("signup", data.runId))
+        .setLabel("Signup")
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(disabled),
+      new ButtonBuilder()
+        .setCustomId(buildCustomId("quick-signup", data.runId))
+        .setLabel("Quick Sign")
+        .setStyle(ButtonStyle.Success)
+        .setDisabled(disabled),
+      new ButtonBuilder()
+        .setCustomId(buildCustomId("lootbuddy", data.runId))
+        .setLabel("LB")
+        .setEmoji("💰")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(disabled),
+    ),
+    new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(buildCustomId("cancel", data.runId))
+        .setLabel("Unsign")
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId(buildCustomId("note", data.runId))
+        .setLabel("Add / Edit Note")
+        .setEmoji("📝")
+        .setStyle(ButtonStyle.Secondary),
+    ),
+  ];
 }

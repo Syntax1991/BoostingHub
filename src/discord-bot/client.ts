@@ -4,6 +4,7 @@ import { BotApiClient } from "@/discord-bot/bot-api-client";
 import { parseCharacterScopedCustomId, parseCustomId } from "@/discord-bot/custom-ids";
 import type { BotEnv } from "@/discord-bot/env";
 import { handleCancelButton, handleWithdrawReasonModal } from "@/discord-bot/interactions/cancel-handler";
+import { handleNoteButton, handleNoteModal } from "@/discord-bot/interactions/note-handler";
 import {
   handleArchiveButton,
   handleArchiveConfirmButton,
@@ -56,6 +57,9 @@ export function createBotClient(env: BotEnv): Client {
           case "cancel":
             await handleCancelButton(interaction, api, parsed.runId);
             break;
+          case "note":
+            await handleNoteButton(interaction, api, parsed.runId);
+            break;
           case "signup":
             await handleSignupButton(interaction, api, parsed.runId);
             break;
@@ -100,6 +104,8 @@ export function createBotClient(env: BotEnv): Client {
         const parsed = parseCustomId(interaction.customId);
         if (parsed?.action === "withdraw-reason") {
           await handleWithdrawReasonModal(interaction, api, parsed.runId);
+        } else if (parsed?.action === "note-modal") {
+          await handleNoteModal(interaction, api, parsed.runId);
         }
         return;
       }

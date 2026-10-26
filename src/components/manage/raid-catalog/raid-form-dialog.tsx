@@ -9,10 +9,12 @@ import {
   fieldInputClass,
 } from "@/components/manage/raid-catalog/raid-catalog-dialog";
 import { SeasonSelector } from "@/components/manage/raid-catalog/season-selector";
+import { raidShortName } from "@/lib/raid-catalog";
 
 export type RaidFormValues = {
   raidId: string;
   name: string;
+  shortName: string | null;
   season: string;
   sortOrder: number;
   trackLockouts: boolean;
@@ -37,6 +39,7 @@ export function RaidFormDialog({
   const initial = raid;
   const blizzardLinked = initial.blizzardInstanceId != null;
   const [name, setName] = useState(initial.name);
+  const [shortName, setShortName] = useState(initial.shortName ?? "");
   const [season, setSeason] = useState(initial.season);
   const [sortOrder, setSortOrder] = useState(String(initial.sortOrder));
   const [trackLockouts, setTrackLockouts] = useState(initial.trackLockouts);
@@ -46,6 +49,7 @@ export function RaidFormDialog({
 
   function reset() {
     setName(initial.name);
+    setShortName(initial.shortName ?? "");
     setSeason(initial.season);
     setSortOrder(String(initial.sortOrder));
     setTrackLockouts(initial.trackLockouts);
@@ -54,7 +58,7 @@ export function RaidFormDialog({
     setShowAdvanced(false);
   }
 
-  const fields = { name, season, sortOrder, trackLockouts, blizzardInstanceId };
+  const fields = { name, shortName, season, sortOrder, trackLockouts, blizzardInstanceId };
 
   return (
     <RaidCatalogDialog
@@ -79,6 +83,17 @@ export function RaidFormDialog({
           />
         </Field>
       )}
+      <Field
+        label="Short name"
+        hint={`Compact label for Discord signup titles, e.g. "Venom & Tide". Empty uses "${raidShortName({ name: initial.name })}".`}
+      >
+        <input
+          className={fieldInputClass}
+          value={shortName}
+          maxLength={24}
+          onChange={(e) => setShortName(e.target.value)}
+        />
+      </Field>
       <SeasonSelector seasons={seasons} value={season} onChange={setSeason} />
       <Field label="Order" hint="Lower numbers come first (lockout views, lists).">
         <input

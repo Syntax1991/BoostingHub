@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'8d62cbc3da30bdeac418ac71f1d705e04e5c2526b0161bec92c1f5458054568f'>;
+  StorageHashBase<'7b89d762d89a8727648436736954dfbb86a8b6b7bf1d66f8443334e55b7289a5'>;
 export type ExecutionHash =
   ExecutionHashBase<'b27b9239312d18e407528e2d06057d2da4f3e67bdff7bffe5f827471950c2fa6'>;
 export type ProfileHash =
@@ -513,6 +513,7 @@ export type FieldOutputTypes = {
       readonly blizzardInstanceId: CodecTypes['pg/int4@1']['output'] | null;
       readonly wclZoneId: CodecTypes['pg/int4@1']['output'] | null;
       readonly wclRankingEncounterId: CodecTypes['pg/int4@1']['output'] | null;
+      readonly shortName: CodecTypes['pg/text@1']['output'] | null;
       readonly archivedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
@@ -1254,6 +1255,7 @@ export type FieldInputTypes = {
       readonly blizzardInstanceId: CodecTypes['pg/int4@1']['input'] | null;
       readonly wclZoneId: CodecTypes['pg/int4@1']['input'] | null;
       readonly wclRankingEncounterId: CodecTypes['pg/int4@1']['input'] | null;
+      readonly shortName: CodecTypes['pg/text@1']['input'] | null;
       readonly archivedAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
@@ -1993,6 +1995,7 @@ export type StorageColumnTypes = {
       readonly isActive: CodecTypes['pg/bool@1']['output'];
       readonly name: CodecTypes['pg/text@1']['output'];
       readonly season: CodecTypes['pg/text@1']['output'];
+      readonly shortName: CodecTypes['pg/text@1']['output'] | null;
       readonly sortOrder: CodecTypes['pg/int4@1']['output'];
       readonly trackLockouts: CodecTypes['pg/bool@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
@@ -2734,6 +2737,7 @@ export type StorageColumnInputTypes = {
       readonly isActive: CodecTypes['pg/bool@1']['input'];
       readonly name: CodecTypes['pg/text@1']['input'];
       readonly season: CodecTypes['pg/text@1']['input'];
+      readonly shortName: CodecTypes['pg/text@1']['input'] | null;
       readonly sortOrder: CodecTypes['pg/int4@1']['input'];
       readonly trackLockouts: CodecTypes['pg/bool@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
@@ -5036,6 +5040,11 @@ type ContractBase = Omit<
                 readonly wclRankingEncounterId: {
                   readonly nativeType: 'int4';
                   readonly codecId: 'pg/int4@1';
+                  readonly nullable: true;
+                };
+                readonly shortName: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
                   readonly nullable: true;
                 };
                 readonly archivedAt: {
@@ -10439,6 +10448,10 @@ type ContractBase = Omit<
                 readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
               };
+              readonly shortName: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
               readonly archivedAt: {
                 readonly nullable: true;
                 readonly type: {
@@ -10531,6 +10544,7 @@ type ContractBase = Omit<
                 readonly blizzardInstanceId: { readonly column: 'blizzardInstanceId' };
                 readonly wclZoneId: { readonly column: 'wclZoneId' };
                 readonly wclRankingEncounterId: { readonly column: 'wclRankingEncounterId' };
+                readonly shortName: { readonly column: 'shortName' };
                 readonly archivedAt: { readonly column: 'archivedAt' };
                 readonly createdAt: { readonly column: 'createdAt' };
                 readonly updatedAt: { readonly column: 'updatedAt' };

@@ -567,11 +567,12 @@ describe("builder-driven Discord signup preview", () => {
       "quick-signup",
       "lootbuddy",
       "cancel",
+      "note",
     ]);
     const html = renderGuideSignupPreviewHtml(fixture);
     expect(html).toContain("Community");
     expect(html).not.toMatch(/\bSplit\b/);
-    expect(html).toContain("Quick Signup");
+    expect(html).toContain("Quick Sign");
     expect(html).toContain("generated-from-buildSignupEmbed");
   });
 });

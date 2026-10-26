@@ -64,6 +64,7 @@ function mapCatalogRaid(row: Record<string, unknown>): CatalogRaid {
     wclZoneId: asNumberOrNull(row.wclZoneId),
     wclRankingEncounterId: asNumberOrNull(row.wclRankingEncounterId),
     archivedAt: asStringOrNull(row.archivedAt),
+    shortName: asStringOrNull(row.shortName),
     bosses: bosses.map(mapCatalogBoss),
   };
 }
@@ -108,6 +109,7 @@ async function ensureReferenceRaids(now = new Date().toISOString()): Promise<voi
         blizzardInstanceId: raid.blizzardInstanceId,
         wclZoneId: raid.warcraftLogsZoneId ?? null,
         wclRankingEncounterId: raid.warcraftLogsEncounterId ?? null,
+        shortName: raid.shortName ?? null,
         createdAt: now,
         updatedAt: now,
       });

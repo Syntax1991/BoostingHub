@@ -156,8 +156,7 @@ function humanizeDiscordMarkup(value: string): string {
  */
 export function renderGuideSignupPreviewHtml(data: SignupEmbedData = guideSignupPreviewFixture()): string {
   const embed = buildSignupEmbed(data).toJSON();
-  const row = buildSignupButtons(data).toJSON();
-  const components = (row.components ?? []) as Array<{
+  const components = buildSignupButtons(data).flatMap((row) => row.toJSON().components ?? []) as Array<{
     type: number;
     style?: number;
     label?: string | null;
@@ -252,7 +251,8 @@ export function renderGuideSignupPreviewHtml(data: SignupEmbedData = guideSignup
 export function guideSignupPreviewButtonActions(
   data: SignupEmbedData = guideSignupPreviewFixture(),
 ): string[] {
-  const row = buildSignupButtons(data).toJSON();
-  const components = (row.components ?? []) as Array<{ custom_id?: string }>;
+  const components = buildSignupButtons(data).flatMap((row) => row.toJSON().components ?? []) as Array<{
+    custom_id?: string;
+  }>;
   return components.map((c) => parseCustomId(c.custom_id ?? "")?.action).filter(Boolean) as string[];
 }

@@ -563,6 +563,37 @@ export const signupRepository = {
     });
   },
 
+  /** The User's note on this Run: the first non-empty `notes` of their non-withdrawn signups. */
+  async findRunNote(runId: string, userId: string): Promise<string | null> {
+    const rows = (await orm.RunSignup.where({ runId, userId }).select("status", "notes", "createdAt").all()) as Array<
+      Record<string, unknown>
+    >;
+    const active = rows
+      .filter((row) => row.status !== "WITHDRAWN")
+      .sort((a, b) => asString(a.createdAt).localeCompare(asString(b.createdAt)));
+    for (const row of active) {
+      const note = asStringOrNull(row.notes)?.trim();
+      if (note) return note;
+    }
+    return null;
+  },
+
+  /** One note per User and Run: written onto every non-withdrawn signup of that User (null clears). */
+  async setRunNote(runId: string, userId: string, note: string | null): Promise<number> {
+    const rows = (await orm.RunSignup.where({ runId, userId }).select("id", "status").all()) as Array<
+      Record<string, unknown>
+    >;
+    const ids = rows.filter((row) => row.status !== "WITHDRAWN").map((row) => asString(row.id));
+    if (ids.length === 0) return 0;
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      for (const id of ids) {
+        await txOrm.RunSignup.where({ id }).update({ notes: note });
+      }
+    });
+    return ids.length;
+  },
+
   async listByRunId(runId: string): Promise<SignupListRecord[]> {
     const signups = await orm.RunSignup
       .where({ runId })

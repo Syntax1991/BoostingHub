@@ -35,6 +35,7 @@ import {
   PICKED_WITHDRAW_RUN_STATUSES,
   planCharacterOfferReconciliation,
   planLootbuddyReconciliation,
+  normalizeSignupNote,
 } from "@/services/signup-state";
 import {
   getScheduleConflictsForCharacters,
@@ -939,6 +940,34 @@ export const signupService = {
    * when this throws WITHDRAW_REASON_REQUIRED) and go through
    * `withdrawPickedSignup`; the rest are cancelled as before.
    */
+  /** The acting User's note on a Run (prefills the Discord "Add / Edit Note" modal). */
+  async getRunNote(actor: AuthenticatedUser, input: { runId: string }): Promise<{ note: string | null }> {
+    return { note: await signupRepository.findRunNote(input.runId, actor.id) };
+  },
+
+  /**
+   * One short note per User and Run ("can also play Ele", "~10 min late"),
+   * stored on their non-withdrawn signups and shown on the Discord Signup
+   * message. Blank clears it. Requires an active signup; works until the Run
+   * has ended.
+   */
+  async setRunNote(
+    actor: AuthenticatedUser,
+    input: { runId: string; note: string | null },
+  ): Promise<{ note: string | null; updated: number }> {
+    const run = await runRepository.findById(input.runId);
+    if (!run) throw new DomainError("NOT_FOUND", "Run was not found.", 404);
+    if (run.status === "COMPLETED" || run.status === "CANCELLED") {
+      throw new DomainError("INVALID_STATE_TRANSITION", "This run has ended — notes can no longer change.");
+    }
+    const note = normalizeSignupNote(input.note);
+    const updated = await signupRepository.setRunNote(input.runId, actor.id, note);
+    if (updated === 0) {
+      throw new DomainError("NOT_FOUND", "Sign up for this run first, then add a note.", 404);
+    }
+    return { note, updated };
+  },
+
   async withdrawFromRun(actor: AuthenticatedUser, input: { runId: string; reason?: string | null }) {
     const run = await runRepository.findById(input.runId);
     if (!run) {

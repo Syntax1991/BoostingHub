@@ -68,10 +68,20 @@ export const createRaidSchema = raidMetadataSchema;
 
 export const updateRaidSchema = raidMetadataSchema.extend({
   raidId: z.string().min(1),
+  /** Compact label ("Venom"); blank clears it (derived from the name). Optional for older clients. */
+  shortName: z
+    .string()
+    .trim()
+    .max(24, "Short name is at most 24 characters.")
+    .optional()
+    .transform((value) => (value === undefined ? undefined : value || null)),
   /** Legacy `Raid.isActive`: selectable when creating / editing a Run (else "Historical"). */
   availableForRuns: z.boolean(),
 });
-export type UpdateRaidInput = z.infer<typeof updateRaidSchema>;
+/** `shortName` omitted keeps the stored value (older clients, scripts, tests). */
+export type UpdateRaidInput = Omit<z.infer<typeof updateRaidSchema>, "shortName"> & {
+  shortName?: string | null;
+};
 
 export const raidIdSchema = z.object({ raidId: z.string().min(1) });
 

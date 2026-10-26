@@ -24,7 +24,9 @@ describe("run lifecycle channel embeds", () => {
       difficulty: "HEROIC",
       lootType: "VIP",
     }).toJSON();
-    expect(json.title).toBe("📅 Run Rescheduled");
+    // Run identity first (compact title, else the stored product label), then the change.
+    expect(json.title).toBe("📅 Rescheduled · Season 2 Bundle");
+    expect(json.description).toContain("[Open Run](https://example.test/runs/run-123)");
     expect(json.url).toBe("https://example.test/runs/run-123");
     expect(json.description).toContain(discordTimestamp(oldIso, "F"));
     expect(json.description).toContain(discordTimestamp(newIso, "F"));

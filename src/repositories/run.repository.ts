@@ -105,6 +105,8 @@ export type SignupOnRun = {
   publishedRole: CharacterRole | null;
   /** Characterless Lootbuddy class snapshot; null for BOOSTER / legacy Character-backed loot. */
   lootbuddyClass: WowClass | null;
+  /** The signer's note for this Run (Discord "Add / Edit Note"); null when none. */
+  notes?: string | null;
   character: SignupCharacterOnRun | null;
 };
 
@@ -183,6 +185,8 @@ export type RunRaidContentRecord = {
   runId: string;
   raidId: string;
   raidName: string;
+  /** `Raid.shortName` (compact Discord title); null = derived from the name. */
+  raidShortName?: string | null;
   season: string;
   sortOrder: number;
   plannedBossCount: number;
@@ -201,6 +205,7 @@ function mapRaidContent(row: Record<string, unknown>): RunRaidContentRecord {
     runId: asString(row.runId),
     raidId: asString(row.raidId ?? raid.id),
     raidName: asString(raid.name, "Unknown raid"),
+    raidShortName: asStringOrNull(raid.shortName),
     season: asString(raid.season),
     sortOrder: asNumber(row.sortOrder),
     plannedBossCount: asNumber(row.plannedBossCount),
@@ -405,6 +410,7 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
         offeredRoles: mapOfferedRoles(signup.offeredRoles),
         publishedRole: signup.publishedRole == null ? null : mapCharacterRole(signup.publishedRole),
         lootbuddyClass: signup.lootbuddyClass == null ? null : mapWowClass(signup.lootbuddyClass),
+        notes: asStringOrNull(signup.notes),
         character: character
           ? {
               name: asString(character.name),

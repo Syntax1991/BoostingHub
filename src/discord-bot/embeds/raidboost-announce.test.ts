@@ -1,84 +1,43 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { buildRaidboostAnnounce } from "@/discord-bot/embeds/raidboost-announce";
 
 describe("buildRaidboostAnnounce", () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
-  it("builds Heroic Saved announce matching Carl-bot layout", () => {
-    const result = buildRaidboostAnnounce({
-      runId: "run-123",
+  it("is role pings + one short line naming the Run — no second embed", () => {
+    const announce = buildRaidboostAnnounce({
+      runId: "r1111111-1111-4111-8111-111111111111",
       difficulty: "HEROIC",
-      lootType: "SAVED",
-      phoenixEmoji: "<:PhoenixStarDiscord:123>",
-      roleMentions: ["<@&111>", "<@&222>", "<@&333>"],
-    });
-
-    expect(result.content).toBe("<@&111> <@&222> <@&333>");
-    expect(result.allowedMentions.roles).toEqual(["111", "222", "333"]);
-    const embed = result.embeds[0]!.toJSON();
-    expect(embed.title).toBe("<:PhoenixStarDiscord:123> Raidboost Announce <:PhoenixStarDiscord:123>");
-    expect(embed.description).toBe(
-      "**HC** 💰❌ Heroic Saved - *Please refer to the channel name for the time* 🕒",
-    );
-  });
-
-  it("omits phoenix markup when emoji is missing and still pings roles", () => {
-    const result = buildRaidboostAnnounce({
-      runId: "run-123",
-      difficulty: "MYTHIC",
       lootType: "VIP",
-      phoenixEmoji: null,
-      roleMentions: ["<@&9>"],
+      contentTitle: "Venom & Tide & Kithix",
+      phoenixEmoji: "<:PhoenixStarDiscord:123>",
+      roleMentions: ["<@&10>", "<@&20>", "<@&30>"],
     });
-    expect(result.embeds[0]!.toJSON().title).toBe("Raidboost Announce");
-    expect(result.embeds[0]!.toJSON().description).toContain("**Mythic** 💎 Mythic VIP");
-    expect(result.content).toBe("<@&9>");
+    expect(announce.content).toBe(
+      "<@&10> <@&20> <@&30>\n<:PhoenixStarDiscord:123> Raidboost: **HC** 💎 VIP · Venom & Tide & Kithix — signups open below <:PhoenixStarDiscord:123>",
+    );
+    expect(announce.allowedMentions.roles).toEqual(["10", "20", "30"]);
+    expect("embeds" in announce).toBe(false);
   });
 
-  it("allows empty content when no roles resolved", () => {
-    const result = buildRaidboostAnnounce({
-      runId: "run-123",
-      difficulty: "NORMAL",
-      lootType: "UNSAVED",
-      phoenixEmoji: "<:PhoenixStarDiscord:1>",
+  it("without pings (Ping Discord roles off) it is just the line; missing emoji / title are omitted", () => {
+    const announce = buildRaidboostAnnounce({
+      runId: "r1111111-1111-4111-8111-111111111111",
+      difficulty: "MYTHIC",
+      lootType: "SAVED",
+      phoenixEmoji: null,
       roleMentions: [],
     });
-    expect(result.content).toBe("");
-    expect(result.allowedMentions.roles).toEqual([]);
-    expect(result.embeds[0]!.toJSON().description).toContain("**NM** 💰 Normal Unsaved");
+    expect(announce.content).toBe("Raidboost: **Mythic** 💰❌ Saved — signups open below");
+    expect(announce.allowedMentions.roles).toEqual([]);
   });
 
-  it("links the announce embed title to the canonical run page", () => {
-    vi.stubEnv("NODE_ENV", "test");
-    vi.stubEnv("BETTER_AUTH_URL", "https://example.test");
-    const result = buildRaidboostAnnounce({
-      runId: "run-123",
-      difficulty: "HEROIC",
-      lootType: "SAVED",
-      phoenixEmoji: "<:PhoenixStarDiscord:123>",
-      roleMentions: ["<@&111>"],
-    });
-    const embed = result.embeds[0]!.toJSON();
-    expect(embed.title).toBe("<:PhoenixStarDiscord:123> Raidboost Announce <:PhoenixStarDiscord:123>");
-    expect(embed.url).toBe("https://example.test/runs/run-123");
-    expect(result.content).toBe("<@&111>");
-  });
-
-  it("still builds the announce and omits the URL when production has no base URL", () => {
-    vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("BETTER_AUTH_URL", "");
-    const result = buildRaidboostAnnounce({
-      runId: "run-123",
-      difficulty: "HEROIC",
-      lootType: "SAVED",
+  it("ignores malformed role mentions for allowedMentions", () => {
+    const announce = buildRaidboostAnnounce({
+      runId: "r1111111-1111-4111-8111-111111111111",
+      difficulty: "NORMAL",
+      lootType: "UNSAVED",
       phoenixEmoji: null,
-      roleMentions: ["<@&111>"],
+      roleMentions: ["<@&42>", "@everyone"],
     });
-    const embed = result.embeds[0]!.toJSON();
-    expect(embed.title).toBe("Raidboost Announce");
-    expect(embed.url).toBeUndefined();
-    expect(result.content).toBe("<@&111>");
+    expect(announce.allowedMentions.roles).toEqual(["42"]);
   });
 });

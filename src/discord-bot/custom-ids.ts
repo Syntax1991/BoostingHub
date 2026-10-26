@@ -25,6 +25,9 @@ const ACTIONS = [
   "lootbuddy-discard",
   /** Modal asking a picked player for their withdrawal reason. */
   "withdraw-reason",
+  /** "Add / Edit Note" on the Signup message, then its modal. */
+  "note",
+  "note-modal",
   /** Completed / cancelled Run: "Archive Run" on the Signup message, then an ephemeral confirm. */
   "archive",
   "archive-confirm",

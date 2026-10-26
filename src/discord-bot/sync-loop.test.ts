@@ -115,19 +115,17 @@ describe("syncOnce — raidboost announce on first channel create", () => {
     expect(createdChannel.send).toHaveBeenCalledTimes(2);
     const announce = createdChannel.send.mock.calls[0][0] as {
       content: string;
-      embeds: Array<{ data?: { title?: string; description?: string }; toJSON?: () => { title?: string; description?: string } }>;
+      embeds?: unknown[];
       allowedMentions: { roles: string[]; parse?: string[]; users?: string[]; repliedUser?: boolean };
     };
-    expect(announce.content).toBe("<@&role-tank> <@&role-healer> <@&role-dps>");
+    // Role pings + one short line; the Signup embed right after carries the details.
+    const [pings, line] = announce.content.split("\n");
+    expect(pings).toBe("<@&role-tank> <@&role-healer> <@&role-dps>");
+    expect(line).toContain("PhoenixStarDiscord");
+    expect(line).toContain("Raidboost: **HC** 💰❌ Saved");
+    expect(announce.embeds).toBeUndefined();
     expect(announce.allowedMentions.roles).toEqual(["role-tank", "role-healer", "role-dps"]);
     expect(announce.allowedMentions.parse).toEqual([]);
-    const embedJson =
-      typeof announce.embeds[0]?.toJSON === "function"
-        ? announce.embeds[0].toJSON()
-        : (announce.embeds[0] as { data?: { title?: string; description?: string } }).data;
-    expect(embedJson?.title).toContain("PhoenixStarDiscord");
-    expect(embedJson?.title).toContain("Raidboost Announce");
-    expect(embedJson?.description).toContain("**HC** 💰❌ Heroic Saved");
   });
 
   it("posts announce without role pings when discordRolePing is false", async () => {
@@ -172,7 +170,8 @@ describe("syncOnce — raidboost announce on first channel create", () => {
       content?: string;
       allowedMentions: { roles: string[] };
     };
-    expect(announce.content).toBeUndefined();
+    expect(announce.content).not.toContain("<@&");
+    expect(announce.content).toContain("Raidboost:");
     expect(announce.allowedMentions.roles).toEqual([]);
   });
 
@@ -312,9 +311,10 @@ describe("syncOnce — raidboost announce on first channel create", () => {
     expect(send).not.toHaveBeenCalled();
 
     const payload = edit.mock.calls[0][0] as { components: Array<{ components: Array<{ data: { custom_id: string; label?: string; disabled?: boolean } }> }> };
-    const buttons = payload.components[0]!.components.map((c) => c.data);
-    expect(buttons.map((b) => b.custom_id.split(":")[1])).toEqual(["signup", "quick-signup", "lootbuddy", "cancel"]);
-    expect(buttons.map((b) => b.label)).toEqual(["Signup", "Quick Signup", "Sign as Lootbuddy", "Cancel Signup"]);
+    expect(payload.components).toHaveLength(2);
+    const buttons = payload.components.flatMap((row) => row.components.map((c) => c.data));
+    expect(buttons.map((b) => b.custom_id.split(":")[1])).toEqual(["signup", "quick-signup", "lootbuddy", "cancel", "note"]);
+    expect(buttons.map((b) => b.label)).toEqual(["Signup", "Quick Sign", "LB", "Unsign", "Add / Edit Note"]);
     expect(buttons.filter((b) => b.custom_id.includes("cancel"))[0]?.disabled).toBeFalsy();
 
     expect((api.recordDiscordState as ReturnType<typeof vi.fn>).mock.calls).toEqual([

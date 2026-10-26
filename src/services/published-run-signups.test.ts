@@ -330,7 +330,7 @@ describe("published-run signups", () => {
     const openEmbed = await discordSyncService.getSignupEmbedData(runId);
     expect(openEmbed?.signupWindowOpen).toBe(true);
     expect(openEmbed?.runStatus).toBe("PUBLISHED");
-    const openButtons = buildSignupButtons(openEmbed!).toJSON().components as Array<{
+    const openButtons = buildSignupButtons(openEmbed!).flatMap((row) => row.toJSON().components) as Array<{
       custom_id: string;
       disabled?: boolean;
     }>;
@@ -360,7 +360,7 @@ describe("published-run signups", () => {
     const closedEmbed = await discordSyncService.getSignupEmbedData(runId);
     expect(closedEmbed?.signupWindowOpen).toBe(false);
     expect(closedEmbed?.runStatus).toBe("IN_PROGRESS");
-    const closedButtons = buildSignupButtons(closedEmbed!).toJSON().components as Array<{
+    const closedButtons = buildSignupButtons(closedEmbed!).flatMap((row) => row.toJSON().components) as Array<{
       custom_id: string;
       disabled?: boolean;
     }>;

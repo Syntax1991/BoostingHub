@@ -6,8 +6,10 @@ import {
   StringSelectMenuOptionBuilder,
   type ButtonInteraction,
   type InteractionEditReplyOptions,
+  type Client,
   type StringSelectMenuInteraction,
 } from "discord.js";
+import { resolveGuildEmojiIndicators } from "@/discord-bot/class-emoji-lookup";
 import { BotApiClient } from "@/discord-bot/bot-api-client";
 import { buildCharacterScopedCustomId, buildCustomId } from "@/discord-bot/custom-ids";
 import { describeBotApiError } from "@/discord-bot/interactions/error-copy";
@@ -91,6 +93,8 @@ type EligibleCharacterOption = {
   characterId: string;
   characterName: string;
   realm: string;
+  /** Class for the option's class icon (Bot API sends it; older payloads may not). */
+  wowClass?: WowClass;
   /** Every role this Character's class can perform. */
   roles: CharacterRole[];
   /** Specialization-derived default, or null when specialization is missing/unrecognized. */
@@ -186,33 +190,79 @@ type ReplyableInteraction = {
  * information only — selecting this menu only stages the choice (see
  * `handleCharacterSelect`); nothing is persisted until Confirm.
  */
+/**
+ * Secondary option line: the role this Character is offered as (its active
+ * offer, else its specialization default), then the other roles it can play
+ * as offspec, then any informational lockout — e.g. `Healer · Ranged DPS
+ * offspec · VA: HC 3/8`. At most 100 characters.
+ */
+export function formatCharacterOptionDescription(
+  option: EligibleCharacterOption,
+  offeredRoles: readonly CharacterRole[],
+): string | null {
+  const primary = offeredRoles.length > 0 ? orderedRoles([...offeredRoles]) : option.defaultRole ? [option.defaultRole] : [];
+  const offspec = orderedRoles(option.roles.filter((role) => !primary.includes(role)));
+  const lockouts = formatDiscordCharacterLockoutDescription(option);
+  const render = (labels: Record<CharacterRole, string>, markDefault: boolean) =>
+    [
+      primary.length > 0
+        ? `${primary.map((role) => labels[role]).join("/")}${markDefault && offeredRoles.length === 0 ? " (default)" : ""}`
+        : null,
+      offspec.length > 0 ? `${offspec.map((role) => labels[role]).join("/")} offspec` : null,
+      lockouts,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  const full = render(ROLE_LABELS, true);
+  if (!full) return null;
+  if (full.length <= SELECT_DESCRIPTION_MAX) return full;
+  // Lockouts matter more than wording: compact role labels before truncating.
+  const compact = render(SHORT_ROLE_LABELS, false);
+  return compact.length <= SELECT_DESCRIPTION_MAX ? compact : `${compact.slice(0, SELECT_DESCRIPTION_MAX - 1)}…`;
+}
+
+const SHORT_ROLE_LABELS: Record<CharacterRole, string> = {
+  TANK: "Tank",
+  HEALER: "Healer",
+  MELEE_DPS: "MDPS",
+  RANGED_DPS: "RDPS",
+  DPS: "DPS",
+};
+
+/** `<:name:id>` / `<a:name:id>` Guild emoji markup → select option emoji; null when unusable. */
+export function parseGuildEmojiMarkup(markup: string | undefined): { id: string; name: string; animated: boolean } | null {
+  const match = markup ? /^<(a?):([A-Za-z0-9_]+):(\d+)>$/.exec(markup.trim()) : null;
+  return match ? { animated: match[1] === "a", name: match[2]!, id: match[3]! } : null;
+}
+
+/**
+ * One option per Character, BOOSTER only (multi-select): class icon,
+ * `Character-Realm`, and `role · offspec` as the secondary line. Selecting
+ * only stages the choice (see `handleCharacterSelect`); nothing is persisted
+ * until Confirm.
+ */
 export function buildCharacterSelectOptions(
   eligible: EligibleCharacterOption[],
   activeOffer: ActiveBoosterOffers,
   preferredCharacterId?: string | null,
+  classIndicators?: Partial<Record<WowClass, string>>,
 ): StringSelectMenuOptionBuilder[] {
   const activeIds = new Set(activeOffer.characterIds);
   const preferDefault = activeIds.size === 0 && Boolean(preferredCharacterId);
   return eligible.slice(0, MAX_SELECT_OPTIONS).map((option) => {
     const existingRoles = activeOffer.offeredRolesByCharacterId[option.characterId] ?? [];
-    const roleLabel = existingRoles.length > 0
-      ? existingRoles.map((role) => ROLE_LABELS[role]).join("/")
-      : option.defaultRole
-        ? `${ROLE_LABELS[option.defaultRole]} (default)`
-        : null;
     const builder = new StringSelectMenuOptionBuilder()
-      .setLabel(roleLabel ? `${option.characterName}-${option.realm} — ${roleLabel}` : `${option.characterName}-${option.realm}`)
+      .setLabel(`${option.characterName}-${option.realm}`)
       .setValue(option.characterId)
       .setDefault(
         activeIds.has(option.characterId) ||
           (preferDefault && option.characterId === preferredCharacterId),
       );
-    // Informational only — a saved Character is still fully selectable.
-    // Bundle Runs list every content segment (never only Grotto's 0/1).
-    const lockoutDescription = formatDiscordCharacterLockoutDescription(option);
-    if (lockoutDescription) {
-      builder.setDescription(lockoutDescription);
-    }
+    // Lockouts are informational only — a saved Character is still fully selectable.
+    const description = formatCharacterOptionDescription(option, existingRoles);
+    if (description) builder.setDescription(description);
+    const emoji = option.wowClass ? parseGuildEmojiMarkup(classIndicators?.[option.wowClass]) : null;
+    if (emoji) builder.setEmoji(emoji);
     return builder;
   });
 }
@@ -328,6 +378,17 @@ export async function handleCharacterSelect(interaction: StringSelectMenuInterac
  * memory and refreshes the same menu — it never changes the copy or advances.
  * Pressing Next is the only way into the role editor.
  */
+/** Guild class emojis for option icons; none (plain options) when the Guild is unknown or the lookup fails. */
+async function classIndicatorsFor(interaction: ReplyableInteraction): Promise<Partial<Record<WowClass, string>>> {
+  const { client, guildId } = interaction as { client?: Client; guildId?: string | null };
+  if (!client || !guildId) return {};
+  try {
+    return (await resolveGuildEmojiIndicators(client, guildId)).classIndicators;
+  } catch {
+    return {};
+  }
+}
+
 async function renderCharacterSelectionStep(
   interaction: ReplyableInteraction,
   api: BotApiClient,
@@ -355,6 +416,7 @@ async function renderCharacterSelectionStep(
     options.booster.eligible,
     stagedOffer,
     options.preferredCharacterId,
+    await classIndicatorsFor(interaction),
   );
   if (selectOptions.length === 0) {
     await interaction.editReply({ content: "You have no eligible booster characters for this run.", components: [] });

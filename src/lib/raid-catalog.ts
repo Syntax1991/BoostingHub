@@ -37,6 +37,8 @@ export type CatalogRaid = {
    * lockouts and Warcraft Logs but are never offered for new planning.
    */
   archivedAt: string | null;
+  /** `Raid.shortName` — compact label ("Venom"); null = derived, see `raidShortName`. */
+  shortName: string | null;
   /** Ordered by `sortOrder`. */
   bosses: readonly CatalogBoss[];
 };
@@ -125,6 +127,7 @@ export function catalogRaidFromFixture(entry: WowRaidCatalogEntry): CatalogRaid 
     wclZoneId: entry.warcraftLogsZoneId ?? null,
     wclRankingEncounterId: entry.warcraftLogsEncounterId ?? null,
     archivedAt: null,
+    shortName: entry.shortName ?? null,
     bosses: entry.bosses.map((boss) => ({
       id: boss.id,
       raidId: entry.id,
@@ -180,4 +183,28 @@ export function raidIntegrationStatus(
         ? "MAPPED"
         : "NEEDS_MAPPING",
   };
+}
+
+/**
+ * Compact raid label for dense surfaces (Discord signup title): the admin's
+ * `Raid.shortName`, else derived from the name — leading "The " dropped,
+ * "… of X" → "X", otherwise the first word ("The Venomous Abyss" → "Venomous").
+ */
+export function raidShortName(raid: { name: string; shortName?: string | null }): string {
+  const explicit = raid.shortName?.trim();
+  if (explicit) return explicit;
+  const cleaned = raid.name.replace(/^The\s+/i, "").trim();
+  const ofMatch = cleaned.match(/\sof\s+(.+)$/i);
+  if (ofMatch?.[1]) return ofMatch[1].trim();
+  return cleaned.split(/\s+/)[0] || raid.name;
+}
+
+/** Ordered short names joined for a multi-raid Run ("Venom & Tide & Kithix"). */
+export function contentShortTitle(
+  contents: ReadonlyArray<{ sortOrder: number; raidName: string; raidShortName?: string | null }>,
+): string {
+  return [...contents]
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((content) => raidShortName({ name: content.raidName, shortName: content.raidShortName }))
+    .join(" & ");
 }
