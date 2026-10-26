@@ -1,4 +1,6 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
+import { contentShortTitle } from "@/lib/raid-catalog";
+import { runSetupSelectionLabel } from "@/lib/run-selection-label";
 import {
   canManageCommunitySchedule,
   canMaterializeCommunityScheduleOccurrence,
@@ -37,7 +39,6 @@ import {
 } from "@/lib/product-selection";
 import { isSelectableProduct, productPlanningService } from "@/services/product-planning.service";
 import { getDiscordManagementScheduleRoleId } from "@/lib/discord-config";
-import { DIFFICULTY_ABBREVIATIONS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
 import {
   formatCommunityScheduleShare,
   formatScheduleShareRunDescription,
@@ -183,6 +184,8 @@ export type CommunityScheduleTemplateOption = {
   productId: string | null;
   contentBossCounts: ContentBossCounts;
   productLabel: string;
+  /** Compact content title ("Venom & Tide & Kithix"). */
+  contentTitle: string;
   titleCoverage: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
@@ -233,6 +236,10 @@ export type CommunityScheduleRunSetupInventoryItem = {
   id: string;
   name: string;
   productLabel: string;
+  /** Compact content title ("Venom & Tide & Kithix"). */
+  contentTitle: string;
+  /** Shared Run Setup option label. */
+  label: string;
   titleCoverage: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
@@ -367,10 +374,15 @@ async function assertNoConflictsForLead(
   );
 }
 
+/** Shared Run Setup option label (`run-selection-label`), from the live template fields. */
 function templateLabel(template: RunTemplateRecord): string {
-  const coverage = templateCoverage(template);
-  const display = templateContentDisplay(template);
-  return `${template.name} · ${DIFFICULTY_ABBREVIATIONS[template.difficulty]} ${RUN_LOOT_TYPE_LABELS[template.lootType]} ${coverage.titleCoverage} · ${display.productLabel}`;
+  return runSetupSelectionLabel({
+    name: template.name,
+    contentTitle: contentShortTitle(template.contents),
+    difficulty: template.difficulty,
+    lootType: template.lootType,
+    titleCoverage: templateCoverage(template).titleCoverage,
+  });
 }
 
 function templateProductFields(
@@ -380,6 +392,7 @@ function templateProductFields(
   productId: string | null;
   contentBossCounts: ContentBossCounts;
   productLabel: string;
+  contentTitle: string;
   titleCoverage: string;
 } {
   const contentRows = template.contents;
@@ -390,6 +403,7 @@ function templateProductFields(
     productId: selection?.productId ?? null,
     contentBossCounts: selection?.contentBossCounts ?? {},
     productLabel: display.productLabel,
+    contentTitle: contentShortTitle(template.contents),
     titleCoverage: coverage.titleCoverage,
   };
 }
@@ -522,9 +536,7 @@ function groupRunSetups(
     let group = groups.get(key);
     if (!group) {
       const template = slot.runTemplateId ? templatesById.get(slot.runTemplateId) : null;
-      const runSetupName = template
-        ? `${DIFFICULTY_ABBREVIATIONS[template.difficulty]} ${RUN_LOOT_TYPE_LABELS[template.lootType]} · ${templateContentDisplay(template).productLabel}`
-        : (slot.runTemplateName ?? "Unconfigured Schedule");
+      const runSetupName = template ? templateLabel(template) : (slot.runTemplateName ?? "Unconfigured Schedule");
       group = {
         key,
         runTemplateId: slot.runTemplateId,
@@ -596,6 +608,8 @@ function buildRunSetupInventory(
       id: template.id,
       name: template.name,
       productLabel: product.productLabel,
+      contentTitle: product.contentTitle,
+      label: templateLabel(template),
       titleCoverage: product.titleCoverage,
       difficulty: template.difficulty,
       lootType: template.lootType,
@@ -834,6 +848,7 @@ async function listTemplateOptions(): Promise<{
       productId: product.productId,
       contentBossCounts: product.contentBossCounts,
       productLabel: product.productLabel,
+      contentTitle: product.contentTitle,
       titleCoverage: product.titleCoverage,
       difficulty: template.difficulty,
       lootType: template.lootType,

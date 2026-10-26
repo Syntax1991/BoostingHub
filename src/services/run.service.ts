@@ -1,4 +1,6 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
+import { contentShortTitle } from "@/lib/raid-catalog";
+import { runSetupSelectionLabel } from "@/lib/run-selection-label";
 import { matchesRaidIdFilter, type RaidIdFilter } from "@/lib/raid-id-filter";
 import {
   assertCanManageRun,
@@ -73,7 +75,6 @@ import {
   RUN_SCHEDULE_PAST_GRACE_MS,
   type RunLifecycleCapabilities,
 } from "@/services/run-state";
-import { DIFFICULTY_ABBREVIATIONS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
 import type { CreateRunInput, StartRunInput, UpdateRunInput } from "@/validators/run";
 import type { ManageRunFilterInput } from "@/validators/manage-run-filters";
 import type { CreateManyRunsInput, MassCreateDefaults, MassCreateRunRow } from "@/validators/mass-create-runs";
@@ -830,7 +831,13 @@ export const runService = {
         desiredDpsCount: template.desiredDpsCount,
         desiredLootbuddyCount: template.desiredLootbuddyCount,
         notes: template.notes,
-        label: `${template.name} — ${DIFFICULTY_ABBREVIATIONS[template.difficulty]} ${RUN_LOOT_TYPE_LABELS[template.lootType]} ${coverage.titleCoverage}`,
+        label: runSetupSelectionLabel({
+          name: template.name,
+          contentTitle: contentShortTitle(template.contents),
+          difficulty: template.difficulty,
+          lootType: template.lootType,
+          titleCoverage: coverage.titleCoverage,
+        }),
       };
     });
 

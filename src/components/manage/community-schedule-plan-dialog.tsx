@@ -548,9 +548,7 @@ export function CommunitySchedulePlanDialog({
                     <option value="">Select…</option>
                     {templatesForLead.map((template) => (
                       <option key={template.id} value={template.id}>
-                        {template.name} · {template.productLabel} ·{" "}
-                        {template.difficulty === "HEROIC" ? "HC" : template.difficulty} ·{" "}
-                        {template.lootType}
+                        {template.label}
                       </option>
                     ))}
                   </select>
