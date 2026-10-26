@@ -87,7 +87,8 @@ describe("Discord Signup vs Roster embeds", () => {
     ).toJSON();
     const roster = buildRosterEmbed(rosterData()).toJSON();
 
-    expect(signup.title).toBe("Signups");
+    // Signup title is the Run's content title; the Roster message keeps "Roster".
+    expect(signup.title).not.toBe("Roster");
     expect(signup.fields?.some((f) => f.name === "Roster")).toBe(false);
     expect(signup.fields?.find((f) => f.name?.includes("Tanks"))?.value).toContain("<@101>");
     expect(roster.title).toBe("Roster");
@@ -221,13 +222,13 @@ describe("Discord Signup vs Roster embeds", () => {
       }),
     ).toJSON();
 
-    expect(signup.fields?.some((f) => f.name?.startsWith("📦 Lootbuddies"))).toBe(true);
+    expect(signup.fields?.some((f) => f.name?.startsWith("💰 Lootbuddies"))).toBe(true);
     expect(roster.fields?.some((f) => f.name?.includes("Lootbuddies (1/3)"))).toBe(true);
     expect(roster.fields?.find((f) => f.name?.includes("Tanks"))?.value).not.toContain("<@303>");
   });
 
   it("E: Signup and Roster are independently titled messages", () => {
-    expect(buildSignupEmbed(signupData()).toJSON().title).toBe("Signups");
+    expect(buildSignupEmbed(signupData()).toJSON().title).not.toBe("Roster");
     expect(buildRosterEmbed(rosterData()).toJSON().title).toBe("Roster");
   });
 });

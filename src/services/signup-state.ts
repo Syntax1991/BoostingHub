@@ -276,3 +276,15 @@ export function normalizeWithdrawReason(value: string | null | undefined): strin
   }
   return reason;
 }
+
+/** Signup notes are one short line: collapsed whitespace, at most this many characters. */
+export const SIGNUP_NOTE_MAX_LENGTH = 100;
+
+export function normalizeSignupNote(note: string | null | undefined): string | null {
+  const text = (note ?? "").replace(/\s+/g, " ").trim();
+  if (!text) return null;
+  if (text.length > SIGNUP_NOTE_MAX_LENGTH) {
+    throw new DomainError("VALIDATION_FAILED", `Keep the note to ${SIGNUP_NOTE_MAX_LENGTH} characters.`);
+  }
+  return text;
+}

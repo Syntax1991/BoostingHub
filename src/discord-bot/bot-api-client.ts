@@ -229,6 +229,8 @@ export class BotApiClient {
         scopeChanges?: RunScopeChange[];
         scheduledStartAt: string;
         productLabel: string;
+        /** Compact Run identity; optional for an older API. */
+        contentTitle?: string;
         difficulty: RaidDifficulty;
         lootType: RunLootType;
       }>;
@@ -407,6 +409,20 @@ export class BotApiClient {
       method: "POST",
       discordUserId,
       ...(reason === undefined ? {} : { body: JSON.stringify({ reason }) }),
+    });
+  }
+
+  /** The acting User's note on this Run (null when none). */
+  getSignupNote(runId: string, discordUserId: string) {
+    return this.request<{ note: string | null }>(`/api/bot/runs/${runId}/signup/note`, { discordUserId });
+  }
+
+  /** Sets (or with blank/null clears) the acting User's note on this Run. */
+  setSignupNote(runId: string, discordUserId: string, note: string | null) {
+    return this.request<{ note: string | null; updated: number }>(`/api/bot/runs/${runId}/signup/note`, {
+      method: "PUT",
+      discordUserId,
+      body: JSON.stringify({ note }),
     });
   }
 

@@ -1,0 +1,44 @@
+[
+  {
+    "id": "column.public.raid.shortName",
+    "label": "Add column \"shortName\" to \"raid\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "shortName",
+        "table": "raid"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"shortName\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "raid",
+          "shortName"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"shortName\"",
+        "sql": "ALTER TABLE \"public\".\"raid\" ADD COLUMN \"shortName\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"shortName\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "raid",
+          "shortName"
+        ]
+      }
+    ]
+  }
+]

@@ -44,6 +44,8 @@ export type WowRaidCatalogEntry = {
   trackLockouts: boolean;
   /** Seeded into `Raid.isActive` (standalone Create Run product) for a missing Raid row. */
   availableForRuns: boolean;
+  /** Seeded into `Raid.shortName` for a missing Raid row (compact Discord / UI label). */
+  shortName?: string;
   bosses: readonly WowRaidCatalogBoss[];
 };
 
@@ -81,6 +83,7 @@ export const WOW_RAID_CATALOG: readonly WowRaidCatalogEntry[] = [
   {
     id: MANAFORGE_OMEGA_RAID_ID,
     name: "Manaforge Omega",
+    shortName: "Manaforge",
     season: "The War Within Season 3",
     // Live Character Raid Encounters instance.id (was incorrectly 1296 = Liberation of Undermine).
     blizzardInstanceId: 1302,
@@ -153,6 +156,7 @@ export const WOW_RAID_CATALOG: readonly WowRaidCatalogEntry[] = [
   {
     id: VENOMOUS_ABYSS_RAID_ID,
     name: "The Venomous Abyss",
+    shortName: "Venom",
     season: "Midnight Season 2",
     // Live EU Character Raid Encounters instance.id (de_DE: Der Giftige Abgrund).
     blizzardInstanceId: 1320,
@@ -222,6 +226,7 @@ export const WOW_RAID_CATALOG: readonly WowRaidCatalogEntry[] = [
   {
     id: TIDEBOUND_GROTTO_RAID_ID,
     name: "The Tidebound Grotto",
+    shortName: "Tide",
     season: "Midnight Season 2",
     // Verified Battle.net journal-instance id (en_US: The Tidebound Grotto).
     blizzardInstanceId: 1317,
@@ -246,6 +251,7 @@ export const WOW_RAID_CATALOG: readonly WowRaidCatalogEntry[] = [
   {
     id: UNBINDING_KITHIX_RAID_ID,
     name: "The Unbinding of Kith'ix",
+    shortName: "Kithix",
     season: "Midnight Season 2",
     // Verified Battle.net journal-instance id (en_US: The Unbinding of Kith'ix).
     blizzardInstanceId: 1324,

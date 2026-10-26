@@ -563,6 +563,8 @@ export const raidCatalogService = {
       season: input.season,
       isActive: input.availableForRuns,
       sortOrder: input.sortOrder,
+      // Omitted by older clients → keep the stored short name.
+      shortName: input.shortName === undefined ? raid.shortName : input.shortName,
       trackLockouts: input.trackLockouts,
       blizzardInstanceId: input.blizzardInstanceId,
       now: now.toISOString(),

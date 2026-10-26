@@ -313,6 +313,7 @@ export const raidCatalogRepository = {
       season: string;
       isActive: boolean;
       sortOrder: number;
+      shortName: string | null;
       trackLockouts: boolean;
       blizzardInstanceId: number | null;
       now: string;

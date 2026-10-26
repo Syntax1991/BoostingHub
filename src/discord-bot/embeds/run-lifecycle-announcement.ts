@@ -1,7 +1,7 @@
 import { EmbedBuilder } from "discord.js";
 import { absoluteRunUrl } from "@/lib/app-url";
 import { discordTimestamp } from "@/lib/discord-timestamp";
-import { DIFFICULTY_LABELS } from "@/lib/labels";
+import { DIFFICULTY_ABBREVIATIONS, DIFFICULTY_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
 import { formatRunScopeChangeDetail, type RunScopeChange } from "@/lib/run-scope-change";
 import type { RaidDifficulty, RunLootType } from "@/models/enums";
 
@@ -16,31 +16,33 @@ function withCanonicalRunUrl(embed: EmbedBuilder, runId: string): EmbedBuilder {
   return embed;
 }
 
+/** Run identity for lifecycle posts: the compact content title, else the stored product label. */
+function runLabel(input: { productLabel: string; contentTitle?: string }): string {
+  return input.contentTitle?.trim() || input.productLabel;
+}
+
+/** Run identity first, then the change: old → new time, and the way back to the Run. */
 export function buildRunRescheduledChannelEmbed(input: {
   runId: string;
   productLabel: string;
+  contentTitle?: string;
   previousScheduledStartAt: string;
   scheduledStartAt: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
 }): EmbedBuilder {
-  const difficulty = DIFFICULTY_LABELS[input.difficulty].toUpperCase();
-  const meta = `${difficulty} · ${input.lootType}`;
+  const runUrl = absoluteRunUrl(input.runId);
   return withCanonicalRunUrl(
     new EmbedBuilder()
       .setColor(0xf0b429)
-      .setTitle("📅 Run Rescheduled")
+      .setTitle(`📅 Rescheduled · ${runLabel(input)}`.slice(0, 256))
       .setDescription(
         [
-          "The schedule for this run has changed.",
+          `${DIFFICULTY_ABBREVIATIONS[input.difficulty]} · ${RUN_LOOT_TYPE_LABELS[input.lootType]}`,
           "",
-          `**${input.productLabel}**`,
-          meta,
-          "",
-          `**Old:** ${discordTimestamp(input.previousScheduledStartAt, "F")}`,
-          `**New:** ${discordTimestamp(input.scheduledStartAt, "F")}`,
-          "",
-          "Please check the updated start time.",
+          `**Old:** ~~${discordTimestamp(input.previousScheduledStartAt, "F")}~~`,
+          `**New:** ${discordTimestamp(input.scheduledStartAt, "F")} (${discordTimestamp(input.scheduledStartAt, "R")})`,
+          ...(runUrl ? ["", `🔗 [Open Run](${runUrl})`] : []),
         ].join("\n"),
       ),
     input.runId,
@@ -51,6 +53,7 @@ export function buildRunRescheduledChannelEmbed(input: {
 export function buildRunScopeChangedChannelEmbed(input: {
   runId: string;
   productLabel: string;
+  contentTitle?: string;
   scheduledStartAt: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
@@ -79,6 +82,7 @@ export function buildRunScopeChangedChannelEmbed(input: {
 export function buildRunCancelledChannelEmbed(input: {
   runId: string;
   productLabel: string;
+  contentTitle?: string;
   scheduledStartAt: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
@@ -93,7 +97,7 @@ export function buildRunCancelledChannelEmbed(input: {
         [
           "This run has been cancelled.",
           "",
-          `**${input.productLabel}**`,
+          `**${runLabel(input)}**`,
           `${when} · ${difficulty} · ${input.lootType}`,
           "",
           "No further action is required for this run.",
@@ -106,6 +110,7 @@ export function buildRunCancelledChannelEmbed(input: {
 export function buildRunReactivatedChannelEmbed(input: {
   runId: string;
   productLabel: string;
+  contentTitle?: string;
   scheduledStartAt: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
@@ -120,7 +125,7 @@ export function buildRunReactivatedChannelEmbed(input: {
         [
           "The previously cancelled Run is active again.",
           "",
-          `**${input.productLabel}**`,
+          `**${runLabel(input)}**`,
           `${when} · ${difficulty} · ${input.lootType}`,
           "",
           "Please check the Run channel for the current signup and roster state.",

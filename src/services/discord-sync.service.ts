@@ -1,3 +1,4 @@
+import { contentShortTitle } from "@/lib/raid-catalog";
 import type { CharacterRole, NotificationType, RaidDifficulty, RunLootType, RunStatus, WowClass } from "@/models/enums";
 import { trustedWarcraftLogsReportAuthorIds, warcraftLogsReportChannelIds } from "@/lib/warcraft-logs/config";
 import { warcraftLogsDiscoveryRepository } from "@/repositories/warcraft-logs-discovery.repository";
@@ -166,6 +167,21 @@ export type SignupEmbedData = {
   };
   /** When true, first channel provision pings Tank/Healer/DPS Discord roles. */
   discordRolePing: boolean;
+  /** Compact content title from Raid short names, in content order ("Venom & Tide & Kithix"). */
+  contentTitle?: string;
+  /**
+   * One note per User with a non-withdrawn signup on this Run (first non-empty
+   * `RunSignup.notes` of that User), in signup order. Optional for older payloads.
+   */
+  notes?: SignupEmbedNote[];
+};
+
+export type SignupEmbedNote = {
+  userId: string;
+  userName: string;
+  discordUsername: string | null;
+  discordUserId: string | null;
+  note: string;
 };
 
 export type RosterEmbedMember = {
@@ -365,7 +381,7 @@ export type SignupSyncWorkItem = {
  * Folded into `lastSignupSignature` so existing messages refresh once after
  * deploy — no schema migration.
  */
-export const SIGNUP_MESSAGE_FORMAT_VERSION = "v9-archive-run-button";
+export const SIGNUP_MESSAGE_FORMAT_VERSION = "v10-roster-first-notes";
 
 /**
  * Bumped when Roster Discord embed presentation changes without a domain
@@ -499,6 +515,8 @@ export type RunAnnouncementWorkItem = {
   scopeChanges: RunScopeChange[];
   scheduledStartAt: string;
   productLabel: string;
+  /** Compact Run identity ("Venom & Tide & Kithix") when the Run is loaded this pass. */
+  contentTitle?: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
 };
@@ -643,7 +661,29 @@ function toSignupEmbedData(run: RunListRecord): SignupEmbedData {
     roleStatus: projection.roleStatus,
     members: projection.members,
     discordRolePing: run.discordRolePing,
+    contentTitle: contentShortTitle(run.contents),
+    notes: signupNotes(run),
   };
+}
+
+/** One note per signed-up User (first non-empty note of their non-withdrawn signups), signup order. */
+function signupNotes(run: RunListRecord): SignupEmbedNote[] {
+  const seen = new Set<string>();
+  const notes: SignupEmbedNote[] = [];
+  for (const signup of run.signups) {
+    if (!isSignedUpSignup(signup.status) || seen.has(signup.userId)) continue;
+    const note = signup.notes?.trim();
+    if (!note) continue;
+    seen.add(signup.userId);
+    notes.push({
+      userId: signup.userId,
+      userName: signup.userName,
+      discordUsername: signup.discordUsername,
+      discordUserId: signup.discordUserId,
+      note,
+    });
+  }
+  return notes;
 }
 
 /**
@@ -887,6 +927,15 @@ function buildSignupEmbedSignature(
       lootbuddy: { signed: data.roleStatus.lootbuddy.signed, target: data.roleStatus.lootbuddy.target },
     },
     members: { signed: data.members.signed },
+    // The summary line shows selected / target, so picks refresh this message too.
+    picked: {
+      tank: data.roleStatus.tank.picked,
+      healer: data.roleStatus.healer.picked,
+      dps: data.roleStatus.dps.picked,
+      lootbuddy: data.roleStatus.lootbuddy.picked,
+    },
+    contentTitle: data.contentTitle ?? "",
+    notes: data.notes ?? [],
     channelName: extra.channelName,
     targetBucket: extra.targetBucket,
     classEmojiFingerprint: extra.classEmojiFingerprint ?? "",
@@ -1500,6 +1549,11 @@ export const discordSyncService = {
 
     const { notificationDmWorkItems: notificationDms, accountNotificationDms } = await buildPendingNotificationDms();
 
+    // Announcement identity must not depend on the candidate set: one light
+    // contents read (no full Run load) for every pending announcement's Run.
+    const contentTitles = await runRepository.listContentShortTitles(
+      pendingAnnouncements.map((row) => row.runId),
+    );
     const runAnnouncements: RunAnnouncementWorkItem[] = pendingAnnouncements.map((row) => ({
       announcementId: row.id,
       runId: row.runId,
@@ -1509,6 +1563,7 @@ export const discordSyncService = {
       scopeChanges: row.type === "RUN_SCOPE_CHANGED" ? parseRunScopeChanges(row.scopeChanges) : [],
       scheduledStartAt: row.scheduledStartAt,
       productLabel: row.productLabel,
+      contentTitle: contentTitles.get(row.runId),
       difficulty: row.difficulty,
       lootType: row.lootType,
     }));

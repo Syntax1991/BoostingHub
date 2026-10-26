@@ -602,6 +602,9 @@ model Raid {
   wclZoneId Int?
   /// When set, WCL rankings are scoped to this encounter within `wclZoneId`.
   wclRankingEncounterId Int?
+  /// Short display name for compact surfaces (Discord signup title, e.g. "Venom").
+  /// Admin-edited in the Raid Catalog; null = derived from `name`.
+  shortName String?
   /// Archived: kept for historical Runs, lockouts and Warcraft Logs, but never
   /// offered for new Runs, Run Setups or Product contents. Null = in the catalog.
   archivedAt TimestamptzString?

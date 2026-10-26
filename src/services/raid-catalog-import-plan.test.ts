@@ -13,6 +13,7 @@ const kithix: CatalogRaid = {
   wclZoneId: 53,
   wclRankingEncounterId: null,
   archivedAt: null,
+  shortName: null,
   bosses: [
     {
       id: "boss-kithix",

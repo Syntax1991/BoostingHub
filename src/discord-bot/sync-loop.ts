@@ -888,8 +888,8 @@ async function syncSignupPost(
     }
 
     const embed = buildSignupEmbed(data, { classIndicators, roleIndicators });
-    const row = buildSignupButtons(data);
-    const payload: MessageEditOptions = { embeds: [embed], components: [row] };
+    const rows = buildSignupButtons(data);
+    const payload: MessageEditOptions = { embeds: [embed], components: rows };
 
     // Local QA may still hold comma-separated multi-message ids from an earlier
     // experiment — treat those as invalid and repost a single message.
@@ -933,7 +933,7 @@ async function syncSignupPost(
       }
     }
 
-    const message = await channel.send({ embeds: [embed], components: [row] });
+    const message = await channel.send({ embeds: [embed], components: rows });
     await api.recordDiscordState(data.runId, {
       kind: "signup",
       channelId: message.channelId,
@@ -976,7 +976,7 @@ async function postRaidboostAnnounce(
   client: Client,
   env: BotEnv,
   channelId: string,
-  data: Pick<SignupEmbedData, "difficulty" | "lootType" | "runId" | "discordRolePing">,
+  data: Pick<SignupEmbedData, "difficulty" | "lootType" | "runId" | "discordRolePing" | "contentTitle">,
 ): Promise<void> {
   let channel;
   try {
@@ -1047,7 +1047,7 @@ async function postRaidboostAnnounce(
 
   if (data.discordRolePing && roleMentions.length === 0) {
     console.warn(
-      `[discord-bot] raidboost announce for run ${data.runId} has no role pings — posting embed only`,
+      `[discord-bot] raidboost announce for run ${data.runId} has no role pings — posting the announce line only`,
     );
   }
 
@@ -1055,14 +1055,14 @@ async function postRaidboostAnnounce(
     runId: data.runId,
     difficulty: data.difficulty,
     lootType: data.lootType,
+    contentTitle: data.contentTitle,
     phoenixEmoji,
     roleMentions,
   });
 
   try {
     await (channel as TextChannel).send({
-      content: announce.content || undefined,
-      embeds: announce.embeds,
+      content: announce.content,
       allowedMentions: { parse: [], roles: roleIds, users: [], repliedUser: false },
     });
   } catch (error) {
@@ -1470,6 +1470,7 @@ async function syncRunAnnouncement(
       ? buildRunRescheduledChannelEmbed({
           runId: item.runId,
           productLabel: item.productLabel,
+          contentTitle: item.contentTitle,
           previousScheduledStartAt: item.previousScheduledStartAt ?? item.scheduledStartAt,
           scheduledStartAt: item.scheduledStartAt,
           difficulty: item.difficulty,
@@ -1479,6 +1480,7 @@ async function syncRunAnnouncement(
         ? buildRunScopeChangedChannelEmbed({
             runId: item.runId,
             productLabel: item.productLabel,
+            contentTitle: item.contentTitle,
             scheduledStartAt: item.scheduledStartAt,
             difficulty: item.difficulty,
             lootType: item.lootType,
@@ -1488,6 +1490,7 @@ async function syncRunAnnouncement(
         ? buildRunReactivatedChannelEmbed({
             runId: item.runId,
             productLabel: item.productLabel,
+            contentTitle: item.contentTitle,
             scheduledStartAt: item.scheduledStartAt,
             difficulty: item.difficulty,
             lootType: item.lootType,
@@ -1495,6 +1498,7 @@ async function syncRunAnnouncement(
         : buildRunCancelledChannelEmbed({
             runId: item.runId,
             productLabel: item.productLabel,
+            contentTitle: item.contentTitle,
             scheduledStartAt: item.scheduledStartAt,
             difficulty: item.difficulty,
             lootType: item.lootType,

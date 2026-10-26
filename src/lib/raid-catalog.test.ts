@@ -25,6 +25,7 @@ function raid(overrides: Partial<CatalogRaid> & Pick<CatalogRaid, "id">): Catalo
     wclZoneId: null,
     wclRankingEncounterId: null,
     archivedAt: null,
+    shortName: null,
     bosses: [],
     ...overrides,
   };

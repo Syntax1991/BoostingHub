@@ -1,3 +1,4 @@
+import { contentShortTitle } from "@/lib/raid-catalog";
 import { mapExternalBoosters, type ExternalBooster } from "@/lib/external-booster";
 import { db, orm } from "@/lib/prisma";
 import { mapRaidBossRefs, type RaidBossRef } from "@/lib/lockout-bosses";
@@ -105,6 +106,8 @@ export type SignupOnRun = {
   publishedRole: CharacterRole | null;
   /** Characterless Lootbuddy class snapshot; null for BOOSTER / legacy Character-backed loot. */
   lootbuddyClass: WowClass | null;
+  /** The signer's note for this Run (Discord "Add / Edit Note"); null when none. */
+  notes?: string | null;
   character: SignupCharacterOnRun | null;
 };
 
@@ -183,6 +186,8 @@ export type RunRaidContentRecord = {
   runId: string;
   raidId: string;
   raidName: string;
+  /** `Raid.shortName` (compact Discord title); null = derived from the name. */
+  raidShortName?: string | null;
   season: string;
   sortOrder: number;
   plannedBossCount: number;
@@ -201,6 +206,7 @@ function mapRaidContent(row: Record<string, unknown>): RunRaidContentRecord {
     runId: asString(row.runId),
     raidId: asString(row.raidId ?? raid.id),
     raidName: asString(raid.name, "Unknown raid"),
+    raidShortName: asStringOrNull(raid.shortName),
     season: asString(raid.season),
     sortOrder: asNumber(row.sortOrder),
     plannedBossCount: asNumber(row.plannedBossCount),
@@ -405,6 +411,7 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
         offeredRoles: mapOfferedRoles(signup.offeredRoles),
         publishedRole: signup.publishedRole == null ? null : mapCharacterRole(signup.publishedRole),
         lootbuddyClass: signup.lootbuddyClass == null ? null : mapWowClass(signup.lootbuddyClass),
+        notes: asStringOrNull(signup.notes),
         character: character
           ? {
               name: asString(character.name),
@@ -441,6 +448,23 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
 
 
 export const runRepository = {
+  /** Compact content titles ("Venom & Tide & Kithix") for Runs — one contents query, no full Run load. */
+  async listContentShortTitles(runIds: readonly string[]): Promise<Map<string, string>> {
+    const ids = [...new Set(runIds)];
+    if (ids.length === 0) return new Map();
+    const rows = (await orm.RunRaidContent.where((content) => content.runId.in(ids))
+      .include("raid", (raid) => raid.select("name", "shortName"))
+      .all()) as Array<Record<string, unknown>>;
+    const byRun = new Map<string, Array<{ sortOrder: number; raidName: string; raidShortName: string | null }>>();
+    for (const row of rows) {
+      const raid = (row.raid ?? {}) as Record<string, unknown>;
+      const list = byRun.get(asString(row.runId)) ?? [];
+      list.push({ sortOrder: asNumber(row.sortOrder), raidName: asString(raid.name, "Unknown raid"), raidShortName: asStringOrNull(raid.shortName) });
+      byRun.set(asString(row.runId), list);
+    }
+    return new Map([...byRun].map(([runId, contents]) => [runId, contentShortTitle(contents)]));
+  },
+
   async listUpcoming(filters: RunListFilters = {}): Promise<RunListRecord[]> {
     let query = orm.Run
       .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))

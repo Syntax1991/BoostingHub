@@ -1,15 +1,13 @@
-import { EmbedBuilder } from "discord.js";
-import { absoluteRunUrl } from "@/lib/app-url";
-import { DIFFICULTY_ABBREVIATIONS, DIFFICULTY_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
+import { DIFFICULTY_ABBREVIATIONS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
 import type { RaidDifficulty, RunLootType } from "@/models/enums";
 
-/** Guild custom emoji name flanking the Raidboost Announce title. */
+/** Guild custom emoji name flanking the Raidboost Announce line. */
 export const RAIDBOOST_ANNOUNCE_EMOJI_NAME = "PhoenixStarDiscord";
 
 /** Guild role names pinged when a new Run channel is provisioned. */
 export const RAIDBOOST_PING_ROLE_NAMES = ["tank", "healer", "dps"] as const;
 
-const LOOT_EMOJIS: Record<RunLootType, string> = {
+export const LOOT_EMOJIS: Record<RunLootType, string> = {
   SAVED: "💰❌",
   UNSAVED: "💰",
   VIP: "💎",
@@ -21,6 +19,8 @@ export type RaidboostAnnounceInput = {
   runId: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
+  /** Compact content title ("Venom & Tide & Kithix"); falls back to no title. */
+  contentTitle?: string;
   /** Resolved `<:PhoenixStarDiscord:id>` markup, or null when missing. */
   phoenixEmoji: string | null;
   /** Role mention strings `<@&id>` for tank/healer/dps (only resolved roles). */
@@ -28,41 +28,29 @@ export type RaidboostAnnounceInput = {
 };
 
 /**
- * Carl-bot-style open announce posted once when a Run's dedicated channel is
- * first created. Content carries role mentions (embeds alone do not ping).
+ * Short open announce posted once when a Run's dedicated channel is first
+ * created: role pings (when the Run opted in) + one line naming the Run. No
+ * second embed — the Signup message right below carries title, time and roster.
  */
 export function buildRaidboostAnnounce(input: RaidboostAnnounceInput): {
   content: string;
-  embeds: EmbedBuilder[];
   allowedMentions: { roles: string[] };
 } {
-  const abbrev = DIFFICULTY_ABBREVIATIONS[input.difficulty];
-  const difficultyLabel = DIFFICULTY_LABELS[input.difficulty];
-  const lootLabel = RUN_LOOT_TYPE_LABELS[input.lootType];
-  const lootEmoji = LOOT_EMOJIS[input.lootType];
   const phoenix = input.phoenixEmoji?.trim() || "";
-  const title = phoenix
-    ? `${phoenix} Raidboost Announce ${phoenix}`
-    : "Raidboost Announce";
-
-  const embed = new EmbedBuilder()
-    .setTitle(title)
-    .setDescription(
-      `**${abbrev}** ${lootEmoji} ${difficultyLabel} ${lootLabel} - *Please refer to the channel name for the time* 🕒`,
-    );
-  const runUrl = absoluteRunUrl(input.runId);
-  if (runUrl) embed.setURL(runUrl);
+  const run = [
+    `**${DIFFICULTY_ABBREVIATIONS[input.difficulty]}** ${LOOT_EMOJIS[input.lootType]} ${RUN_LOOT_TYPE_LABELS[input.lootType]}`,
+    input.contentTitle?.trim() || null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const line = [phoenix, `Raidboost: ${run} — signups open below`, phoenix].filter(Boolean).join(" ");
 
   const roleIds = input.roleMentions
-    .map((mention) => {
-      const match = mention.match(/^<@&(\d+)>$/);
-      return match?.[1] ?? null;
-    })
+    .map((mention) => /^<@&(\d+)>$/.exec(mention)?.[1] ?? null)
     .filter((id): id is string => Boolean(id));
 
   return {
-    content: input.roleMentions.join(" "),
-    embeds: [embed],
+    content: [input.roleMentions.join(" "), line].filter(Boolean).join("\n"),
     allowedMentions: { roles: roleIds },
   };
 }
