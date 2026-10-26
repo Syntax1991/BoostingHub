@@ -32,6 +32,11 @@ export type CatalogRaid = {
   blizzardInstanceId: number | null;
   wclZoneId: number | null;
   wclRankingEncounterId: number | null;
+  /**
+   * `Raid.archivedAt`: archived raids stay readable for historical Runs,
+   * lockouts and Warcraft Logs but are never offered for new planning.
+   */
+  archivedAt: string | null;
   /** Ordered by `sortOrder`. */
   bosses: readonly CatalogBoss[];
 };
@@ -119,6 +124,7 @@ export function catalogRaidFromFixture(entry: WowRaidCatalogEntry): CatalogRaid 
     blizzardInstanceId: entry.blizzardInstanceId,
     wclZoneId: entry.warcraftLogsZoneId ?? null,
     wclRankingEncounterId: entry.warcraftLogsEncounterId ?? null,
+    archivedAt: null,
     bosses: entry.bosses.map((boss) => ({
       id: boss.id,
       raidId: entry.id,

@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'61b92f9402f7825de761de9d22b7ce30c0a3a4d6e59f9c54d21f64583fd27260'>;
+  StorageHashBase<'8d62cbc3da30bdeac418ac71f1d705e04e5c2526b0161bec92c1f5458054568f'>;
 export type ExecutionHash =
   ExecutionHashBase<'b27b9239312d18e407528e2d06057d2da4f3e67bdff7bffe5f827471950c2fa6'>;
 export type ProfileHash =
@@ -513,6 +513,7 @@ export type FieldOutputTypes = {
       readonly blizzardInstanceId: CodecTypes['pg/int4@1']['output'] | null;
       readonly wclZoneId: CodecTypes['pg/int4@1']['output'] | null;
       readonly wclRankingEncounterId: CodecTypes['pg/int4@1']['output'] | null;
+      readonly archivedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
     };
@@ -1253,6 +1254,7 @@ export type FieldInputTypes = {
       readonly blizzardInstanceId: CodecTypes['pg/int4@1']['input'] | null;
       readonly wclZoneId: CodecTypes['pg/int4@1']['input'] | null;
       readonly wclRankingEncounterId: CodecTypes['pg/int4@1']['input'] | null;
+      readonly archivedAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
     };
@@ -1984,6 +1986,7 @@ export type StorageColumnTypes = {
       readonly sortOrder: CodecTypes['pg/int4@1']['output'];
     };
     readonly raid: {
+      readonly archivedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly blizzardInstanceId: CodecTypes['pg/int4@1']['output'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
@@ -2724,6 +2727,7 @@ export type StorageColumnInputTypes = {
       readonly sortOrder: CodecTypes['pg/int4@1']['input'];
     };
     readonly raid: {
+      readonly archivedAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly blizzardInstanceId: CodecTypes['pg/int4@1']['input'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
@@ -5032,6 +5036,11 @@ type ContractBase = Omit<
                 readonly wclRankingEncounterId: {
                   readonly nativeType: 'int4';
                   readonly codecId: 'pg/int4@1';
+                  readonly nullable: true;
+                };
+                readonly archivedAt: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-string@1';
                   readonly nullable: true;
                 };
                 readonly createdAt: {
@@ -10430,6 +10439,13 @@ type ContractBase = Omit<
                 readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
               };
+              readonly archivedAt: {
+                readonly nullable: true;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                };
+              };
               readonly createdAt: {
                 readonly nullable: false;
                 readonly type: {
@@ -10515,6 +10531,7 @@ type ContractBase = Omit<
                 readonly blizzardInstanceId: { readonly column: 'blizzardInstanceId' };
                 readonly wclZoneId: { readonly column: 'wclZoneId' };
                 readonly wclRankingEncounterId: { readonly column: 'wclRankingEncounterId' };
+                readonly archivedAt: { readonly column: 'archivedAt' };
                 readonly createdAt: { readonly column: 'createdAt' };
                 readonly updatedAt: { readonly column: 'updatedAt' };
               };

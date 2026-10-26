@@ -182,6 +182,42 @@ export async function deleteRaidAction(input: unknown): Promise<ActionResult> {
   }
 }
 
+export async function archiveRaidAction(input: unknown): Promise<ActionResult> {
+  try {
+    const admin = await requireAdmin();
+    const { raidId } = raidIdSchema.parse(input);
+    const { name } = await raidCatalogService.archiveRaid(admin, raidId);
+    revalidateRaidCatalog(raidId);
+    return { ok: true, message: `Raid "${name}" archived.` };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function restoreRaidAction(input: unknown): Promise<ActionResult> {
+  try {
+    const admin = await requireAdmin();
+    const { raidId } = raidIdSchema.parse(input);
+    const { name } = await raidCatalogService.restoreRaid(admin, raidId);
+    revalidateRaidCatalog(raidId);
+    return { ok: true, message: `Raid "${name}" restored.` };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function removeDuplicateRaidAction(input: unknown): Promise<ActionResult> {
+  try {
+    const admin = await requireAdmin();
+    const { raidId } = raidIdSchema.parse(input);
+    const { name, keptRaidName } = await raidCatalogService.removeDuplicateRaid(admin, raidId);
+    revalidateRaidCatalog();
+    return { ok: true, message: `Duplicate "${name}" removed; ${keptRaidName} is kept.` };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
 export async function createEncounterAction(input: unknown): Promise<ActionResult> {
   try {
     const admin = await requireAdmin();

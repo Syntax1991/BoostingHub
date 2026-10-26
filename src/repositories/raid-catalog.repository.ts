@@ -98,6 +98,22 @@ async function writeProductContents(txOrm: TxOrm, productId: string, contents: r
   }
 }
 
+/** Map stored `killedBossIds` (JSON array) through `bossIdMap`; unknown ids are dropped. Null stays null. */
+export function remapKilledBossIds(value: unknown, bossIdMap: ReadonlyMap<string, string>): string | null {
+  if (typeof value !== "string") return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed)) return null;
+  const mapped = parsed
+    .map((id) => (typeof id === "string" ? bossIdMap.get(id) : undefined))
+    .filter((id): id is string => id != null);
+  return JSON.stringify([...new Set(mapped)]);
+}
+
 /** `pg_advisory_xact_lock` namespace serializing Blizzard raid imports (one instance id → one Raid). */
 export const RAID_IMPORT_LOCK_NAMESPACE = 837470;
 
@@ -330,6 +346,74 @@ export const raidCatalogRepository = {
   async deleteRaid(raidId: string): Promise<void> {
     await orm.Raid.where({ id: raidId }).delete();
     bumpCatalogMemo();
+  },
+
+  /** Archive (timestamp) or restore (null). Touches nothing but the lifecycle column. */
+  async setRaidArchivedAt(raidId: string, input: { archivedAt: string | null; now: string }): Promise<void> {
+    await orm.Raid.where({ id: raidId }).update({ archivedAt: input.archivedAt, updatedAt: input.now });
+    bumpCatalogMemo();
+  },
+
+  /**
+   * Fold a duplicate Raid (same Blizzard instance as `targetRaidId`) into the
+   * target and delete it, atomically. Only Character lockouts can move: a
+   * lockout the target already has for the same Character / difficulty /
+   * reset is dropped, any other is re-pointed with its killed boss ids mapped
+   * (`bossIdMap`, source → target). Refuses — writing nothing — when the
+   * source is referenced by a Run, Run Setup or Product content.
+   */
+  async mergeDuplicateRaid(input: {
+    sourceRaidId: string;
+    targetRaidId: string;
+    bossIdMap: ReadonlyMap<string, string>;
+    now: string;
+  }): Promise<{ droppedLockouts: number; movedLockouts: number }> {
+    const result = await db.transaction(async (tx) => {
+      await lockRaidImports(tx as unknown as { execute: (plan: never) => Promise<unknown> });
+      const txOrm = txOrmOf(tx);
+      const raidId = input.sourceRaidId;
+      // Sequential: one transaction connection.
+      const usages = [
+        await txOrm.RunRaidContent.where({ raidId }).select("id").first(),
+        await txOrm.RunTemplateRaidContent.where({ raidId }).select("id").first(),
+        await txOrm.ProductRaidContent.where({ raidId }).select("id").first(),
+      ];
+      if (usages.some(Boolean)) {
+        throw new DomainError(
+          "CONTENT_RAID_IN_USE",
+          "This raid is used by a Run, Run Setup or Product and cannot be merged. Archive it instead.",
+        );
+      }
+      const targetRows = (await txOrm.CharacterRaidLockout.where({ raidId: input.targetRaidId })
+        .select("characterId", "difficulty", "resetIdentifier")
+        .all()) as Array<Record<string, unknown>>;
+      const targetKeys = new Set(
+        targetRows.map((row) => `${asString(row.characterId)}\u0000${asString(row.difficulty)}\u0000${asString(row.resetIdentifier)}`),
+      );
+      const sourceRows = (await txOrm.CharacterRaidLockout.where({ raidId }).all()) as Array<Record<string, unknown>>;
+      let droppedLockouts = 0;
+      let movedLockouts = 0;
+      for (const row of sourceRows) {
+        const id = asString(row.id);
+        const key = `${asString(row.characterId)}\u0000${asString(row.difficulty)}\u0000${asString(row.resetIdentifier)}`;
+        if (targetKeys.has(key)) {
+          await txOrm.CharacterRaidLockout.where({ id }).delete();
+          droppedLockouts += 1;
+          continue;
+        }
+        await txOrm.CharacterRaidLockout.where({ id }).update({
+          raidId: input.targetRaidId,
+          killedBossIds: remapKilledBossIds(row.killedBossIds, input.bossIdMap),
+          updatedAt: input.now,
+        });
+        targetKeys.add(key);
+        movedLockouts += 1;
+      }
+      await txOrm.Raid.where({ id: raidId }).delete();
+      return { droppedLockouts, movedLockouts };
+    });
+    bumpCatalogMemo();
+    return result;
   },
 
   async createEncounter(input: {

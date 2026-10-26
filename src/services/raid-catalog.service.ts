@@ -48,6 +48,15 @@ import {
  * (count, order, ids) frozen — boss totals and `killedBossIds` depend on it.
  * Identity-preserving metadata (names, season, order, lockout tracking,
  * Blizzard / Warcraft Logs ids) stays editable.
+ *
+ * Raid lifecycle (one action per state, decided before rendering):
+ * - unused, non-seeded → Delete (hard delete, bosses go with it);
+ * - a duplicate of another Raid with the same Blizzard instance, used by no
+ *   Run / Run Setup / Product → Remove duplicate (its lockouts fold into the
+ *   other Raid, then it is deleted);
+ * - otherwise (referenced or seeded) → Archive (`Raid.archivedAt`): kept for
+ *   history, lockouts and Warcraft Logs, closed to new Runs / Run Setups /
+ *   Product contents; Restore clears it.
  */
 
 const SEEDED_RAID_IDS = new Set(WOW_RAID_CATALOG.map((raid) => raid.id));
@@ -61,6 +70,18 @@ export type RaidCatalogRaidRow = CatalogRaid & {
   structureLocked: boolean;
   /** Blizzard / boss mapping / lockout / Warcraft Logs readiness (derived). */
   status: RaidIntegrationStatus;
+  archived: boolean;
+  /** The Raid this row duplicates (same Blizzard instance) and can be folded into. */
+  duplicateOf: { id: string; name: string } | null;
+  /** Lifecycle actions the server accepts for this Raid right now. */
+  actions: RaidLifecycleActions;
+};
+
+export type RaidLifecycleActions = {
+  delete: boolean;
+  removeDuplicate: boolean;
+  archive: boolean;
+  restore: boolean;
 };
 
 export type RaidCatalogProductContentRow = ProductDefinition["contents"][number] & {
@@ -84,9 +105,55 @@ export type RaidCatalogPageData = {
   importSeasons: Array<{ key: string; name: string; current: boolean; raidCount: number }>;
 };
 
-function toRaidRow(raid: CatalogRaid, references: RaidReferenceCounts): RaidCatalogRaidRow {
+type ReferenceLookup = (raidId: string) => RaidReferenceCounts;
+
+function referenceLookup(map: ReadonlyMap<string, RaidReferenceCounts>): ReferenceLookup {
+  return (raidId) => map.get(raidId) ?? EMPTY_RAID_REFERENCES;
+}
+
+function planningReferenceCount(references: RaidReferenceCounts): number {
+  return references.runContents + references.templateContents + references.productContents;
+}
+
+/** Which Raid of a same-instance group is kept: planning references, then lockouts, then id. */
+function outranks(a: CatalogRaid, b: CatalogRaid, referencesOf: ReferenceLookup): boolean {
+  const ra = referencesOf(a.id);
+  const rb = referencesOf(b.id);
+  const byPlanning = planningReferenceCount(ra) - planningReferenceCount(rb);
+  if (byPlanning !== 0) return byPlanning > 0;
+  const byLockouts = ra.lockouts - rb.lockouts;
+  if (byLockouts !== 0) return byLockouts > 0;
+  return a.id < b.id;
+}
+
+/**
+ * The Raid `raid` duplicates: another Raid with the same Blizzard instance id
+ * that outranks it. Only a Raid without Run / Run Setup / Product references
+ * is a removable duplicate — those references are never re-pointed.
+ */
+export function findDuplicateTarget(
+  raid: CatalogRaid,
+  catalog: RaidCatalog,
+  referencesOf: ReferenceLookup,
+): CatalogRaid | null {
+  if (raid.blizzardInstanceId == null) return null;
+  if (planningReferenceCount(referencesOf(raid.id)) > 0) return null;
+  let target: CatalogRaid | null = null;
+  for (const other of catalog.raids) {
+    if (other.id === raid.id || other.blizzardInstanceId !== raid.blizzardInstanceId) continue;
+    if (!outranks(other, raid, referencesOf)) continue;
+    if (!target || outranks(other, target, referencesOf)) target = other;
+  }
+  return target;
+}
+
+function toRaidRow(raid: CatalogRaid, catalog: RaidCatalog, referencesOf: ReferenceLookup): RaidCatalogRaidRow {
+  const references = referencesOf(raid.id);
   const referenced = isRaidReferenced(references);
   const seeded = SEEDED_RAID_IDS.has(raid.id);
+  const archived = raid.archivedAt != null;
+  const duplicate = findDuplicateTarget(raid, catalog, referencesOf);
+  const canDelete = !referenced && !seeded && !duplicate;
   return {
     ...raid,
     references,
@@ -94,7 +161,28 @@ function toRaidRow(raid: CatalogRaid, references: RaidReferenceCounts): RaidCata
     seeded,
     structureLocked: referenced || seeded,
     status: raidIntegrationStatus(raid),
+    archived,
+    duplicateOf: duplicate ? { id: duplicate.id, name: duplicate.name } : null,
+    actions: {
+      delete: canDelete,
+      removeDuplicate: duplicate != null,
+      archive: !archived && !canDelete && !duplicate,
+      restore: archived,
+    },
   };
+}
+
+/** Map each boss of `source` to the `target` boss sharing a Blizzard encounter id, else the same order. */
+function duplicateBossMap(source: CatalogRaid, target: CatalogRaid): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const boss of source.bosses) {
+    const match =
+      target.bosses.find((candidate) =>
+        candidate.blizzardEncounterIds.some((id) => boss.blizzardEncounterIds.includes(id)),
+      ) ?? target.bosses.find((candidate) => candidate.sortOrder === boss.sortOrder);
+    if (match) map.set(boss.id, match.id);
+  }
+  return map;
 }
 
 export function summarizeProductContent(
@@ -190,6 +278,8 @@ function assertEncounterIds(
 export function validateProductContents(
   contents: readonly ProductContentInput[],
   catalog: RaidCatalog,
+  /** Raids the product already holds — an archived one may stay, never be newly added. */
+  keptRaidIds: ReadonlySet<string> = new Set(),
 ): ProductContentWrite[] {
   if (contents.length === 0) {
     throw new DomainError("CONTENT_PRODUCT_EMPTY", "A product needs at least one raid content.");
@@ -202,6 +292,9 @@ export function validateProductContents(
       throw new DomainError("CONTENT_DUPLICATE_PRODUCT_RAID", `${raid.name} appears more than once in this product.`);
     }
     seen.add(raid.id);
+    if (raid.archivedAt != null && !keptRaidIds.has(raid.id)) {
+      throw new DomainError("CONTENT_RAID_ARCHIVED", `${raid.name} is archived and cannot be added to a product.`);
+    }
     const total = raid.bosses.length;
     if (total === 0) {
       throw new DomainError("CONTENT_INVALID_BOSS_COUNT", `${raid.name} has no encounters yet.`);
@@ -409,8 +502,9 @@ export const raidCatalogService = {
       productRepository.listAll(),
       raidCatalogRepository.listDistinctSeasons(),
     ]);
+    const referencesOf = referenceLookup(references);
     return {
-      raids: catalog.raids.map((raid) => toRaidRow(raid, references.get(raid.id) ?? EMPTY_RAID_REFERENCES)),
+      raids: catalog.raids.map((raid) => toRaidRow(raid, catalog, referencesOf)),
       products: products.map((product) => toProductRow(product, catalog)),
       seasons,
       importSeasons: RAID_SEASONS.map((season) => ({
@@ -429,11 +523,12 @@ export const raidCatalogService = {
 
   async getRaidDetail(admin: AuthenticatedUser, raidId: string): Promise<RaidCatalogRaidRow> {
     assertCanManageRaidCatalog(admin);
-    const [{ raid }, references] = await Promise.all([
+    // Grouped counts for every Raid: a duplicate is judged against its same-instance siblings.
+    const [{ catalog, raid }, references] = await Promise.all([
       loadRaidContext(raidId),
-      raidCatalogRepository.raidReferenceCounts(raidId),
+      raidCatalogRepository.listRaidReferenceCounts(),
     ]);
-    return toRaidRow(raid, references);
+    return toRaidRow(raid, catalog, referenceLookup(references));
   },
 
   async createRaid(admin: AuthenticatedUser, input: RaidMetadataInput, now = new Date()): Promise<{ raidId: string }> {
@@ -511,19 +606,78 @@ export const raidCatalogService = {
     if (SEEDED_RAID_IDS.has(raid.id)) {
       throw new DomainError(
         "CONTENT_RAID_IN_USE",
-        `${raid.name} is core catalog content and cannot be deleted. Turn off "Available for new Runs" instead.`,
+        `${raid.name} is core catalog content and cannot be deleted. Archive it instead.`,
       );
     }
     const references = await raidCatalogRepository.raidReferenceCounts(raid.id);
     if (isRaidReferenced(references)) {
       throw new DomainError(
         "CONTENT_RAID_IN_USE",
-        `${raid.name} is in use (${referenceSummary(references)}) and cannot be deleted. Turn off "Available for new Runs" instead.`,
+        `${raid.name} is in use (${referenceSummary(references)}) and cannot be deleted. Archive it instead.`,
       );
     }
     await raidCatalogRepository.deleteRaid(raid.id);
     await record(admin, "CONTENT_RAID_DELETED", `Raid "${raid.name}" deleted.`);
     return { name: raid.name };
+  },
+
+  /** Archive: history, lockouts and Warcraft Logs stay intact; new Runs / Run Setups / Products can no longer use it. */
+  async archiveRaid(admin: AuthenticatedUser, raidId: string, now = new Date()): Promise<{ name: string }> {
+    assertCanManageRaidCatalog(admin);
+    const { raid } = await loadRaidContext(raidId);
+    if (raid.archivedAt != null) {
+      throw new DomainError("CONTENT_RAID_ARCHIVED", `${raid.name} is already archived.`);
+    }
+    await raidCatalogRepository.setRaidArchivedAt(raid.id, { archivedAt: now.toISOString(), now: now.toISOString() });
+    await record(admin, "CONTENT_RAID_ARCHIVED", `Raid "${raid.name}" archived.`);
+    return { name: raid.name };
+  },
+
+  async restoreRaid(admin: AuthenticatedUser, raidId: string, now = new Date()): Promise<{ name: string }> {
+    assertCanManageRaidCatalog(admin);
+    const { raid } = await loadRaidContext(raidId);
+    if (raid.archivedAt == null) {
+      throw new DomainError("CONTENT_RAID_NOT_ARCHIVED", `${raid.name} is not archived.`);
+    }
+    await raidCatalogRepository.setRaidArchivedAt(raid.id, { archivedAt: null, now: now.toISOString() });
+    await record(admin, "CONTENT_RAID_RESTORED", `Raid "${raid.name}" restored.`);
+    return { name: raid.name };
+  },
+
+  /**
+   * Remove a duplicate Raid (same Blizzard instance as a Raid that outranks it):
+   * its Character lockouts fold into that Raid (exact copies dropped), then it is
+   * deleted. Refused when the duplicate is used by a Run, Run Setup or Product.
+   */
+  async removeDuplicateRaid(
+    admin: AuthenticatedUser,
+    raidId: string,
+    now = new Date(),
+  ): Promise<{ name: string; keptRaidName: string; droppedLockouts: number; movedLockouts: number }> {
+    assertCanManageRaidCatalog(admin);
+    const [{ catalog, raid }, references] = await Promise.all([
+      loadRaidContext(raidId),
+      raidCatalogRepository.listRaidReferenceCounts(),
+    ]);
+    const target = findDuplicateTarget(raid, catalog, referenceLookup(references));
+    if (!target) {
+      throw new DomainError(
+        "CONTENT_RAID_NOT_DUPLICATE",
+        `${raid.name} is not a removable duplicate: no other raid shares its Blizzard instance, or it is used by a Run, Run Setup or Product.`,
+      );
+    }
+    const result = await raidCatalogRepository.mergeDuplicateRaid({
+      sourceRaidId: raid.id,
+      targetRaidId: target.id,
+      bossIdMap: duplicateBossMap(raid, target),
+      now: now.toISOString(),
+    });
+    await record(
+      admin,
+      "CONTENT_RAID_DUPLICATE_REMOVED",
+      `Duplicate raid "${raid.name}" (${raid.id}) folded into ${target.id}: ${result.droppedLockouts} duplicate lockouts dropped, ${result.movedLockouts} moved.`,
+    );
+    return { name: raid.name, keptRaidName: target.name, ...result };
   },
 
   async createEncounter(
@@ -633,7 +787,11 @@ export const raidCatalogService = {
   async updateProduct(admin: AuthenticatedUser, input: UpdateProductInput, now = new Date()): Promise<void> {
     assertCanManageRaidCatalog(admin);
     const product = await loadProduct(input.productId);
-    const contents = validateProductContents(input.contents, await raidRepository.loadCatalog());
+    const contents = validateProductContents(
+      input.contents,
+      await raidRepository.loadCatalog(),
+      new Set(product.contents.map((content) => content.raidId)),
+    );
     await raidCatalogRepository.updateProduct(product.id, {
       name: input.name,
       active: input.active,

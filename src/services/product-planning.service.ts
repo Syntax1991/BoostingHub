@@ -12,11 +12,21 @@ import { productRepository } from "@/repositories/product.repository";
  * Server authority for product-driven Run planning (Create Run, Mass Create,
  * Run Setup, Schedule). Selector options and submissions both come from the
  * persisted catalog: `Product.active && Product.selectable` — no key
- * allowlist, no preset enum, no special casing of seeded products.
+ * allowlist, no preset enum, no special casing of seeded products. A product
+ * holding an archived Raid is closed to new planning (Runs and Run Setups).
  */
 
-export function isSelectableProduct(product: Pick<PlanningProduct, "active" | "selectable">): boolean {
-  return product.active && product.selectable;
+export function hasArchivedRaid(product: Pick<PlanningProduct, "contents">): boolean {
+  return product.contents.some((content) => content.raidArchived === true);
+}
+
+/** Usable for new planning: active and no archived content raid (selectable not required). */
+export function isPlanningActiveProduct(product: Pick<PlanningProduct, "active" | "contents">): boolean {
+  return product.active && !hasArchivedRaid(product);
+}
+
+export function isSelectableProduct(product: Pick<PlanningProduct, "active" | "selectable" | "contents">): boolean {
+  return isPlanningActiveProduct(product) && product.selectable;
 }
 
 /** Map pure selection errors to domain errors (user-facing messages, no raw failures). */
@@ -54,7 +64,7 @@ export const productPlanningService = {
 
   /** Active products (selectable or not) — what keeps existing Run Setups usable. */
   async listActive(): Promise<PlanningProduct[]> {
-    return (await productRepository.listPlanningProducts()).filter((product) => product.active);
+    return (await productRepository.listPlanningProducts()).filter(isPlanningActiveProduct);
   },
 
   /** Resolve + validate a new selection against the DB catalog. */

@@ -34,6 +34,7 @@ function raid(partial: Partial<CatalogRaid> & Pick<CatalogRaid, "name" | "bosses
     blizzardInstanceId: null,
     wclZoneId: null,
     wclRankingEncounterId: null,
+    archivedAt: null,
     ...partial,
   };
 }

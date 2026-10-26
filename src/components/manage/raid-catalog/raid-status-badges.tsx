@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { cn } from "@/lib/cn";
 import type { RaidIntegrationStatus } from "@/lib/raid-catalog";
 
@@ -50,5 +51,53 @@ export function RaidStatusBadges({
         {status.warcraftLogs === "MAPPED" ? "Warcraft Logs mapped" : "Warcraft Logs needs mapping"}
       </Badge>
     </div>
+  );
+}
+
+type LifecycleRaid = {
+  archived: boolean;
+  duplicateOf: { id: string; name: string } | null;
+};
+
+/** One-line lifecycle state of a raid list row: Archived / Duplicate (nothing when in the catalog). */
+export function RaidLifecycleBadge({ raid }: { raid: LifecycleRaid }) {
+  if (raid.duplicateOf) return <Badge tone="warn">Duplicate</Badge>;
+  if (raid.archived) return <Badge tone="off">Archived</Badge>;
+  return null;
+}
+
+/** Raid detail: why an archived or duplicate raid looks the way it does. */
+export function RaidLifecycleNotice({
+  raid,
+  className,
+}: {
+  raid: LifecycleRaid;
+  className?: string;
+}) {
+  if (!raid.duplicateOf && !raid.archived) return null;
+  return (
+    <p
+      role="status"
+      className={cn(
+        "rounded-md border px-3 py-2 text-sm",
+        raid.duplicateOf ? "border-warning/40 bg-warning/10" : "border-border bg-surface-raised",
+        className,
+      )}
+    >
+      {raid.duplicateOf ? (
+        <>
+          Duplicate of{" "}
+          <Link
+            href={`/manage/raid-catalog/raids/${raid.duplicateOf.id}`}
+            className="font-medium underline"
+          >
+            {raid.duplicateOf.name}
+          </Link>{" "}
+          (same Blizzard instance). Remove the duplicate to keep one raid.
+        </>
+      ) : (
+        "Archived: kept for existing Runs, lockouts and Warcraft Logs, but not offered for new Runs, Run Setups or Products."
+      )}
+    </p>
   );
 }
