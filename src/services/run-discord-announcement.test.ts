@@ -439,7 +439,7 @@ describe("channel embed copy", () => {
       lootType: "VIP",
     });
     const json = embed.toJSON();
-    expect(json.title).toContain("Run Rescheduled");
+    expect(json.title).toContain("📅 Rescheduled");
     expect(json.description).toContain(discordTimestamp(oldIso, "F"));
     expect(json.description).toContain(discordTimestamp(newIso, "F"));
     expect(json.description).not.toMatch(/@everyone|@here/);

@@ -1,3 +1,4 @@
+import { contentShortTitle } from "@/lib/raid-catalog";
 import { mapExternalBoosters, type ExternalBooster } from "@/lib/external-booster";
 import { db, orm } from "@/lib/prisma";
 import { mapRaidBossRefs, type RaidBossRef } from "@/lib/lockout-bosses";
@@ -447,6 +448,23 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
 
 
 export const runRepository = {
+  /** Compact content titles ("Venom & Tide & Kithix") for Runs — one contents query, no full Run load. */
+  async listContentShortTitles(runIds: readonly string[]): Promise<Map<string, string>> {
+    const ids = [...new Set(runIds)];
+    if (ids.length === 0) return new Map();
+    const rows = (await orm.RunRaidContent.where((content) => content.runId.in(ids))
+      .include("raid", (raid) => raid.select("name", "shortName"))
+      .all()) as Array<Record<string, unknown>>;
+    const byRun = new Map<string, Array<{ sortOrder: number; raidName: string; raidShortName: string | null }>>();
+    for (const row of rows) {
+      const raid = (row.raid ?? {}) as Record<string, unknown>;
+      const list = byRun.get(asString(row.runId)) ?? [];
+      list.push({ sortOrder: asNumber(row.sortOrder), raidName: asString(raid.name, "Unknown raid"), raidShortName: asStringOrNull(raid.shortName) });
+      byRun.set(asString(row.runId), list);
+    }
+    return new Map([...byRun].map(([runId, contents]) => [runId, contentShortTitle(contents)]));
+  },
+
   async listUpcoming(filters: RunListFilters = {}): Promise<RunListRecord[]> {
     let query = orm.Run
       .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))

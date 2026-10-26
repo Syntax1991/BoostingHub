@@ -1549,7 +1549,11 @@ export const discordSyncService = {
 
     const { notificationDmWorkItems: notificationDms, accountNotificationDms } = await buildPendingNotificationDms();
 
-    const runsById = new Map(runs.map((run) => [run.id, run]));
+    // Announcement identity must not depend on the candidate set: one light
+    // contents read (no full Run load) for every pending announcement's Run.
+    const contentTitles = await runRepository.listContentShortTitles(
+      pendingAnnouncements.map((row) => row.runId),
+    );
     const runAnnouncements: RunAnnouncementWorkItem[] = pendingAnnouncements.map((row) => ({
       announcementId: row.id,
       runId: row.runId,
@@ -1559,7 +1563,7 @@ export const discordSyncService = {
       scopeChanges: row.type === "RUN_SCOPE_CHANGED" ? parseRunScopeChanges(row.scopeChanges) : [],
       scheduledStartAt: row.scheduledStartAt,
       productLabel: row.productLabel,
-      contentTitle: runsById.has(row.runId) ? contentShortTitle(runsById.get(row.runId)!.contents) : undefined,
+      contentTitle: contentTitles.get(row.runId),
       difficulty: row.difficulty,
       lootType: row.lootType,
     }));

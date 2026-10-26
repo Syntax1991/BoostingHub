@@ -1037,15 +1037,15 @@ describe("discordSyncService.listSyncWork", () => {
     const data = await discordSyncService.getSignupEmbedData(runId);
     expect(data).not.toBeNull();
     const embed = buildSignupEmbed(data!).toJSON();
-    expect(embed.title).toBe("Signups");
-    expect(embed.url).toBeUndefined();
-    expect(embed.description?.split("\n")[0]).toMatch(/^\[.+\]\(https:\/\/example\.test\/runs\//);
+    // Compact content title; the canonical Run link sits on the title now.
+    expect(embed.title).toBe(data!.contentTitle);
+    expect(embed.url).toMatch(/^https:\/\/example\.test\/runs\//);
 
     await discordSyncService.recordSignupPost({ runId, channelId: "chan-1", messageId: "msg-url" });
     const after = await runDiscordPostRepository.findByRunId(runId);
     expect(after?.signupMessageId).toBe("msg-url");
     expect(after?.lastSignupSignature).toContain(SIGNUP_MESSAGE_FORMAT_VERSION);
-    expect(JSON.parse(after!.lastSignupSignature!).messageFormatVersion).toBe("v9-archive-run-button");
+    expect(JSON.parse(after!.lastSignupSignature!).messageFormatVersion).toBe(SIGNUP_MESSAGE_FORMAT_VERSION);
 
     expect((await discordSyncService.listSyncWork()).signups.some((entry) => entry.runId === runId)).toBe(false);
     vi.unstubAllEnvs();

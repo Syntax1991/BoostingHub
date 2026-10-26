@@ -1822,8 +1822,8 @@ describe("syncOnce — Run lifecycle channel announcements", () => {
       const embed = payload.embeds[0];
       return embed?.data?.title ?? embed?.toJSON?.()?.title ?? "";
     });
-    expect(titles[0]).toContain("Run Rescheduled");
-    expect(titles[1]).toContain("Run Rescheduled");
+    expect(titles[0]).toContain("📅 Rescheduled");
+    expect(titles[1]).toContain("📅 Rescheduled");
     expect(titles[2]).toContain("Run Cancelled");
     void firstEmbed;
 

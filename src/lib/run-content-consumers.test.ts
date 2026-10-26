@@ -248,19 +248,15 @@ describe("Discord Bundle content labels", () => {
       discordRolePing: true,
     }).toJSON();
 
-    expect(embed.title).toBe("Signups");
-    expect(embed.description).toContain("Bundle Run");
-    expect(embed.description).toContain("Season 2 Bundle");
-    expect(embed.description).toContain("Tide 1/1");
-    expect(embed.description).toContain("The Venomous Abyss 8/8");
+    // Older payload without contentTitle: the product label is the title; the
+    // compact summary carries the Raid Lead, no admin Content/Roster fields.
+    expect(embed.title).toBe("Season 2 Bundle");
+    expect(embed.description).toContain("<@111>");
     expect(embed.fields?.find((field) => field.name === "Content")).toBeUndefined();
     expect(embed.fields?.find((field) => field.name === "Roster")).toBeUndefined();
-    expect(embed.fields?.find((field) => field.name?.includes("Raid Lead"))?.value).toBe("<@111>");
     expect(display.titleCoverage).toBe("9/9");
     expect(display.channelCoverage).toBe("9of9");
-    // Compact 9/9 stays in title/channel; description lists each raid separately.
     expect(embed.description).not.toMatch(/S2B|s2b/);
-    expect(embed.description).not.toMatch(/9\/9/);
   });
 
   it("roster embed identifies Bundle once with content summary", () => {
