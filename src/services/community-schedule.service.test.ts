@@ -412,7 +412,8 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
     const group = page.runSetups.find((row) => row.runTemplateId === templateId);
     expect(group?.slots).toHaveLength(3);
     expect(group?.autoCreateSummary).toBe("MIXED");
-    expect(group?.runSetupName).toBe("HC Unsaved · The Venomous Abyss");
+    // Shared Run Setup label: live name + short content title + run type.
+    expect(group?.runSetupName).toBe("Existing Setup · Venom · HC Unsaved 8/8");
   });
 
   it("rolls back template + slots when a later slot create fails", async () => {
@@ -619,7 +620,8 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
 
     const page = await communityScheduleService.getPage(admin);
     const group = page.runSetups.find((row) => row.runTemplateId === plan.templateId);
-    expect(group?.runSetupName).toContain("The Venomous Abyss");
+    expect(group?.runSetupName).toBe("Edited Setup Name · Venom · HC Unsaved 7/8");
+    expect(group?.runSetupName).not.toContain("The Venomous Abyss");
     expect(group?.slots).toHaveLength(2);
     const option = page.templates.find((row) => row.id === plan.templateId);
     expect(option?.productId).toBe(VENOMOUS_ABYSS_PRODUCT_ID);

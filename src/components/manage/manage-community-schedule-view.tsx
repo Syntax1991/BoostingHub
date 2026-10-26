@@ -209,7 +209,7 @@ function RunSetupInventorySection({ page }: { page: CommunitySchedulePage }) {
                   {!setup.isActive ? " · Inactive" : ""}
                 </p>
                 <p className="mt-0.5 text-xs text-muted">
-                  {setup.productLabel} · {DIFFICULTY_ABBREVIATIONS[setup.difficulty]} ·{" "}
+                  {setup.contentTitle} · {DIFFICULTY_ABBREVIATIONS[setup.difficulty]} ·{" "}
                   {RUN_LOOT_TYPE_LABELS[setup.lootType]} · {setup.titleCoverage}
                 </p>
                 <p className="mt-0.5 text-xs text-muted">
@@ -225,7 +225,7 @@ function RunSetupInventorySection({ page }: { page: CommunitySchedulePage }) {
                   <CommunityScheduleDuplicateSetupButton runTemplateId={setup.id} />
                   <CommunityScheduleDeleteSetupButton
                     runTemplateId={setup.id}
-                    runSetupName={`${setup.name} · ${setup.productLabel}`}
+                    runSetupName={setup.label}
                     raidLeadName="Global"
                     slotCount={setup.slotCount}
                     canDelete={setup.canDelete}

@@ -1,4 +1,6 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
+import { contentShortTitle } from "@/lib/raid-catalog";
+import { runSelectionLabel, runSetupDefaultName } from "@/lib/run-selection-label";
 import {
   canManageCommunitySchedule,
   canMaterializeCommunityScheduleOccurrence,
@@ -16,7 +18,7 @@ import {
 } from "@/lib/community-schedule";
 import { formatDate, formatDateTime, formatTime } from "@/lib/datetime";
 import { DomainError } from "@/lib/errors";
-import { DIFFICULTY_ABBREVIATIONS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
+import { DIFFICULTY_ABBREVIATIONS } from "@/lib/labels";
 import { db, orm } from "@/lib/prisma";
 import type { RunStatus } from "@/models/enums";
 import {
@@ -68,9 +70,9 @@ function tx(txHandle: unknown): TxOrm {
   return (handle.orm.public ?? (handle.orm as unknown as TxOrm)) as TxOrm;
 }
 
+/** Shared existing-Run option label (`run-selection-label`): the live Run title (+ status). */
 function runLabel(run: RunListRecord): string {
-  const scope = run.contentDisplay.summary || run.contentDisplay.productLabel;
-  return `${formatDateTime(run.scheduledStartAt)} · ${DIFFICULTY_ABBREVIATIONS[run.difficulty]} · ${scope} · ${run.status}`;
+  return runSelectionLabel(run);
 }
 
 /** The occurrence of `slot` in the raid ID that contains the Run's start. */
@@ -313,8 +315,12 @@ function setupEquals(template: RunTemplateRecord, snapshot: RunPlanningSnapshot)
 }
 
 function adoptedSetupName(run: RunListRecord): string {
-  const scope = run.contentDisplay.summary || run.contentDisplay.productLabel;
-  return `${DIFFICULTY_ABBREVIATIONS[run.difficulty]} ${RUN_LOOT_TYPE_LABELS[run.lootType]} · ${scope}`.slice(0, 80);
+  return runSetupDefaultName({
+    contentTitle: contentShortTitle(run.contents),
+    difficulty: run.difficulty,
+    lootType: run.lootType,
+    titleCoverage: run.contentDisplay.titleCoverage,
+  });
 }
 
 /** Active, usable Run Setup with the same planning fields (most recently updated first), or null. */
@@ -506,7 +512,8 @@ export const communityScheduleOccurrenceService = {
       const lead = leads.get(run.raidLeadId);
       candidates.push({
         runId: run.id,
-        label: `${runLabel(run)} · ${run.raidLeadName}`,
+        // The Run title already names the Raid Lead.
+        label: runLabel(run),
         scheduledStartAt: run.scheduledStartAt,
         windowStartAt: occurrence.windowStartAt,
         ...time,
