@@ -2,6 +2,7 @@ import { requireUserOrRedirect } from "@/auth/session";
 import { canAccessManagement } from "@/auth/authorization";
 import { redirect } from "next/navigation";
 import { parseRunFilters } from "@/validators/run-filters";
+import { resolveRaidIdFilter } from "@/lib/raid-id-filter";
 import { parseManageRunFilters } from "@/validators/manage-run-filters";
 import { characterService } from "@/services/character.service";
 import { battleNetService } from "@/services/battle-net.service";
@@ -101,13 +102,19 @@ export const characterController = {
 };
 
 export const runController = {
-  async getRunsPage(searchParams: { difficulty?: string | string[]; status?: string | string[] }) {
+  async getRunsPage(searchParams: {
+    difficulty?: string | string[];
+    status?: string | string[];
+    id?: string | string[];
+  }) {
     const user = await requireUserOrRedirect("/runs");
     const filters = parseRunFilters(searchParams);
+    const raidId = resolveRaidIdFilter(searchParams.id);
     return {
       filters,
+      raidId,
       canCreate: canAccessManagement(user.accountRole),
-      runs: await runService.listRuns(user, filters),
+      runs: await runService.listRuns(user, filters, raidId),
     };
   },
 
@@ -127,9 +134,10 @@ export const runController = {
 };
 
 export const signupController = {
-  async getMyRunsPage() {
+  async getMyRunsPage(searchParams: { id?: string | string[] } = {}) {
     const user = await requireUserOrRedirect("/my-runs");
-    return signupService.getMyRuns(user);
+    const raidId = resolveRaidIdFilter(searchParams.id);
+    return { raidId, ...(await signupService.getMyRuns(user, { raidId })) };
   },
 };
 

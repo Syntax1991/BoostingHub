@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { formatDate, formatTime } from "@/lib/datetime";
 import { EmptyState, PageHeader } from "@/components/ui/primitives";
+import { RaidIdFilter } from "@/components/runs/raid-id-filter";
+import { RAID_ID_FILTERS, raidIdSearchParam, type RaidIdFilter as RaidIdFilterValue } from "@/lib/raid-id-filter";
 import { PageWorkspace } from "@/components/ui/layout";
 import { runDetailPath } from "@/lib/run-routes";
 import { DifficultyBadge } from "@/components/ui/badges";
@@ -17,12 +19,19 @@ import { cn } from "@/lib/cn";
 import type { CharacterRole } from "@/models/enums";
 import type { signupService } from "@/services/signup.service";
 
-type MyRuns = Awaited<ReturnType<typeof signupService.getMyRuns>>;
+type MyRuns = Awaited<ReturnType<typeof signupService.getMyRuns>> & { raidId: RaidIdFilterValue };
 type SignupItem = MyRuns["pending"][number];
 
 type SectionTone = "emphasis" | "default" | "quiet";
 
 /** A characterless Lootbuddy has no Character — its own Class snapshot stands in for display. */
+const MY_RUNS_RAID_ID_HREFS = Object.fromEntries(
+  RAID_ID_FILTERS.map((filter) => {
+    const id = raidIdSearchParam(filter);
+    return [filter, id ? `/my-runs?id=${id}` : "/my-runs"];
+  }),
+) as Record<RaidIdFilterValue, string>;
+
 function characterLabel(item: Pick<SignupItem, "characterName" | "characterRealm" | "lootbuddyClass">): string {
   if (item.characterName) {
     return item.characterRealm ? `${item.characterName}-${item.characterRealm}` : item.characterName;
@@ -56,11 +65,18 @@ export function MyRunsView({ data, timeZone }: { data: MyRuns; timeZone: string 
         title="My Runs"
         description="Your participation across runs — selected, pending, not selected, and withdrawn."
       />
+      <div className="mb-3 flex justify-end">
+        <RaidIdFilter value={data.raidId} hrefs={MY_RUNS_RAID_ID_HREFS} />
+      </div>
       {!hasAnySignup ? (
-        <EmptyState
-          title="You have not signed up for any runs."
-          description="Signups from /runs appear here, grouped by pending, selected, not selected, and withdrawn."
-        />
+        data.raidId === "all" ? (
+          <EmptyState
+            title="You have not signed up for any runs."
+            description="Signups from /runs appear here, grouped by pending, selected, not selected, and withdrawn."
+          />
+        ) : (
+          <EmptyState title="No runs in this raid ID." description="Choose Next ID or All to see your other signups." />
+        )
       ) : (
         <div className="space-y-3.5">
           <SignupGroup

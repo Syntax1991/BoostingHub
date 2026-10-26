@@ -11,7 +11,15 @@ import {
   ScheduleStartField,
   type ScheduleStartState,
 } from "@/components/manage/community-schedule-start-fields";
+import { Copy } from "lucide-react";
 import { fromDatetimeLocalValue, toDatetimeLocalValue } from "@/lib/datetime";
+import {
+  canAddRunRow,
+  duplicateRunRow,
+  QUICK_DUPLICATE_OFFSETS_HOURS,
+  quickDuplicateLabel,
+  type QuickDuplicateOffset,
+} from "@/lib/run-row-duplicate";
 import { DIFFICULTY_LABELS, ROLE_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
 import { selectionCoveragePreview, type ProductSelection } from "@/lib/product-selection";
 import {
@@ -264,22 +272,9 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
     ]);
   }
 
-  function duplicateRow(key: string) {
-    if (rows.length >= form.maxRuns) return;
-    const source = rows.find((row) => row.key === key);
-    if (!source) return;
-    setRows((current) => {
-      const index = current.findIndex((row) => row.key === key);
-      const copy: Row = {
-        key: crypto.randomUUID(),
-        scheduledLocal: source.scheduledLocal,
-        overrides: { ...source.overrides },
-        expanded: false,
-      };
-      const next = [...current];
-      next.splice(index + 1, 0, copy);
-      return next;
-    });
+  /** Copy the row it is invoked on (all overrides), start shifted by real hours, inserted right below it. */
+  function duplicateRow(key: string, offsetHours: QuickDuplicateOffset = 0) {
+    setRows((current) => duplicateRunRow(current, key, offsetHours, form.maxRuns, () => crypto.randomUUID()));
   }
 
   function removeRow(key: string) {
@@ -713,7 +708,7 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
                       Overridden
                     </span>
                   ) : null}
-                  <div className="ml-auto flex gap-2">
+                  <div className="ml-auto flex flex-wrap items-center gap-2">
                     <Button
                       type="button"
                       variant="ghost"
@@ -721,14 +716,26 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
                     >
                       {row.expanded ? "Hide" : "Configure"}
                     </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => duplicateRow(row.key)}
-                      disabled={rows.length >= form.maxRuns}
-                    >
-                      Duplicate
-                    </Button>
+                    <div role="group" aria-label={`Duplicate run ${index + 1}`} className="flex gap-0.5">
+                      {QUICK_DUPLICATE_OFFSETS_HOURS.map((offset) => {
+                        const label = quickDuplicateLabel(offset);
+                        const full = !canAddRunRow(rows.length, form.maxRuns);
+                        return (
+                          <button
+                            key={offset}
+                            type="button"
+                            onClick={() => duplicateRow(row.key, offset)}
+                            disabled={full}
+                            aria-label={`${label} (run ${index + 1})`}
+                            title={full ? `${label} — limit of ${form.maxRuns} runs reached` : label}
+                            className="inline-flex h-9 min-w-9 items-center justify-center gap-0.5 rounded-md px-1.5 text-xs text-muted hover:bg-surface-raised hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <Copy className="h-3.5 w-3.5" aria-hidden />
+                            {offset > 0 ? <span>+{offset}h</span> : null}
+                          </button>
+                        );
+                      })}
+                    </div>
                     <Button type="button" variant="ghost" onClick={() => removeRow(row.key)} disabled={rows.length <= 1}>
                       Remove
                     </Button>

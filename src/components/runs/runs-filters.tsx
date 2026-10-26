@@ -1,6 +1,8 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { raidIdSearchParam, type RaidIdFilter } from "@/lib/raid-id-filter";
 import { RAID_DIFFICULTIES, RUN_STATUSES } from "@/models/enums";
 import { DIFFICULTY_LABELS, RUN_STATUS_LABELS } from "@/lib/labels";
 import { Toolbar, ToolbarField, toolbarControlClassName } from "@/components/ui/toolbar";
@@ -12,9 +14,14 @@ import { Toolbar, ToolbarField, toolbarControlClassName } from "@/components/ui/
 export function RunsFilters({
   difficulty,
   status,
+  raidId,
+  raidIdControl,
 }: {
   difficulty?: string;
   status?: string;
+  raidId: RaidIdFilter;
+  /** Server-rendered Current ID | Next ID | All links. */
+  raidIdControl?: ReactNode;
 }) {
   const router = useRouter();
 
@@ -24,11 +31,13 @@ export function RunsFilters({
     const nextStatus = key === "status" ? value : status ?? "";
     if (nextDifficulty) params.set("difficulty", nextDifficulty);
     if (nextStatus) params.set("status", nextStatus);
+    const id = raidIdSearchParam(raidId);
+    if (id) params.set("id", id);
     router.push(`/runs${params.toString() ? `?${params}` : ""}`);
   }
 
   return (
-    <Toolbar>
+    <Toolbar end={raidIdControl}>
       <ToolbarField label="Difficulty">
         <select
           value={difficulty ?? ""}

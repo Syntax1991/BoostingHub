@@ -1,4 +1,5 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
+import { matchesRaidIdFilter, type RaidIdFilter } from "@/lib/raid-id-filter";
 import type {
   CharacterRole,
   LootbuddyMode,
@@ -62,14 +63,19 @@ function sameRoleSet(a: readonly CharacterRole[], b: readonly CharacterRole[]): 
  * not account identities. Roster selection remains a later phase.
  */
 export const signupService = {
-  async getMyRuns(user: AuthenticatedUser) {
+  async getMyRuns(user: AuthenticatedUser, options: { raidId?: RaidIdFilter; now?: Date } = {}) {
     // Only signups on upcoming Runs are loaded (not the whole signup history).
     const signups = await signupRepository.listByUserIdForRunStatuses(user.id, UPCOMING_RUN_STATUSES);
 
     // My Runs is active/upcoming participation only — skip terminal/DRAFT Runs
-    // before schedule-conflict projection and before status bucketing.
-    const upcomingSignups = signups.filter((signup) =>
-      UPCOMING_RUN_STATUSES.includes(signup.run.status),
+    // before schedule-conflict projection and before status bucketing. The
+    // raid-ID week (`?id=`, same helper as /runs) also applies before bucketing.
+    const raidId = options.raidId ?? "all";
+    const now = options.now ?? new Date();
+    const upcomingSignups = signups.filter(
+      (signup) =>
+        UPCOMING_RUN_STATUSES.includes(signup.run.status) &&
+        matchesRaidIdFilter(signup.run.scheduledStartAt, raidId, now),
     );
 
     const byRun = new Map<
