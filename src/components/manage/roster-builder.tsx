@@ -547,13 +547,11 @@ function RosterBuilderEditor({
   function toggleRoleCopy(signup: SignupRow, checked: boolean) {
     if (!data.roster.canEdit || data.roster.needsPublishSeed || pending) return;
     if (signup.status === "WITHDRAWN") return;
-    // Unselected schedule-conflicted Boosters cannot be newly staged (BLOCKED — no override).
+    // Runs within 2h / weekly unavailable: hard block — no override.
     if (checked && !stagedSelections.has(signup.id) && (signup.scheduleConflicts?.length ?? 0) > 0) {
       return;
     }
-    // WARNING: a NEW pick with saved / fully-saved lockout progress needs an
-    // explicit confirmation first. Slots already in the saved draft or the
-    // published roster, role reassignments and deselects never prompt.
+    // WARNING: NEW pick with saved lockout needs confirmation. Conflict stays blocked above.
     if (checked && !stagedSelections.has(signup.id)) {
       const unconfirmed = warningsNeedingConfirmation(signup);
       if (unconfirmed.length > 0) {
@@ -1466,6 +1464,8 @@ function SignupTile({
   const lockoutAttention = signup.contentSaves?.some((row) => row.label.attention) ?? false;
   const scheduleConflicts = signup.scheduleConflicts ?? [];
   const scheduleBlocked = !selected && scheduleConflicts.length > 0;
+  // Warning icon = schedule conflict only (runs < 2h apart / weekly unavailable).
+  // Saved lockout is already visible as HC X/10 — no extra triangle for that.
   const disabled = !editing || locked || signup.status === "WITHDRAWN" || scheduleBlocked;
   const offeredSpecs: OfferedSpecChoice[] =
     signup.participationType === "BOOSTER" ? resolveOfferedSpecs(signupOfferedSpecInput(signup)) : [];
@@ -1552,7 +1552,7 @@ function SignupTile({
         } ${
           selected
             ? "border-success/70 bg-success/15 ring-1 ring-success/30"
-            : scheduleBlocked || lockoutAttention
+            : scheduleBlocked
               ? "border-warning/45 bg-warning/5 hover:border-warning/65"
               : "border-border bg-surface hover:bg-surface-raised/50"
         }`}
@@ -1597,9 +1597,14 @@ function SignupTile({
           {selected ? (
             <DraftCheckIcon size={16} />
           ) : scheduleBlocked ? (
-            <WarningIcon label="Schedule conflict" size={16} />
-          ) : lockoutAttention || signup.issue ? (
-            <WarningIcon label={signup.issue ?? "Lockout attention"} size={16} />
+            <WarningIcon
+              label={
+                scheduleConflicts.map((row) => row.message).join(" · ") || "Schedule conflict"
+              }
+              size={16}
+            />
+          ) : signup.issue ? (
+            <WarningIcon label={signup.issue} size={16} />
           ) : (
             <span className="inline-block w-4 shrink-0" aria-hidden />
           )}
