@@ -330,8 +330,13 @@ describe("Archive / Restore Raid", () => {
     expect(await orm.RunRaidContent.where({ runId: run.id, raidId }).all()).toHaveLength(1);
     expect(await lockoutsOf(raidId)).toHaveLength(1);
 
+    const raidRowsBefore = (await orm.Raid.select("id").all()).length;
     await raidCatalogService.restoreRaid(admin, raidId);
     expect((await row(raidId))!.archived).toBe(false);
+    // Restore clears the lifecycle column on the same row — never a second Raid.
+    expect((await orm.Raid.select("id").all()).length).toBe(raidRowsBefore);
+    expect(await orm.Raid.where({ name: "QA Archive Raid" }).all()).toHaveLength(1);
+    expect(await orm.RunRaidContent.where({ runId: run.id, raidId }).all()).toHaveLength(1);
     expect((await raidRepository.listAvailableForRuns()).map((raid) => raid.id)).toContain(raidId);
     expect((await productPlanningService.listSelectable()).map((product) => product.id)).toContain(productId);
     await expectCode(raidCatalogService.restoreRaid(admin, raidId), "CONTENT_RAID_NOT_ARCHIVED");
