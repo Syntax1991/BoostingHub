@@ -204,9 +204,9 @@ function makeChannelFetcher(client: Client): ChannelFetcher {
 }
 
 function mapCategoryChildren(
-  channels: Iterable<{ id: string; position?: number; parentId?: string | null; name?: string | null }>,
+  channels: Iterable<{ id: string; position?: number; parentId?: string | null; name?: string | null; type?: ChannelType }>,
   categoryId: string | null,
-): Array<{ id: string; position: number; name?: string }> {
+): Array<{ id: string; position: number; name?: string; voice?: boolean }> {
   return [...channels]
     .filter((channel) => {
       if (categoryId === null) return true;
@@ -216,6 +216,7 @@ function mapCategoryChildren(
       id: channel.id,
       position: typeof channel.position === "number" ? channel.position : 0,
       ...(typeof channel.name === "string" ? { name: channel.name } : {}),
+      ...(channel.type === ChannelType.GuildVoice || channel.type === ChannelType.GuildStageVoice ? { voice: true } : {}),
     }));
 }
 
