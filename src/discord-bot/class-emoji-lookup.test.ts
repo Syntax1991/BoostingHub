@@ -68,6 +68,7 @@ const EMOJIS = [
   fakeEmoji("loot", "55"),
   fakeEmoji("raidlead", "44"),
   fakeEmoji("lootbuddy", "99"),
+  fakeEmoji("Unsaved", "66"),
 ];
 
 describe("resolveGuildEmojiIndicators — one snapshot for class and role indicators", () => {
@@ -87,6 +88,7 @@ describe("resolveGuildEmojiIndicators — one snapshot for class and role indica
       dps: "<:dps:33>",
       lootbuddy: "<:loot:55>",
       raidlead: "<:raidlead:44>",
+      vip: "<:Unsaved:66>",
     });
   });
 
@@ -307,7 +309,7 @@ describe("fingerprints over cached indicators", () => {
       fingerprintClassIndicators({ SHAMAN: "<:shaman:123>", DEATH_KNIGHT: "<:dk:456>", DEMON_HUNTER: "<a:dh:789>" }),
     );
     expect(fingerprintRoleIndicators(roleIndicators)).toBe(
-      "tank:11|healer:22|dps:33|lootbuddy:55|raidlead:44",
+      "tank:11|healer:22|dps:33|lootbuddy:55|raidlead:44|vip:66",
     );
   });
 });

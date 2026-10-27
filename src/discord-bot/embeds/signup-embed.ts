@@ -28,6 +28,7 @@ const ROLE_EMOJI_FALLBACK: Record<RoleDiscordEmojiKey, string> = {
   dps: "⚔",
   lootbuddy: "💰",
   raidlead: "⚔",
+  vip: LOOT_EMOJIS.VIP,
 };
 
 /**
@@ -237,6 +238,11 @@ function buildNotesFields(notes: readonly SignupEmbedNote[], maxNoteChars: numbe
 }
 
 /** Distinct signed-up Users (the existing "Signed users" meaning), never selection progress. */
+/** VIP shows the Guild's `:Unsaved:` emoji when present; other Run types keep unicode. */
+function lootTypeEmoji(data: SignupEmbedData, roleIndicators?: GuildRoleIndicators): string {
+  return data.lootType === "VIP" ? roleEmoji("vip", roleIndicators) : LOOT_EMOJIS[data.lootType];
+}
+
 function signedSummary(data: SignupEmbedData): string {
   return `👥 ${data.uniqueSignupCount} signed`;
 }
@@ -248,7 +254,7 @@ export function buildSignupSummary(
 ): string {
   const leadLine = [
     `${roleEmoji("raidlead", roleIndicators)} ${formatRaidLeadFieldValue(data)}`,
-    `${LOOT_EMOJIS[data.lootType]} ${DIFFICULTY_ABBREVIATIONS[data.difficulty]} ${RUN_LOOT_TYPE_LABELS[data.lootType]}`,
+    `${lootTypeEmoji(data, roleIndicators)} ${DIFFICULTY_ABBREVIATIONS[data.difficulty]} ${RUN_LOOT_TYPE_LABELS[data.lootType]}`,
     signedSummary(data),
   ]
     .filter(Boolean)
