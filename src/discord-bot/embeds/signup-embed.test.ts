@@ -262,6 +262,13 @@ describe("buildSignupEmbed — hierarchy", () => {
     expect(json.description).toContain("<:rl:4> <@999000111222333444>");
   });
 
+  it("VIP Run type uses the Guild `:Unsaved:` emoji when present, 💎 otherwise; other Run types keep unicode", () => {
+    const roleIndicators = { vip: "<:Unsaved:7>" };
+    expect(buildSignupSummary(emptyData(), roleIndicators)).toContain("<:Unsaved:7> HC VIP");
+    expect(buildSignupSummary(emptyData())).toContain("💎 HC VIP");
+    expect(buildSignupSummary(emptyData({ lootType: "UNSAVED" }), roleIndicators)).toContain("💰 HC Unsaved");
+  });
+
   it("signup demand may exceed the composition target: 5 Healer signups for 3 slots reads `Healers 5`, never `5/3`", () => {
     const data = emptyData({
       uniqueSignupCount: 13,

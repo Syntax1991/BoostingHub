@@ -19,6 +19,7 @@ const ROLE_EMOJI_FALLBACK: Record<RoleDiscordEmojiKey, string> = {
   dps: "⚔",
   lootbuddy: "📦",
   raidlead: "⭐",
+  vip: "💎",
 };
 
 const EMPTY_SELECTION = "No players selected yet.";

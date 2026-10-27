@@ -3,8 +3,11 @@ import { CLASS_DISCORD_EMOJI_NAMES } from "@/lib/run-start-message";
 import type { WowClass } from "@/models/enums";
 import { WOW_CLASSES } from "@/models/enums";
 
-/** Logical role keys used in signup/roster embeds (API + fingerprints). */
-export const ROLE_DISCORD_EMOJI_KEYS = ["tank", "healer", "dps", "lootbuddy", "raidlead"] as const;
+/**
+ * Logical keys for Guild emojis used in signup/roster embeds (API + fingerprints):
+ * the roles, plus `vip` for the VIP Run type in the Signup summary.
+ */
+export const ROLE_DISCORD_EMOJI_KEYS = ["tank", "healer", "dps", "lootbuddy", "raidlead", "vip"] as const;
 export type RoleDiscordEmojiKey = (typeof ROLE_DISCORD_EMOJI_KEYS)[number];
 
 /**
@@ -17,6 +20,8 @@ export const ROLE_DISCORD_EMOJI_NAMES: Record<RoleDiscordEmojiKey, readonly stri
   dps: ["dps"],
   lootbuddy: ["loot"],
   raidlead: ["raidlead"],
+  // The Guild's money-bag emoji (`:Unsaved:`) is the VIP Run type marker.
+  vip: ["unsaved"],
 };
 
 export type GuildRoleIndicators = Partial<Record<RoleDiscordEmojiKey, string>>;
@@ -146,7 +151,8 @@ export function buildClassIndicators(snapshot: GuildEmojiSnapshot): GuildClassIn
 
 /**
  * Role emojis (`tank`, `healer`/`heal`, `dps`, `loot`, `raidlead`) for signup/roster
- * field labels. Logical key `lootbuddy` maps to Guild emoji `loot`. Missing
+ * field labels, plus `unsaved` for the VIP Run type. Logical key `lootbuddy`
+ * maps to Guild emoji `loot`, `vip` to `unsaved`. Missing
  * names are omitted so the embed falls back to unicode.
  */
 export function buildRoleIndicators(snapshot: GuildEmojiSnapshot): GuildRoleIndicators {
