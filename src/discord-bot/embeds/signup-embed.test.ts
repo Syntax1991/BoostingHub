@@ -210,7 +210,9 @@ describe("buildSignupEmbed — hierarchy", () => {
     const summary = buildSignupSummary(data);
     const seconds = Math.floor(Date.parse(data.scheduledStartAt) / 1000);
     expect(summary).toContain("<@999000111222333444>");
-    expect(summary).toContain("💎 HC VIP");
+    expect(summary).toContain("💎 VIP");
+    // Run type only — no difficulty prefix.
+    expect(summary).not.toContain("HC VIP");
     // Distinct signed-up Users (the old "Signed users"), never picked/target.
     expect(summary).toContain("👥 13 signed");
     expect(summary).not.toMatch(/selected/i);
@@ -264,9 +266,9 @@ describe("buildSignupEmbed — hierarchy", () => {
 
   it("VIP Run type uses the Guild `:Unsaved:` emoji when present, 💎 otherwise; other Run types keep unicode", () => {
     const roleIndicators = { vip: "<:Unsaved:7>" };
-    expect(buildSignupSummary(emptyData(), roleIndicators)).toContain("<:Unsaved:7> HC VIP");
-    expect(buildSignupSummary(emptyData())).toContain("💎 HC VIP");
-    expect(buildSignupSummary(emptyData({ lootType: "UNSAVED" }), roleIndicators)).toContain("💰 HC Unsaved");
+    expect(buildSignupSummary(emptyData(), roleIndicators)).toContain("<:Unsaved:7> VIP");
+    expect(buildSignupSummary(emptyData())).toContain("💎 VIP");
+    expect(buildSignupSummary(emptyData({ lootType: "UNSAVED" }), roleIndicators)).toContain("💰 Unsaved");
   });
 
   it("signup demand may exceed the composition target: 5 Healer signups for 3 slots reads `Healers 5`, never `5/3`", () => {
@@ -360,6 +362,13 @@ describe("buildSignupButtons", () => {
     ]);
     expect(layout.flat().map((button) => button.action)).toEqual(["signup", "quick-signup", "lootbuddy", "cancel", "note"]);
     expect(layout.flat().every((button) => button.runId === "r7777777-7777-4777-8777-777777777777")).toBe(true);
+  });
+
+  it("LB button uses the Guild lootbuddy emoji (`:Unsaved:`) when present, 💰 otherwise", () => {
+    const lbEmoji = (roleIndicators?: { lootbuddy?: string }) =>
+      (buildSignupButtons(emptyData(), roleIndicators)[0]!.toJSON().components as Array<{ emoji?: unknown }>)[2]!.emoji;
+    expect(lbEmoji({ lootbuddy: "<:Unsaved:1532868942727741491>" })).toEqual({ animated: false, name: "Unsaved", id: "1532868942727741491" });
+    expect(lbEmoji()).toMatchObject({ name: "💰", id: undefined });
   });
 
   it("a closed window disables the signup row; Unsign and the note stay usable", () => {

@@ -888,7 +888,7 @@ async function syncSignupPost(
     }
 
     const embed = buildSignupEmbed(data, { classIndicators, roleIndicators });
-    const rows = buildSignupButtons(data);
+    const rows = buildSignupButtons(data, roleIndicators);
     const payload: MessageEditOptions = { embeds: [embed], components: rows };
 
     // Local QA may still hold comma-separated multi-message ids from an earlier

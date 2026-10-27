@@ -18,7 +18,8 @@ export const ROLE_DISCORD_EMOJI_NAMES: Record<RoleDiscordEmojiKey, readonly stri
   tank: ["tank"],
   healer: ["healer", "heal"],
   dps: ["dps"],
-  lootbuddy: ["loot"],
+  // The Guild's money-bag `:Unsaved:` emoji first; `loot` stays as a fallback.
+  lootbuddy: ["unsaved", "loot"],
   raidlead: ["raidlead"],
   // The Guild's money-bag emoji (`:Unsaved:`) is the VIP Run type marker.
   vip: ["unsaved"],
@@ -152,7 +153,7 @@ export function buildClassIndicators(snapshot: GuildEmojiSnapshot): GuildClassIn
 /**
  * Role emojis (`tank`, `healer`/`heal`, `dps`, `loot`, `raidlead`) for signup/roster
  * field labels, plus `unsaved` for the VIP Run type. Logical key `lootbuddy`
- * maps to Guild emoji `loot`, `vip` to `unsaved`. Missing
+ * maps to Guild emoji `unsaved` (else `loot`), `vip` to `unsaved`. Missing
  * names are omitted so the embed falls back to unicode.
  */
 export function buildRoleIndicators(snapshot: GuildEmojiSnapshot): GuildRoleIndicators {

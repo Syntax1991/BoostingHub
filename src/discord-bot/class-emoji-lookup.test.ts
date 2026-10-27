@@ -86,7 +86,7 @@ describe("resolveGuildEmojiIndicators — one snapshot for class and role indica
       tank: "<:tank:11>",
       healer: "<:healer:22>",
       dps: "<:dps:33>",
-      lootbuddy: "<:loot:55>",
+      lootbuddy: "<:Unsaved:66>",
       raidlead: "<:raidlead:44>",
       vip: "<:Unsaved:66>",
     });
@@ -297,6 +297,23 @@ describe("createGuildEmojiCache", () => {
   });
 });
 
+describe("buildRoleIndicators — lootbuddy", () => {
+  it("prefers the Guild `:Unsaved:` emoji and falls back to `loot`", async () => {
+    const withUnsaved = await resolveGuildEmojiIndicators(
+      fakeClient({ [GUILD]: [fakeEmoji("loot", "55"), fakeEmoji("Unsaved", "66")] }).client,
+      GUILD,
+      createGuildEmojiCache(),
+    );
+    expect(withUnsaved.roleIndicators.lootbuddy).toBe("<:Unsaved:66>");
+    const lootOnly = await resolveGuildEmojiIndicators(
+      fakeClient({ [GUILD]: [fakeEmoji("loot", "55")] }).client,
+      GUILD,
+      createGuildEmojiCache(),
+    );
+    expect(lootOnly.roleIndicators.lootbuddy).toBe("<:loot:55>");
+  });
+});
+
 describe("fingerprints over cached indicators", () => {
   it("are identical to fingerprints of the same emojis built directly", async () => {
     const discord = fakeClient({ [GUILD]: EMOJIS });
@@ -309,7 +326,7 @@ describe("fingerprints over cached indicators", () => {
       fingerprintClassIndicators({ SHAMAN: "<:shaman:123>", DEATH_KNIGHT: "<:dk:456>", DEMON_HUNTER: "<a:dh:789>" }),
     );
     expect(fingerprintRoleIndicators(roleIndicators)).toBe(
-      "tank:11|healer:22|dps:33|lootbuddy:55|raidlead:44|vip:66",
+      "tank:11|healer:22|dps:33|lootbuddy:66|raidlead:44|vip:66",
     );
   });
 });
