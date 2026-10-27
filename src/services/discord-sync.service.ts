@@ -381,7 +381,7 @@ export type SignupSyncWorkItem = {
  * Folded into `lastSignupSignature` so existing messages refresh once after
  * deploy — no schema migration.
  */
-export const SIGNUP_MESSAGE_FORMAT_VERSION = "v13-run-type-only";
+export const SIGNUP_MESSAGE_FORMAT_VERSION = "v14-header-grid";
 
 /**
  * Bumped when Roster Discord embed presentation changes without a domain

@@ -247,27 +247,38 @@ function signedSummary(data: SignupEmbedData): string {
   return `👥 ${data.uniqueSignupCount} signed`;
 }
 
-/** Compact Run summary under the title: who / what / when, without admin wording. */
-export function buildSignupSummary(
+/** Raid lead as plain text — field names cannot render mentions. */
+function raidLeadName(data: SignupEmbedData): string {
+  const name = data.raidLeadName.trim();
+  return name.length > 0 ? name : EMPTY_FIELD_VALUE;
+}
+
+/**
+ * The Run header as one 3×2 grid of inline fields, aligned with the
+ * Tanks | Healers | DPS columns below it:
+ *
+ *   ⚔ Raid lead   💎 VIP        👥 14 signed
+ *   📅 date       🕒 time       ◷ in 3 days
+ */
+export function buildSignupHeaderFields(
   data: SignupEmbedData,
   roleIndicators?: GuildRoleIndicators,
-): string {
-  const leadLine = [
-    `${roleEmoji("raidlead", roleIndicators)} ${formatRaidLeadFieldValue(data)}`,
-    `${lootTypeEmoji(data, roleIndicators)} ${RUN_LOOT_TYPE_LABELS[data.lootType]}`,
-    signedSummary(data),
-  ]
-    .filter(Boolean)
-    .join("  ");
+): EmbedField[] {
   const seconds = unixSeconds(data.scheduledStartAt);
-  const timeLine = `📅 <t:${seconds}:D>  🕒 <t:${seconds}:t>  ◷ <t:${seconds}:R>`;
-  const stateLine = isRunEnded(data)
-    ? "Run ended — Raid Lead / Admin can archive it below."
-    : data.signupWindowOpen
-      ? null
-      : "Signups are closed.";
-  // A blank line under the title, and one closing the metadata before the role row.
-  return [ZERO_WIDTH, leadLine, timeLine, stateLine].filter(Boolean).join("\n") + SECTION_GAP;
+  return [
+    { name: `${roleEmoji("raidlead", roleIndicators)} ${raidLeadName(data)}`, value: `📅 <t:${seconds}:D>` },
+    {
+      name: `${lootTypeEmoji(data, roleIndicators)} ${RUN_LOOT_TYPE_LABELS[data.lootType]}`,
+      value: `🕒 <t:${seconds}:t>`,
+    },
+    { name: signedSummary(data), value: `◷ <t:${seconds}:R>` },
+  ].map((field) => ({ ...field, inline: true }));
+}
+
+/** Only when signups are closed or the Run ended; an open Run has no description. */
+export function buildSignupStateLine(data: SignupEmbedData): string | null {
+  if (isRunEnded(data)) return "Run ended — Raid Lead / Admin can archive it below.";
+  return data.signupWindowOpen ? null : "Signups are closed.";
 }
 
 export function emptySignupEmbedMembers(): SignupEmbedRoleMembers {
@@ -313,6 +324,7 @@ function assemble(
     false,
   );
   const fields: EmbedField[] = [
+    ...buildSignupHeaderFields(data, options?.roleIndicators),
     ...buildRoleFields(data, step.classIndicators, options?.roleIndicators),
     // Lootbuddies → Notes gap only when Notes follow.
     ...(notes.length > 0
@@ -325,9 +337,10 @@ function assemble(
 
   const embed = new EmbedBuilder()
     .setTitle(title)
-    .setDescription(buildSignupSummary(data, options?.roleIndicators))
     .addFields(fields)
     .setColor(data.signupWindowOpen ? 0xd4af37 : 0x555555);
+  const stateLine = buildSignupStateLine(data);
+  if (stateLine) embed.setDescription(stateLine);
   if (runUrl) embed.setURL(runUrl);
   if (!isRunEnded(data)) embed.setFooter({ text: "Signup does not mean selected." });
   return embed;
@@ -344,7 +357,7 @@ function fitsDiscordLimits(embed: EmbedBuilder): boolean {
 
 /**
  * The Signup Discord message: `contentTitle` ("Venom & Tide & Kithix") linking
- * to the Run, a compact summary, then the roster-first body — Tanks | Healers
+ * to the Run, the 3×2 header grid, then the roster-first body — Tanks | Healers
  * | DPS columns, Lootbuddies, Notes (only when someone left one), Open Run.
  * The selected lineup stays on the separate Roster message.
  *
@@ -401,18 +414,20 @@ export function buildSignupButtons(
       new ButtonBuilder()
         .setCustomId(buildCustomId("signup", data.runId))
         .setLabel("Signup")
-        .setStyle(ButtonStyle.Primary)
+        .setEmoji("📝")
+        .setStyle(ButtonStyle.Success)
         .setDisabled(disabled),
       new ButtonBuilder()
         .setCustomId(buildCustomId("quick-signup", data.runId))
         .setLabel("Quick Sign")
+        .setEmoji("⚡")
         .setStyle(ButtonStyle.Success)
         .setDisabled(disabled),
       new ButtonBuilder()
         .setCustomId(buildCustomId("lootbuddy", data.runId))
         .setLabel("LB")
         .setEmoji(roleEmoji("lootbuddy", roleIndicators))
-        .setStyle(ButtonStyle.Secondary)
+        .setStyle(ButtonStyle.Success)
         .setDisabled(disabled),
     ),
     new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -423,8 +438,8 @@ export function buildSignupButtons(
       new ButtonBuilder()
         .setCustomId(buildCustomId("note", data.runId))
         .setLabel("Add / Edit Note")
-        .setEmoji("📝")
-        .setStyle(ButtonStyle.Secondary),
+        .setEmoji("🗒️")
+        .setStyle(ButtonStyle.Primary),
     ),
   ];
 }

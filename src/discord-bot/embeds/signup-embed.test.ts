@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { ButtonStyle } from "discord.js";
 import type { SignupEmbedData, SignupEmbedMember, SignupEmbedNote } from "@/services/discord-sync.service";
 import {
   buildSignupButtons,
   buildSignupEmbed,
-  buildSignupSummary,
+  buildSignupHeaderFields,
+  buildSignupStateLine,
   emptySignupEmbedMembers,
   formatSignupNoteLine,
   formatSignupParticipantGroupLine,
@@ -185,6 +187,11 @@ describe("participant lines", () => {
   });
 });
 
+/** Fields after the 3×2 header grid (Raid Lead | type | signed). */
+function body(json: { fields?: Array<{ name: string; value: string; inline?: boolean }> }) {
+  return (json.fields ?? []).slice(3);
+}
+
 describe("buildSignupEmbed — hierarchy", () => {
   it("title is the compact content title linking to the Run — never the long raid names", () => {
     const json = buildSignupEmbed(emptyData(), { runUrl: RUN_URL }).toJSON();
@@ -197,7 +204,7 @@ describe("buildSignupEmbed — hierarchy", () => {
     expect(buildSignupEmbed(emptyData({ contentTitle: undefined, productLabel: "Venom" })).toJSON().title).toBe("Venom");
   });
 
-  it("summary: Raid Lead, run type, signup count (not selection), date, time, relative start — no admin block", () => {
+  it("header grid: Raid Lead | run type | signup count over date | time | relative start — no admin block", () => {
     const data = emptyData({
       uniqueSignupCount: 13,
       roleStatus: {
@@ -207,34 +214,35 @@ describe("buildSignupEmbed — hierarchy", () => {
         lootbuddy: { signed: 0, picked: 0 },
       },
     });
-    const summary = buildSignupSummary(data);
+    const header = buildSignupHeaderFields(data);
     const seconds = Math.floor(Date.parse(data.scheduledStartAt) / 1000);
-    expect(summary).toContain("<@999000111222333444>");
-    expect(summary).toContain("💎 VIP");
-    // Run type only — no difficulty prefix.
-    expect(summary).not.toContain("HC VIP");
-    // Distinct signed-up Users (the old "Signed users"), never picked/target.
-    expect(summary).toContain("👥 13 signed");
-    expect(summary).not.toMatch(/selected/i);
-    expect(summary).not.toContain("16/20");
-    expect(summary).toContain(`<t:${seconds}:D>`);
-    expect(summary).toContain(`<t:${seconds}:t>`);
-    expect(summary).toContain(`<t:${seconds}:R>`);
-    const fields = buildSignupEmbed(data).toJSON().fields ?? [];
+    // Field names cannot render mentions: the Raid Lead is plain text.
+    expect(header).toEqual([
+      { name: `⚔ ${data.raidLeadName}`, value: `📅 <t:${seconds}:D>`, inline: true },
+      { name: "💎 VIP", value: `🕒 <t:${seconds}:t>`, inline: true },
+      // Distinct signed-up Users (the old "Signed users"), never picked/target.
+      { name: "👥 13 signed", value: `◷ <t:${seconds}:R>`, inline: true },
+    ]);
+    const json = buildSignupEmbed(data).toJSON();
+    const fields = json.fields ?? [];
+    expect(fields.slice(0, 3)).toEqual(header);
+    // An open Run has no description: the grid sits right under the title.
+    expect(json.description).toBeUndefined();
     for (const name of ["Scheduled", "Signed users", "Status", "Loot", "Signups by role"]) {
       expect(fields.some((field) => field.name === name || field.name.endsWith(` ${name}`))).toBe(false);
     }
     expect(JSON.stringify(buildSignupEmbed(data).toJSON())).not.toContain("Roster published");
   });
 
-  it("closed and ended Runs say so in the summary", () => {
-    expect(buildSignupSummary(emptyData({ signupWindowOpen: false }))).toContain("Signups are closed.");
-    expect(buildSignupSummary(emptyData({ runStatus: "COMPLETED", signupWindowOpen: false }))).toContain("Run ended");
+  it("closed and ended Runs say so in the description", () => {
+    expect(buildSignupStateLine(emptyData())).toBeNull();
+    expect(buildSignupStateLine(emptyData({ signupWindowOpen: false }))).toBe("Signups are closed.");
+    expect(buildSignupEmbed(emptyData({ runStatus: "COMPLETED", signupWindowOpen: false })).toJSON().description).toContain("Run ended");
   });
 
   it("roster-first fields: Tanks | Healers | DPS inline with signup counts only, Lootbuddies, Open Run", () => {
     const json = buildSignupEmbed(rosterData(10, 2), { classIndicators: INDICATORS, runUrl: RUN_URL }).toJSON();
-    const fields = json.fields ?? [];
+    const fields = body(json);
     expect(fields.map((field) => field.name)).toEqual([
       "🛡 Tanks 2",
       "✚ Healers 4",
@@ -249,7 +257,7 @@ describe("buildSignupEmbed — hierarchy", () => {
   });
 
   it("empty roles keep their column so the grid stays stable; no Notes heading without notes", () => {
-    const fields = buildSignupEmbed(emptyData(), { runUrl: null }).toJSON().fields ?? [];
+    const fields = body(buildSignupEmbed(emptyData(), { runUrl: null }).toJSON());
     expect(fields.map((field) => field.value)).toEqual(["—\n\u200b", "—\n\u200b", "—\n\u200b", "—"]);
     expect(fields.some((field) => field.name.includes("Notes"))).toBe(false);
   });
@@ -260,15 +268,16 @@ describe("buildSignupEmbed — hierarchy", () => {
     }).toJSON();
     const names = (json.fields ?? []).map((field) => field.name);
     // Real WoW role artwork (Guild emojis), once per heading — never `<emoji> Tanks <emoji>`.
-    expect(names.slice(0, 4)).toEqual(["<:tank:1> Tanks 0", "<:healer:2> Healers 0", "<:dps:3> DPS 0", "<:lb:5> Lootbuddies 0"]);
-    expect(json.description).toContain("<:rl:4> <@999000111222333444>");
+    expect(names.slice(3, 7)).toEqual(["<:tank:1> Tanks 0", "<:healer:2> Healers 0", "<:dps:3> DPS 0", "<:lb:5> Lootbuddies 0"]);
+    expect(names[0]).toMatch(/^<:rl:4> /);
   });
 
   it("VIP Run type uses the Guild `:Unsaved:` emoji when present, 💎 otherwise; other Run types keep unicode", () => {
     const roleIndicators = { vip: "<:Unsaved:7>" };
-    expect(buildSignupSummary(emptyData(), roleIndicators)).toContain("<:Unsaved:7> VIP");
-    expect(buildSignupSummary(emptyData())).toContain("💎 VIP");
-    expect(buildSignupSummary(emptyData({ lootType: "UNSAVED" }), roleIndicators)).toContain("💰 Unsaved");
+    const runType = (data: SignupEmbedData, indicators?: typeof roleIndicators) => buildSignupHeaderFields(data, indicators)[1]!.name;
+    expect(runType(emptyData(), roleIndicators)).toBe("<:Unsaved:7> VIP");
+    expect(runType(emptyData())).toBe("💎 VIP");
+    expect(runType(emptyData({ lootType: "UNSAVED" }), roleIndicators)).toBe("💰 Unsaved");
   });
 
   it("signup demand may exceed the composition target: 5 Healer signups for 3 slots reads `Healers 5`, never `5/3`", () => {
@@ -282,7 +291,7 @@ describe("buildSignupEmbed — hierarchy", () => {
       },
     });
     const json = buildSignupEmbed(data, { runUrl: null }).toJSON();
-    expect((json.fields ?? []).map((field) => field.name)).toEqual(["🛡 Tanks 1", "✚ Healers 5", "⚔ DPS 7", "💰 Lootbuddies 1"]);
+    expect(body(json).map((field) => field.name)).toEqual(["🛡 Tanks 1", "✚ Healers 5", "⚔ DPS 7", "💰 Lootbuddies 1"]);
     const text = JSON.stringify({ description: json.description, fields: json.fields });
     for (const ratio of ["5/3", "1/2", "7/11", "0/16"]) expect(text).not.toContain(ratio);
     expect(text).not.toMatch(/selected/i); // only the footer explains that signup is not selection
@@ -371,6 +380,21 @@ describe("buildSignupButtons", () => {
     expect(lbEmoji()).toMatchObject({ name: "💰", id: undefined });
   });
 
+  it("join buttons are green with emojis; Unsign red; the note blurple", () => {
+    const styles = buildSignupButtons(emptyData()).flatMap((row) =>
+      (row.toJSON().components as Array<{ label: string; style: ButtonStyle; emoji?: { name?: string } }>).map(
+        (component) => [component.label, component.style, component.emoji?.name ?? null],
+      ),
+    );
+    expect(styles).toEqual([
+      ["Signup", ButtonStyle.Success, "📝"],
+      ["Quick Sign", ButtonStyle.Success, "⚡"],
+      ["LB", ButtonStyle.Success, "💰"],
+      ["Unsign", ButtonStyle.Danger, null],
+      ["Add / Edit Note", ButtonStyle.Primary, "🗒️"],
+    ]);
+  });
+
   it("a closed window disables the signup row; Unsign and the note stay usable", () => {
     const layout = rows(emptyData({ signupWindowOpen: false })).flat();
     const byAction = new Map(layout.map((button) => [button.action, button.disabled]));
@@ -395,15 +419,14 @@ describe("buildSignupEmbed — section spacing", () => {
   const GAP = "\n\u200b";
   const zeroWidthLines = (text: string) => text.split("\n").filter((line) => line === "\u200b").length;
 
-  it("a blank line under the title and one closing the metadata", () => {
-    const description = buildSignupEmbed(emptyData({ uniqueSignupCount: 2 })).toJSON().description ?? "";
-    expect(description.startsWith("\u200b\n")).toBe(true);
-    expect(description.endsWith(GAP)).toBe(true);
-    expect(zeroWidthLines(description)).toBe(2);
+  it("no blank lines between the title, the header grid and the role row", () => {
+    const json = buildSignupEmbed(emptyData({ uniqueSignupCount: 2 })).toJSON();
+    expect(json.description).toBeUndefined();
+    for (const field of (json.fields ?? []).slice(0, 3)) expect(zeroWidthLines(field.value)).toBe(0);
   });
 
   it("one gap under the Tanks | Healers | DPS row, none between players", () => {
-    const fields = buildSignupEmbed(rosterData(18, 0), { classIndicators: INDICATORS, runUrl: null }).toJSON().fields ?? [];
+    const fields = body(buildSignupEmbed(rosterData(18, 0), { classIndicators: INDICATORS, runUrl: null }).toJSON());
     for (const field of fields.slice(0, 3)) {
       expect(field.value.endsWith(GAP)).toBe(true);
       expect(zeroWidthLines(field.value)).toBe(1); // only the closing gap
