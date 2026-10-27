@@ -15,7 +15,7 @@ import {
   chunkEmbedFieldLines,
 } from "@/lib/discord-embed-field-chunking";
 import { classIndicator } from "@/lib/run-start-message";
-import { DIFFICULTY_ABBREVIATIONS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
+import { RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
 import type { WowClass } from "@/models/enums";
 
 const EMPTY_FIELD_VALUE = "—";
@@ -254,7 +254,7 @@ export function buildSignupSummary(
 ): string {
   const leadLine = [
     `${roleEmoji("raidlead", roleIndicators)} ${formatRaidLeadFieldValue(data)}`,
-    `${lootTypeEmoji(data, roleIndicators)} ${DIFFICULTY_ABBREVIATIONS[data.difficulty]} ${RUN_LOOT_TYPE_LABELS[data.lootType]}`,
+    `${lootTypeEmoji(data, roleIndicators)} ${RUN_LOOT_TYPE_LABELS[data.lootType]}`,
     signedSummary(data),
   ]
     .filter(Boolean)
@@ -378,9 +378,12 @@ function isRunEnded(data: Pick<SignupEmbedData, "runStatus">): boolean {
  * Two rows below the embed: Signup · Quick Sign · LB, then Unsign · Add / Edit
  * Note. Signup buttons disable once the window closes (the server is the real
  * gate either way); Unsign and the note stay available. An ended Run shows
- * only "Archive Run".
+ * only "Archive Run". The LB button carries the Guild lootbuddy emoji when present.
  */
-export function buildSignupButtons(data: SignupEmbedData): ActionRowBuilder<ButtonBuilder>[] {
+export function buildSignupButtons(
+  data: SignupEmbedData,
+  roleIndicators?: GuildRoleIndicators,
+): ActionRowBuilder<ButtonBuilder>[] {
   if (isRunEnded(data)) {
     return [
       new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -408,7 +411,7 @@ export function buildSignupButtons(data: SignupEmbedData): ActionRowBuilder<Butt
       new ButtonBuilder()
         .setCustomId(buildCustomId("lootbuddy", data.runId))
         .setLabel("LB")
-        .setEmoji("💰")
+        .setEmoji(roleEmoji("lootbuddy", roleIndicators))
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(disabled),
     ),
