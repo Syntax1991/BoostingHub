@@ -112,3 +112,15 @@ describe("Attendance table", () => {
     expect(table![1].split(/\s+/)).toContain("relative");
   });
 });
+
+describe("CardHeader on phones", () => {
+  const primitives = read("components/ui/primitives.tsx");
+
+  it("lets the actions wrap under a readable title instead of squeezing it (Attendance header)", () => {
+    const header = primitives.slice(primitives.indexOf("export function CardHeader"), primitives.indexOf("export function PageHeader"));
+    expect(header).toContain("flex flex-wrap items-start justify-between");
+    // The title keeps a 12rem basis, so wide actions move to their own row.
+    expect(classNameContaining(header, "flex-[1_1_12rem]")).toContain("min-w-0");
+    expect(classNameContaining(header, "max-w-full")).toContain("shrink-0");
+  });
+});

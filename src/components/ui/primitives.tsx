@@ -42,15 +42,17 @@ export function CardHeader({
   return (
     <div
       className={cn(
-        "flex items-start justify-between gap-3 border-b border-border px-3 py-2",
+        // Wraps: when the actions do not fit beside a readable title (12rem), they
+        // move to their own row instead of squeezing the title into a sliver.
+        "flex flex-wrap items-start justify-between gap-x-3 gap-y-2 border-b border-border px-3 py-2",
         className,
       )}
     >
-      <div className="min-w-0">
+      <div className="min-w-0 flex-[1_1_12rem]">
         <h2 className="text-sm font-semibold tracking-wide text-foreground">{title}</h2>
         {description ? <p className="mt-0.5 text-xs text-muted">{description}</p> : null}
       </div>
-      {action ? <div className="shrink-0">{action}</div> : null}
+      {action ? <div className="max-w-full shrink-0">{action}</div> : null}
     </div>
   );
 }
