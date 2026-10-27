@@ -381,7 +381,7 @@ export type SignupSyncWorkItem = {
  * Folded into `lastSignupSignature` so existing messages refresh once after
  * deploy — no schema migration.
  */
-export const SIGNUP_MESSAGE_FORMAT_VERSION = "v11-signup-counts-only";
+export const SIGNUP_MESSAGE_FORMAT_VERSION = "v12-section-spacing";
 
 /**
  * Bumped when Roster Discord embed presentation changes without a domain
