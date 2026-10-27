@@ -31,6 +31,7 @@ import {
   WarningIcon,
 } from "@/components/ui/ops-icons";
 import { ChooseSpecOption } from "@/components/manage/choose-spec-option";
+import { rosterSlotWarningReasons } from "@/components/manage/roster-slot-warning";
 import { SpecIcon } from "@/components/ui/spec-icon";
 import { WclBestLink } from "@/components/ui/wcl-best-link";
 import { Card, CardHeader } from "@/components/ui/primitives";
@@ -120,7 +121,8 @@ type DraftRosterSlot = {
   specialization: string | null;
   name: string;
   wowClass: WowClass | null;
-  warning: boolean;
+  /** Why the slot needs attention, one line per reason; empty = no warning icon. */
+  warningReasons: string[];
   external?: boolean;
 };
 
@@ -493,16 +495,13 @@ function RosterBuilderEditor({
     for (const signup of domainSignups) {
       if (!stagedSelections.has(signup.id)) continue;
       const role = stagedSelections.get(signup.id) ?? null;
-      const lockoutAttention = signup.contentSaves?.some((row) => row.label.attention) ?? false;
-      const hasConflict = (signup.scheduleConflicts?.length ?? 0) > 0;
-      const plannedElsewhere = (signup.runCommitments?.length ?? 0) > 0;
       slots.push({
         signup,
         role,
         specialization: stagedSpecs.get(signup.id) ?? null,
         name: signupDisplayName(signup),
         wowClass: lootbuddyDisplayClass(signup) ?? signup.character?.wowClass ?? null,
-        warning: lockoutAttention || hasConflict || plannedElsewhere || Boolean(signup.issue),
+        warningReasons: rosterSlotWarningReasons(signup),
       });
     }
     for (const booster of externalBoosters) {
@@ -512,7 +511,7 @@ function RosterBuilderEditor({
         specialization: null,
         name: `@${booster.name}`,
         wowClass: booster.wowClass,
-        warning: false,
+        warningReasons: [],
         external: true,
       });
     }
@@ -1138,7 +1137,9 @@ function RosterBuilderEditor({
                           <SpecIcon wowClass={slot.wowClass} specialization={slot.specialization} size={18} />
                         ) : null}
                         {slot.role && isConcreteScanRole(slot.role) ? <RoleIcon role={slot.role} size={18} /> : null}
-                        {slot.warning ? <WarningIcon label="Needs attention" size={16} /> : null}
+                        {slot.warningReasons.length > 0 ? (
+                          <WarningIcon label={slot.warningReasons.join("\n")} size={16} />
+                        ) : null}
                       </button>
                     ) : (
                       <div className="flex min-h-[40px] items-center rounded-md border border-dashed border-border/50 px-2.5 py-2 text-sm text-muted/70">
