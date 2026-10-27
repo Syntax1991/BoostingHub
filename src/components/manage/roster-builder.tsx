@@ -1463,6 +1463,8 @@ function SignupTile({
   const character = signup.character;
   const displayClass = lootbuddyDisplayClass(signup);
   const lockoutAttention = signup.contentSaves?.some((row) => row.label.attention) ?? false;
+  const lockoutSaved =
+    signup.contentSaves?.some((row) => row.label.kind === "saved" || row.label.kind === "fully_saved") ?? false;
   const scheduleConflicts = signup.scheduleConflicts ?? [];
   const scheduleBlocked = !selected && scheduleConflicts.length > 0;
   const runCommitments = signup.runCommitments ?? [];
@@ -1599,6 +1601,9 @@ function SignupTile({
             : showScheduleOrCommitmentWarning
               ? "border-warning/45 bg-warning/5 hover:border-warning/65"
               : "border-border bg-surface hover:bg-surface-raised/50"
+        } ${
+          // Saved lockout: warning frame. `!` beats the unlayered `* { border-color }` in globals.css.
+          lockoutSaved && !selected ? "border-warning/45!" : ""
         }`}
       >
         {/* Row 1 — identity: class · name · ilvl | role · check/warn */}
