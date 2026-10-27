@@ -110,7 +110,7 @@ STUB
 chmod +x "${BIN}"/*
 
 UNITS=(boostinghub-web.service boostinghub-discord-bot.service boostinghub-backup.service
-  boostinghub-character-sync.timer boostinghub-community-schedule.timer)
+  boostinghub-character-sync.timer boostinghub-community-schedule.timer boostinghub-battlenet-links.timer)
 
 # Runs update-server.sh in a fresh sandbox; sets RC, OUTPUT, CALLS, STATE.
 run_deploy() {
@@ -120,11 +120,11 @@ run_deploy() {
   : > "${LOG}/calls"
   printf '#!/usr/bin/env bash\necho tsx-stub\n' > "${APP}/node_modules/.bin/tsx"
   chmod +x "${APP}/node_modules/.bin/tsx"
-  printf '{"scripts":{"sync:characters":"tsx a.ts","materialize:community-schedule":"tsx b.ts"}}\n' > "${APP}/package.json"
+  printf '{"scripts":{"sync:characters":"tsx a.ts","materialize:community-schedule":"tsx b.ts","reconcile:battlenet-links":"tsx c.ts"}}\n' > "${APP}/package.json"
   echo before-sha > "${STATE}/head"
   local unit
   for unit in "${UNITS[@]}"; do touch "${STATE}/${unit}.exists"; done
-  touch "${STATE}/boostinghub-character-sync.timer.active" "${STATE}/boostinghub-community-schedule.timer.active"
+  touch "${STATE}/boostinghub-character-sync.timer.active" "${STATE}/boostinghub-community-schedule.timer.active"     "${STATE}/boostinghub-battlenet-links.timer.active"
   touch "${STATE}/boostinghub-web.service.active" "${STATE}/boostinghub-discord-bot.service.active"
   # Per-case setup hook (env assignments are passed as arguments).
   [[ -n "${SETUP:-}" ]] && eval "${SETUP}"
@@ -154,7 +154,7 @@ check "timers stopped before npm ci" '(( $(at "systemctl stop boostinghub-charac
 check "timers restarted only after migrate and web/bot restart" \
   '(( $(at "systemctl start boostinghub-character-sync.timer") > $(at "npm db:migrate") &&
       $(at "systemctl start boostinghub-character-sync.timer") > $(at "systemctl restart boostinghub-discord-bot.service") ))'
-check "both timers active again" 'timer_active boostinghub-character-sync.timer && timer_active boostinghub-community-schedule.timer'
+check "all timers active again" 'timer_active boostinghub-character-sync.timer && timer_active boostinghub-community-schedule.timer && timer_active boostinghub-battlenet-links.timer'
 check "no job service started manually" '! grep -q "systemctl start boostinghub-character-sync.service\|systemctl start boostinghub-community-schedule.service" <<<"${CALLS}"'
 check "backup timer never paused" '! grep -q "boostinghub-backup.timer" <<<"${CALLS}"'
 check "enable/disable never called" '! grep -q "UNEXPECTED" <<<"${CALLS}"'
@@ -182,7 +182,7 @@ check "backup failure restores timers" 'timer_active boostinghub-character-sync.
 run_deploy build-fails STUB_FAIL_STEP=build
 check "build failure exits non-zero" '[[ ${RC} -ne 0 ]]'
 check "build failure leaves timers stopped" '! timer_active boostinghub-character-sync.timer && ! timer_active boostinghub-community-schedule.timer'
-check "build failure prints recovery command" 'grep -q "after fixing the release run: systemctl start boostinghub-character-sync.timer boostinghub-community-schedule.timer" <<<"${OUTPUT}"'
+check "build failure prints recovery command" 'grep -q "after fixing the release run: systemctl start boostinghub-character-sync.timer boostinghub-community-schedule.timer boostinghub-battlenet-links.timer" <<<"${OUTPUT}"'
 check "build failure did not restart web/bot" '! grep -q "systemctl restart" <<<"${CALLS}"'
 
 # 6. Migration failure: same — schema / code may not match, timers stay stopped.

@@ -1014,6 +1014,20 @@ describe("reconcileBattleNetCharactersForConnection (already-connected accounts,
 
     await expect(characterOperationsService.reconcileBattleNetLinks(owner)).rejects.toMatchObject({ code: expect.any(String) });
   });
+
+  it("scheduled run (no actor) links the same exact matches, idempotent", async () => {
+    const owned = ownedCharacter({ id: "300214", name: "Bnrecsched" });
+    const row = await manual(owner, { name: owned.name });
+    await seedConnectedWithStoredRoster([owned]);
+    mockEnrichmentSuccess({ id: owned.id, name: owned.name, realmId: owned.realmId, wowClass: owned.wowClass, itemLevel: 650 });
+
+    const first = await characterOperationsService.runBattleNetLinkReconcile(null);
+    expect(first.linked).toBeGreaterThanOrEqual(1);
+    expect((await characterRepository.findById(row.id))!.blizzardCharacterId).toBe(owned.id);
+    const second = await characterOperationsService.runBattleNetLinkReconcile(null);
+    expect(second.linked).toBe(0);
+    expect(await ownerCharacterCount()).toBe(1);
+  });
 });
 
 describe("characterBlizzardImportService.importCharacters", () => {

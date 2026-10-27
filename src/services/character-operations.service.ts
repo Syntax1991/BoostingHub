@@ -505,14 +505,23 @@ export const characterOperationsService = {
   },
 
   /**
-   * One-off / on-demand link backfill: runs the exact-match reconciliation
+   * On-demand link backfill ("Link Battle.net matches"): the admin-triggered
+   * run of {@link runBattleNetLinkReconcile}, attributed to that admin.
+   */
+  async reconcileBattleNetLinks(admin: AuthenticatedUser): Promise<ReconcileLinksResult> {
+    assertCanManageCharacterOperations(admin);
+    return characterOperationsService.runBattleNetLinkReconcile(admin.id);
+  },
+
+  /**
+   * Runs the exact-match reconciliation
    * (characterBlizzardImportService.reconcileBattleNetCharactersForConnection)
    * for every existing Battle.net connection — bounded concurrency, failures
    * isolated per connection. Only links existing exact matches; never imports,
    * never unlinks, never touches users without a connection. Idempotent.
+   * `actorUserId` null = the scheduled job (npm run reconcile:battlenet-links).
    */
-  async reconcileBattleNetLinks(admin: AuthenticatedUser): Promise<ReconcileLinksResult> {
-    assertCanManageCharacterOperations(admin);
+  async runBattleNetLinkReconcile(actorUserId: string | null): Promise<ReconcileLinksResult> {
     if (!isBlizzardConfigured()) {
       throw new DomainError("BATTLENET_NOT_CONFIGURED", "Battle.net integration is not configured.", 503);
     }
@@ -553,8 +562,8 @@ export const characterOperationsService = {
     }
     result.durationMs = Date.now() - start;
     await activityRepository.create({
-      userId: admin.id,
-      type: "ADMIN_BATTLENET_LINKS_RECONCILED",
+      userId: actorUserId,
+      type: actorUserId ? "ADMIN_BATTLENET_LINKS_RECONCILED" : "SCHEDULED_BATTLENET_LINKS_RECONCILED",
       message: `Reconciled Battle.net links for ${result.connections} connections: ${result.linked} linked, ${result.alreadyLinked} already linked, ${result.skipped} skipped, ${result.failed} failed, ${result.noSnapshot} without roster, ${result.connectionErrors} errors.`,
     });
     return result;

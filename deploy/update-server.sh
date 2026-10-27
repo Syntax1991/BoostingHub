@@ -25,9 +25,9 @@ LOCK_FILE="${BOOSTINGHUB_DEPLOY_LOCK:-/run/lock/boostinghub-deploy.lock}"
 # Timers whose service runs application code from APP_DIR (ExecStart =
 # /usr/bin/npm run <script> as APP_USER). The backup timer is NOT listed: its
 # service runs a root-owned installed copy and never touches the checkout.
-APP_TIMERS=(boostinghub-character-sync.timer boostinghub-community-schedule.timer)
+APP_TIMERS=(boostinghub-character-sync.timer boostinghub-community-schedule.timer boostinghub-battlenet-links.timer)
 # npm scripts those services run — checked before the timers come back.
-APP_TIMER_NPM_SCRIPTS=(sync:characters materialize:community-schedule)
+APP_TIMER_NPM_SCRIPTS=(sync:characters materialize:community-schedule reconcile:battlenet-links)
 # A job that is already running is waited for (never killed); bounded.
 RUNNING_JOB_WAIT_SECONDS="${BOOSTINGHUB_RUNNING_JOB_WAIT_SECONDS:-900}"
 
