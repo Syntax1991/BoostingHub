@@ -249,14 +249,14 @@ describe("Discord Bundle content labels", () => {
     }).toJSON();
 
     // Older payload without contentTitle: the product label is the title; the
-    // compact summary carries the Raid Lead, no admin Content/Roster fields.
+    // header grid carries the Raid Lead, no admin Content/Roster fields.
     expect(embed.title).toBe("Season 2 Bundle");
-    expect(embed.description).toContain("<@111>");
+    expect(embed.fields?.[0]?.name).toMatch(/ Titan$/);
     expect(embed.fields?.find((field) => field.name === "Content")).toBeUndefined();
     expect(embed.fields?.find((field) => field.name === "Roster")).toBeUndefined();
     expect(display.titleCoverage).toBe("9/9");
     expect(display.channelCoverage).toBe("9of9");
-    expect(embed.description).not.toMatch(/S2B|s2b/);
+    expect(JSON.stringify(embed)).not.toMatch(/S2B|s2b/);
   });
 
   it("roster embed identifies Bundle once with content summary", () => {
