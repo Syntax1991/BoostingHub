@@ -30,6 +30,20 @@ const ROLE_EMOJI_FALLBACK: Record<RoleDiscordEmojiKey, string> = {
   raidlead: "⚔",
 };
 
+/**
+ * One blank line closing a section (Discord trims trailing whitespace, but a
+ * line holding only a zero-width space survives). Used once per section
+ * boundary — never between players — so 20+ signups stay compact.
+ */
+const SECTION_GAP = `\n${ZERO_WIDTH}`;
+
+/** Appends the section gap to the field(s) that visually close a section. */
+function closeSection(fields: EmbedField[], closing: readonly EmbedField[]): EmbedField[] {
+  return fields.map((field) =>
+    closing.includes(field) ? { ...field, value: `${field.value}${SECTION_GAP}` } : field,
+  );
+}
+
 /** Discord limit on combined embed text (title + description + fields + footer). */
 export const DISCORD_EMBED_TOTAL_CHAR_LIMIT = 6000;
 
@@ -193,7 +207,11 @@ function buildRoleFields(
   const built = roleColumns(data).map((column) =>
     buildColumnFields(column, classIndicators, roleIndicators, true),
   );
-  return [...built.map((fields) => fields[0]!), ...built.flatMap((fields) => fields.slice(1))];
+  const primaries = built.map((fields) => fields[0]!);
+  const continuations = built.flatMap((fields) => fields.slice(1));
+  // Gap before Lootbuddies: under the Tanks | Healers | DPS row (the tallest column sets it).
+  const closing = continuations.length > 0 ? [continuations[continuations.length - 1]!] : primaries;
+  return closeSection([...primaries, ...continuations], closing);
 }
 
 function truncate(text: string, max: number): string {
@@ -242,7 +260,8 @@ export function buildSignupSummary(
     : data.signupWindowOpen
       ? null
       : "Signups are closed.";
-  return [leadLine, timeLine, stateLine].filter(Boolean).join("\n");
+  // A blank line under the title, and one closing the metadata before the role row.
+  return [ZERO_WIDTH, leadLine, timeLine, stateLine].filter(Boolean).join("\n") + SECTION_GAP;
 }
 
 export function emptySignupEmbedMembers(): SignupEmbedRoleMembers {
@@ -280,16 +299,22 @@ function assemble(
 ): EmbedBuilder {
   const runUrl = options?.runUrl === undefined ? absoluteRunUrl(data.runId) : options.runUrl;
   const title = (data.contentTitle?.trim() || data.productLabel).slice(0, 256);
+  const notes = buildNotesFields(data.notes ?? [], step.maxNoteChars);
+  const lootbuddies = buildColumnFields(
+    lootbuddyColumn(data),
+    step.classIndicators,
+    options?.roleIndicators,
+    false,
+  );
   const fields: EmbedField[] = [
     ...buildRoleFields(data, step.classIndicators, options?.roleIndicators),
-    ...buildColumnFields(
-      lootbuddyColumn(data),
-      step.classIndicators,
-      options?.roleIndicators,
-      false,
-    ),
-    ...buildNotesFields(data.notes ?? [], step.maxNoteChars),
+    // Lootbuddies → Notes gap only when Notes follow.
+    ...(notes.length > 0
+      ? closeSection(lootbuddies, [lootbuddies[lootbuddies.length - 1]!])
+      : lootbuddies),
+    ...notes,
   ];
+  // The Open Run field's empty name renders as one blank line: the gap before the link.
   if (runUrl) fields.push({ name: ZERO_WIDTH, value: `🔗 [Open Run](${runUrl})`, inline: false });
 
   const embed = new EmbedBuilder()

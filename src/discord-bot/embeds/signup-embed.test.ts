@@ -248,7 +248,7 @@ describe("buildSignupEmbed — hierarchy", () => {
 
   it("empty roles keep their column so the grid stays stable; no Notes heading without notes", () => {
     const fields = buildSignupEmbed(emptyData(), { runUrl: null }).toJSON().fields ?? [];
-    expect(fields.map((field) => field.value)).toEqual(["—", "—", "—", "—"]);
+    expect(fields.map((field) => field.value)).toEqual(["—\n\u200b", "—\n\u200b", "—\n\u200b", "—"]);
     expect(fields.some((field) => field.name.includes("Notes"))).toBe(false);
   });
 
@@ -374,3 +374,43 @@ describe("buildSignupButtons", () => {
     }
   });
 });
+
+describe("buildSignupEmbed — section spacing", () => {
+  const GAP = "\n\u200b";
+  const zeroWidthLines = (text: string) => text.split("\n").filter((line) => line === "\u200b").length;
+
+  it("a blank line under the title and one closing the metadata", () => {
+    const description = buildSignupEmbed(emptyData({ uniqueSignupCount: 2 })).toJSON().description ?? "";
+    expect(description.startsWith("\u200b\n")).toBe(true);
+    expect(description.endsWith(GAP)).toBe(true);
+    expect(zeroWidthLines(description)).toBe(2);
+  });
+
+  it("one gap under the Tanks | Healers | DPS row, none between players", () => {
+    const fields = buildSignupEmbed(rosterData(18, 0), { classIndicators: INDICATORS, runUrl: null }).toJSON().fields ?? [];
+    for (const field of fields.slice(0, 3)) {
+      expect(field.value.endsWith(GAP)).toBe(true);
+      expect(zeroWidthLines(field.value)).toBe(1); // only the closing gap
+    }
+    expect(fields[3]!.name).toMatch(/Lootbuddies/);
+  });
+
+  it("Lootbuddies → Notes gets a gap only when Notes follow; Open Run keeps its blank-name gap", () => {
+    const withNotes = buildSignupEmbed(rosterData(6, 2, [note("u", "333333333333333333", "~10 min late")]), { runUrl: RUN_URL }).toJSON().fields ?? [];
+    const lootbuddies = withNotes.find((field) => field.name.includes("Lootbuddies"))!;
+    expect(lootbuddies.value.endsWith(GAP)).toBe(true);
+    const notes = withNotes.find((field) => field.name === "📝 Notes")!;
+    expect(notes.value.endsWith(GAP)).toBe(false);
+    expect(withNotes[withNotes.length - 1]).toMatchObject({ name: "\u200b", value: `🔗 [Open Run](${RUN_URL})` });
+
+    const withoutNotes = buildSignupEmbed(rosterData(6, 2), { runUrl: RUN_URL }).toJSON().fields ?? [];
+    expect(withoutNotes.find((field) => field.name.includes("Lootbuddies"))!.value.endsWith(GAP)).toBe(false);
+    expect(withoutNotes.some((field) => field.name.includes("Notes"))).toBe(false);
+  });
+
+  it("spacing never pushes a 25-signup roster with notes past Discord limits", () => {
+    const notes = Array.from({ length: 6 }, (_, index) => note(`s${index}`, snowflake(700000 + index), "can also play Ele"));
+    expectWithinDiscordLimits(rosterData(25, 6, notes));
+  });
+});
+
