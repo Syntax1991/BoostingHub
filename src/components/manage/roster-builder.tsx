@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { AddBoosterDialog } from "@/components/manage/add-booster-dialog";
 import { RosterBuilderTrigger } from "@/components/manage/roster-builder-dialog";
+import { SIGNUP_TILE_TONE_CLASSES, signupTileTone } from "@/lib/signup-tile-tone";
 import { setRosterHasUnsavedEdits } from "@/components/manage/roster-unsaved-store";
 import { resolveRosterActions } from "@/components/manage/roster-actions";
 import {
@@ -1471,7 +1472,7 @@ function SignupTile({
   const runCommitments = signup.runCommitments ?? [];
   const plannedElsewhere = runCommitments.length > 0;
   // Warning icon: hard schedule conflict (<2h / weekly unavailable) OR already
-  // RESERVED/COMMITTED on another Run in this raid ID week. Saved lockout stays HC X/10 only.
+  // RESERVED/COMMITTED on another Run in this raid ID week. Saved lockout tints the tile (no icon).
   const showScheduleOrCommitmentWarning = scheduleBlocked || plannedElsewhere;
   const commitmentWarningLabel = plannedElsewhere
     ? `Already planned: ${runCommitments
@@ -1566,6 +1567,8 @@ function SignupTile({
   const lockoutShort = formatSignupTileLockoutShort(signup.contentSaves ?? [], difficulty);
 
   const canChangeSpec = selected && needsSpecChoice && !disabled;
+  // Saved = verified boss kills on this Run's content (the HC X/10 line is shown).
+  const tileTone = signupTileTone({ selected, warning: showScheduleOrCommitmentWarning, saved: lockoutSaved });
 
   return (
     <div ref={warningRef} className="relative h-full">
@@ -1596,13 +1599,7 @@ function SignupTile({
         }}
         className={`flex h-full w-full flex-col justify-center gap-0.5 overflow-hidden rounded-md border px-2.5 py-1.5 text-left transition-colors ${
           disabled ? "cursor-not-allowed opacity-55" : "cursor-pointer"
-        } ${
-          selected
-            ? "border-success/70 bg-success/15 ring-1 ring-success/30"
-            : showScheduleOrCommitmentWarning
-              ? "border-warning/45 bg-warning/5 hover:border-warning/65"
-              : "border-border bg-surface hover:bg-surface-raised/50"
-        } ${
+        } ${SIGNUP_TILE_TONE_CLASSES[tileTone]} ${
           // Saved lockout: warning frame. `!` beats the unlayered `* { border-color }` in globals.css.
           lockoutSaved && !selected ? "border-warning/45!" : ""
         }`}
@@ -1705,7 +1702,7 @@ function SignupTile({
           {lockoutShort ? (
             <span
               className={`inline-flex max-w-[7.5rem] shrink-0 items-center gap-1 truncate ${
-                lockoutAttention ? "font-medium text-warning" : "text-foreground/70"
+                lockoutAttention || lockoutSaved ? "font-medium text-warning" : "text-foreground/70"
               }`}
               title={formatContentLockoutTooltip(signup.contentSaves ?? [])}
             >
