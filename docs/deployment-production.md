@@ -29,6 +29,9 @@ Community schedule Draft release (oneshot, Mon 12:00 Europe/Berlin, Persistent) 
   → npm run materialize:community-schedule (overlap guarded by advisory lock 837462/4)
   → creates the Drafts of the raid ID starting the following Wednesday 06:00 (missed release: once on next start)
 
+Battle.net link reconciliation (oneshot, 06:30 + 18:30 Europe/Berlin, Persistent) boostinghub-battlenet-links.timer → .service
+  → npm run reconcile:battlenet-links (same exact-match backfill as Manage → Characters → "Link Battle.net matches")
+
 Database backup (oneshot, daily 03:15)  boostinghub-backup.timer → .service
   → /usr/local/libexec/boostinghub/backup-db.sh → /var/backups/boostinghub/*.dump
 ```
@@ -92,8 +95,9 @@ Safety contract, in order:
    operational files are preserved (no `reset --hard`, no `git clean`, no forced
    checkout).
 5. Records the full pre-deploy SHA.
-5a. **Pause scheduled app jobs**: `boostinghub-character-sync.timer` and
-    `boostinghub-community-schedule.timer` (their services run `npm run …` /
+5a. **Pause scheduled app jobs**: `boostinghub-character-sync.timer`,
+    `boostinghub-community-schedule.timer` and `boostinghub-battlenet-links.timer`
+    (their services run `npm run …` /
     `tsx` from the checkout) are stopped if active; enablement is untouched. An
     already-running job service is waited for (bounded, never killed); if it is
     still running after 15 min the deploy aborts before any change. The backup

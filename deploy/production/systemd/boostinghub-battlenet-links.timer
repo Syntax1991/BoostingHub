@@ -1,0 +1,25 @@
+# Timer for boostinghub-battlenet-links.service — every 12 hours.
+#
+# Fires at 06:30 and 18:30 Europe/Berlin (clear of the 03:15 backup and the
+# Monday 12:00 schedule release) and links existing manual Characters to their
+# owners' connected Battle.net accounts (exact matches only; never imports or
+# unlinks). Persistent=true: a pass missed while the host was down (or while a
+# deploy paused this timer) runs once on the next start; the pass is idempotent.
+#
+# Install manually on the host as root (not part of the normal deploy):
+#   install -o root -g root -m 0644 deploy/production/systemd/boostinghub-battlenet-links.timer /etc/systemd/system/
+#   systemctl daemon-reload
+#   systemctl restart boostinghub-battlenet-links.timer
+#   systemctl list-timers boostinghub-battlenet-links.timer
+
+[Unit]
+Description=BoostingHub Battle.net link reconciliation (06:30 and 18:30 Europe/Berlin)
+
+[Timer]
+OnCalendar=*-*-* 06,18:30:00 Europe/Berlin
+AccuracySec=1min
+Persistent=true
+Unit=boostinghub-battlenet-links.service
+
+[Install]
+WantedBy=timers.target
