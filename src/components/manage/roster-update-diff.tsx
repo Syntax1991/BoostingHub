@@ -68,6 +68,18 @@ export function RosterUpdateDiff({ changes, runChanged }: { changes: RosterDiffC
               </li>
             );
           }
+          if (change.kind === "BOSS_PLAN_CHANGED") {
+            return (
+              <li key={`boss:${change.member.signupId}`} className="flex gap-2">
+                <span aria-label="Boss plan changed" className="w-3 shrink-0 font-semibold text-warning">
+                  ~
+                </span>
+                <span>
+                  {change.member.label} · {change.before ?? "All bosses default"} → {change.after ?? "All bosses default"}
+                </span>
+              </li>
+            );
+          }
           return (
             <li key={`role:${change.member.signupId}`} className="flex gap-2">
               <span aria-label="Role changed" className="w-3 shrink-0 font-semibold text-warning">

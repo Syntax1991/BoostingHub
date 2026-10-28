@@ -47,6 +47,22 @@ const rosterSelectionSchema = z.object({
   selectedRole: z.enum(CHARACTER_ROLES).nullable(),
 });
 
+/**
+ * One boss exception: for this planned boss (content + boss) the slot plays
+ * another of the player's signed-up Characters (playSignupId) and/or another
+ * role. The server validates ownership, eligibility and the boss itself.
+ */
+const rosterBossExceptionSchema = z.object({
+  slotSignupId: entityIdSchema,
+  runRaidContentId: entityIdSchema,
+  raidBossId: entityIdSchema,
+  playSignupId: entityIdSchema.nullable(),
+  role: z.enum(CHARACTER_ROLES),
+});
+
+/** Full set; a roster never needs more (≈ 30 slots × 10 bosses). */
+const rosterBossExceptionsSchema = z.array(rosterBossExceptionSchema).max(400).optional();
+
 export const saveRosterDraftSchema = z.object({
   runId: entityIdSchema,
   version: z.number().int().positive(),
@@ -60,6 +76,8 @@ export const saveRosterDraftSchema = z.object({
     .optional(),
   /** Acknowledged warnings for NEWLY selected signups. */
   confirmedWarnings: confirmedRosterWarningsSchema,
+  /** Boss-specific exceptions (feature-gated); omitted keeps the saved ones. */
+  bossExceptions: rosterBossExceptionsSchema,
 });
 
 export const saveExternalBoostersSchema = z.object({
@@ -134,6 +152,8 @@ export const updateRosterSchema = z.object({
   acknowledgeWarnings: z.boolean(),
   /** Acknowledged selection warnings for picks NEW to the roster. */
   confirmedWarnings: confirmedRosterWarningsSchema,
+  /** Boss-specific exceptions (feature-gated); omitted keeps the saved draft ones. */
+  bossExceptions: rosterBossExceptionsSchema,
 });
 
 /** Publish Roster on a published roster: explicit repost, compare-and-set on version AND postRevision. */

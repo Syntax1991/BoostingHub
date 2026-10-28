@@ -27,6 +27,7 @@ import {
   mapDifficulty,
   mapLootType,
   mapParticipation,
+  mapRosterState,
   mapRunStatus,
   mapSignupStatus,
   mapWowClass,
@@ -310,7 +311,16 @@ async function insertRaidContents(
   }
 }
 
-/** Replace the full content set inside an open transaction (delete + recreate). */
+/**
+ * Replace the full content set inside an open transaction (delete + recreate).
+ *
+ * Boss exceptions reference the content row, so the delete would cascade all
+ * of them away. Exceptions whose raid stays in the Run and whose boss is still
+ * PLANNED (first plannedBossCount bosses by sortOrder) are re-bound to the new
+ * content row; the rest — removed raid or a boss no longer planned — are
+ * dropped. Both stages are kept as they were, so the existing "Run changed
+ * since publish" flag still drives Update Roster.
+ */
 async function replaceRaidContentsTx(
   ormLike: TxOrm,
   runId: string,
@@ -318,10 +328,47 @@ async function replaceRaidContentsTx(
   now: string,
 ) {
   const existing = (await ormLike.RunRaidContent.where({ runId }).all()) as Record<string, unknown>[];
+  const raidIdByContentId = new Map(existing.map((row) => [asString(row.id), asString(row.raidId)]));
+  const keptExceptions =
+    existing.length === 0
+      ? []
+      : ((await ormLike.RunRosterBossException.where((row) =>
+          row.runRaidContentId.in(existing.map((content) => asString(content.id))),
+        ).all()) as Record<string, unknown>[]);
   for (const row of existing) {
     await ormLike.RunRaidContent.where({ id: asString(row.id) }).delete();
   }
   await insertRaidContents(ormLike, runId, contents, now);
+  if (keptExceptions.length === 0) return;
+
+  const inserted = (await ormLike.RunRaidContent.where({ runId }).all()) as Record<string, unknown>[];
+  const contentByRaidId = new Map(inserted.map((row) => [asString(row.raidId), row]));
+  const bossRows = (await ormLike.RaidBoss.where((boss) =>
+    boss.raidId.in([...contentByRaidId.keys()]),
+  ).all()) as Record<string, unknown>[];
+  const plannedBossIds = new Set<string>();
+  for (const [raidId, content] of contentByRaidId) {
+    bossRows
+      .filter((boss) => asString(boss.raidId) === raidId)
+      .sort((left, right) => asNumber(left.sortOrder, 0) - asNumber(right.sortOrder, 0))
+      .slice(0, asNumber(content.plannedBossCount, 0))
+      .forEach((boss) => plannedBossIds.add(asString(boss.id)));
+  }
+  for (const row of keptExceptions) {
+    const content = contentByRaidId.get(raidIdByContentId.get(asString(row.runRaidContentId)) ?? "");
+    if (!content || !plannedBossIds.has(asString(row.raidBossId))) continue;
+    await ormLike.RunRosterBossException.create({
+      id: crypto.randomUUID(),
+      rosterId: asString(row.rosterId),
+      stage: mapRosterState(row.stage),
+      slotSignupId: asString(row.slotSignupId),
+      runRaidContentId: asString(content.id),
+      raidBossId: asString(row.raidBossId),
+      playSignupId: asStringOrNull(row.playSignupId),
+      role: mapCharacterRole(row.role),
+      createdAt: asString(row.createdAt) || now,
+    });
+  }
 }
 
 /**

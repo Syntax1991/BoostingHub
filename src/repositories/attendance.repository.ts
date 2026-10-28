@@ -312,6 +312,7 @@ export const attendanceRepository = {
           version: lockedRoster.version,
           runChangedSinceAck: lockedRoster.runChangedSinceAck,
           draft: lockedRoster.selections,
+          bossExceptions: lockedRoster.bossExceptions,
           signups: runSignups.map((row) => ({
             id: asString(row.id),
             status: mapSignupStatus(row.status),

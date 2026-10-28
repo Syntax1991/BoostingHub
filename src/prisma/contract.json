@@ -144,6 +144,10 @@
       "model": "RunRoster",
       "namespace": "public"
     },
+    "run_roster_boss_exception": {
+      "model": "RunRosterBossException",
+      "namespace": "public"
+    },
     "run_roster_entry": {
       "model": "RunRosterEntry",
       "namespace": "public"
@@ -3991,6 +3995,21 @@
                   "model": "Raid",
                   "namespace": "public"
                 }
+              },
+              "rosterBossExceptions": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "raidBossId"
+                  ]
+                },
+                "to": {
+                  "model": "RunRosterBossException",
+                  "namespace": "public"
+                }
               }
             },
             "storage": {
@@ -6409,6 +6428,21 @@
                   "namespace": "public"
                 }
               },
+              "rosterBossExceptions": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "runRaidContentId"
+                  ]
+                },
+                "to": {
+                  "model": "RunRosterBossException",
+                  "namespace": "public"
+                }
+              },
               "run": {
                 "cardinality": "N:1",
                 "on": {
@@ -6545,6 +6579,21 @@
               }
             },
             "relations": {
+              "bossExceptions": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "rosterId"
+                  ]
+                },
+                "to": {
+                  "model": "RunRosterBossException",
+                  "namespace": "public"
+                }
+              },
               "entries": {
                 "cardinality": "1:N",
                 "on": {
@@ -6641,6 +6690,195 @@
               },
               "namespaceId": "public",
               "table": "run_roster"
+            }
+          },
+          "RunRosterBossException": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "playSignupId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "raidBossId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "role": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "CharacterRole",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "rosterId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "runRaidContentId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "slotSignupId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "stage": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "RosterState",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              }
+            },
+            "relations": {
+              "playSignup": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "playSignupId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunSignup",
+                  "namespace": "public"
+                }
+              },
+              "raidBoss": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "raidBossId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RaidBoss",
+                  "namespace": "public"
+                }
+              },
+              "roster": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "rosterId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunRoster",
+                  "namespace": "public"
+                }
+              },
+              "runRaidContent": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "runRaidContentId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunRaidContent",
+                  "namespace": "public"
+                }
+              },
+              "slotSignup": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "slotSignupId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunSignup",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "playSignupId": {
+                  "column": "playSignupId"
+                },
+                "raidBossId": {
+                  "column": "raidBossId"
+                },
+                "role": {
+                  "column": "role"
+                },
+                "rosterId": {
+                  "column": "rosterId"
+                },
+                "runRaidContentId": {
+                  "column": "runRaidContentId"
+                },
+                "slotSignupId": {
+                  "column": "slotSignupId"
+                },
+                "stage": {
+                  "column": "stage"
+                }
+              },
+              "namespaceId": "public",
+              "table": "run_roster_boss_exception"
             }
           },
           "RunRosterEntry": {
@@ -6921,6 +7159,36 @@
               }
             },
             "relations": {
+              "bossExceptionSlots": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "slotSignupId"
+                  ]
+                },
+                "to": {
+                  "model": "RunRosterBossException",
+                  "namespace": "public"
+                }
+              },
+              "bossExceptionsPlayed": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "playSignupId"
+                  ]
+                },
+                "to": {
+                  "model": "RunRosterBossException",
+                  "namespace": "public"
+                }
+              },
               "character": {
                 "cardinality": "N:1",
                 "on": {
@@ -14345,6 +14613,237 @@
                 }
               ]
             },
+            "run_roster_boss_exception": {
+              "checks": [
+                {
+                  "expression": "\"role\" IN ('TANK', 'HEALER', 'MELEE_DPS', 'RANGED_DPS', 'DPS')",
+                  "name": "run_roster_boss_exception_role_check_e8a47be4",
+                  "prefix": "run_roster_boss_exception_role_check"
+                },
+                {
+                  "expression": "\"stage\" IN ('DRAFT', 'PUBLISHED')",
+                  "name": "run_roster_boss_exception_stage_check_1b5054bc",
+                  "prefix": "run_roster_boss_exception_stage_check"
+                }
+              ],
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "playSignupId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "raidBossId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "role": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "CharacterRole",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "rosterId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "runRaidContentId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "slotSignupId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "stage": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "RosterState",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "rosterId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_roster_boss_exception"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_roster"
+                  }
+                },
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "slotSignupId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_roster_boss_exception"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_signup"
+                  }
+                },
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "runRaidContentId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_roster_boss_exception"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_raid_content"
+                  }
+                },
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "raidBossId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_roster_boss_exception"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "raid_boss"
+                  }
+                },
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "playSignupId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_roster_boss_exception"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_signup"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "playSignupId"
+                  ],
+                  "name": "run_roster_boss_exception_playSignupId_idx_d7101728",
+                  "prefix": "run_roster_boss_exception_playSignupId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "raidBossId"
+                  ],
+                  "name": "run_roster_boss_exception_raidBossId_idx_869a61e0",
+                  "prefix": "run_roster_boss_exception_raidBossId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "rosterId"
+                  ],
+                  "name": "run_roster_boss_exception_rosterId_idx_ca029c6b",
+                  "prefix": "run_roster_boss_exception_rosterId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "rosterId",
+                    "stage"
+                  ],
+                  "name": "run_roster_boss_exception_rosterId_stage_idx_5519d655",
+                  "prefix": "run_roster_boss_exception_rosterId_stage_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "runRaidContentId"
+                  ],
+                  "name": "run_roster_boss_exception_runRaidContentId_idx_b5f2a8be",
+                  "prefix": "run_roster_boss_exception_runRaidContentId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "slotSignupId"
+                  ],
+                  "name": "run_roster_boss_exception_slotSignupId_idx_0e62234d",
+                  "prefix": "run_roster_boss_exception_slotSignupId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "rosterId",
+                    "stage",
+                    "slotSignupId",
+                    "runRaidContentId",
+                    "raidBossId"
+                  ]
+                }
+              ]
+            },
             "run_roster_entry": {
               "checks": [
                 {
@@ -17027,10 +17526,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "883e1fd522f355c4012102fadb12368abc4002a6fb13e8b06ea79fc3db85aecc"
+    "storageHash": "6bf45172add1e36a8b1f7b73f96a6ed59a18db85fa7aa3ad9414f9466e9df267"
   },
   "execution": {
-    "executionHash": "b27b9239312d18e407528e2d06057d2da4f3e67bdff7bffe5f827471950c2fa6",
+    "executionHash": "324c5afa3b4d6d5548548ec3e865b7ab15f3ade264bd46a2057a901773b881e8",
     "mutations": {
       "defaults": [
         {
@@ -17709,6 +18208,17 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "run_roster"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "run_roster_boss_exception"
           }
         },
         {

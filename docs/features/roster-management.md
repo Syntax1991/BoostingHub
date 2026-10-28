@@ -213,6 +213,22 @@ All of these work on the **CURRENT** Run only — its signups, availability, loc
 
 **Query shape.** The picker, the diff and the strip read only the roster view model the page already loads (one batched schedule-conflict read, one batched commitments read, cached WCL for all signups — no per-candidate query, no WCL or Blizzard request per render). `syncHealth` is derived in memory from the Character snapshot. Fill gaps / Build is one `proposeRoster` call: the same batched reads as Auto Build (signups, account statuses, schedule conflicts, cached WCL).
 
+## Boss-specific exceptions
+
+Behind the switch `ROSTER_BOSS_EXCEPTIONS_ENABLED` (off in production until UI, Discord and consumables audit are complete; while off, boss exception input is refused).
+
+The roster stays the default: every selected Booster plays **every planned boss** with their slot's Character and role. Only deviations are stored, in `RunRosterBossException` — never a roster per boss. A Run without exceptions behaves exactly as before (no new warning, no new state).
+
+- **Identity.** One row = one roster slot (`slotSignupId`) × one planned boss (`runRaidContentId` + `raidBossId`, so Bundle bosses stay distinct) × `stage` (`DRAFT` / `PUBLISHED`). Unique per roster, stage, slot, content and boss — a player holds at most one Booster slot per boss.
+- **What may change for a boss.** The role (concrete: Tank / Healer / Melee / Ranged) and/or the Character: `playSignupId` is another BOOSTER signup of the **same player on the same Run** (null = the slot's own Character). Rows that only restate the default are dropped.
+- **Hard rules** (Save / Update / Publish refuse): selected Booster slot; a **planned** boss of that content (6/8 → bosses 1–6 only); alternate Character of the same player, not withdrawn, active, owner still a Booster, no schedule conflict / reservation, not itself a roster slot; role offered by the playing signup.
+- **Warnings** (acknowledged with the composition warnings on Publish / Update, never a Save block): per-boss composition only for bosses an exception touches, grouped — "Boss 7–8: 2 of 3 Healers" / "Venom 5–6: …" in Bundles; boss-exact lockouts of an alternate assignment on fresh-loot Runs — "Boss 8: Synalt-Antonidas is already saved" (from `killedBossIds`; a full clear counts for every boss).
+- **Draft vs published.** Save writes the DRAFT set (a slot that leaves the draft loses its rows); Publish / Update copies DRAFT → PUBLISHED in the same transaction; Edit Published seeds DRAFT from PUBLISHED. Unpublished changes (Update needed, Start refused) include a differing exception set. The Update diff shows a kept slot's plan change as one `~` line.
+- **Reservation.** An alternate Character is reserved by the Run like a selected one (cross-Run conflict checks and commitments), and re-checked inside the write transaction.
+- **Run edits.** When contents are replaced (raid or planned boss count changed), exceptions on bosses that stay planned move to the new content row; those of a removed raid or an unplanned boss are dropped. The existing "Run changed since publish" flag then requires Update Roster.
+- **Withdrawal.** A withdrawn slot or alternate Character takes its exceptions with it.
+- **Not affected.** Attendance stays one row per roster slot; Auto Build, Fill gaps and Smart Replacement work on the default roster (a replaced slot's exceptions leave with it). There is no payout domain.
+
 ## Run commitments (informational)
 
 Roster Builder attaches `runCommitments: CharacterRunCommitment[]` to each BOOSTER card via a **batched** repository lookup (`listReservingCommitmentsByCharacterIds`, one read for all Characters), excluding the target Run.
