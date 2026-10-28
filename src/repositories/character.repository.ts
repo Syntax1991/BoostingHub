@@ -199,7 +199,7 @@ function mapCharacter(character: Record<string, unknown>): CharacterPageRecord {
 }
 
 async function replacePlayableSpecs(characterId: string, specs: readonly string[]): Promise<void> {
-  await orm.CharacterPlayableSpec.where({ characterId }).delete();
+  await orm.CharacterPlayableSpec.where({ characterId }).deleteAndCount();
   const now = new Date().toISOString();
   for (const specialization of specs) {
     await orm.CharacterPlayableSpec.create({
@@ -215,7 +215,7 @@ async function replaceOffspecRoles(
   characterId: string,
   roles: readonly CharacterRole[],
 ): Promise<void> {
-  await orm.CharacterOffspecRole.where({ characterId }).delete();
+  await orm.CharacterOffspecRole.where({ characterId }).deleteAndCount();
   const now = new Date().toISOString();
   for (const role of roles) {
     await orm.CharacterOffspecRole.create({
@@ -474,7 +474,7 @@ export const characterRepository = {
         syncFailureCount: 0,
         updatedAt: new Date().toISOString(),
       });
-      await txOrm.CharacterWclPerformance.where({ characterId }).delete();
+      await txOrm.CharacterWclPerformance.where({ characterId }).deleteAndCount();
     });
   },
 
