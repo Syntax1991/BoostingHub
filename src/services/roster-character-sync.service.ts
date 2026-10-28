@@ -62,12 +62,13 @@ export const rosterCharacterSyncService = {
 
     const result: RosterCharacterSyncResult = { synced: 0, failed: 0, skipped: 0 };
     await mapWithConcurrency(picks, ROSTER_SYNC_CONCURRENCY, async (pick) => {
-      const character = await characterRepository.findById(pick.character!.id);
-      if (!character?.isActive || isInManualCooldown(character)) {
-        result.skipped += 1;
-        return;
-      }
+      // One Character's failure (lookup included) never aborts the others or loses their results.
       try {
+        const character = await characterRepository.findById(pick.character!.id);
+        if (!character?.isActive || isInManualCooldown(character)) {
+          result.skipped += 1;
+          return;
+        }
         const connection = await battleNetConnectionRepository.findByUserAndRegion(pick.userId, character.region);
         await syncLinkedCharacterProfile(
           { id: pick.userId, name: pick.userName },

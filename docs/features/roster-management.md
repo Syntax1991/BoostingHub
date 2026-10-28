@@ -198,7 +198,12 @@ All of these work on the **CURRENT** Run only — its signups, availability, loc
 
 **Update Roster diff** (`lib/roster-diff.ts`, `roster-update-diff.tsx`). The Update dialog lists exactly what the draft changes against the published roster: `+` added, `−` removed, `⇄` Character changed (same User's removed + added Booster), `~` role changed — identity by signup / User, never row order. Lootbuddies appear as added / removed. External Boosters are live roster data, not draft data, so they never appear. First publish is unchanged.
 
-**Auto Build Roster in the editor** opens on top of the current (possibly unsaved) draft: **Fill gaps** keeps every pick and fills only the missing composition; **Build from signups** proposes a whole draft from the current signups (`rosterBuilderService.proposeRoster(…, { baseSelections })`, read-only; same candidate rules, selection risk and aggregate saved-warning confirmation as before). **Apply to draft** stages the result. Opened from the Run header or the Schedule, Auto Build keeps its old behaviour (proposal from the saved / published roster, Apply saves the draft).
+**Auto Build Roster in the editor** opens on top of the current (possibly unsaved) draft (`rosterBuilderService.proposeRoster(…, { baseSelections })`, read-only; same candidate rules, selection risk and aggregate saved-warning confirmation as before):
+
+- **Fill gaps** keeps every draft pick locked — Boosters and Lootbuddies, including a `NOT_SELECTED` signup re-selected on a published roster, with its role and chosen spec — and fills only the missing composition. Only `WITHDRAWN` (or unknown) ids drop out of the base. No extra confirmation.
+- **Build from signups** proposes a whole draft from the current signups and **replaces all draft Boosters and Lootbuddies**; External Boosters stay (they are not draft data). When the draft holds at least one Booster or Lootbuddy, Apply first asks "Replace the current draft?" — Cancel (or Escape) leaves the draft exactly as it was; an empty draft applies without asking.
+
+**Apply to draft** stages the result. Opened from the Run header or the Schedule, Auto Build keeps its old behaviour (proposal from the saved / published roster, Apply saves the draft).
 
 **Late Fill** is presentation, not a Run state: within 24 h of the start (`isLateFillWindow`, `run.lateFill`) the strip reads "Late fill · Need N replacements". Each short role (Tank ×1, Healer ×2, DPS ×3) opens the candidate picker for that slot; **Fill gaps** proposes all of them. Pinging eligible role candidates on Discord is not part of this — it is web-only.
 

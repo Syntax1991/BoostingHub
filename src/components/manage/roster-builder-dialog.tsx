@@ -129,10 +129,14 @@ export function RosterBuilderDialog({
   const [data, setData] = useState<RosterBuilderResult | null>(null);
   /** ONE aggregate confirmation for every proposed pick with a warning — never one dialog per Character. */
   const [confirmingWarnings, setConfirmingWarnings] = useState(false);
+  /** Build from signups on a non-empty draft: explicit "replace the draft" confirmation before Apply. */
+  const [confirmingReplace, setConfirmingReplace] = useState(false);
   const stageMode = Boolean(draft && onStage);
   const [mode, setMode] = useState<RosterBuilderMode>(initialMode);
   // Snapshot of the editor draft when the dialog opened — the proposal never chases later edits.
   const [baseDraft] = useState(() => draft ?? null);
+  // Every local pick counts — Boosters and Lootbuddies (External Boosters are not draft picks).
+  const buildReplacesDraft = stageMode && mode === "build" && (baseDraft?.length ?? 0) > 0;
 
   useEffect(() => {
     dialogRef.current?.showModal();
@@ -164,8 +168,17 @@ export function RosterBuilderDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- baseSelections derives from mode + the opening snapshot
   }, [runId, mode]);
 
-  function handleApply() {
+  /**
+   * Build replaces the whole local draft: when it holds any Booster or
+   * Lootbuddy, the Raid Lead confirms first. Fill gaps keeps every pick and
+   * never asks. `replaceConfirmed` is set only by that confirmation.
+   */
+  function handleApply(replaceConfirmed = false) {
     if (!data || !canApply) return;
+    if (!replaceConfirmed && buildReplacesDraft) {
+      setConfirmingReplace(true);
+      return;
+    }
     if (data.warnings.length > 0) {
       setConfirmingWarnings(true);
       return;
@@ -273,7 +286,7 @@ export function RosterBuilderDialog({
         {stageMode ? (
           <p className="mt-1 text-xs text-muted">
             {mode === "build"
-              ? "Proposes a whole draft from the current signups. Replaces the draft's picks; External Boosters stay."
+              ? "Proposes a whole draft from the current signups. Replaces all draft Boosters and Lootbuddies; External Boosters stay."
               : "Keeps every current pick and fills only the missing slots from the current signups."}{" "}
             Applies to the draft only — review, then Save / Update.
           </p>
@@ -383,12 +396,22 @@ export function RosterBuilderDialog({
           type="button"
           disabled={!canApply || applying || pending}
           className="inline-flex h-8 items-center rounded-md bg-accent px-3 text-xs font-medium text-accent-foreground hover:bg-accent-hover disabled:opacity-50"
-          onClick={handleApply}
+          onClick={() => handleApply()}
         >
           {applying ? "Applying…" : stageMode ? "Apply to draft" : "Apply Roster"}
         </button>
       </div>
     </dialog>
+    {confirmingReplace ? (
+      <ReplaceDraftConfirmDialog
+        draftCount={baseDraft?.length ?? 0}
+        onCancel={() => setConfirmingReplace(false)}
+        onConfirm={() => {
+          setConfirmingReplace(false);
+          handleApply(true);
+        }}
+      />
+    ) : null}
     {confirmingWarnings && data && data.warnings.length > 0 ? (
       <RosterWarningConfirmDialog
         title={
@@ -417,6 +440,72 @@ export function RosterBuilderDialog({
       />
     ) : null}
     </>
+  );
+}
+
+/**
+ * Build from signups replaces the local draft. Same native-dialog confirm
+ * pattern as the roster warning confirmation: Escape / Cancel never applies.
+ */
+function ReplaceDraftConfirmDialog({
+  draftCount,
+  onCancel,
+  onConfirm,
+}: {
+  draftCount: number;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (!dialog.open) dialog.showModal();
+    const onDialogCancel = (event: Event) => {
+      event.preventDefault();
+      onCancel();
+    };
+    dialog.addEventListener("cancel", onDialogCancel);
+    return () => dialog.removeEventListener("cancel", onDialogCancel);
+  }, [onCancel]);
+
+  return (
+    <dialog
+      ref={dialogRef}
+      aria-labelledby={titleId}
+      className="w-[min(26rem,calc(100vw-2rem))] rounded-lg border border-border bg-surface p-0 text-foreground shadow-xl backdrop:bg-black/50"
+    >
+      <div className="border-b border-border px-4 py-3">
+        <h2 id={titleId} className="text-base font-semibold">
+          Replace the current draft?
+        </h2>
+      </div>
+      <div className="space-y-2 px-4 py-4 text-sm">
+        <p className="text-warning">This replaces all draft Boosters and Lootbuddies. External Boosters stay.</p>
+        <p className="text-muted">
+          {draftCount} current pick{draftCount === 1 ? "" : "s"} will be replaced by the proposal. Nothing is saved until
+          you Save / Update the roster.
+        </p>
+      </div>
+      <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
+        <button
+          type="button"
+          className="inline-flex h-8 items-center rounded-md border border-border px-3 text-xs font-medium hover:bg-surface-raised"
+          onClick={onCancel}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="inline-flex h-8 items-center rounded-md border border-warning/45 bg-warning/15 px-3 text-xs font-medium text-warning hover:bg-warning/25"
+          onClick={onConfirm}
+        >
+          Replace draft
+        </button>
+      </div>
+    </dialog>
   );
 }
 

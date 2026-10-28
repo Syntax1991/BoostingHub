@@ -154,10 +154,11 @@ function selectedLockedFromRoster(
 }
 
 /**
- * The Roster Builder's own (unsaved) draft as the proposal's locked base:
- * known, still-active offers only, one slot per signup. Anything else (a
- * withdrawn or foreign id from a stale editor) is dropped — the proposal's
- * fullSelections then simply no longer contain it.
+ * The Roster Builder's own (unsaved) draft as the proposal's locked base: every
+ * known, non-withdrawn signup, one slot per signup. NOT_SELECTED counts — the
+ * editor may re-select it on a published roster, and Fill gaps must keep every
+ * pick. Anything else (a withdrawn or foreign id from a stale editor) is
+ * dropped — the proposal's fullSelections then simply no longer contain it.
  */
 function lockedFromBaseSelections(
   signups: RosterSignupRow[],
@@ -168,7 +169,7 @@ function lockedFromBaseSelections(
   const rows: Array<{ signup: RosterSignupRow; selectedRole: CharacterRole | null }> = [];
   for (const selection of base) {
     const signup = byId.get(selection.signupId);
-    if (!signup || seen.has(signup.id) || !isActiveSignupOffer(signup.status)) continue;
+    if (!signup || seen.has(signup.id) || signup.status === "WITHDRAWN") continue;
     seen.add(signup.id);
     rows.push({
       signup,

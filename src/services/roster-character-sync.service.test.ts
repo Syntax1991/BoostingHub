@@ -199,6 +199,29 @@ describe("rosterCharacterSyncService.syncStaleSelected", () => {
     });
   });
 
+  it("a failing Character lookup counts as failed for that Character only; the others still sync", async () => {
+    const roster = await rosterRepository.findByRunId(ids.run);
+    await rosterRepository.replaceSelectedSignupIds(roster!.id, roster!.version, [
+      { signupId: ids.signupStale, selectedRole: "HEALER" },
+      { signupId: ids.signupFresh, selectedRole: "HEALER" },
+      { signupId: ids.signupUnpicked, selectedRole: "HEALER" },
+    ]);
+    const { characterRepository } = await import("@/repositories/character.repository");
+    const original = characterRepository.findById.bind(characterRepository);
+    const lookup = vi.spyOn(characterRepository, "findById").mockImplementation(async (id: string) => {
+      if (id === ids.charStale) throw new Error("connection reset");
+      return original(id);
+    });
+    try {
+      const result = await rosterCharacterSyncService.syncStaleSelected(asUser(ids.lead, "RAID_LEAD"), ids.run);
+      expect(result).toEqual({ synced: 1, failed: 1, skipped: 0 });
+      expect(syncMock).toHaveBeenCalledTimes(1);
+      expect(syncMock.mock.calls[0]![1]).toMatchObject({ id: ids.charUnpicked });
+    } finally {
+      lookup.mockRestore();
+    }
+  });
+
   it("is manager-only and refused once the Run has started", async () => {
     await expect(
       rosterCharacterSyncService.syncStaleSelected(asUser(ids.user, "USER"), ids.run),

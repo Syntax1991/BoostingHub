@@ -876,8 +876,18 @@ function RosterBuilderEditor({
     setErrorCode(null);
     if (input.confirmed.length > 0) withConfirmedWarnings(input.confirmed);
     const next: StagedSelections = new Map(input.selections.map((row) => [row.signupId, row.selectedRole]));
+    // A pick that keeps its role keeps the spec the Raid Lead chose; new picks get the default display spec.
+    const defaults = collectInitialStagedSpecs(data, next);
+    const specs: StagedSpecs = new Map(
+      [...defaults].map(([signupId, spec]) => [
+        signupId,
+        stagedSelections.get(signupId) === next.get(signupId) && stagedSpecs.has(signupId)
+          ? (stagedSpecs.get(signupId) ?? null)
+          : spec,
+      ]),
+    );
     setStagedSelections(next);
-    setStagedSpecs(collectInitialStagedSpecs(data, next));
+    setStagedSpecs(specs);
   }
 
   function syncSelectedCharacters() {
