@@ -252,6 +252,11 @@ function sortByScheduleThenRunId(items: WeekSectionItem[]): WeekSectionItem[] {
   });
 }
 
+/** The text sort group only — voice / stage channels never take part in ordering or its verification. */
+function textChildren(children: ReadonlyArray<CategoryChild>): CategoryChild[] {
+  return children.filter((child) => !child.voice);
+}
+
 function sortChildrenByPosition(children: ReadonlyArray<CategoryChild>): CategoryChild[] {
   return [...children].sort((a, b) => a.position - b.position);
 }
@@ -318,7 +323,7 @@ export function planWeekSectionOrder(
   env: WeekSectionEnv,
   items: ReadonlyArray<WeekSectionItem>,
 ): WeekSectionPlan {
-  const children = allChildren.filter((child) => !child.voice);
+  const children = textChildren(allChildren);
   if (!env.discordRunCategoryId) {
     return { status: "skipped", reason: "DISCORD_RUN_CATEGORY_ID is unset" };
   }
@@ -559,7 +564,7 @@ export async function reconcileWeekSectionPositionsUntilSettled(
       return { status: "skipped", reason: verifyPlan.reason, attempts: attempt };
     }
 
-    const liveOrderIds = sortChildrenByPosition(freshChildren).map((child) => child.id);
+    const liveOrderIds = sortChildrenByPosition(textChildren(freshChildren)).map((child) => child.id);
     if (relativeOrderMatches(liveOrderIds, verifyPlan.finalOrderIds)) {
       return { status: "ok", moved: totalMoved, attempts: attempt, verified: true };
     }

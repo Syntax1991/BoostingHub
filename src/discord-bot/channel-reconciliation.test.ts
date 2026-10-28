@@ -931,6 +931,36 @@ describe("reconcileWeekSectionPositionsUntilSettled — fresh verify + bounded r
     expect(setPositions).not.toHaveBeenCalled();
     expect(sleep).not.toHaveBeenCalled();
   });
+
+  it("PRODUCTION: voice channels in the category do not fail verification (no retry loop)", async () => {
+    // Live 2026-10-28 after #291: text order correct, but the verify step
+    // compared the live list WITH Raid #1 / Raid #2 against the plan without them.
+    const live = [
+      child(CURRENT_MARKER, 0),
+      child("chan-1", 1),
+      { id: "raid-2-voice", position: 2, voice: true },
+      { id: "raid-1-voice", position: 2, voice: true },
+      child(NEXT_MARKER, 3),
+    ];
+    const setPositions = vi.fn().mockResolvedValue(undefined) as PositionSetter;
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    const result = await reconcileWeekSectionPositionsUntilSettled(
+      listerFor(live),
+      listerFor(live),
+      setPositions,
+      weekEnv,
+      [weekItem({ targetBucket: "CURRENT", existingRunChannelId: "chan-1" })],
+      { sleep },
+    );
+
+    expect(result).toEqual({ status: "ok", moved: 0, attempts: 1, verified: true });
+    expect(setPositions).not.toHaveBeenCalled();
+    expect(sleep).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
 });
 
 describe("planWeekSectionOrder — BoostingHub and manual Run channels sorted together by time", () => {
