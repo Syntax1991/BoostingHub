@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'7b89d762d89a8727648436736954dfbb86a8b6b7bf1d66f8443334e55b7289a5'>;
+  StorageHashBase<'883e1fd522f355c4012102fadb12368abc4002a6fb13e8b06ea79fc3db85aecc'>;
 export type ExecutionHash =
   ExecutionHashBase<'b27b9239312d18e407528e2d06057d2da4f3e67bdff7bffe5f827471950c2fa6'>;
 export type ProfileHash =
@@ -928,7 +928,8 @@ export type FieldOutputTypes = {
         | 'ROSTER_WITHDRAWN'
         | 'RUN_REACTIVATED'
         | 'RUN_SCOPE_CHANGED'
-        | 'CHARACTER_BATTLENET_REPAIR';
+        | 'CHARACTER_BATTLENET_REPAIR'
+        | 'ROSTER_CHARACTER_SAVED';
       readonly runId: CodecTypes['pg/text@1']['output'] | null;
       readonly signupId: CodecTypes['pg/text@1']['output'] | null;
       readonly sourceKey: CodecTypes['pg/text@1']['output'];
@@ -1670,7 +1671,8 @@ export type FieldInputTypes = {
         | 'ROSTER_WITHDRAWN'
         | 'RUN_REACTIVATED'
         | 'RUN_SCOPE_CHANGED'
-        | 'CHARACTER_BATTLENET_REPAIR';
+        | 'CHARACTER_BATTLENET_REPAIR'
+        | 'ROSTER_CHARACTER_SAVED';
       readonly runId: CodecTypes['pg/text@1']['input'] | null;
       readonly signupId: CodecTypes['pg/text@1']['input'] | null;
       readonly sourceKey: CodecTypes['pg/text@1']['input'];
@@ -2422,7 +2424,8 @@ export type StorageColumnTypes = {
         | 'ROSTER_WITHDRAWN'
         | 'RUN_REACTIVATED'
         | 'RUN_SCOPE_CHANGED'
-        | 'CHARACTER_BATTLENET_REPAIR';
+        | 'CHARACTER_BATTLENET_REPAIR'
+        | 'ROSTER_CHARACTER_SAVED';
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly userId: CodecTypes['pg/text@1']['output'];
       readonly visibleInApp: CodecTypes['pg/bool@1']['output'];
@@ -3164,7 +3167,8 @@ export type StorageColumnInputTypes = {
         | 'ROSTER_WITHDRAWN'
         | 'RUN_REACTIVATED'
         | 'RUN_SCOPE_CHANGED'
-        | 'CHARACTER_BATTLENET_REPAIR';
+        | 'CHARACTER_BATTLENET_REPAIR'
+        | 'ROSTER_CHARACTER_SAVED';
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly userId: CodecTypes['pg/text@1']['input'];
       readonly visibleInApp: CodecTypes['pg/bool@1']['input'];
@@ -8464,6 +8468,7 @@ type ContractBase = Omit<
                 'RUN_REACTIVATED',
                 'RUN_SCOPE_CHANGED',
                 'CHARACTER_BATTLENET_REPAIR',
+                'ROSTER_CHARACTER_SAVED',
               ];
             };
             readonly ParticipationType: {
@@ -14204,6 +14209,7 @@ type ContractBase = Omit<
                 readonly name: 'CHARACTER_BATTLENET_REPAIR';
                 readonly value: 'CHARACTER_BATTLENET_REPAIR';
               },
+              { readonly name: 'ROSTER_CHARACTER_SAVED'; readonly value: 'ROSTER_CHARACTER_SAVED' },
             ];
           };
           readonly DiscordDeliveryStatus: {

@@ -6,10 +6,13 @@ import {
 } from "@/services/notification-content";
 
 const BASE = {
-  productLabel: "Venomous Abyss 8/8",
-  scheduledStartAt: "2026-09-25T20:15:00.000Z",
-  difficulty: "HEROIC" as const,
-  lootType: "VIP" as const,
+  run: {
+    runId: "r1",
+    contentTitle: "Venom & Tide & Kith'ix",
+    scheduledStartAt: "2026-09-25T20:15:00.000Z",
+    difficulty: "HEROIC" as const,
+    lootType: "VIP" as const,
+  },
 };
 
 describe("roster withdrawal notification (to the Raid Lead)", () => {

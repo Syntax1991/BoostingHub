@@ -173,6 +173,8 @@ enum NotificationType {
   RUN_SCOPE_CHANGED = "RUN_SCOPE_CHANGED"
   /// To a Character's owner, once per broken Blizzard identity: reconnect Battle.net to repair it.
   CHARACTER_BATTLENET_REPAIR = "CHARACTER_BATTLENET_REPAIR"
+  /// A picked (draft/published) Character newly killed a planned boss elsewhere — to its owner and the Raid Lead.
+  ROSTER_CHARACTER_SAVED = "ROSTER_CHARACTER_SAVED"
 }
 
 /// Discord DM delivery decision snapshotted at notification creation.

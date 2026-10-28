@@ -297,17 +297,19 @@ The bot delivers from `listSyncWork.notificationDms` (PENDING rows only). Legacy
 ```text
 📣 **Raid Invite**
 
-{productLabel}
-{DD/MM/YYYY HH:mm Europe/Berlin} · {DIFFICULTY}
+{contentTitle}
+<t:…:F> · {DIFFICULTY} · {Run type}
 
-Assignment: {Role} · {Character} ({Class}) · VIP
+Assignment: {Role} · {Character} ({Class})
 Channel: <#runChannelId>
 Voice: <#voiceChannelId>
 
 Please be online 10 minutes before start.
+
+{Run link}
 ```
 
-- VIP appears only on the Assignment line (never duplicated on the schedule line).
+- VIP appears once — on the meta line (the Run type); the Assignment line does not repeat it.
 - `Channel:` uses the persisted `RunDiscordPost.runChannelId` as a real `<#id>` mention. When that id is missing, the Channel line is omitted — never `#unknown`.
 - `Voice:` links the Run's temporary voice channel (see below). The bot prefers the voice channel it created or deleted **in the same sync pass** (voice runs before DMs), else `RunDiscordPost.voiceChannelId` read when the DM is due — so a Quiet-Hours-delayed invite never links a channel that was already deleted. Omitted when there is none. The mention is rendered by the bot only; `UserNotification.message` never contains it.
 - Permanent DM failures (`isDiscordPermanentDmError`: closed DMs 50007, no mutual guilds 50278, Missing Access 50001 / Missing Permissions 50013) → `FAILED_PERMANENT` (no retry, one compact warn line with notification id and Discord code). Rate limits, 5xx, network/timeouts and unknown codes leave `PENDING` and retry on the next pass.
@@ -316,6 +318,26 @@ Please be online 10 minutes before start.
 - App-archived Runs do not enqueue notification DMs.
 
 Roster Pick DMs (`ROSTER_SELECTED`) use a separate message body (`buildRosterSelectedDmMessage`) and are also delivered via `notificationDms`.
+
+### Run DM format (every Run-related DM)
+
+All Run DMs — Roster Selected / Roster Update (swap) / Roster removed / Roster Withdrawal (Raid Lead) / Raid Invite / Run Cancelled / Run Reactivated / Run Updated (scope) / Run Rescheduled / the three Saved DMs — share one hierarchy (`src/lib/discord-run-dm.ts`: `DmRunContext`, `dmRunHeader`, `dmRunUrl`):
+
+```text
+{emoji} **{Event heading}**
+
+{contentTitle}                      ← e.g. Venom & Tide & Kithix
+<t:…:F> · {DIFFICULTY} · {Run type}
+
+{event-specific lines}
+
+{Run / Roster link}                 ← last line (labelled where the event asks for an action)
+```
+
+- **Run identity** is the compact content title from `contentShortTitle` (`Raid.shortName` in authoritative content order: `Venom`, `Venom & Tide`, `Venom & Tide & Kithix`) — the same identity as the Signup post and the lifecycle channel announcements. It is derived once per DM work item from the persisted Run contents (`NotificationDmWorkItem.contentTitle`); `productLabel` ("Season 2 Bundle", formal Raid names) stays for its other consumers and is only the fallback for an older API.
+- **Run Rescheduled** shows `Old:` / `New:` in place of the meta line.
+- The Start Run Saved summary DM delivers the bell notification's own text (`savedSummary.message`) under the heading — the affected-set snapshot; delivery never parses notification copy.
+- Event semantics (recipients, triggers, per-event toggles, Quiet Hours, idempotency) are unchanged by the format.
 
 ## Run voice channels
 

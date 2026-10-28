@@ -27,6 +27,8 @@ import { resolveRaiderIoItemLevelEnrichment } from "@/services/character-raider-
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
 import { characterRepairNotificationService } from "@/services/character-repair-notification.service";
+import { rosterSavedNoticeService, type NewLockoutKills } from "@/services/roster-saved-notice.service";
+import { parseKilledBossIds } from "@/lib/lockout-bosses";
 
 /**
  * Owns refreshing already Blizzard-linked characters: single refresh,
@@ -110,6 +112,21 @@ export type SyncableCharacter = {
   blizzardRealmId: string | null;
 };
 
+/**
+ * Bosses killed now that the stored row did not have. A missing row means
+ * everything is new; a legacy row without boss ids only counts as new when
+ * the kill count grew (never guessed boss by boss).
+ */
+export function newlyKilledBossIds(previous: Record<string, unknown> | null, killedBossIds: readonly string[]): string[] {
+  if (!previous) return [...killedBossIds];
+  const before = parseKilledBossIds(previous.killedBossIds);
+  if (before) {
+    const known = new Set(before);
+    return killedBossIds.filter((id) => !known.has(id));
+  }
+  return killedBossIds.length > Number(previous.bossesDefeated ?? 0) ? [...killedBossIds] : [];
+}
+
 async function syncCurrentRaidLockoutsFromBlizzard(character: {
   id: string;
   name: string;
@@ -138,7 +155,22 @@ async function syncCurrentRaidLockoutsFromBlizzard(character: {
     // Sequential per-raid upserts (no transaction helper in this codebase).
     // Each call preserves other tracked-raid rows via the DB catalog's tracked set.
     const trackedRaidIds = catalog.lockoutRaids.map((raid) => raid.id);
+    // Stored rows before this sync — the baseline for "newly killed".
+    const previousRows = await lockoutRepository.listForCharacterReset(character.id, derived.resetIdentifier);
+    const kills: NewLockoutKills[] = [];
     for (const raid of derived.raids) {
+      for (const row of raid.difficulties) {
+        const killedBossIds = row.bosses.filter((boss) => boss.killedThisReset).map((boss) => boss.bossId);
+        const previous =
+          previousRows.find((stored) => stored.raidId === raid.raidId && stored.difficulty === row.difficulty) ?? null;
+        kills.push({
+          raidId: raid.raidId,
+          difficulty: row.difficulty,
+          resetIdentifier: derived.resetIdentifier,
+          killedBossIds,
+          newBossIds: newlyKilledBossIds(previous, killedBossIds),
+        });
+      }
       await lockoutRepository.replaceVerifiedCurrentResetLockouts(character.id, {
         raidId: raid.raidId,
         resetIdentifier: derived.resetIdentifier,
@@ -152,6 +184,8 @@ async function syncCurrentRaidLockoutsFromBlizzard(character: {
         verifiedAt: derived.verifiedAt,
       });
     }
+    // Picked for a Run, then saved elsewhere: tell the player and the Raid Lead (best-effort).
+    await rosterSavedNoticeService.notifyNewKills(character.id, kills);
     return true;
   } catch (error) {
     if (isDomainError(error) && error.code === "BATTLENET_NOT_CONFIGURED") {

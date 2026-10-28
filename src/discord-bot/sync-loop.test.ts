@@ -1205,7 +1205,8 @@ describe("syncOnce — Apex-style Raid Invite DMs", () => {
     expect(sendDm).toHaveBeenCalledTimes(1);
     const content = sendDm.mock.calls[0][0].content as string;
     expect(content).toContain("📣 **Raid Invite**");
-    expect(content).toContain("Healer · Synmist (Monk) · VIP");
+    expect(content).toContain("Healer · Synmist (Monk)");
+    expect(content).toContain(" · HEROIC · VIP");
     expect(content).toContain("Channel: <#run-chan>");
     expect(content).not.toMatch(/unknown/i);
     expect((content.match(/VIP/g) ?? []).length).toBe(1);
@@ -1371,6 +1372,79 @@ describe("syncOnce — UserNotification DMs", () => {
       notificationId: "cccccccc-cccc-4ccc-8ccc-ccccccccccc9",
       result: "SENT",
     });
+  });
+
+  it("Saved DMs (pre-Run / Start reminder / Raid Lead summary) use the compact Raid title and deliver the summary text as written", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+    ]);
+    const sendDm = vi.fn().mockResolvedValue({ id: "dm-saved" });
+    const { client } = makeDiscordClient(children);
+    (client as { users: { fetch: ReturnType<typeof vi.fn> } }).users = {
+      fetch: vi.fn().mockResolvedValue({ id: "discord-user", send: sendDm }),
+    };
+    const base = {
+      type: "ROSTER_CHARACTER_SAVED" as const,
+      discordUserId: "discord-user",
+      runId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab1",
+      signupId: null,
+      runChannelId: null,
+      // The formal product label must never reach these DMs.
+      productLabel: "Season 2 Bundle",
+      contentTitle: "Venom & Tide & Kith'ix",
+      scheduledStartAt: "2026-12-12T20:30:00.000Z",
+      previousScheduledStartAt: null,
+      difficulty: "HEROIC" as const,
+      lootType: "VIP" as const,
+      participationType: null,
+      selectedRole: null,
+      characterName: null,
+      wowClass: null,
+    };
+    const saved = (audience: "player" | "lead" | "start") => ({
+      audience,
+      characterLabel: "Synmist-Antonidas",
+      playerName: "Kiri",
+      bossNames: ["Boss A"],
+      url: "https://example.test/runs/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab1",
+    });
+    // Harmless copy changes (other dash, colon, extra line) must not matter: the text is delivered, never parsed.
+    const summaryMessage = "2 selected Characters are saved:\nSynmist-Antonidas – Boss A\nSynblast-Antonidas: Boss B, Boss C\nCheck the roster.";
+    const api = makeApi({ channels: [], signups: [], roster: [] });
+    (api.listSyncWork as ReturnType<typeof vi.fn>).mockResolvedValue({
+      channels: [],
+      signups: [],
+      roster: [],
+      start: [],
+      raidInvites: [],
+      notificationDms: [
+        { ...base, notificationId: "cccccccc-cccc-4ccc-8ccc-cccccccccc01", characterSaved: saved("player") },
+        { ...base, notificationId: "cccccccc-cccc-4ccc-8ccc-cccccccccc02", characterSaved: saved("lead") },
+        { ...base, notificationId: "cccccccc-cccc-4ccc-8ccc-cccccccccc03", characterSaved: saved("start") },
+        {
+          ...base,
+          notificationId: "cccccccc-cccc-4ccc-8ccc-cccccccccc04",
+          savedSummary: { message: summaryMessage, rosterUrl: "https://example.test/runs/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab1" },
+        },
+      ],
+    });
+
+    await syncOnce(client as never, botEnv(), api);
+
+    expect(sendDm).toHaveBeenCalledTimes(4);
+    const contents = sendDm.mock.calls.map((call) => call[0].content as string);
+    for (const content of contents) {
+      expect(content.split("\n")[2]).toBe("Venom & Tide & Kith'ix");
+      expect(content).not.toContain("Season 2 Bundle");
+    }
+    expect(contents[0]).toContain("Your picked Character is saved");
+    expect(contents[1]).toContain("Picked Character got saved");
+    expect(contents[2]).toContain("Reminder: you are saved");
+    expect(contents[3]).toContain("Selected Characters are saved");
+    expect(contents[3]).toContain("Synmist-Antonidas – Boss A");
+    expect(contents[3]).toContain("Synblast-Antonidas: Boss B, Boss C");
+    expect(contents[3]).toContain("Check the roster.");
   });
 
   it("sends the one-time Battle.net repair DM (account notification, no Run) and acks it per notification", async () => {

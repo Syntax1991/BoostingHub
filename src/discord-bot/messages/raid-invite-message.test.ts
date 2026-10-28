@@ -4,6 +4,7 @@ import {
   formatRaidInviteAssignment,
   formatRaidInviteSchedule,
 } from "@/discord-bot/messages/raid-invite-message";
+import { absoluteRunUrl } from "@/lib/app-url";
 
 describe("formatRaidInviteSchedule", () => {
   it("formats Europe/Berlin as DD/MM/YYYY HH:mm", () => {
@@ -62,10 +63,7 @@ describe("formatRaidInviteAssignment", () => {
 describe("buildRaidInviteMessage", () => {
   it("renders a real Discord channel mention when runChannelId exists", () => {
     const text = buildRaidInviteMessage({
-      productLabel: "Venom & Tide",
-      scheduledStartAt: "2026-09-16T13:30:00.000Z",
-      difficulty: "HEROIC",
-      lootType: "VIP",
+      run: { runId: "r1", contentTitle: "Venom & Tide", scheduledStartAt: "2026-09-16T13:30:00.000Z", difficulty: "HEROIC", lootType: "VIP" },
       participationType: "BOOSTER",
       selectedRole: "HEALER",
       characterName: "Synmist",
@@ -74,8 +72,9 @@ describe("buildRaidInviteMessage", () => {
       voiceChannelId: null,
     });
 
-    expect(text).toContain("<t:1789565400:F> · HEROIC");
-    expect(text).toContain("Assignment: Healer · Synmist (Monk) · VIP");
+    expect(text).toContain("<t:1789565400:F> · HEROIC · VIP");
+    // VIP once: the meta line names the Run type, the assignment does not repeat it.
+    expect(text).toContain("Assignment: Healer · Synmist (Monk)\n");
     expect(text).toContain("Channel: <#1550000000000000001>");
     expect(text).toContain("<#1550000000000000001>");
     expect(text).not.toMatch(/unknown/i);
@@ -85,10 +84,7 @@ describe("buildRaidInviteMessage", () => {
 
   it("omits the Channel line when runChannelId is missing", () => {
     const text = buildRaidInviteMessage({
-      productLabel: "Venom & Tide",
-      scheduledStartAt: "2026-09-16T13:30:00.000Z",
-      difficulty: "HEROIC",
-      lootType: "VIP",
+      run: { runId: "r1", contentTitle: "Venom & Tide", scheduledStartAt: "2026-09-16T13:30:00.000Z", difficulty: "HEROIC", lootType: "VIP" },
       participationType: "BOOSTER",
       selectedRole: "HEALER",
       characterName: "Synmist",
@@ -105,10 +101,7 @@ describe("buildRaidInviteMessage", () => {
 
   it("omits Channel line for blank runChannelId and never invents #name", () => {
     const text = buildRaidInviteMessage({
-      productLabel: "Raid",
-      scheduledStartAt: "2026-09-16T13:30:00.000Z",
-      difficulty: "NORMAL",
-      lootType: "UNSAVED",
+      run: { runId: "r1", contentTitle: "Raid", scheduledStartAt: "2026-09-16T13:30:00.000Z", difficulty: "NORMAL", lootType: "UNSAVED" },
       participationType: "BOOSTER",
       selectedRole: "MELEE_DPS",
       characterName: "Bob",
@@ -124,17 +117,28 @@ describe("buildRaidInviteMessage", () => {
 
   describe("Channel / Voice lines", () => {
     const base = {
-      productLabel: "Season 2 Bundle",
-      scheduledStartAt: "2026-09-16T13:30:00.000Z",
-      difficulty: "HEROIC" as const,
-      lootType: "UNSAVED" as const,
+      run: {
+        runId: "r1",
+        contentTitle: "Venom & Tide & Kith'ix",
+        scheduledStartAt: "2026-09-16T13:30:00.000Z",
+        difficulty: "HEROIC" as const,
+        lootType: "UNSAVED" as const,
+      },
       participationType: "BOOSTER" as const,
       selectedRole: "HEALER" as const,
       characterName: "Synlight",
       wowClass: "PRIEST" as const,
     };
-    const head = ["📣 **Raid Invite**", "", "Season 2 Bundle", "<t:1789565400:F> · HEROIC", "", "Assignment: Healer · Synlight (Priest)"];
-    const tail = ["", "Please be online 10 minutes before start."];
+    const head = [
+      "📣 **Raid Invite**",
+      "",
+      "Venom & Tide & Kith'ix",
+      "<t:1789565400:F> · HEROIC · UNSAVED",
+      "",
+      "Assignment: Healer · Synlight (Priest)",
+    ];
+    const runUrl = absoluteRunUrl("r1");
+    const tail = ["", "Please be online 10 minutes before start.", ...(runUrl ? ["", runUrl] : [])];
 
     it("text + voice: both lines, Channel before Voice", () => {
       expect(buildRaidInviteMessage({ ...base, runChannelId: "111", voiceChannelId: "222" })).toBe(
