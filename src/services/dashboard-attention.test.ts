@@ -14,6 +14,7 @@ function baseItem(overrides: Partial<MyRunsProjection["selected"][number]> = {})
     runTitle: "Friday Heroic",
     productLabel: "Venomous Abyss",
     contentSummary: "8/8",
+    contentTitle: "Venom",
     difficulty: "HEROIC",
     scheduledStartAt: "2026-10-10T20:00:00.000Z",
     runStatus: "PUBLISHED",

@@ -16,6 +16,7 @@ import {
   SIGNUP_STATUS_LABELS,
 } from "@/lib/labels";
 import { cn } from "@/lib/cn";
+import { groupMyRunsByRun, myRunsSelectionPhrase } from "@/lib/my-runs-groups";
 import type { CharacterRole } from "@/models/enums";
 import type { signupService } from "@/services/signup.service";
 
@@ -43,9 +44,12 @@ function characterLabel(item: Pick<SignupItem, "characterName" | "characterRealm
 }
 
 function selectionPhrase(offer: SignupItem): string {
-  if (offer.selectionState === "PUBLISHED") return "Selected · Confirmed";
-  if (offer.selectionState === "DRAFT") return "Selected · Draft";
-  return SIGNUP_STATUS_LABELS[offer.status];
+  return myRunsSelectionPhrase(offer, SIGNUP_STATUS_LABELS[offer.status]);
+}
+
+/** Booster: the authoritative pick role, else the single offered role. */
+function offerRole(offer: SignupItem): CharacterRole | null {
+  return offer.displayRole ?? (offer.offeredRoles.length === 1 ? offer.offeredRoles[0] : null);
 }
 
 function selectionTone(offer: SignupItem): string {
@@ -89,6 +93,7 @@ export function MyRunsView({ data, timeZone }: { data: MyRuns; timeZone: string 
           <SignupGroup
             title="Pending"
             items={data.pending}
+            selectedContext={data.selected}
             empty="No pending signups."
             timeZone={timeZone}
             tone="default"
@@ -110,12 +115,15 @@ export function MyRunsView({ data, timeZone }: { data: MyRuns; timeZone: string 
 function SignupGroup({
   title,
   items,
+  selectedContext,
   empty,
   timeZone,
   tone,
 }: {
   title: string;
   items: SignupItem[];
+  /** Pending only: the Selected rows, shown as context on the same Run's block. */
+  selectedContext?: SignupItem[];
   empty: string;
   timeZone: string;
   tone: SectionTone;
@@ -136,7 +144,7 @@ function SignupGroup({
       {items.length === 0 ? (
         <p className="text-xs text-muted">{empty}</p>
       ) : (
-        <RunOfferList items={items} timeZone={timeZone} />
+        <RunOfferList items={items} selectedContext={selectedContext} timeZone={timeZone} />
       )}
     </section>
   );
@@ -160,39 +168,16 @@ function WithdrawnSection({ items, timeZone }: { items: SignupItem[]; timeZone: 
   );
 }
 
-type RunGroup = {
-  runId: string;
-  runTitle: string;
-  productLabel: string;
-  contentSummary?: string;
-  difficulty: SignupItem["difficulty"];
-  scheduledStartAt: string;
-  offers: SignupItem[];
-};
-
-function groupByRun(items: SignupItem[]): RunGroup[] {
-  const groups: RunGroup[] = [];
-  for (const item of items) {
-    let group = groups.find((entry) => entry.runId === item.runId);
-    if (!group) {
-      group = {
-        runId: item.runId,
-        runTitle: item.runTitle,
-        productLabel: item.productLabel,
-        contentSummary: item.contentSummary,
-        difficulty: item.difficulty,
-        scheduledStartAt: item.scheduledStartAt,
-        offers: [],
-      };
-      groups.push(group);
-    }
-    group.offers.push(item);
-  }
-  return groups;
-}
-
-function RunOfferList({ items, timeZone }: { items: SignupItem[]; timeZone: string }) {
-  const groups = groupByRun(items);
+function RunOfferList({
+  items,
+  selectedContext,
+  timeZone,
+}: {
+  items: SignupItem[];
+  selectedContext?: SignupItem[];
+  timeZone: string;
+}) {
+  const groups = groupMyRunsByRun(items, selectedContext);
   return (
     <ul className="divide-y divide-border/60">
       {groups.map((group) => (
@@ -207,10 +192,7 @@ function RunOfferList({ items, timeZone }: { items: SignupItem[]; timeZone: stri
                 {group.runTitle}
               </Link>
               <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px] leading-snug text-muted">
-                <span className="truncate">
-                  {group.productLabel}
-                  {group.contentSummary ? ` · ${group.contentSummary}` : ""}
-                </span>
+                <span className="truncate">{group.contentTitle}</span>
                 <DifficultyBadge difficulty={group.difficulty} />
               </p>
             </div>
@@ -224,11 +206,16 @@ function RunOfferList({ items, timeZone }: { items: SignupItem[]; timeZone: stri
             </div>
 
             {/* Participations + per-offer Withdraw */}
-            <ul className="min-w-0 space-y-2">
-              {group.offers.map((offer) => (
-                <OfferRow key={offer.id} offer={offer} />
-              ))}
-            </ul>
+            <div className="min-w-0">
+              {group.selectedContext.length > 0 ? (
+                <SelectedContext picks={group.selectedContext} pendingCount={group.offers.length} />
+              ) : null}
+              <ul className="min-w-0 space-y-2">
+                {group.offers.map((offer) => (
+                  <OfferRow key={offer.id} offer={offer} />
+                ))}
+              </ul>
+            </div>
           </div>
         </li>
       ))}
@@ -236,10 +223,44 @@ function RunOfferList({ items, timeZone }: { items: SignupItem[]; timeZone: stri
   );
 }
 
+/**
+ * Read-only context on a Pending Run block: the User's selected
+ * participation(s) on the same Run (they live in Selected), so the rows
+ * below read as pending alternatives. No actions here.
+ */
+function SelectedContext({ picks, pendingCount }: { picks: SignupItem[]; pendingCount: number }) {
+  return (
+    <div className="mb-2.5 border-b border-border/60 pb-2.5">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-muted">Selected for this Run</p>
+      <ul className="mt-1 space-y-1">
+        {picks.map((pick) => {
+          const role = offerRole(pick);
+          return (
+            <li key={pick.id} className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[13px] leading-snug">
+              {pick.participationType === "LOOTBUDDY" ? (
+                <LootbuddyIcon size={16} />
+              ) : role ? (
+                <RoleIcon role={role} size={16} />
+              ) : null}
+              <span className="min-w-0 truncate font-medium text-foreground">{characterLabel(pick)}</span>
+              <span className="text-[12px] text-muted">
+                · {pick.participationType === "LOOTBUDDY" ? "Lootbuddy" : role ? CHARACTER_ROLE_LABELS[role] : "Booster"}
+              </span>
+              <span className={cn("text-[12px] font-medium", selectionTone(pick))}>· {selectionPhrase(pick)}</span>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-2.5 text-[11px] font-medium uppercase tracking-wide text-muted">
+        Pending alternatives · {pendingCount}
+      </p>
+    </div>
+  );
+}
+
 function OfferRow({ offer }: { offer: SignupItem }) {
   const isLootbuddy = offer.participationType === "LOOTBUDDY";
-  const primaryRole: CharacterRole | null =
-    offer.displayRole ?? (offer.offeredRoles.length === 1 ? offer.offeredRoles[0] : null);
+  const primaryRole = offerRole(offer);
   const canWithdraw = offer.canWithdrawWithReason || offer.canWithdraw;
 
   return (

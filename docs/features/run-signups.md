@@ -103,6 +103,21 @@ Updating one side never clears the other. Removing one Lootbuddy does not affect
 4. Save each section separately (`setCharacterOffers` / `setLootbuddies`).
 5. Review on `/my-runs` or the Run detail Signups tab — both participation types can appear for the same Run.
 
+### My Runs (`/my-runs`)
+
+Top-level groups stay **Selected / Pending / Not Selected / Withdrawn** (raid-ID filter `?id=` applies to all of them), each listing the User's participations grouped by Run. The Run block shows the Run title, the compact raid title (`contentShortTitle`, e.g. `Venom & Tide & Kithix`) and the difficulty.
+
+When a Run in **Pending** also has selected participation(s) of the same User (draft or published — the same authority as the Selected group, `selectionState` `DRAFT` / `PUBLISHED`), its Pending block starts with read-only context:
+
+```
+SELECTED FOR THIS RUN
+<role icon> Synblast-Antonidas · Healer · Selected · Draft
+PENDING ALTERNATIVES · 4
+  …the 4 pending offers, each with its own Withdraw…
+```
+
+The selected row itself stays in **Selected** (never repeated as a pending row) and carries no action in the context. Several selected participations are all listed — the domain allows one Booster plus any number of Lootbuddies per User and Run (and two Boosters can coexist in a draft until publish validation blocks it). Helper: `groupMyRunsByRun` (`src/lib/my-runs-groups.ts`).
+
 ## Booster offered roles vs selected role
 
 These are different domain facts:

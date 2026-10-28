@@ -12,6 +12,7 @@ import { rosterBuilderService } from "@/services/roster-builder.service";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
+import { groupMyRunsByRun } from "@/lib/my-runs-groups";
 
 // Warcraft Logs auto-link enrichment runs after Character writes/syncs; keep it
 // offline (a real WARCRAFT_LOGS_* in .env would otherwise hit the live API).
@@ -402,5 +403,57 @@ describe("draft selection user visibility", () => {
     const arg = spy.mock.calls[0]?.[0] as string[];
     expect(arg.length).toBeGreaterThanOrEqual(3);
     spy.mockRestore();
+  });
+
+  it("My Runs: a Pending Run block gets the same Run's draft pick as context; raid-ID filtering keeps weeks apart", async () => {
+    const [blast, beast, other1] = await Promise.all(
+      ["Dsvca", "Dsvcb", "Dsvcc"].map((prefix) =>
+        characterService.createCharacter(owner, {
+          name: charName(prefix),
+          realm: "Antonidas",
+          region: "EU",
+          wowClass: "PRIEST",
+          specialization: "Holy",
+          itemLevel: 640,
+        }),
+      ),
+    );
+    createdCharacterIds.push(blast!.id, beast!.id, other1!.id);
+
+    // Two different raid IDs (weekly reset Wednesday 06:00 Europe/Berlin).
+    const thisWeek = await createOpenRun(lead, "2026-12-11T19:00:00.000Z", { healers: 1 });
+    const nextWeek = await createOpenRun(lead, "2026-12-18T19:00:00.000Z", { healers: 1 });
+    const pickedOffer = await signupService.createBoosterSignup(owner, {
+      runId: thisWeek.id,
+      characterId: blast!.id,
+      role: "HEALER",
+      isBackup: false,
+    });
+    await signupService.createBoosterSignup(owner, { runId: thisWeek.id, characterId: beast!.id, role: "HEALER", isBackup: false });
+    await signupService.createBoosterSignup(owner, { runId: nextWeek.id, characterId: other1!.id, role: "HEALER", isBackup: false });
+    const view = await rosterService.getRosterManagementView(lead, thisWeek.id);
+    await rosterService.saveDraftSelection(lead, {
+      runId: thisWeek.id,
+      version: view.roster.version,
+      selections: [{ signupId: pickedOffer.id, selectedRole: "HEALER" }],
+    });
+
+    const now = new Date("2026-12-10T12:00:00.000Z");
+    const current = await signupService.getMyRuns(owner, { raidId: "current", now });
+    expect(current.pending.some((row) => row.runId === nextWeek.id)).toBe(false);
+    const groups = groupMyRunsByRun(current.pending, current.selected);
+    const block = groups.find((group) => group.runId === thisWeek.id)!;
+    expect(block.selectedContext.map((pick) => [pick.id, pick.selectionState, pick.displayRole])).toEqual([
+      [pickedOffer.id, "DRAFT", "HEALER"],
+    ]);
+    expect(block.offers.map((offer) => offer.characterId)).toEqual([beast!.id]);
+    // Shared compact title (`contentShortTitle`), not the full raid names.
+    expect(block.contentTitle).toBe("Venom");
+
+    const next = await signupService.getMyRuns(owner, { raidId: "next", now });
+    const nextGroups = groupMyRunsByRun(next.pending, next.selected);
+    expect(nextGroups.map((group) => group.runId)).toContain(nextWeek.id);
+    expect(nextGroups.find((group) => group.runId === nextWeek.id)!.selectedContext).toEqual([]);
+    expect(nextGroups.some((group) => group.runId === thisWeek.id)).toBe(false);
   });
 });

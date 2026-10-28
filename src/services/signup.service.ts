@@ -144,6 +144,7 @@ export const signupService = {
         runTitle: signup.run.title,
         productLabel: signup.run.productLabel,
         contentSummary: signup.run.contentSummary,
+        contentTitle: signup.run.contentTitle,
         difficulty: signup.run.difficulty,
         scheduledStartAt: signup.run.scheduledStartAt,
         runStatus: signup.run.status,
