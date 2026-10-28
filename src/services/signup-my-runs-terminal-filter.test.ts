@@ -57,6 +57,7 @@ function makeSignup(input: {
       scheduledStartAt: "2026-10-01T18:00:00.000Z",
       productLabel: "The Venomous Abyss",
       contentSummary: "The Venomous Abyss 8/8",
+      contentTitle: "Venom",
     },
   };
 }

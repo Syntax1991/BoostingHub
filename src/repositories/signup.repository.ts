@@ -12,6 +12,7 @@ import type {
   WowRegion,
 } from "@/models/enums";
 import { UPCOMING_RUN_STATUSES } from "@/models/enums";
+import { contentShortTitle } from "@/lib/raid-catalog";
 import { projectRunContentDisplay } from "@/lib/run-content-display";
 import {
   asBoolean,
@@ -60,6 +61,8 @@ export type SignupListRecord = {
     scheduledStartAt: string;
     productLabel: string;
     contentSummary: string;
+    /** Compact raid title (`contentShortTitle`), e.g. "Venom & Tide & Kithix". */
+    contentTitle: string;
   };
 };
 
@@ -93,6 +96,7 @@ function mapSignup(row: Record<string, unknown>): SignupListRecord {
     return {
       raidId: asString(content.raidId ?? contentRaid.id),
       raidName: asString(contentRaid.name, "Unknown raid"),
+      raidShortName: contentRaid.shortName == null ? null : asString(contentRaid.shortName),
       sortOrder: asNumber(content.sortOrder),
       plannedBossCount: asNumber(content.plannedBossCount),
       totalBossCount: bosses.length,
@@ -133,6 +137,7 @@ function mapSignup(row: Record<string, unknown>): SignupListRecord {
       scheduledStartAt: asString(run.scheduledStartAt),
       productLabel: display.productLabel,
       contentSummary: display.summary,
+      contentTitle: contentShortTitle(contents),
     },
   };
 }

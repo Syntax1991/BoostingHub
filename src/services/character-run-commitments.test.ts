@@ -621,6 +621,7 @@ describe("projectCharacterRunCommitment", () => {
         scheduledStartAt: "2026-11-01T20:00:00.000Z",
         productLabel: "Season 2 Bundle",
         contentSummary: "summary",
+        contentTitle: "Venom",
       },
     });
     expect(projected).toEqual({
