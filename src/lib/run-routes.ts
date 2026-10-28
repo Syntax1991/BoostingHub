@@ -68,6 +68,27 @@ export function resolveRunDetailTab(tab: RunDetailTab, hasConsumables: boolean):
   return tab;
 }
 
+/** Active Run Detail tab plus the server-provided tab (`?tab=`) it was last synced from. */
+export type RunDetailTabState = { tab: RunDetailTab; initialTab: RunDetailTab };
+
+/**
+ * Keeps the active tab in step with client-side navigation. Next re-renders
+ * the page with a new `initialTab` when only the URL's `?tab=` changes (e.g. a
+ * Preflight link from Operations to `/runs/[id]#roster-attention`), but React
+ * state seeded from the first `initialTab` would keep the old tab. Only a
+ * CHANGED `initialTab` moves the tab; otherwise the same state object comes
+ * back, so a manual tab click is never reset and the render-phase sync cannot
+ * loop.
+ */
+export function syncRunDetailTab(
+  state: RunDetailTabState,
+  initialTab: RunDetailTab,
+  hasConsumables: boolean,
+): RunDetailTabState {
+  if (state.initialTab === initialTab) return state;
+  return { tab: resolveRunDetailTab(initialTab, hasConsumables), initialTab };
+}
+
 export function runDetailPath(runId: string, tab?: RunDetailTab): string {
   const base = `/runs/${runId}`;
   if (!tab || tab === "roster") {
