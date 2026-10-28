@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { isDomainError } from "@/lib/errors";
 import type { RaidBossRef } from "@/lib/lockout-bosses";
 import type { RaidDifficulty, RunStatus, WowRegion } from "@/models/enums";
@@ -67,10 +68,11 @@ export type SavedNotice = {
 export type RosterCharacterSavedAudience = "player" | "lead" | "start";
 
 /**
- * A content's planned bosses: the first `plannedBossCount` bosses in boss order
- * (a partial Run clears from the start, `HC 6/8` = the first six).
+ * A content's planned bosses: the first `plannedBossCount` bosses in
+ * authoritative boss order (`sortOrder`). A partial Run clears from the start:
+ * 6/8 = bosses 1–6, 8/8 = all of them. No arbitrary boss subsets.
  */
-function plannedBosses(content: SavedNoticeCommitment["run"]["contents"][number]): RaidBossRef[] {
+export function plannedBosses(content: SavedNoticeCommitment["run"]["contents"][number]): RaidBossRef[] {
   return [...content.bosses].sort((a, b) => a.sortOrder - b.sortOrder).slice(0, content.plannedBossCount);
 }
 
@@ -132,6 +134,28 @@ export function rosterCharacterSavedSourceKey(
   audience: RosterCharacterSavedAudience,
 ): string {
   return `${SOURCE_KEY_PREFIX}${signupId}:${[...bossIds].sort().join(",")}:${audience}`;
+}
+
+const SUMMARY_SOURCE_KEY_PREFIX = "roster-character-saved-summary:";
+
+/**
+ * Start Run re-check summary to the Raid Lead: one per Run and affected set
+ * (which picks, saved on which bosses). The same set never notifies twice; a
+ * different set (another pick, another boss) does. Hashed to keep the key short.
+ */
+export function rosterCharacterSavedSummarySourceKey(
+  runId: string,
+  affected: ReadonlyArray<{ signupId: string; bossIds: readonly string[] }>,
+): string {
+  const canonical = affected
+    .map((entry) => `${entry.signupId}=${[...entry.bossIds].sort().join("+")}`)
+    .sort()
+    .join("|");
+  return `${SUMMARY_SOURCE_KEY_PREFIX}${runId}:${createHash("sha256").update(canonical).digest("hex").slice(0, 32)}`;
+}
+
+export function isRosterCharacterSavedSummarySourceKey(sourceKey: string): boolean {
+  return sourceKey.startsWith(SUMMARY_SOURCE_KEY_PREFIX);
 }
 
 export function parseRosterCharacterSavedSourceKey(

@@ -124,6 +124,58 @@ export function rosterCharacterSavedWebNotification(input: {
   };
 }
 
+/** One line per affected pick, e.g. `Synblast-Antonidas — Boss B, Boss C`. */
+export type SavedSelectedEntry = { characterLabel: string; bossNames: readonly string[] };
+
+function savedSelectedLines(entries: readonly SavedSelectedEntry[]): string[] {
+  return entries.map((entry) => `${entry.characterLabel} — ${entry.bossNames.join(", ")}`);
+}
+
+function savedSelectedHeadline(count: number): string {
+  return count === 1 ? "1 selected Character is saved:" : `${count} selected Characters are saved:`;
+}
+
+/**
+ * ROSTER_CHARACTER_SAVED summary to the Raid Lead after the Start Run re-check:
+ * every SELECTED Booster Character saved on a planned boss, in one notification.
+ */
+export function rosterSelectedSavedSummaryWebNotification(input: {
+  runId: string;
+  entries: readonly SavedSelectedEntry[];
+}): { title: string; message: string; href: string } {
+  return {
+    title: "Selected Characters are saved",
+    message: [savedSelectedHeadline(input.entries.length), ...savedSelectedLines(input.entries), "Check the roster."].join("\n"),
+    href: runDetailPath(input.runId, "roster"),
+  };
+}
+
+export function buildRosterSelectedSavedSummaryDmMessage(input: {
+  productLabel: string;
+  scheduledStartAt: string;
+  difficulty: RaidDifficulty;
+  lootType: RunLootType;
+  entries: readonly SavedSelectedEntry[];
+  rosterUrl: string | null;
+}): string {
+  const when = discordTimestamp(input.scheduledStartAt, "F");
+  const difficulty = DIFFICULTY_LABELS[input.difficulty].toUpperCase();
+  const lines = [
+    "⚠️ **Selected Characters are saved**",
+    "",
+    input.productLabel,
+    `${when} · ${difficulty} · ${input.lootType}`,
+    "",
+    savedSelectedHeadline(input.entries.length),
+    ...input.entries.map(
+      (entry) =>
+        `• **${escapeDiscordInlineText(entry.characterLabel)}** — ${entry.bossNames.map((name) => escapeDiscordInlineText(name)).join(", ")}`,
+    ),
+  ];
+  lines.push("", input.rosterUrl ? `Check the roster: ${input.rosterUrl}` : "Check the roster.");
+  return lines.join("\n");
+}
+
 export function raidInviteWebNotification(input: {
   runId: string;
   productLabel: string;

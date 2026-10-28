@@ -7,16 +7,22 @@ import { userNotificationRepository } from "@/repositories/user-notification.rep
 import { boostingRoleService } from "@/services/boosting-role.service";
 import { newlyKilledBossIds } from "@/services/character-blizzard-sync.service";
 import { characterService } from "@/services/character.service";
-import { discordSyncService } from "@/services/discord-sync.service";
 import { lockoutService } from "@/services/lockout.service";
 import {
   buildRosterCharacterSavedDmMessage,
+  buildRosterSelectedSavedSummaryDmMessage,
   rosterCharacterSavedWebNotification,
+  rosterSelectedSavedSummaryWebNotification,
 } from "@/services/notification-content";
+import { discordSyncService, parseSavedSummaryEntries } from "@/services/discord-sync.service";
+import { runDetailPath } from "@/lib/run-routes";
 import { rosterService } from "@/services/roster.service";
 import {
   parseRosterCharacterSavedSourceKey,
   planSavedNotices,
+  plannedBosses,
+  rosterCharacterSavedSummarySourceKey,
+  savedPlannedBosses,
   rosterCharacterSavedSourceKey,
   rosterSavedNoticeService,
   type SavedNoticeCommitment,
@@ -110,6 +116,86 @@ describe("planSavedNotices", () => {
     for (const status of ["OPEN", "ROSTERING", "PUBLISHED"] as const) {
       expect(planSavedNotices({ region: "EU", kills: kills(["boss-1"], ["boss-1"]), commitments: [commitment({ status })] })).toHaveLength(1);
     }
+  });
+});
+
+describe("planned bosses — N/M = the first N bosses in authoritative order", () => {
+  const content = (plannedBossCount: number) => ({ raidId: "venom", plannedBossCount, bosses: [...BOSSES].reverse() });
+  const saved = (plannedBossCount: number, killed: number[]) =>
+    savedPlannedBosses(
+      { difficulty: "HEROIC", contents: [content(plannedBossCount)] },
+      [{ raidId: "venom", difficulty: "HEROIC", killedBossIds: killed.map((n) => `boss-${n}`) }],
+    ).map((boss) => boss.id);
+
+  it("6/8 → bosses 1–6, 7/8 → bosses 1–7, 8/8 → all (by sortOrder, not input order)", () => {
+    expect(plannedBosses(content(6)).map((boss) => boss.sortOrder)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(plannedBosses(content(7)).map((boss) => boss.sortOrder)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(plannedBosses(content(8)).map((boss) => boss.sortOrder)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+  });
+
+  it("6/8: a kill on boss 7 alone does not count; boss 6 does", () => {
+    expect(saved(6, [7])).toEqual([]);
+    expect(saved(6, [6])).toEqual(["boss-6"]);
+    expect(saved(6, [6, 7, 8])).toEqual(["boss-6"]);
+    expect(saved(8, [7])).toEqual(["boss-7"]);
+  });
+
+  it("6/8 before the Run: a new kill on boss 7 alone never notifies", () => {
+    const partial = commitment({ contents: [content(6)] });
+    expect(planSavedNotices({ region: "EU", kills: kills(["boss-7"], ["boss-7"]), commitments: [partial] })).toEqual([]);
+  });
+});
+
+describe("Start Run Raid Lead summary — copy, DM, idempotency key", () => {
+  const entries = [
+    { characterLabel: "Synmist-Antonidas", bossNames: ["Boss A"] },
+    { characterLabel: "Synblast-Antonidas", bossNames: ["Boss B", "Boss C"] },
+  ];
+
+  it("one grouped web notification linking the Roster tab", () => {
+    expect(rosterSelectedSavedSummaryWebNotification({ runId: "run-1", entries })).toEqual({
+      title: "Selected Characters are saved",
+      message: [
+        "2 selected Characters are saved:",
+        "Synmist-Antonidas — Boss A",
+        "Synblast-Antonidas — Boss B, Boss C",
+        "Check the roster.",
+      ].join("\n"),
+      href: runDetailPath("run-1", "roster"),
+    });
+    expect(rosterSelectedSavedSummaryWebNotification({ runId: "run-1", entries: entries.slice(0, 1) }).message).toMatch(
+      /^1 selected Character is saved:\n/,
+    );
+  });
+
+  it("the DM lists every affected pick; the stored message round-trips into DM entries", () => {
+    const dm = buildRosterSelectedSavedSummaryDmMessage({
+      productLabel: "The Venomous Abyss",
+      scheduledStartAt: START,
+      difficulty: "HEROIC",
+      lootType: "VIP",
+      entries,
+      rosterUrl: "https://example.test/runs/run-1",
+    });
+    expect(dm).toContain("Selected Characters are saved");
+    expect(dm).toContain("2 selected Characters are saved:");
+    expect(dm).toContain("• **Synmist-Antonidas** — Boss A");
+    expect(dm).toContain("• **Synblast-Antonidas** — Boss B, Boss C");
+    expect(dm).toContain("Check the roster: https://example.test/runs/run-1");
+
+    const stored = rosterSelectedSavedSummaryWebNotification({ runId: "run-1", entries }).message;
+    expect(parseSavedSummaryEntries(stored)).toEqual(entries);
+  });
+
+  it("deterministic key: same affected set in any order → same key; another pick or boss → new key", () => {
+    const a = { signupId: "s-1", bossIds: ["b-2", "b-1"] };
+    const b = { signupId: "s-2", bossIds: ["b-3"] };
+    const key = rosterCharacterSavedSummarySourceKey("run-1", [a, b]);
+    expect(rosterCharacterSavedSummarySourceKey("run-1", [b, { signupId: "s-1", bossIds: ["b-1", "b-2"] }])).toBe(key);
+    expect(rosterCharacterSavedSummarySourceKey("run-1", [a])).not.toBe(key);
+    expect(rosterCharacterSavedSummarySourceKey("run-1", [a, { signupId: "s-2", bossIds: ["b-3", "b-4"] }])).not.toBe(key);
+    expect(rosterCharacterSavedSummarySourceKey("run-2", [a, b])).not.toBe(key);
+    expect(parseRosterCharacterSavedSourceKey(key)).toBeNull(); // never mistaken for a per-pick notice
   });
 });
 
@@ -308,80 +394,172 @@ describe("rosterSavedNoticeService.notifyNewKills", () => {
 });
 
 describe("runStartSavedCheckService (Start Run re-check)", () => {
-  it("reminds each SELECTED player saved on a planned boss — once — and nobody else", async () => {
-    const savedChar = await characterService.createCharacter(owner, {
-      name: "Rsnsaved",
-      realm: "Antonidas",
-      region: "EU",
-      wowClass: "PRIEST",
-      specialization: "Holy",
-      itemLevel: 640,
-    });
-    const cleanChar = await characterService.createCharacter(owner, {
-      name: "Rsnclean",
-      realm: "Antonidas",
-      region: "EU",
-      wowClass: "PRIEST",
-      specialization: "Discipline",
-      itemLevel: 640,
-    });
-    createdCharacterIds.push(savedChar.id, cleanChar.id);
-    const start = "2026-12-19T20:30:00.000Z";
+  let slot = 0;
+
+  /**
+   * A Run with one SELECTED Booster pick per entry (state set directly — the
+   * roster/start flow is covered elsewhere). `kills` are 1-based boss
+   * positions in authoritative order, stored as this raid ID's lockout.
+   */
+  async function startedRun(entries: Array<{ name: string; kills: number[] }>, plannedBossCount = 8) {
+    slot += 1;
+    const start = new Date(Date.parse("2026-12-26T20:30:00.000Z") + slot * 7 * 24 * 3_600_000).toISOString();
     const created = await runService.createRun(
       lead,
-      venomousCreateInput({ scheduledStartAt: start, desiredTankCount: 0, desiredHealerCount: 2, desiredDpsCount: 0 }),
+      venomousCreateInput({
+        scheduledStartAt: start,
+        plannedBossCount,
+        desiredTankCount: 0,
+        desiredHealerCount: entries.length,
+        desiredDpsCount: 0,
+      }),
     );
     createdRunIds.push(created.id);
     await runService.openRun(lead, created.id);
-    const savedOffer = await signupService.createBoosterSignup(owner, { runId: created.id, characterId: savedChar.id, role: "HEALER", isBackup: false });
-    const cleanOffer = await signupService.createBoosterSignup(owner, { runId: created.id, characterId: cleanChar.id, role: "HEALER", isBackup: false });
-
     const run = (await runRepository.findById(created.id))!;
     const content = run.contents[0]!;
-    const [first, second] = [...content.bosses].sort((a, b) => a.sortOrder - b.sortOrder);
+    const bosses = [...content.bosses].sort((a, b) => a.sortOrder - b.sortOrder);
     const resetIdentifier = lockoutService.getResetIdentifierForRun("EU", start);
-    const now = new Date().toISOString();
-    await orm.CharacterRaidLockout.create({
-      id: crypto.randomUUID(),
-      characterId: savedChar.id,
-      raidId: content.raidId,
-      difficulty: run.difficulty,
-      resetIdentifier,
-      bossesDefeated: 2,
-      isComplete: false,
-      killedBossIds: JSON.stringify([first!.id, second!.id]),
-      createdAt: now,
-      updatedAt: now,
-    });
+    const picks: Array<{ signupId: string; label: string }> = [];
+    for (const entry of entries) {
+      const character = await characterService.createCharacter(owner, {
+        name: entry.name,
+        realm: "Antonidas",
+        region: "EU",
+        wowClass: "PRIEST",
+        specialization: "Holy",
+        itemLevel: 640,
+      });
+      createdCharacterIds.push(character.id);
+      const offer = await signupService.createBoosterSignup(owner, {
+        runId: created.id,
+        characterId: character.id,
+        role: "HEALER",
+        isBackup: false,
+      });
+      await orm.RunSignup.where({ id: offer.id }).update({ status: "SELECTED", publishedRole: "HEALER" });
+      if (entry.kills.length > 0) {
+        const now = new Date().toISOString();
+        await orm.CharacterRaidLockout.create({
+          id: crypto.randomUUID(),
+          characterId: character.id,
+          raidId: content.raidId,
+          difficulty: run.difficulty,
+          resetIdentifier,
+          bossesDefeated: entry.kills.length,
+          isComplete: false,
+          killedBossIds: JSON.stringify(entry.kills.map((n) => bosses[n - 1]!.id)),
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      picks.push({ signupId: offer.id, label: `${entry.name}-Antonidas` });
+    }
+    return { runId: created.id, run, bosses, picks };
+  }
 
-    // Not started yet → nothing (the check only runs for a started Run).
-    expect(await runStartSavedCheckService.run(created.id)).toBe(0);
-
-    // Published picks, Run started (state set directly — the roster/start flow is covered elsewhere).
-    await orm.RunSignup.where({ id: savedOffer.id }).update({ status: "SELECTED", publishedRole: "HEALER" });
-    await orm.RunSignup.where({ id: cleanOffer.id }).update({ status: "SELECTED", publishedRole: "HEALER" });
-    await orm.Run.where({ id: created.id }).update({ status: "IN_PROGRESS" });
-
-    expect(await runStartSavedCheckService.run(created.id)).toBe(1);
-    expect(await runStartSavedCheckService.run(created.id)).toBe(0); // idempotent
-
-    const reminders = (await userNotificationRepository.listForUser(ids.owner)).filter(
-      (row) => row.type === "ROSTER_CHARACTER_SAVED" && row.runId === created.id,
+  async function notesFor(userId: string, runId: string) {
+    return (await userNotificationRepository.listForUser(userId)).filter(
+      (row) => row.type === "ROSTER_CHARACTER_SAVED" && row.runId === runId,
     );
-    expect(reminders).toHaveLength(1);
-    expect(reminders[0]!.signupId).toBe(savedOffer.id);
-    expect(reminders[0]!.title).toBe("Reminder: you are saved");
-    expect(reminders[0]!.message).toContain(`Rsnsaved-Antonidas is saved on ${first!.name}, ${second!.name}`);
-    // Only the player — the Raid Lead saw it in the Start Run checklist.
-    expect(
-      (await userNotificationRepository.listForUser(ids.lead)).some(
-        (row) => row.type === "ROSTER_CHARACTER_SAVED" && row.runId === created.id,
-      ),
-    ).toBe(false);
+  }
 
-    // The DM goes out while the Run is running.
+  it("one saved SELECTED Character → its player reminder + ONE Raid Lead summary; clean picks get nothing", async () => {
+    const { runId, bosses, picks } = await startedRun([
+      { name: "Rsnsaved", kills: [1, 2] },
+      { name: "Rsnclean", kills: [] },
+    ]);
+    // Not started yet → nothing (the check only runs for a started Run).
+    expect(await runStartSavedCheckService.run(runId)).toBe(0);
+    await orm.Run.where({ id: runId }).update({ status: "IN_PROGRESS" });
+
+    expect(await runStartSavedCheckService.run(runId)).toBe(2); // player reminder + RL summary
+
+    const reminders = await notesFor(ids.owner, runId);
+    expect(reminders).toHaveLength(1);
+    expect(reminders[0]!.signupId).toBe(picks[0]!.signupId);
+    expect(reminders[0]!.title).toBe("Reminder: you are saved");
+    expect(reminders[0]!.message).toContain(`Rsnsaved-Antonidas is saved on ${bosses[0]!.name}, ${bosses[1]!.name}`);
+
+    const summaries = await notesFor(ids.lead, runId);
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]!.title).toBe("Selected Characters are saved");
+    expect(summaries[0]!.message).toBe(
+      ["1 selected Character is saved:", `Rsnsaved-Antonidas — ${bosses[0]!.name}, ${bosses[1]!.name}`, "Check the roster."].join(
+        "\n",
+      ),
+    );
+    expect(summaries[0]!.href).toBe(runDetailPath(runId, "roster"));
+    expect(summaries[0]!.signupId).toBeNull();
+
+    // Both DMs go out while the Run is running.
     const work = await discordSyncService.listSyncWork();
-    const dm = work.notificationDms.find((item) => item.runId === created.id && item.type === "ROSTER_CHARACTER_SAVED");
-    expect(dm?.characterSaved).toMatchObject({ audience: "start", characterLabel: "Rsnsaved-Antonidas", bossNames: [first!.name, second!.name] });
+    const dms = work.notificationDms.filter((item) => item.runId === runId && item.type === "ROSTER_CHARACTER_SAVED");
+    expect(dms.find((item) => item.characterSaved)?.characterSaved).toMatchObject({
+      audience: "start",
+      characterLabel: "Rsnsaved-Antonidas",
+    });
+    expect(dms.find((item) => item.savedSummary)?.savedSummary).toMatchObject({
+      entries: [{ characterLabel: "Rsnsaved-Antonidas", bossNames: [bosses[0]!.name, bosses[1]!.name] }],
+    });
+  });
+
+  it("several saved SELECTED Characters → one reminder each + exactly ONE grouped summary; a repeated check adds nothing", async () => {
+    const { runId, run, bosses } = await startedRun([
+      { name: "Rsnmist", kills: [1] },
+      { name: "Rsnblast", kills: [2, 3] },
+      { name: "Rsnquiet", kills: [] },
+    ]);
+    await orm.Run.where({ id: runId }).update({ status: "IN_PROGRESS" });
+
+    expect(await runStartSavedCheckService.run(runId)).toBe(3); // 2 reminders + 1 summary
+    expect(await runStartSavedCheckService.run(runId)).toBe(0); // same affected set → no duplicate
+
+    expect((await notesFor(ids.owner, runId)).map((row) => row.message).sort()).toEqual([
+      `Rsnblast-Antonidas is saved on ${bosses[1]!.name}, ${bosses[2]!.name} for ${run.title} — no loot from those bosses for you.`,
+      `Rsnmist-Antonidas is saved on ${bosses[0]!.name} for ${run.title} — no loot from those bosses for you.`,
+    ]);
+    const summaries = await notesFor(ids.lead, runId);
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]!.message).toBe(
+      [
+        "2 selected Characters are saved:",
+        `Rsnblast-Antonidas — ${bosses[1]!.name}, ${bosses[2]!.name}`,
+        `Rsnmist-Antonidas — ${bosses[0]!.name}`,
+        "Check the roster.",
+      ].join("\n"),
+    );
+  });
+
+  it("no affected SELECTED Character → no reminder and no Raid Lead summary", async () => {
+    const { runId } = await startedRun([
+      { name: "Rsnnone", kills: [] },
+      { name: "Rsnzero", kills: [] },
+    ]);
+    await orm.Run.where({ id: runId }).update({ status: "IN_PROGRESS" });
+    expect(await runStartSavedCheckService.run(runId)).toBe(0);
+    expect(await notesFor(ids.owner, runId)).toEqual([]);
+    expect(await notesFor(ids.lead, runId)).toEqual([]);
+  });
+
+  it("6/8 Run: a kill on boss 7 alone never triggers; a kill on boss 6 does", async () => {
+    const { runId, bosses } = await startedRun(
+      [
+        { name: "Rsnseven", kills: [7] },
+        { name: "Rsnsix", kills: [6, 7] },
+      ],
+      6,
+    );
+    await orm.Run.where({ id: runId }).update({ status: "IN_PROGRESS" });
+    expect(await runStartSavedCheckService.run(runId)).toBe(2); // Rsnsix reminder + summary
+
+    const reminders = await notesFor(ids.owner, runId);
+    expect(reminders).toHaveLength(1);
+    expect(reminders[0]!.message).toContain(`Rsnsix-Antonidas is saved on ${bosses[5]!.name} for`);
+    expect(reminders[0]!.message).not.toContain(bosses[6]!.name);
+    const [summary] = await notesFor(ids.lead, runId);
+    expect(summary!.message).toBe(
+      ["1 selected Character is saved:", `Rsnsix-Antonidas — ${bosses[5]!.name}`, "Check the roster."].join("\n"),
+    );
   });
 });

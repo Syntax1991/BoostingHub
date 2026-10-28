@@ -10,10 +10,14 @@ import { runRepository } from "@/repositories/run.repository";
 import { userNotificationRepository } from "@/repositories/user-notification.repository";
 import { syncLinkedCharacterProfile, verifiedConnectionId } from "@/services/character-blizzard-sync.service";
 import { lockoutService } from "@/services/lockout.service";
-import { rosterCharacterSavedWebNotification } from "@/services/notification-content";
+import {
+  rosterCharacterSavedWebNotification,
+  rosterSelectedSavedSummaryWebNotification,
+} from "@/services/notification-content";
 import {
   deliveryFor,
   rosterCharacterSavedSourceKey,
+  rosterCharacterSavedSummarySourceKey,
   savedPlannedBosses,
 } from "@/services/roster-saved-notice.service";
 
@@ -24,8 +28,9 @@ const START_SYNC_CONCURRENCY = 3;
  * Second line of defence at Start Run ("doppelt hält besser"): fresh Blizzard
  * sync of every SELECTED Booster Character, then a reminder to each owner whose
  * Character is saved on a planned boss of this Run — "you are saved on Boss X,
- * no loot there". Runs after the Start Run response (never delays it), once per
- * pick and boss set. A Character whose sync fails is still checked against its
+ * no loot there" — and ONE grouped summary of all of them to the Raid Lead.
+ * Runs after the Start Run response (never delays it), once per pick and boss
+ * set (summary: once per affected set). A Character whose sync fails is still checked against its
  * last known lockouts. Best-effort — never throws.
  */
 export const runStartSavedCheckService = {
@@ -55,6 +60,7 @@ export const runStartSavedCheckService = {
       });
 
       let created = 0;
+      const affected: Array<{ signupId: string; characterLabel: string; bossIds: string[]; bossNames: string[] }> = [];
       for (const pick of picks) {
         const character = await characterRepository.findById(pick.character!.id);
         if (!character) continue;
@@ -69,12 +75,19 @@ export const runStartSavedCheckService = {
           })),
         );
         if (bosses.length === 0) continue;
+        const characterLabel = `${character.name}-${character.realm}`;
+        affected.push({
+          signupId: pick.id,
+          characterLabel,
+          bossIds: bosses.map((boss) => boss.id),
+          bossNames: bosses.map((boss) => boss.name),
+        });
 
         const copy = rosterCharacterSavedWebNotification({
           audience: "start",
           runId: run.id,
           runTitle: run.title,
-          characterLabel: `${character.name}-${character.realm}`,
+          characterLabel,
           playerName: pick.userName,
           bossNames: bosses.map((boss) => boss.name),
         });
@@ -85,6 +98,28 @@ export const runStartSavedCheckService = {
           runId: run.id,
           signupId: pick.id,
           sourceKey: rosterCharacterSavedSourceKey(pick.id, bosses.map((boss) => boss.id), "start"),
+          title: copy.title,
+          message: copy.message,
+          href: copy.href,
+          discordDeliveryStatus: delivery.status,
+          discordUserId: delivery.discordUserId,
+          discordDeliverAfter: delivery.discordDeliverAfter,
+        });
+        if (row) created += 1;
+      }
+
+      // The fresh sync can find saves the pre-Start checklist did not show:
+      // ONE grouped summary to the Raid Lead (never one per Character).
+      if (affected.length > 0) {
+        affected.sort((a, b) => a.characterLabel.localeCompare(b.characterLabel));
+        const copy = rosterSelectedSavedSummaryWebNotification({ runId: run.id, entries: affected });
+        const delivery = await deliveryFor(run.raidLeadId);
+        const row = await userNotificationRepository.createIgnoreDuplicate({
+          userId: run.raidLeadId,
+          type: "ROSTER_CHARACTER_SAVED",
+          runId: run.id,
+          signupId: null,
+          sourceKey: rosterCharacterSavedSummarySourceKey(run.id, affected),
           title: copy.title,
           message: copy.message,
           href: copy.href,

@@ -70,6 +70,7 @@ import {
   buildRosterRemovedDmMessage,
   buildRosterWithdrawnDmMessage,
   buildRosterCharacterSavedDmMessage,
+  buildRosterSelectedSavedSummaryDmMessage,
   buildRunCancelledDmMessage,
   buildRunReactivatedDmMessage,
   buildRunRescheduledDmMessage,
@@ -1294,6 +1295,16 @@ async function syncNotificationDm(
       });
       break;
     case "ROSTER_CHARACTER_SAVED":
+      if (item.savedSummary) {
+        content = buildRosterSelectedSavedSummaryDmMessage({
+          productLabel: item.productLabel,
+          scheduledStartAt: item.scheduledStartAt,
+          difficulty: item.difficulty,
+          lootType: item.lootType,
+          ...item.savedSummary,
+        });
+        break;
+      }
       if (!item.characterSaved) return;
       content = buildRosterCharacterSavedDmMessage({
         productLabel: item.productLabel,

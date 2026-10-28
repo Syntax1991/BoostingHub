@@ -56,6 +56,7 @@ import { parseRescheduleHrefTimestamps } from "@/services/notification-content";
 import { findCharacterStillNeedingBattleNetRepair } from "@/services/character-repair-notification.service";
 import {
   ROSTER_CHARACTER_SAVED_RUN_STATUSES,
+  isRosterCharacterSavedSummarySourceKey,
   parseRosterCharacterSavedSourceKey,
 } from "@/services/roster-saved-notice.service";
 
@@ -497,6 +498,11 @@ export type NotificationDmWorkItem = {
     playerName: string;
     bossNames: string[];
     url: string | null;
+  } | null;
+  /** Set for the ROSTER_CHARACTER_SAVED Start Run summary to the Raid Lead: every saved pick in one DM. */
+  savedSummary?: {
+    entries: Array<{ characterLabel: string; bossNames: string[] }>;
+    rosterUrl: string | null;
   } | null;
 };
 
@@ -1084,6 +1090,21 @@ function toStartMember(
   };
 }
 
+/**
+ * The summary's own message lines (`Name-Realm — Boss A, Boss B`) between the
+ * headline and "Check the roster." — written by rosterSelectedSavedSummaryWebNotification.
+ */
+export function parseSavedSummaryEntries(message: string): Array<{ characterLabel: string; bossNames: string[] }> {
+  return message
+    .split("\n")
+    .slice(1)
+    .filter((line) => line.includes(" — "))
+    .map((line) => {
+      const [characterLabel, bosses] = line.split(" — ");
+      return { characterLabel: characterLabel!.trim(), bossNames: (bosses ?? "").split(", ").filter(Boolean) };
+    });
+}
+
 async function buildPendingNotificationDms(): Promise<{
   notificationDmWorkItems: NotificationDmWorkItem[];
   accountNotificationDms: AccountNotificationDmWorkItem[];
@@ -1169,6 +1190,22 @@ async function buildPendingNotificationDms(): Promise<{
         ...base,
         previousScheduledStartAt: parsed.previousScheduledStartAt,
         scheduledStartAt: parsed.nextScheduledStartAt ?? run.scheduledStartAt,
+      });
+      continue;
+    }
+
+    if (notification.type === "ROSTER_CHARACTER_SAVED" && isRosterCharacterSavedSummarySourceKey(notification.sourceKey)) {
+      // Start Run re-check summary: only worth sending while the Run is running.
+      if (run.status !== "IN_PROGRESS") {
+        await userNotificationRepository.skipPendingDiscordDelivery(notification.id);
+        continue;
+      }
+      notificationDmWorkItems.push({
+        ...base,
+        savedSummary: {
+          entries: parseSavedSummaryEntries(notification.message),
+          rosterUrl: absoluteAppUrl(runDetailPath(run.id, "roster")),
+        },
       });
       continue;
     }

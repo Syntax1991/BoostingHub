@@ -181,6 +181,11 @@ export class BotApiClient {
           reason: string;
           rosterUrl: string | null;
         } | null;
+        /** ROSTER_CHARACTER_SAVED Start Run summary to the Raid Lead; optional for an older API. */
+        savedSummary?: {
+          entries: Array<{ characterLabel: string; bossNames: string[] }>;
+          rosterUrl: string | null;
+        } | null;
         /** ROSTER_CHARACTER_SAVED only; optional for an older API. */
         characterSaved?: {
           audience: "player" | "lead" | "start";
