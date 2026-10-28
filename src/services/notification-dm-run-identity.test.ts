@@ -13,6 +13,7 @@ import {
   buildRunReactivatedDmMessage,
   buildRunRescheduledDmMessage,
   buildRunScopeChangedDmMessage,
+  rosterSelectedSavedSummaryWebNotification,
 } from "@/services/notification-content";
 
 /**
@@ -156,7 +157,14 @@ const DMS: Array<{ name: string; text: string; event: string[]; link: string | n
     name: "Start Run saved summary — Raid Lead",
     text: buildRosterSelectedSavedSummaryDmMessage({
       run,
-      message: "2 selected Characters are saved:\nSynblast-Antonidas — Boss B, Boss C\nSynmist-Antonidas — Boss A\nCheck the roster.",
+      // The real stored notification copy (no trailing instruction — the link is the action).
+      message: rosterSelectedSavedSummaryWebNotification({
+        runId: run.runId,
+        entries: [
+          { characterLabel: "Synblast-Antonidas", bossNames: ["Boss B", "Boss C"] },
+          { characterLabel: "Synmist-Antonidas", bossNames: ["Boss A"] },
+        ],
+      }).message,
       rosterUrl: EXAMPLE_URL,
     }),
     event: ["2 selected Characters are saved:", "Synblast-Antonidas — Boss B, Boss C", "Synmist-Antonidas — Boss A"],
@@ -214,6 +222,19 @@ describe.each(DMS)("Run DM hierarchy — $name", ({ text, event, link }) => {
     for (const line of lines.filter((l) => l.includes("http"))) {
       expect(line).toMatch(/^\[[^\]]+\]\(<https?:\/\/[^>]+>\)$/);
     }
+  });
+});
+
+describe("Start Run Raid Lead summary DM ending", () => {
+  it("entries, blank, [Open Roster](<url>) — no 'Check the roster.' before the link", () => {
+    const text = DMS.find((dm) => dm.name === "Start Run saved summary — Raid Lead")!.text;
+    expect(text.split("\n").slice(-4)).toEqual([
+      "Synblast-Antonidas — Boss B, Boss C",
+      "Synmist-Antonidas — Boss A",
+      "",
+      masked("Open Roster", EXAMPLE_URL),
+    ]);
+    expect(text).not.toContain("Check the roster.");
   });
 });
 

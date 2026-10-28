@@ -145,7 +145,8 @@ export function rosterSelectedSavedSummaryWebNotification(input: {
 }): { title: string; message: string; href: string } {
   return {
     title: "Selected Characters are saved",
-    message: [savedSelectedHeadline(input.entries.length), ...savedSelectedLines(input.entries), "Check the roster."].join("\n"),
+    // No trailing "Check the roster.": the notification links the Roster tab and the DM ends with [Open Roster].
+    message: [savedSelectedHeadline(input.entries.length), ...savedSelectedLines(input.entries)].join("\n"),
     href: runDetailPath(input.runId, "roster"),
   };
 }
