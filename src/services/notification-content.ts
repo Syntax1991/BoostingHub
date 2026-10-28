@@ -1,12 +1,12 @@
 import { DEFAULT_TIME_ZONE, formatDateTime } from "@/lib/datetime";
 import { discordTimestamp } from "@/lib/discord-timestamp";
+import { dmRunHeader, dmRunUrl, type DmRunContext } from "@/lib/discord-run-dm";
 import { isInQuietHours, nextQuietHoursEndUtc, type QuietHoursSnapshot } from "@/lib/quiet-hours";
-import { CHARACTER_ROLE_LABELS, CLASS_LABELS, DIFFICULTY_LABELS } from "@/lib/labels";
-import { absoluteRunUrl } from "@/lib/app-url";
+import { CHARACTER_ROLE_LABELS, CLASS_LABELS } from "@/lib/labels";
 import { runDetailPath } from "@/lib/run-routes";
 import { formatRunScopeChangeLines, type RunScopeChange } from "@/lib/run-scope-change";
 import { escapeDiscordInlineText } from "@/lib/run-start-message";
-import type { CharacterRole, ParticipationType, RaidDifficulty, RunLootType, WowClass } from "@/models/enums";
+import type { CharacterRole, ParticipationType, WowClass } from "@/models/enums";
 import type { DiscordDeliveryStatus } from "@/models/enums";
 
 export type NotificationAssignmentInput = {
@@ -150,29 +150,21 @@ export function rosterSelectedSavedSummaryWebNotification(input: {
   };
 }
 
+/**
+ * DM for the Start Run summary: the notification's own `message` (already the
+ * affected-set snapshot) under a Discord heading. Lines are only escaped for
+ * display — never interpreted as Characters / bosses.
+ */
 export function buildRosterSelectedSavedSummaryDmMessage(input: {
-  productLabel: string;
-  scheduledStartAt: string;
-  difficulty: RaidDifficulty;
-  lootType: RunLootType;
-  entries: readonly SavedSelectedEntry[];
+  run: DmRunContext;
+  message: string;
   rosterUrl: string | null;
 }): string {
-  const when = discordTimestamp(input.scheduledStartAt, "F");
-  const difficulty = DIFFICULTY_LABELS[input.difficulty].toUpperCase();
   const lines = [
-    "⚠️ **Selected Characters are saved**",
-    "",
-    input.productLabel,
-    `${when} · ${difficulty} · ${input.lootType}`,
-    "",
-    savedSelectedHeadline(input.entries.length),
-    ...input.entries.map(
-      (entry) =>
-        `• **${escapeDiscordInlineText(entry.characterLabel)}** — ${entry.bossNames.map((name) => escapeDiscordInlineText(name)).join(", ")}`,
-    ),
+    ...dmRunHeader("⚠️ **Selected Characters are saved**", input.run),
+    ...input.message.split(/\r?\n/).map((line) => escapeDiscordInlineText(line)),
   ];
-  lines.push("", input.rosterUrl ? `Check the roster: ${input.rosterUrl}` : "Check the roster.");
+  if (input.rosterUrl) lines.push("", input.rosterUrl);
   return lines.join("\n");
 }
 
@@ -319,51 +311,29 @@ export function resolveDiscordDelivery(input: {
  * Channel line uses a real `<#id>` mention only when runChannelId is set.
  */
 export function buildRosterSelectedDmMessage(input: {
-  productLabel: string;
-  scheduledStartAt: string;
-  difficulty: RaidDifficulty;
-  lootType: RunLootType;
+  run: DmRunContext;
   assignment: NotificationAssignmentInput;
   runChannelId: string | null;
   /** Character swap for a player already in the roster: "Roster Update" instead of "Roster Selected". */
   update?: boolean;
 }): string {
-  const when = discordTimestamp(input.scheduledStartAt, "F");
-  const difficulty = DIFFICULTY_LABELS[input.difficulty].toUpperCase();
-  const loot = input.lootType;
-  const assignment = formatRosterDmAssignment(input.assignment);
   const lines = [
-    input.update ? "🔁 **Roster Update**" : "✅ **Roster Selected**",
-    "",
-    input.productLabel,
-    `${when} · ${difficulty} · ${loot}`,
-    "",
-    `Assignment: ${assignment}`,
+    ...dmRunHeader(input.update ? "🔁 **Roster Update**" : "✅ **Roster Selected**", input.run),
+    `Assignment: ${formatRosterDmAssignment(input.assignment)}`,
   ];
   const channelId = input.runChannelId?.trim() || null;
   if (channelId) {
     lines.push(`Channel: <#${channelId}>`);
   }
   lines.push("", input.update ? "Your character changed — you are still in the roster." : "You are in the roster.");
-  return lines.join("\n");
+  return withRunLink(lines, dmRunUrl(input.run));
 }
 
-export function buildRosterRemovedDmMessage(input: {
-  productLabel: string;
-  scheduledStartAt: string;
-  difficulty: RaidDifficulty;
-  lootType: RunLootType;
-}): string {
-  const when = discordTimestamp(input.scheduledStartAt, "F");
-  const difficulty = DIFFICULTY_LABELS[input.difficulty].toUpperCase();
-  return [
-    "↩️ **Roster Update**",
-    "",
-    input.productLabel,
-    `${when} · ${difficulty} · ${input.lootType}`,
-    "",
-    "You are no longer in the roster for this run.",
-  ].join("\n");
+export function buildRosterRemovedDmMessage(input: { run: DmRunContext }): string {
+  return withRunLink(
+    [...dmRunHeader("↩️ **Roster Update**", input.run), "You are no longer in the roster for this run."],
+    dmRunUrl(input.run),
+  );
 }
 
 /**
@@ -371,26 +341,17 @@ export function buildRosterRemovedDmMessage(input: {
  * character, reason) is escaped so it cannot mention anyone or break markdown.
  */
 export function buildRosterWithdrawnDmMessage(input: {
-  productLabel: string;
-  scheduledStartAt: string;
-  difficulty: RaidDifficulty;
-  lootType: RunLootType;
+  run: DmRunContext;
   playerName: string;
   characterLabel: string | null;
   reason: string;
   rosterUrl: string | null;
 }): string {
-  const when = discordTimestamp(input.scheduledStartAt, "F");
-  const difficulty = DIFFICULTY_LABELS[input.difficulty].toUpperCase();
   const who = input.characterLabel
     ? `**${escapeDiscordInlineText(input.playerName)}** (${escapeDiscordInlineText(input.characterLabel)})`
     : `**${escapeDiscordInlineText(input.playerName)}**`;
   const lines = [
-    "🚪 **Roster Withdrawal**",
-    "",
-    input.productLabel,
-    `${when} · ${difficulty} · ${input.lootType}`,
-    "",
+    ...dmRunHeader("🚪 **Roster Withdrawal**", input.run),
     `${who} withdrew from the roster.`,
     `Reason: ${escapeDiscordInlineText(input.reason)}`,
   ];
@@ -401,18 +362,13 @@ export function buildRosterWithdrawnDmMessage(input: {
 }
 
 export function buildRosterCharacterSavedDmMessage(input: {
+  run: DmRunContext;
   audience: "player" | "lead" | "start";
-  productLabel: string;
-  scheduledStartAt: string;
-  difficulty: RaidDifficulty;
-  lootType: RunLootType;
   characterLabel: string;
   playerName: string;
   bossNames: readonly string[];
   url: string | null;
 }): string {
-  const when = discordTimestamp(input.scheduledStartAt, "F");
-  const difficulty = DIFFICULTY_LABELS[input.difficulty].toUpperCase();
   const character = `**${escapeDiscordInlineText(input.characterLabel)}**`;
   const bosses = input.bossNames.map((name) => escapeDiscordInlineText(name)).join(", ");
   const heading = {
@@ -420,7 +376,7 @@ export function buildRosterCharacterSavedDmMessage(input: {
     lead: "⚠️ **Picked Character got saved**",
     start: "⏰ **Reminder: you are saved**",
   }[input.audience];
-  const lines = [heading, "", input.productLabel, `${when} · ${difficulty} · ${input.lootType}`, ""];
+  const lines = dmRunHeader(heading, input.run);
   if (input.audience === "start") {
     lines.push(`${character} is saved on **${bosses}** — no loot from those bosses for you this Run.`);
   } else if (input.audience === "player") {
@@ -478,41 +434,17 @@ export function buildCharacterBattleNetRepairDmMessage(input: {
   return lines.join("\n");
 }
 
-export function buildRunCancelledDmMessage(input: {
-  productLabel: string;
-  scheduledStartAt: string;
-  difficulty: RaidDifficulty;
-  lootType: RunLootType;
-}): string {
-  const when = discordTimestamp(input.scheduledStartAt, "F");
-  const difficulty = DIFFICULTY_LABELS[input.difficulty].toUpperCase();
-  return [
-    "❌ **Run Cancelled**",
-    "",
-    input.productLabel,
-    `${when} · ${difficulty} · ${input.lootType}`,
-    "",
-    "This run has been cancelled.",
-  ].join("\n");
+export function buildRunCancelledDmMessage(input: { run: DmRunContext }): string {
+  return withRunLink([...dmRunHeader("❌ **Run Cancelled**", input.run), "This run has been cancelled."], dmRunUrl(input.run));
 }
 
 export function buildRunScopeChangedDmMessage(input: {
-  runId: string;
-  productLabel: string;
-  scheduledStartAt: string;
-  difficulty: RaidDifficulty;
-  lootType: RunLootType;
+  run: DmRunContext;
   changes: readonly RunScopeChange[];
 }): string {
-  const when = discordTimestamp(input.scheduledStartAt, "F");
-  const difficulty = DIFFICULTY_LABELS[input.difficulty].toUpperCase();
-  const runUrl = absoluteRunUrl(input.runId);
+  const runUrl = dmRunUrl(input.run);
   return [
-    "⚠️ **Run Updated**",
-    "",
-    input.productLabel,
-    `${when} · ${difficulty} · ${input.lootType}`,
-    "",
+    ...dmRunHeader("⚠️ **Run Updated**", input.run),
     "The planned raid scope changed:",
     ...formatRunScopeChangeLines(input.changes),
     "",
@@ -520,39 +452,40 @@ export function buildRunScopeChangedDmMessage(input: {
   ].join("\n");
 }
 
-export function buildRunReactivatedDmMessage(input: {
-  productLabel: string;
-  scheduledStartAt: string;
-  difficulty: RaidDifficulty;
-  lootType: RunLootType;
-}): string {
-  const when = discordTimestamp(input.scheduledStartAt, "F");
-  const difficulty = DIFFICULTY_LABELS[input.difficulty].toUpperCase();
-  return [
-    "✅ **Run Reactivated**",
-    "",
-    input.productLabel,
-    `${when} · ${difficulty} · ${input.lootType}`,
-    "",
-    "The previously cancelled Run is active again.",
-  ].join("\n");
+export function buildRunReactivatedDmMessage(input: { run: DmRunContext }): string {
+  return withRunLink(
+    [...dmRunHeader("✅ **Run Reactivated**", input.run), "The previously cancelled Run is active again."],
+    dmRunUrl(input.run),
+  );
 }
 
+/**
+ * `run.scheduledStartAt` is the NEW time. Old / New replace the usual meta
+ * line, so the title is followed by the two times directly.
+ */
 export function buildRunRescheduledDmMessage(input: {
-  productLabel: string;
+  run: DmRunContext;
   previousScheduledStartAt: string;
-  nextScheduledStartAt: string;
 }): string {
-  return [
-    "📅 **Run Rescheduled**",
-    "",
-    input.productLabel,
-    "",
-    `Old: ${discordTimestamp(input.previousScheduledStartAt, "F")}`,
-    `New: ${discordTimestamp(input.nextScheduledStartAt, "F")}`,
-    "",
-    "Please check the updated run time.",
-  ].join("\n");
+  return withRunLink(
+    [
+      "📅 **Run Rescheduled**",
+      "",
+      input.run.contentTitle,
+      "",
+      `Old: ${discordTimestamp(input.previousScheduledStartAt, "F")}`,
+      `New: ${discordTimestamp(input.run.scheduledStartAt, "F")}`,
+      "",
+      "Please check the updated run time.",
+    ],
+    dmRunUrl(input.run),
+  );
+}
+
+/** Closing Run link (blank line, then the URL) when the app URL is configured. */
+function withRunLink(lines: string[], runUrl: string | null): string {
+  if (runUrl) lines.push("", runUrl);
+  return lines.join("\n");
 }
 
 function formatRosterDmAssignment(input: NotificationAssignmentInput): string {

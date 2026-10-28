@@ -1,17 +1,10 @@
 import { zonedParts } from "@/lib/datetime";
-import { discordTimestamp } from "@/lib/discord-timestamp";
-import {
-  CHARACTER_ROLE_LABELS,
-  CLASS_LABELS,
-  DIFFICULTY_LABELS,
-} from "@/lib/labels";
-import type { CharacterRole, RaidDifficulty, RunLootType, WowClass } from "@/models/enums";
+import { dmRunHeader, dmRunUrl, type DmRunContext } from "@/lib/discord-run-dm";
+import { CHARACTER_ROLE_LABELS, CLASS_LABELS } from "@/lib/labels";
+import type { CharacterRole, RunLootType, WowClass } from "@/models/enums";
 
 export type RaidInviteMessageInput = {
-  productLabel: string;
-  scheduledStartAt: string;
-  difficulty: RaidDifficulty;
-  lootType: RunLootType;
+  run: DmRunContext;
   participationType: "BOOSTER" | "LOOTBUDDY";
   selectedRole: CharacterRole | null;
   characterName: string | null;
@@ -43,7 +36,8 @@ export function formatRaidInviteAssignment(input: {
   selectedRole: CharacterRole | null;
   characterName: string | null;
   wowClass: WowClass | null;
-  lootType: RunLootType;
+  /** null = no VIP marker (the DM's meta line already shows the Run type). */
+  lootType: RunLootType | null;
 }): string {
   const classLabel = input.wowClass ? CLASS_LABELS[input.wowClass] : null;
   const vipSuffix = input.lootType === "VIP" ? " · VIP" : "";
@@ -64,20 +58,12 @@ export function formatRaidInviteAssignment(input: {
  * Channel / Voice lines use real `<#id>` mentions only when their id is set.
  */
 export function buildRaidInviteMessage(input: RaidInviteMessageInput): string {
-  const when = discordTimestamp(input.scheduledStartAt, "F");
-  const difficulty = DIFFICULTY_LABELS[input.difficulty].toUpperCase();
-  const assignment = formatRaidInviteAssignment(input);
+  // The meta line already names the Run type (… · VIP), so VIP is not repeated on the assignment.
+  const assignment = formatRaidInviteAssignment({ ...input, lootType: null });
   const channelId = input.runChannelId?.trim() || null;
   const voiceChannelId = input.voiceChannelId?.trim() || null;
 
-  const lines = [
-    "📣 **Raid Invite**",
-    "",
-    input.productLabel,
-    `${when} · ${difficulty}`,
-    "",
-    `Assignment: ${assignment}`,
-  ];
+  const lines = [...dmRunHeader("📣 **Raid Invite**", input.run), `Assignment: ${assignment}`];
 
   if (channelId) {
     lines.push(`Channel: <#${channelId}>`);
@@ -87,5 +73,7 @@ export function buildRaidInviteMessage(input: RaidInviteMessageInput): string {
   }
 
   lines.push("", "Please be online 10 minutes before start.");
+  const runUrl = dmRunUrl(input.run);
+  if (runUrl) lines.push("", runUrl);
   return lines.join("\n");
 }

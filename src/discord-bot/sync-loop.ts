@@ -58,6 +58,7 @@ import {
   type GuildRoleIndicators,
 } from "@/discord-bot/class-emoji-lookup";
 import { buildRaidInviteMessage } from "@/discord-bot/messages/raid-invite-message";
+import type { DmRunContext } from "@/lib/discord-run-dm";
 import {
   buildRunCancelledChannelEmbed,
   buildRunReactivatedChannelEmbed,
@@ -1193,6 +1194,27 @@ async function syncStartPost(
 }
 
 /**
+ * DM Run identity from a work item: the compact content title (falls back to
+ * the product label only for an older API without `contentTitle`).
+ */
+function dmRunContext(item: {
+  runId: string;
+  productLabel: string;
+  contentTitle?: string;
+  scheduledStartAt: string;
+  difficulty: DmRunContext["difficulty"];
+  lootType: DmRunContext["lootType"];
+}): DmRunContext {
+  return {
+    runId: item.runId,
+    contentTitle: item.contentTitle ?? item.productLabel,
+    scheduledStartAt: item.scheduledStartAt,
+    difficulty: item.difficulty,
+    lootType: item.lootType,
+  };
+}
+
+/**
  * Apex-style Raid Invite DM (legacy lane). Always records the signup id after
  * an attempt (including closed-DM failures) so the bot does not retry forever.
  */
@@ -1202,10 +1224,7 @@ async function syncRaidInvite(
   item: RaidInviteLaneItem,
 ): Promise<void> {
   const content = buildRaidInviteMessage({
-    productLabel: item.productLabel,
-    scheduledStartAt: item.scheduledStartAt,
-    difficulty: item.difficulty,
-    lootType: item.lootType,
+    run: dmRunContext(item),
     participationType: item.participationType,
     selectedRole: item.selectedRole,
     characterName: item.characterName,
@@ -1241,14 +1260,13 @@ async function syncNotificationDm(
   item: NotificationDmLaneItem,
   resolvedVoiceChannels: ResolvedVoiceChannels,
 ): Promise<void> {
+  // One Run identity for every Run DM: compact content title + time / difficulty / Run type.
+  const run = dmRunContext(item);
   let content: string;
   switch (item.type) {
     case "ROSTER_SELECTED":
       content = buildRosterSelectedDmMessage({
-        productLabel: item.productLabel,
-        scheduledStartAt: item.scheduledStartAt,
-        difficulty: item.difficulty,
-        lootType: item.lootType,
+        run,
         assignment: {
           participationType: item.participationType ?? "BOOSTER",
           publishedRole: item.selectedRole,
@@ -1262,10 +1280,7 @@ async function syncNotificationDm(
       break;
     case "RAID_INVITE":
       content = buildRaidInviteMessage({
-        productLabel: item.productLabel,
-        scheduledStartAt: item.scheduledStartAt,
-        difficulty: item.difficulty,
-        lootType: item.lootType,
+        run,
         participationType: item.participationType ?? "BOOSTER",
         selectedRole: item.selectedRole,
         characterName: item.characterName,
@@ -1277,74 +1292,34 @@ async function syncNotificationDm(
       });
       break;
     case "ROSTER_REMOVED":
-      content = buildRosterRemovedDmMessage({
-        productLabel: item.productLabel,
-        scheduledStartAt: item.scheduledStartAt,
-        difficulty: item.difficulty,
-        lootType: item.lootType,
-      });
+      content = buildRosterRemovedDmMessage({ run });
       break;
     case "ROSTER_WITHDRAWN":
       if (!item.withdrawal) return;
-      content = buildRosterWithdrawnDmMessage({
-        productLabel: item.productLabel,
-        scheduledStartAt: item.scheduledStartAt,
-        difficulty: item.difficulty,
-        lootType: item.lootType,
-        ...item.withdrawal,
-      });
+      content = buildRosterWithdrawnDmMessage({ run, ...item.withdrawal });
       break;
     case "ROSTER_CHARACTER_SAVED":
       if (item.savedSummary) {
-        content = buildRosterSelectedSavedSummaryDmMessage({
-          productLabel: item.productLabel,
-          scheduledStartAt: item.scheduledStartAt,
-          difficulty: item.difficulty,
-          lootType: item.lootType,
-          ...item.savedSummary,
-        });
+        content = buildRosterSelectedSavedSummaryDmMessage({ run, ...item.savedSummary });
         break;
       }
       if (!item.characterSaved) return;
-      content = buildRosterCharacterSavedDmMessage({
-        productLabel: item.productLabel,
-        scheduledStartAt: item.scheduledStartAt,
-        difficulty: item.difficulty,
-        lootType: item.lootType,
-        ...item.characterSaved,
-      });
+      content = buildRosterCharacterSavedDmMessage({ run, ...item.characterSaved });
       break;
     case "RUN_CANCELLED":
-      content = buildRunCancelledDmMessage({
-        productLabel: item.productLabel,
-        scheduledStartAt: item.scheduledStartAt,
-        difficulty: item.difficulty,
-        lootType: item.lootType,
-      });
+      content = buildRunCancelledDmMessage({ run });
       break;
     case "RUN_REACTIVATED":
-      content = buildRunReactivatedDmMessage({
-        productLabel: item.productLabel,
-        scheduledStartAt: item.scheduledStartAt,
-        difficulty: item.difficulty,
-        lootType: item.lootType,
-      });
+      content = buildRunReactivatedDmMessage({ run });
       break;
     case "RUN_SCOPE_CHANGED":
-      content = buildRunScopeChangedDmMessage({
-        runId: item.runId,
-        productLabel: item.productLabel,
-        scheduledStartAt: item.scheduledStartAt,
-        difficulty: item.difficulty,
-        lootType: item.lootType,
-        changes: item.scopeChanges ?? [],
-      });
+      content = buildRunScopeChangedDmMessage({ run, changes: item.scopeChanges ?? [] });
       break;
     case "RUN_RESCHEDULED":
+      // `item.scheduledStartAt` is the new time.
       content = buildRunRescheduledDmMessage({
-        productLabel: item.productLabel,
+        run,
         previousScheduledStartAt: item.previousScheduledStartAt ?? item.scheduledStartAt,
-        nextScheduledStartAt: item.scheduledStartAt,
       });
       break;
     default:

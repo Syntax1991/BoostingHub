@@ -183,9 +183,11 @@ export class BotApiClient {
         } | null;
         /** ROSTER_CHARACTER_SAVED Start Run summary to the Raid Lead; optional for an older API. */
         savedSummary?: {
-          entries: Array<{ characterLabel: string; bossNames: string[] }>;
+          message: string;
           rosterUrl: string | null;
         } | null;
+        /** Compact Run identity (Venom & Tide & Kithix); optional for an older API. */
+        contentTitle?: string;
         /** ROSTER_CHARACTER_SAVED only; optional for an older API. */
         characterSaved?: {
           audience: "player" | "lead" | "start";

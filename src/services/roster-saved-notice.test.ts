@@ -14,7 +14,8 @@ import {
   rosterCharacterSavedWebNotification,
   rosterSelectedSavedSummaryWebNotification,
 } from "@/services/notification-content";
-import { discordSyncService, parseSavedSummaryEntries } from "@/services/discord-sync.service";
+import { discordSyncService } from "@/services/discord-sync.service";
+import { contentShortTitle } from "@/lib/raid-catalog";
 import { runDetailPath } from "@/lib/run-routes";
 import { rosterService } from "@/services/roster.service";
 import {
@@ -168,23 +169,28 @@ describe("Start Run Raid Lead summary — copy, DM, idempotency key", () => {
     );
   });
 
-  it("the DM lists every affected pick; the stored message round-trips into DM entries", () => {
+  it("the DM delivers the summary text as written under the compact Raid title — no parsing", () => {
+    const message = rosterSelectedSavedSummaryWebNotification({ runId: "run-1", entries }).message;
     const dm = buildRosterSelectedSavedSummaryDmMessage({
-      productLabel: "The Venomous Abyss",
-      scheduledStartAt: START,
-      difficulty: "HEROIC",
-      lootType: "VIP",
-      entries,
+      run: { runId: "run-1", contentTitle: "Venom & Tide & Kith'ix", scheduledStartAt: START, difficulty: "HEROIC", lootType: "VIP" },
+      message,
       rosterUrl: "https://example.test/runs/run-1",
     });
-    expect(dm).toContain("Selected Characters are saved");
-    expect(dm).toContain("2 selected Characters are saved:");
-    expect(dm).toContain("• **Synmist-Antonidas** — Boss A");
-    expect(dm).toContain("• **Synblast-Antonidas** — Boss B, Boss C");
-    expect(dm).toContain("Check the roster: https://example.test/runs/run-1");
+    const lines = dm.split("\n");
+    expect(lines[0]).toBe("⚠️ **Selected Characters are saved**");
+    expect(lines[2]).toBe("Venom & Tide & Kith'ix");
+    expect(lines[3]).toMatch(/ · HEROIC · VIP$/);
+    expect(lines.slice(5, 9)).toEqual(message.split("\n"));
+    expect(dm).toContain("https://example.test/runs/run-1");
 
-    const stored = rosterSelectedSavedSummaryWebNotification({ runId: "run-1", entries }).message;
-    expect(parseSavedSummaryEntries(stored)).toEqual(entries);
+    // Any copy punctuation is just text: other separators are delivered verbatim, nothing is lost or split.
+    const edited = "2 selected Characters are saved:\nSynmist-Antonidas – Boss A\nSyn: Blast — Boss B, Boss — C\nCheck the roster.";
+    const editedDm = buildRosterSelectedSavedSummaryDmMessage({
+      run: { runId: "run-1", contentTitle: "Venom", scheduledStartAt: START, difficulty: "HEROIC", lootType: "VIP" },
+      message: edited,
+      rosterUrl: null,
+    });
+    expect(editedDm.split("\n").slice(5)).toEqual(edited.split("\n"));
   });
 
   it("deterministic key: same affected set in any order → same key; another pick or boss → new key", () => {
@@ -196,6 +202,23 @@ describe("Start Run Raid Lead summary — copy, DM, idempotency key", () => {
     expect(rosterCharacterSavedSummarySourceKey("run-1", [a, { signupId: "s-2", bossIds: ["b-3", "b-4"] }])).not.toBe(key);
     expect(rosterCharacterSavedSummarySourceKey("run-2", [a, b])).not.toBe(key);
     expect(parseRosterCharacterSavedSourceKey(key)).toBeNull(); // never mistaken for a per-pick notice
+  });
+});
+
+describe("compact Raid title for the Saved DMs (shared contentShortTitle)", () => {
+  const venom = { sortOrder: 1, raidName: "The Venomous Abyss", raidShortName: "Venom" };
+  const tide = { sortOrder: 2, raidName: "The Tidebound Grotto", raidShortName: "Tide" };
+  const kithix = { sortOrder: 3, raidName: "The Unbinding of Kith'ix", raidShortName: "Kith'ix" };
+
+  it("1 / 2 / 3 raids: Venom · Venom & Tide · exactly Venom & Tide & Kith'ix", () => {
+    expect(contentShortTitle([venom])).toBe("Venom");
+    expect(contentShortTitle([venom, tide])).toBe("Venom & Tide");
+    expect(contentShortTitle([venom, tide, kithix])).toBe("Venom & Tide & Kith'ix");
+  });
+
+  it("keeps the authoritative content order (sortOrder), never alphabetical or input order", () => {
+    expect(contentShortTitle([kithix, tide, venom])).toBe("Venom & Tide & Kith'ix");
+    expect(contentShortTitle([{ ...tide, sortOrder: 1 }, { ...venom, sortOrder: 2 }])).toBe("Tide & Venom");
   });
 });
 
@@ -224,10 +247,7 @@ describe("copy + source key", () => {
 
     const dm = buildRosterCharacterSavedDmMessage({
       audience: "lead",
-      productLabel: "The Venomous Abyss",
-      scheduledStartAt: START,
-      difficulty: "HEROIC",
-      lootType: "VIP",
+      run: { runId: "run-1", contentTitle: "Venom & Tide & Kith'ix", scheduledStartAt: START, difficulty: "HEROIC", lootType: "VIP" },
       characterLabel: "Stormhowl-Antonidas",
       playerName: "Kael",
       bossNames: ["Boss 1"],
@@ -382,6 +402,7 @@ describe("rosterSavedNoticeService.notifyNewKills", () => {
     const work = await discordSyncService.listSyncWork();
     const dms = work.notificationDms.filter((item) => item.runId === created.id && item.type === "ROSTER_CHARACTER_SAVED");
     expect(dms.map((item) => item.characterSaved?.audience).sort()).toEqual(["lead", "player"]);
+    for (const item of dms) expect(item.contentTitle).toBe(contentShortTitle(run.contents));
     expect(dms.find((item) => item.characterSaved?.audience === "lead")?.characterSaved).toMatchObject({
       characterLabel: "Rsnstorm-Antonidas",
       playerName: "RSN Owner",
@@ -499,9 +520,20 @@ describe("runStartSavedCheckService (Start Run re-check)", () => {
       audience: "start",
       characterLabel: "Rsnsaved-Antonidas",
     });
-    expect(dms.find((item) => item.savedSummary)?.savedSummary).toMatchObject({
-      entries: [{ characterLabel: "Rsnsaved-Antonidas", bossNames: [bosses[0]!.name, bosses[1]!.name] }],
-    });
+    // The summary DM carries the bell notification's own text — the affected-set snapshot, not re-derived.
+    expect(dms.find((item) => item.savedSummary)?.savedSummary?.message).toBe(summaries[0]!.message);
+    // Both DMs name the Run by its compact content title (shared contentShortTitle), never the product label.
+    const run = (await runRepository.findById(runId))!;
+    for (const item of dms) expect(item.contentTitle).toBe(contentShortTitle(run.contents));
+    expect(dms[0]!.contentTitle).toBe("Venom");
+
+    // Delivery never parses the copy: a reworded / re-punctuated message still goes out verbatim.
+    const reworded = "1 selected Character is saved:\nRsnsaved-Antonidas: A, B – C\nPlease check the roster!";
+    await orm.UserNotification.where({ id: summaries[0]!.id }).update({ message: reworded });
+    const again = await discordSyncService.listSyncWork();
+    expect(
+      again.notificationDms.find((item) => item.runId === runId && item.savedSummary)?.savedSummary?.message,
+    ).toBe(reworded);
   });
 
   it("several saved SELECTED Characters → one reminder each + exactly ONE grouped summary; a repeated check adds nothing", async () => {

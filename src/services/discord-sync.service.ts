@@ -471,6 +471,8 @@ export type NotificationDmWorkItem = {
    */
   voiceChannelId: string | null;
   productLabel: string;
+  /** Compact Run identity (`contentShortTitle`, e.g. "Venom & Tide & Kithix") — used by the Saved DMs. */
+  contentTitle: string;
   scheduledStartAt: string;
   /** Set for RUN_RESCHEDULED — previous schedule before this revision. */
   previousScheduledStartAt: string | null;
@@ -499,9 +501,13 @@ export type NotificationDmWorkItem = {
     bossNames: string[];
     url: string | null;
   } | null;
-  /** Set for the ROSTER_CHARACTER_SAVED Start Run summary to the Raid Lead: every saved pick in one DM. */
+  /**
+   * Set for the ROSTER_CHARACTER_SAVED Start Run summary to the Raid Lead: the
+   * notification's own text, delivered as written (the affected-set snapshot of
+   * the bell notification) — never parsed back into Characters / bosses.
+   */
   savedSummary?: {
-    entries: Array<{ characterLabel: string; bossNames: string[] }>;
+    message: string;
     rosterUrl: string | null;
   } | null;
 };
@@ -1090,21 +1096,6 @@ function toStartMember(
   };
 }
 
-/**
- * The summary's own message lines (`Name-Realm — Boss A, Boss B`) between the
- * headline and "Check the roster." — written by rosterSelectedSavedSummaryWebNotification.
- */
-export function parseSavedSummaryEntries(message: string): Array<{ characterLabel: string; bossNames: string[] }> {
-  return message
-    .split("\n")
-    .slice(1)
-    .filter((line) => line.includes(" — "))
-    .map((line) => {
-      const [characterLabel, bosses] = line.split(" — ");
-      return { characterLabel: characterLabel!.trim(), bossNames: (bosses ?? "").split(", ").filter(Boolean) };
-    });
-}
-
 async function buildPendingNotificationDms(): Promise<{
   notificationDmWorkItems: NotificationDmWorkItem[];
   accountNotificationDms: AccountNotificationDmWorkItem[];
@@ -1153,6 +1144,7 @@ async function buildPendingNotificationDms(): Promise<{
       runChannelId: post?.runChannelId ?? null,
       voiceChannelId: post?.voiceChannelId ?? null,
       productLabel: run.contentDisplay.productLabel,
+      contentTitle: contentShortTitle(run.contents),
       scheduledStartAt: run.scheduledStartAt,
       previousScheduledStartAt: null as string | null,
       scopeChanges: [] as RunScopeChange[],
@@ -1203,7 +1195,7 @@ async function buildPendingNotificationDms(): Promise<{
       notificationDmWorkItems.push({
         ...base,
         savedSummary: {
-          entries: parseSavedSummaryEntries(notification.message),
+          message: notification.message,
           rosterUrl: absoluteAppUrl(runDetailPath(run.id, "roster")),
         },
       });
