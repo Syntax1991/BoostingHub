@@ -13,13 +13,18 @@ const ids = {
   boosterA: "bbbbbbbb-bbbb-4bbb-8bbb-rb0000000003",
   boosterB: "bbbbbbbb-bbbb-4bbb-8bbb-rb0000000004",
   user: "bbbbbbbb-bbbb-4bbb-8bbb-rb0000000005",
+  boosterC: "bbbbbbbb-bbbb-4bbb-8bbb-rb0000000006",
   run: "bbbbbbbb-bbbb-4bbb-8bbb-rbr000000001",
   charHealer: "bbbbbbbb-bbbb-4bbb-8bbb-rbc000000001",
   charMelee: "bbbbbbbb-bbbb-4bbb-8bbb-rbc000000002",
   charRanged: "bbbbbbbb-bbbb-4bbb-8bbb-rbc000000003",
+  charHealer2: "bbbbbbbb-bbbb-4bbb-8bbb-rbc000000004",
   signupHealer: "bbbbbbbb-bbbb-4bbb-8bbb-rbs000000001",
   signupMelee: "bbbbbbbb-bbbb-4bbb-8bbb-rbs000000002",
   signupRanged: "bbbbbbbb-bbbb-4bbb-8bbb-rbs000000003",
+  signupHealer2: "bbbbbbbb-bbbb-4bbb-8bbb-rbs000000004",
+  signupLootA: "bbbbbbbb-bbbb-4bbb-8bbb-rbs000000005",
+  signupLootB: "bbbbbbbb-bbbb-4bbb-8bbb-rbs000000006",
 };
 
 function asUser(id: string, name: string, accountRole: AccountRole): AuthenticatedUser {
@@ -119,16 +124,23 @@ async function cleanup() {
     await orm.RunRosterEntry.where({ rosterId: roster.id }).delete().catch(() => {});
     await orm.RunRoster.where({ id: roster.id }).delete().catch(() => {});
   }
-  for (const signupId of [ids.signupHealer, ids.signupMelee, ids.signupRanged]) {
+  for (const signupId of [
+    ids.signupHealer,
+    ids.signupMelee,
+    ids.signupRanged,
+    ids.signupHealer2,
+    ids.signupLootA,
+    ids.signupLootB,
+  ]) {
     await orm.RunSignupRole.where({ signupId }).delete().catch(() => {});
     await orm.RunSignup.where({ id: signupId }).delete().catch(() => {});
   }
   await orm.RunRaidContent.where({ runId: ids.run }).delete().catch(() => {});
   await orm.Run.where({ id: ids.run }).delete().catch(() => {});
-  for (const id of [ids.charHealer, ids.charMelee, ids.charRanged]) {
+  for (const id of [ids.charHealer, ids.charMelee, ids.charRanged, ids.charHealer2]) {
     await orm.Character.where({ id }).delete().catch(() => {});
   }
-  for (const id of [ids.admin, ids.lead, ids.boosterA, ids.boosterB, ids.user]) {
+  for (const id of [ids.admin, ids.lead, ids.boosterA, ids.boosterB, ids.user, ids.boosterC]) {
     await orm.User.where({ id }).delete().catch(() => {});
   }
 }
@@ -278,6 +290,173 @@ describe("rosterBuilderService", () => {
         selections: proposal.applySelections,
       }),
     ).rejects.toMatchObject({ code: "ROSTER_ALREADY_CHANGED" });
+  });
+
+  describe("Fill gaps / Build on the editor draft (baseSelections)", () => {
+    it("Fill gaps keeps the unsaved draft's picks and fills only the missing composition — read-only", async () => {
+      const before = await rosterRepository.ensure(ids.run);
+      const result = await rosterBuilderService.proposeRoster(lead, ids.run, {
+        baseSelections: [{ signupId: ids.signupHealer, selectedRole: "HEALER" }],
+      });
+      expect(result.shortages).toMatchObject({ tanks: 0, healers: 0, dps: 2 });
+      expect(result.proposed.find((row) => row.signupId === ids.signupHealer)?.locked).toBe(true);
+      expect(result.applySelections.map((row) => row.signupId).sort()).toEqual([ids.signupMelee, ids.signupRanged].sort());
+      expect(result.fullSelections.map((row) => row.signupId).sort()).toEqual(
+        [ids.signupHealer, ids.signupMelee, ids.signupRanged].sort(),
+      );
+      // Draft only: nothing persisted, no status change.
+      const after = await rosterRepository.findByRunId(ids.run);
+      expect(after?.version).toBe(before.version);
+      expect(after?.selectedSignupIds).toEqual([]);
+      const run = (await orm.Run.where({ id: ids.run }).select("status").first()) as { status: string };
+      expect(run.status).toBe("OPEN");
+    });
+
+    it("uses the given draft, not the saved one", async () => {
+      const roster = await rosterRepository.ensure(ids.run);
+      await rosterRepository.replaceSelectedSignupIds(roster.id, roster.version, [
+        { signupId: ids.signupHealer, selectedRole: "HEALER" },
+      ]);
+      const result = await rosterBuilderService.proposeRoster(lead, ids.run, {
+        baseSelections: [
+          { signupId: ids.signupMelee, selectedRole: "MELEE_DPS" },
+          { signupId: ids.signupRanged, selectedRole: "RANGED_DPS" },
+        ],
+      });
+      // DPS full from the draft; only the Healer gap is filled, by the only Healer signup.
+      expect(result.shortages).toMatchObject({ healers: 1, dps: 0 });
+      expect(result.applySelections).toEqual([{ signupId: ids.signupHealer, selectedRole: "HEALER" }]);
+    });
+
+    it("incompatible roles are never proposed: a Healer-only signup does not fill a DPS gap", async () => {
+      const result = await rosterBuilderService.proposeRoster(lead, ids.run, {
+        baseSelections: [{ signupId: ids.signupMelee, selectedRole: "MELEE_DPS" }],
+      });
+      const healer = result.applySelections.find((row) => row.signupId === ids.signupHealer);
+      expect(healer?.selectedRole).toBe("HEALER");
+      expect(result.applySelections.every((row) => row.selectedRole !== null)).toBe(true);
+      expect(result.applySelections.find((row) => row.signupId === ids.signupRanged)?.selectedRole).toBe("RANGED_DPS");
+    });
+
+    it("a full draft is fully staffed — nothing new proposed", async () => {
+      const result = await rosterBuilderService.proposeRoster(lead, ids.run, {
+        baseSelections: [
+          { signupId: ids.signupHealer, selectedRole: "HEALER" },
+          { signupId: ids.signupMelee, selectedRole: "MELEE_DPS" },
+          { signupId: ids.signupRanged, selectedRole: "RANGED_DPS" },
+        ],
+      });
+      expect(result.fullyStaffed).toBe(true);
+      expect(result.applySelections).toEqual([]);
+    });
+
+    it("Build from signups (empty base) proposes the whole draft from current signups only", async () => {
+      const roster = await rosterRepository.ensure(ids.run);
+      await rosterRepository.replaceSelectedSignupIds(roster.id, roster.version, [
+        { signupId: ids.signupHealer, selectedRole: "HEALER" },
+      ]);
+      const result = await rosterBuilderService.proposeRoster(lead, ids.run, { baseSelections: [] });
+      expect(result.proposed.every((row) => !row.locked)).toBe(true);
+      expect(result.fullSelections.map((row) => row.signupId).sort()).toEqual(
+        [ids.signupHealer, ids.signupMelee, ids.signupRanged].sort(),
+      );
+    });
+
+    describe("published roster: a re-selected NOT_SELECTED pick stays locked", () => {
+      async function createLootbuddy(id: string, userId: string, status: "PENDING" | "NOT_SELECTED") {
+        const now = new Date().toISOString();
+        await orm.RunSignup.create({
+          id,
+          runId: ids.run,
+          userId,
+          characterId: null,
+          participationType: "LOOTBUDDY",
+          isBackup: false,
+          status,
+          publishedRole: null,
+          lootbuddyClass: "MAGE",
+          lootbuddyMode: "LOOT_ONLY",
+          lootbuddyVerification: "NONE",
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+
+      beforeEach(async () => {
+        await createUser(ids.boosterC, "RB Booster C", "USER", { isBooster: true });
+        // A strictly better Healer competitor: higher item level, primary Healer.
+        await createCharacter({
+          id: ids.charHealer2,
+          userId: ids.boosterC,
+          name: "RbHealerTwo",
+          wowClass: "PRIEST",
+          specialization: "Holy",
+          primaryRole: "HEALER",
+          itemLevel: 345,
+        });
+        await createSignup({ id: ids.signupHealer2, userId: ids.boosterC, characterId: ids.charHealer2, roles: ["HEALER"] });
+        await createLootbuddy(ids.signupLootA, ids.boosterA, "NOT_SELECTED");
+        await createLootbuddy(ids.signupLootB, ids.boosterB, "PENDING");
+        await orm.RunSignup.where({ id: ids.signupHealer }).update({ status: "NOT_SELECTED" });
+        await orm.Run.where({ id: ids.run }).update({ status: "PUBLISHED", desiredLootbuddyCount: 1 });
+      });
+
+      it("Fill gaps keeps the NOT_SELECTED Healer locked and never proposes the better competitor in its place", async () => {
+        const result = await rosterBuilderService.proposeRoster(lead, ids.run, {
+          baseSelections: [{ signupId: ids.signupHealer, selectedRole: "HEALER" }],
+        });
+        expect(result.shortages.healers).toBe(0);
+        expect(result.proposed.find((row) => row.signupId === ids.signupHealer)).toMatchObject({
+          locked: true,
+          selectedRole: "HEALER",
+        });
+        expect(result.applySelections.some((row) => row.signupId === ids.signupHealer)).toBe(false);
+        expect(result.fullSelections.some((row) => row.signupId === ids.signupHealer2)).toBe(false);
+        expect(result.fullSelections).toContainEqual({ signupId: ids.signupHealer, selectedRole: "HEALER" });
+        // Only the real gaps are filled: two DPS and one of the two eligible Lootbuddies.
+        const added = result.applySelections.map((row) => row.signupId);
+        expect(added.filter((id) => id === ids.signupMelee || id === ids.signupRanged).sort()).toEqual(
+          [ids.signupMelee, ids.signupRanged].sort(),
+        );
+        expect(added.filter((id) => id === ids.signupLootA || id === ids.signupLootB)).toHaveLength(1);
+        expect(added).toHaveLength(3);
+      });
+
+      it("Fill gaps keeps a NOT_SELECTED Lootbuddy locked and does not swap in another Lootbuddy", async () => {
+        const result = await rosterBuilderService.proposeRoster(lead, ids.run, {
+          baseSelections: [{ signupId: ids.signupLootA, selectedRole: null }],
+        });
+        expect(result.shortages.lootbuddies).toBe(0);
+        expect(result.proposed.find((row) => row.signupId === ids.signupLootA)?.locked).toBe(true);
+        expect(result.fullSelections).toContainEqual({ signupId: ids.signupLootA, selectedRole: null });
+        expect(result.fullSelections.some((row) => row.signupId === ids.signupLootB)).toBe(false);
+      });
+
+      it("a WITHDRAWN signup in the draft is still dropped and its slot is filled", async () => {
+        await orm.RunSignup.where({ id: ids.signupHealer }).update({ status: "WITHDRAWN" });
+        const result = await rosterBuilderService.proposeRoster(lead, ids.run, {
+          baseSelections: [{ signupId: ids.signupHealer, selectedRole: "HEALER" }],
+        });
+        expect(result.shortages.healers).toBe(1);
+        expect(result.fullSelections.some((row) => row.signupId === ids.signupHealer)).toBe(false);
+        expect(result.applySelections).toContainEqual({ signupId: ids.signupHealer2, selectedRole: "HEALER" });
+      });
+    });
+
+    it("stale / withdrawn / foreign ids in the draft are dropped, and the result is deterministic", async () => {
+      await orm.RunSignup.where({ id: ids.signupMelee }).update({ status: "WITHDRAWN" });
+      const input = {
+        baseSelections: [
+          { signupId: ids.signupMelee, selectedRole: "MELEE_DPS" as const },
+          { signupId: "bbbbbbbb-bbbb-4bbb-8bbb-rbs00000ffff", selectedRole: "HEALER" as const },
+        ],
+      };
+      const first = await rosterBuilderService.proposeRoster(lead, ids.run, input);
+      const second = await rosterBuilderService.proposeRoster(lead, ids.run, input);
+      expect(first.fullSelections.some((row) => row.signupId === ids.signupMelee)).toBe(false);
+      expect(first.fullSelections).toEqual(second.fullSelections);
+      expect(first.fullSelections.map((row) => row.signupId).sort()).toEqual([ids.signupHealer, ids.signupRanged].sort());
+    });
   });
 
   it("blocks USER from proposing", async () => {

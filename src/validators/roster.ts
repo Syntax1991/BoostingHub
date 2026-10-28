@@ -77,6 +77,16 @@ export const rosterVersionSchema = z.object({
   version: z.number().int().positive(),
 });
 
+/**
+ * Auto Build proposal. `baseSelections` = the Roster Builder's current draft
+ * (Fill Gaps) or [] (Build from signups); omitted = the saved / published
+ * roster (Run header, Schedule). Read-only.
+ */
+export const proposeRosterBuilderSchema = z.object({
+  runId: entityIdSchema,
+  baseSelections: z.array(rosterSelectionSchema).max(120).optional(),
+});
+
 /** Apply Auto Build Roster proposal — new picks only; server revalidates. */
 export const applyRosterBuilderSchema = z.object({
   runId: entityIdSchema,

@@ -8,11 +8,15 @@ import {
   publishRosterAction,
   repostRosterAction,
   saveRosterDraftAction,
+  syncRosterCharactersAction,
   updateRosterAction,
 } from "@/controllers/roster.actions";
 import { Button } from "@/components/ui/button";
 import { AddBoosterDialog } from "@/components/manage/add-booster-dialog";
-import { RosterBuilderTrigger } from "@/components/manage/roster-builder-dialog";
+import { RosterBuilderDialog, type RosterBuilderMode } from "@/components/manage/roster-builder-dialog";
+import { RosterReplacementDialog, type ReplacementTarget } from "@/components/manage/roster-replacement-dialog";
+import { RosterUpdateDiff } from "@/components/manage/roster-update-diff";
+import { ROSTER_ATTENTION_ANCHOR } from "@/components/runs/run-preflight-panel";
 import { SIGNUP_TILE_TONE_CLASSES, signupTileTone } from "@/lib/signup-tile-tone";
 import { setRosterHasUnsavedEdits } from "@/components/manage/roster-unsaved-store";
 import { resolveRosterActions } from "@/components/manage/roster-actions";
@@ -28,6 +32,7 @@ import {
   LockoutIcon,
   LootbuddyIcon,
   QuietOkIcon,
+  ReplaceIcon,
   RoleIcon,
   WarningIcon,
 } from "@/components/ui/ops-icons";
@@ -47,7 +52,13 @@ import {
   formatContentLockoutTooltip,
   formatSignupTileLockoutShort,
 } from "@/lib/run-content-lockouts";
-import { isConcreteCharacterRole } from "@/lib/character-roles";
+import { isConcreteCharacterRole, type ConcreteCharacterRole } from "@/lib/character-roles";
+import { diffRoster, type RosterDiffMember } from "@/lib/roster-diff";
+import {
+  rosterReplacementReasons,
+  withdrawnPickOpenRole,
+  type ReplacementCandidate,
+} from "@/lib/roster-replacement";
 import { countRolesByBucket } from "@/lib/roster-role-buckets";
 import {
   resolveDisplaySpecForSelectedRole,
@@ -124,6 +135,8 @@ type DraftRosterSlot = {
   wowClass: WowClass | null;
   /** Why the slot needs attention, one line per reason; empty = no warning icon. */
   warningReasons: string[];
+  /** An existing warning a replacement fixes (saved / conflict / inactive / revoked) — shows Find replacement. */
+  replaceable?: boolean;
   external?: boolean;
 };
 
@@ -265,12 +278,30 @@ function RosterBuilderEditor({
         /** Spec-aware tile pick — applied on confirm instead of groupRole copy. */
         pendingRole?: CharacterRole;
         pendingSpec?: string | null;
+        /** Find replacement: the draft slot this pick replaces (removed on confirm only). */
+        replacesSignupId?: string;
       }
     | { kind: "server"; action: "save" | "update"; pending: PendingRosterSelectionWarning[] }
     | null
   >(null);
 
+  /** Open Find replacement / Fill slot picker. */
+  const [replacement, setReplacement] = useState<{ target: ReplacementTarget; role: ConcreteCharacterRole } | null>(
+    null,
+  );
+  /** Open Auto Build on top of the current draft (Fill gaps) or from the signups only (Build). */
+  const [builderMode, setBuilderMode] = useState<RosterBuilderMode | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
   const domainSignups = useMemo(() => domainSignupsFrom(data), [data]);
+
+  // Preflight "Find replacements / Fill gaps / Sync Characters" link here; the
+  // page scrolls inside the app shell, so bring the roster section into view.
+  useEffect(() => {
+    if (window.location.hash === `#${ROSTER_ATTENTION_ANCHOR}`) {
+      document.getElementById(ROSTER_ATTENTION_ANCHOR)?.scrollIntoView({ block: "start" });
+    }
+  }, []);
   const [stagedSelections, setStagedSelections] = useState<StagedSelections>(() => new Map(savedSelections));
   const [stagedSpecs, setStagedSpecs] = useState<StagedSpecs>(() => collectInitialStagedSpecs(data, savedSelections));
   // Edited in the Run header's External Boosters dialog; counted here as saved.
@@ -503,6 +534,7 @@ function RosterBuilderEditor({
         name: signupDisplayName(signup),
         wowClass: lootbuddyDisplayClass(signup) ?? signup.character?.wowClass ?? null,
         warningReasons: rosterSlotWarningReasons(signup),
+        replaceable: rosterReplacementReasons(signup).length > 0,
       });
     }
     for (const booster of externalBoosters) {
@@ -655,6 +687,7 @@ function RosterBuilderEditor({
     signup: SignupRow,
     role: CharacterRole,
     specialization: string | null = null,
+    replacesSignupId?: string,
   ) {
     if (!isConcreteCharacterRole(role)) return;
     if (!data.roster.canEdit || data.roster.needsPublishSeed || pending) return;
@@ -669,18 +702,20 @@ function RosterBuilderEditor({
           signup,
           pendingRole: role,
           pendingSpec: specialization,
+          replacesSignupId,
           items: [{ key: signup.id, characterLabel: signupDisplayName(signup), warnings: unconfirmed }],
         });
         return;
       }
     }
-    commitSelectWithRole(signup, role, specialization);
+    commitSelectWithRole(signup, role, specialization, replacesSignupId);
   }
 
   function commitSelectWithRole(
     signup: SignupRow,
     role: CharacterRole,
     specialization: string | null = null,
+    replacesSignupId?: string,
   ) {
     setError(null);
     setErrorCode(null);
@@ -700,6 +735,7 @@ function RosterBuilderEditor({
       for (const otherId of replaceBoosterSignupIds) {
         if (otherId !== signup.id) next.delete(otherId);
       }
+      if (replacesSignupId) next.delete(replacesSignupId);
       next.set(signup.id, role);
       return next;
     });
@@ -708,6 +744,7 @@ function RosterBuilderEditor({
       for (const otherId of replaceBoosterSignupIds) {
         if (otherId !== signup.id) next.delete(otherId);
       }
+      if (replacesSignupId) next.delete(replacesSignupId);
       next.set(
         signup.id,
         specialization ?? resolveDisplaySpecForSelectedRole(signupOfferedSpecInput(signup), role),
@@ -789,7 +826,7 @@ function RosterBuilderEditor({
         prompt.items.flatMap((item) => confirmedWarningsFor(prompt.signup.id, item.warnings)),
       );
       if (prompt.pendingRole && isConcreteCharacterRole(prompt.pendingRole)) {
-        commitSelectWithRole(prompt.signup, prompt.pendingRole, prompt.pendingSpec ?? null);
+        commitSelectWithRole(prompt.signup, prompt.pendingRole, prompt.pendingSpec ?? null, prompt.replacesSignupId);
       } else {
         stageRoleCopy(prompt.signup, true);
       }
@@ -800,6 +837,73 @@ function RosterBuilderEditor({
     );
     if (prompt.action === "save") saveRoster(confirmed);
     else confirmDialog(confirmed);
+  }
+
+  /** Find replacement for a draft slot: same role by default, Run context comes from this editor. */
+  function openReplacement(signup: SignupRow) {
+    const current = stagedRole(signup.id);
+    const role =
+      current && isConcreteCharacterRole(current) ? current : (signup.assignableRoles[0] as ConcreteCharacterRole | undefined);
+    if (!role) return;
+    setReplacement({
+      target: {
+        signupId: signup.id,
+        userId: signup.userId,
+        label: signupDisplayName(signup),
+        reasons: rosterReplacementReasons(signup).map((reason) => reason.label),
+      },
+      role,
+    });
+  }
+
+  function openFillSlot(role: ConcreteCharacterRole, label: string, reasons: string[] = []) {
+    setReplacement({ target: { signupId: null, userId: null, label, reasons }, role });
+  }
+
+  /** Stages the chosen candidate (replacing the slot) — same confirmation path as a tile click. */
+  function chooseReplacement(candidate: ReplacementCandidate<SignupRow>) {
+    const replaces = replacement?.target.signupId ?? undefined;
+    setReplacement(null);
+    selectWithRole(candidate.signup, candidate.role, null, replaces);
+  }
+
+  /** Fill gaps / Build: the proposal replaces the staged draft; the Raid Lead reviews, then Saves / Updates. */
+  function stageProposal(input: {
+    selections: Array<{ signupId: string; selectedRole: CharacterRole | null }>;
+    confirmed: ConfirmedRosterWarning[];
+  }) {
+    setError(null);
+    setErrorCode(null);
+    if (input.confirmed.length > 0) withConfirmedWarnings(input.confirmed);
+    const next: StagedSelections = new Map(input.selections.map((row) => [row.signupId, row.selectedRole]));
+    // A pick that keeps its role keeps the spec the Raid Lead chose; new picks get the default display spec.
+    const defaults = collectInitialStagedSpecs(data, next);
+    const specs: StagedSpecs = new Map(
+      [...defaults].map(([signupId, spec]) => [
+        signupId,
+        stagedSelections.get(signupId) === next.get(signupId) && stagedSpecs.has(signupId)
+          ? (stagedSpecs.get(signupId) ?? null)
+          : spec,
+      ]),
+    );
+    setStagedSelections(next);
+    setStagedSpecs(specs);
+  }
+
+  function syncSelectedCharacters() {
+    setError(null);
+    setErrorCode(null);
+    setNotice(null);
+    startTransition(async () => {
+      const result = await syncRosterCharactersAction({ runId: data.run.id });
+      if (!result.ok) {
+        setError(result.message);
+        setErrorCode(result.code);
+        return;
+      }
+      setNotice(result.message);
+      router.refresh();
+    });
   }
 
   function seedPublished() {
@@ -875,6 +979,57 @@ function RosterBuilderEditor({
 
   const validationIssueCount = liveValidation.blockers.length + liveValidation.warnings.length;
 
+  // —— Needs attention: existing warnings, each with its direct action ——
+  const missing = {
+    tanks: Math.max(0, -liveComposition.tanks.delta),
+    healers: Math.max(0, -liveComposition.healers.delta),
+    dps: Math.max(0, -liveComposition.dps.delta),
+    lootbuddies: Math.max(0, -liveComposition.lootbuddies.delta),
+  };
+  const missingTotal = missing.tanks + missing.healers + missing.dps + missing.lootbuddies;
+  const attentionSlots = editing
+    ? domainSignups
+        .filter((signup) => stagedSelections.has(signup.id))
+        .map((signup) => ({ signup, reasons: rosterReplacementReasons(signup) }))
+        .filter((row) => row.reasons.length > 0)
+    : [];
+  const openWithdrawals = editing
+    ? data.withdrawnPicks
+        .map((pick) => ({ pick, role: withdrawnPickOpenRole(pick.assignableRoles, missing) }))
+        .filter((row): row is { pick: (typeof data.withdrawnPicks)[number]; role: ConcreteCharacterRole } => row.role != null)
+    : [];
+  // Same set the server syncs: saved draft / published picks without a fresh Blizzard sync.
+  const staleSelected = editing
+    ? domainSignups.filter(
+        (signup) =>
+          signup.participationType === "BOOSTER" &&
+          signup.characterActive &&
+          (signup.draftSelected || signup.status === "SELECTED") &&
+          signup.syncHealth != null &&
+          signup.syncHealth !== "HEALTHY",
+      )
+    : [];
+  const dpsFillRole: ConcreteCharacterRole = roleBreakdown.meleeDps <= roleBreakdown.rangedDps ? "MELEE_DPS" : "RANGED_DPS";
+  const showAttention =
+    editing && (missingTotal > 0 || attentionSlots.length > 0 || openWithdrawals.length > 0 || staleSelected.length > 0);
+
+  const rosterDiff = useMemo(() => {
+    if (!data.roster.publishedAt) return [];
+    const member = (signup: SignupRow, role: CharacterRole | null): RosterDiffMember => ({
+      signupId: signup.id,
+      userId: signup.userId,
+      participationType: signup.participationType,
+      role: signup.participationType === "LOOTBUDDY" ? null : role,
+      label: signupDisplayName(signup),
+    });
+    return diffRoster(
+      domainSignups.filter((signup) => signup.status === "SELECTED").map((signup) => member(signup, signup.publishedRole)),
+      domainSignups
+        .filter((signup) => stagedSelections.has(signup.id))
+        .map((signup) => member(signup, stagedSelections.get(signup.id) ?? null)),
+    );
+  }, [data.roster.publishedAt, domainSignups, stagedSelections]);
+
   return (
     <div className="space-y-4">
       {error ? (
@@ -886,6 +1041,11 @@ function RosterBuilderEditor({
             </Button>
           ) : null}
         </div>
+      ) : null}
+      {notice ? (
+        <p role="status" className="text-sm text-muted">
+          {notice}
+        </p>
       ) : null}
       {embedded ? null : (
       <Card>
@@ -1043,7 +1203,7 @@ function RosterBuilderEditor({
       </section>
 
       {/* —— ROSTER: 4-group grid + actions —— */}
-      <section className="space-y-2 border-t border-border pt-3">
+      <section id={ROSTER_ATTENTION_ANCHOR} className="scroll-mt-20 space-y-2 border-t border-border pt-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-base font-semibold text-foreground">
             Roster{" "}
@@ -1058,7 +1218,17 @@ function RosterBuilderEditor({
             ) : null}
           </h3>
           <div className="flex flex-wrap items-center gap-2">
-            {data.roster.canEdit ? <RosterBuilderTrigger runId={data.run.id} /> : null}
+            {data.roster.canEdit ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={!editing || pending}
+                onClick={() => setBuilderMode(stagedSelections.size > 0 ? "fill" : "build")}
+              >
+                Auto Build Roster
+              </Button>
+            ) : null}
             {actions.seed ? (
               <Button type="button" size="md" disabled={pending} onClick={seedPublished}>
                 {pending ? "Loading…" : "Edit Published"}
@@ -1108,6 +1278,101 @@ function RosterBuilderEditor({
           </div>
         </div>
 
+        {showAttention ? (
+          <div
+            className={`space-y-1.5 rounded-md border px-3 py-2 text-sm ${
+              data.run.lateFill && missingTotal > 0 ? "border-warning/45 bg-warning/5" : "border-border bg-surface-raised/30"
+            }`}
+          >
+            {missingTotal > 0 ? (
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                <span className={`font-medium ${data.run.lateFill ? "text-warning" : "text-foreground"}`}>
+                  {data.run.lateFill
+                    ? `Late fill · Need ${missingTotal} ${missingTotal === 1 ? "replacement" : "replacements"}`
+                    : "Still needed"}
+                </span>
+                {(
+                  [
+                    ["TANK", "Tank", missing.tanks],
+                    ["HEALER", "Healer", missing.healers],
+                    [dpsFillRole, "DPS", missing.dps],
+                  ] as const
+                )
+                  .filter(([, , count]) => count > 0)
+                  .map(([role, label, count]) => (
+                    <button
+                      key={label}
+                      type="button"
+                      disabled={pending}
+                      onClick={() => openFillSlot(role, `${label} slot`)}
+                      className="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 text-xs font-medium hover:border-accent/60 hover:text-foreground disabled:opacity-50"
+                    >
+                      <RoleIcon role={role} size={14} />
+                      {label} ×{count}
+                    </button>
+                  ))}
+                {missing.lootbuddies > 0 ? (
+                  <span className="text-xs text-muted">Lootbuddy ×{missing.lootbuddies}</span>
+                ) : null}
+                <Button type="button" size="sm" variant="secondary" disabled={pending} onClick={() => setBuilderMode("fill")}>
+                  Fill gaps
+                </Button>
+              </div>
+            ) : null}
+            {attentionSlots.map(({ signup, reasons }) => (
+              <div key={signup.id} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <WarningIcon label={reasons.map((reason) => reason.label).join("\n")} size={14} />
+                <span className="font-medium">{signupDisplayName(signup)}</span>
+                <span className="min-w-0 text-xs text-muted">{reasons.map((reason) => reason.label).join(" · ")}</span>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => openReplacement(signup)}
+                  className="ml-auto inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium text-accent hover:bg-accent/10 disabled:opacity-50"
+                >
+                  <ReplaceIcon size={14} />
+                  Find replacement
+                </button>
+              </div>
+            ))}
+            {openWithdrawals.map(({ pick, role }) => (
+              <div key={pick.signupId} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <WarningIcon label="Withdrew" size={14} />
+                <span className="font-medium">{pick.characterLabel}</span>
+                <span className="min-w-0 text-xs text-muted">withdrew · {pick.reason}</span>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() =>
+                    openFillSlot(role, `${pick.characterLabel}'s slot`, [`${pick.characterLabel} withdrew: ${pick.reason}`])
+                  }
+                  className="ml-auto inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium text-accent hover:bg-accent/10 disabled:opacity-50"
+                >
+                  <ReplaceIcon size={14} />
+                  Find replacement
+                </button>
+              </div>
+            ))}
+            {staleSelected.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <WarningIcon label="Blizzard sync" size={14} />
+                <span className="min-w-0 text-xs text-muted">
+                  {staleSelected.length} selected Character{staleSelected.length === 1 ? "" : "s"} without a fresh
+                  Blizzard sync — lockouts may be outdated
+                </span>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={syncSelectedCharacters}
+                  className="ml-auto inline-flex h-7 items-center rounded-md px-2 text-xs font-medium text-accent hover:bg-accent/10 disabled:opacity-50"
+                >
+                  {pending ? "Syncing…" : "Sync Characters"}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {draftGroups.map((group, groupIndex) => (
             <div key={groupIndex} className="min-w-0">
@@ -1116,8 +1381,9 @@ function RosterBuilderEditor({
               </p>
               <ul className="space-y-1">
                 {group.map((slot, slotIndex) => (
-                  <li key={`${groupIndex}-${slotIndex}`}>
+                  <li key={`${groupIndex}-${slotIndex}`} className="flex gap-1">
                     {slot ? (
+                      <>
                       <button
                         type="button"
                         disabled={!editing || togglesLocked || !slot.signup}
@@ -1125,7 +1391,7 @@ function RosterBuilderEditor({
                           if (slot.signup) deselectSignup(slot.signup);
                         }}
                         title={slot.external ? "External — edit via External Boosters" : "Remove from draft"}
-                        className="flex min-h-[40px] w-full items-center gap-2 rounded-md border border-border/80 bg-surface-raised/40 px-2.5 py-2 text-left text-sm hover:border-danger/50 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="flex min-h-[40px] min-w-0 flex-1 items-center gap-2 rounded-md border border-border/80 bg-surface-raised/40 px-2.5 py-2 text-left text-sm hover:border-danger/50 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {slot.wowClass ? <ClassIcon wowClass={slot.wowClass} size={22} /> : null}
                         <span
@@ -1135,15 +1401,31 @@ function RosterBuilderEditor({
                           {slot.name}
                         </span>
                         {slot.wowClass && slot.specialization ? (
-                          <SpecIcon wowClass={slot.wowClass} specialization={slot.specialization} size={18} />
+                          // A replaceable slot also carries the Replace button: keep the name readable on phones.
+                          <span className={editing && slot.replaceable ? "hidden sm:inline-flex" : "inline-flex"}>
+                            <SpecIcon wowClass={slot.wowClass} specialization={slot.specialization} size={18} />
+                          </span>
                         ) : null}
                         {slot.role && isConcreteScanRole(slot.role) ? <RoleIcon role={slot.role} size={18} /> : null}
                         {slot.warningReasons.length > 0 ? (
                           <WarningIcon label={slot.warningReasons.join("\n")} size={16} />
                         ) : null}
                       </button>
+                      {editing && slot.replaceable && slot.signup ? (
+                        <button
+                          type="button"
+                          disabled={togglesLocked}
+                          onClick={() => openReplacement(slot.signup!)}
+                          title={`Find replacement for ${slot.name}`}
+                          aria-label={`Find replacement for ${slot.name}`}
+                          className="inline-flex min-h-[40px] w-7 shrink-0 items-center justify-center rounded-md border border-border/80 text-accent hover:border-accent/60 hover:bg-accent/10 disabled:opacity-50"
+                        >
+                          <ReplaceIcon size={15} />
+                        </button>
+                      ) : null}
+                      </>
                     ) : (
-                      <div className="flex min-h-[40px] items-center rounded-md border border-dashed border-border/50 px-2.5 py-2 text-sm text-muted/70">
+                      <div className="flex min-h-[40px] w-full items-center rounded-md border border-dashed border-border/50 px-2.5 py-2 text-sm text-muted/70">
                         Empty
                       </div>
                     )}
@@ -1183,7 +1465,7 @@ function RosterBuilderEditor({
         <div className="border-b border-border px-4 py-3">
           <h2 id="publish-title" className="text-base font-semibold" tabIndex={-1}>
             {dialogMode === "update"
-              ? "Update roster"
+              ? `Update Roster${rosterDiff.length > 0 ? ` · ${rosterDiff.length} change${rosterDiff.length === 1 ? "" : "s"}` : ""}`
               : dialogMode === "repost"
                 ? "Post the roster again"
                 : "Publish roster"}
@@ -1191,11 +1473,13 @@ function RosterBuilderEditor({
         </div>
         <div className="space-y-3 px-4 py-4 text-sm">
           {dialogMode === "update" ? (
-            <p>
-              Updating accepts the current selection as the published roster: selected signups become SELECTED, the
-              rest NOT_SELECTED, and the current Discord roster post is edited in place (no new post). The run stays
-              PUBLISHED and the roster remains editable until the run starts.
-            </p>
+            <>
+              <RosterUpdateDiff changes={rosterDiff} runChanged={data.roster.runChangedSinceAck} />
+              <p className="text-muted">
+                Accepts this selection as the published roster and edits the current Discord roster post in place.
+                Players are notified about their own changes only. The run stays PUBLISHED and editable until Start.
+              </p>
+            </>
           ) : dialogMode === "repost" ? (
             <p>
               Refreshes the current Discord Roster message in place (same message id). No second Roster post is
@@ -1288,6 +1572,26 @@ function RosterBuilderEditor({
           pending={pending}
           onCancel={cancelWarningPrompt}
           onConfirm={confirmWarningPrompt}
+        />
+      ) : null}
+      {replacement ? (
+        <RosterReplacementDialog
+          target={replacement.target}
+          initialRole={replacement.role}
+          signups={data.boosters}
+          staged={stagedSelections}
+          difficulty={data.run.difficulty}
+          onChoose={chooseReplacement}
+          onClose={() => setReplacement(null)}
+        />
+      ) : null}
+      {builderMode ? (
+        <RosterBuilderDialog
+          runId={data.run.id}
+          initialMode={builderMode}
+          draft={[...stagedSelections].map(([signupId, selectedRole]) => ({ signupId, selectedRole }))}
+          onStage={stageProposal}
+          onClose={() => setBuilderMode(null)}
         />
       ) : null}
       {addBoosterOpen ? (

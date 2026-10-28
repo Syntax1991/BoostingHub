@@ -25,6 +25,7 @@ import {
   RosterWarningConfirmDialog,
 } from "@/components/manage/roster-warning-confirm-dialog";
 import type { ConfirmedRosterWarning } from "@/services/roster-selection-risk";
+import type { CharacterRole } from "@/models/enums";
 
 function PickRow({ pick }: { pick: RosterBuilderProposedPick }) {
   const label =
@@ -90,18 +91,35 @@ function BucketSection({
   );
 }
 
+type RosterSelectionInput = { signupId: string; selectedRole: CharacterRole | null };
+
+/** Fill Gaps keeps the current draft and fills what is missing; Build proposes a whole draft from the signups. */
+export type RosterBuilderMode = "fill" | "build";
+
 /**
  * Roster Builder — generates a deterministic proposal from Run signups.
- * Apply uses existing draft selection authority. Opening never mutates.
+ * Opening never mutates.
+ *
+ * Without `draft` (Run header, Schedule) Apply saves the proposal through the
+ * existing draft selection authority. With `draft` (the Roster tab's editor)
+ * the proposal is computed on top of that unsaved draft and Apply only hands
+ * the result back via `onStage` — the Raid Lead reviews it in the editor and
+ * then Saves / Updates as usual (roster version + server checks unchanged).
  */
 export function RosterBuilderDialog({
   runId,
   onClose,
   onApplied,
+  draft,
+  initialMode = "fill",
+  onStage,
 }: {
   runId: string;
   onClose: () => void;
   onApplied?: () => void;
+  draft?: RosterSelectionInput[];
+  initialMode?: RosterBuilderMode;
+  onStage?: (input: { selections: RosterSelectionInput[]; confirmed: ConfirmedRosterWarning[] }) => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -111,6 +129,14 @@ export function RosterBuilderDialog({
   const [data, setData] = useState<RosterBuilderResult | null>(null);
   /** ONE aggregate confirmation for every proposed pick with a warning — never one dialog per Character. */
   const [confirmingWarnings, setConfirmingWarnings] = useState(false);
+  /** Build from signups on a non-empty draft: explicit "replace the draft" confirmation before Apply. */
+  const [confirmingReplace, setConfirmingReplace] = useState(false);
+  const stageMode = Boolean(draft && onStage);
+  const [mode, setMode] = useState<RosterBuilderMode>(initialMode);
+  // Snapshot of the editor draft when the dialog opened — the proposal never chases later edits.
+  const [baseDraft] = useState(() => draft ?? null);
+  // Every local pick counts — Boosters and Lootbuddies (External Boosters are not draft picks).
+  const buildReplacesDraft = stageMode && mode === "build" && (baseDraft?.length ?? 0) > 0;
 
   useEffect(() => {
     dialogRef.current?.showModal();
@@ -121,10 +147,12 @@ export function RosterBuilderDialog({
     return () => dialog.removeEventListener("close", onDialogClose);
   }, [onClose]);
 
+  const baseSelections = baseDraft ? (mode === "build" ? [] : baseDraft) : undefined;
+
   useEffect(() => {
     let cancelled = false;
     startTransition(async () => {
-      const result = await proposeRosterBuilderAction({ runId });
+      const result = await proposeRosterBuilderAction({ runId, baseSelections });
       if (cancelled) return;
       if (!result.ok || !result.data) {
         setError(result.message);
@@ -137,10 +165,20 @@ export function RosterBuilderDialog({
     return () => {
       cancelled = true;
     };
-  }, [runId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- baseSelections derives from mode + the opening snapshot
+  }, [runId, mode]);
 
-  function handleApply() {
-    if (!data || data.applySelections.length === 0) return;
+  /**
+   * Build replaces the whole local draft: when it holds any Booster or
+   * Lootbuddy, the Raid Lead confirms first. Fill gaps keeps every pick and
+   * never asks. `replaceConfirmed` is set only by that confirmation.
+   */
+  function handleApply(replaceConfirmed = false) {
+    if (!data || !canApply) return;
+    if (!replaceConfirmed && buildReplacesDraft) {
+      setConfirmingReplace(true);
+      return;
+    }
     if (data.warnings.length > 0) {
       setConfirmingWarnings(true);
       return;
@@ -150,7 +188,12 @@ export function RosterBuilderDialog({
 
   /** `confirmed` acknowledges exactly the warnings shown; the server recomputes and re-validates them. */
   function apply(confirmed: ConfirmedRosterWarning[]) {
-    if (!data || data.applySelections.length === 0) return;
+    if (!data || !canApply) return;
+    if (stageMode) {
+      onStage?.({ selections: data.fullSelections, confirmed });
+      dialogRef.current?.close();
+      return;
+    }
     setApplying(true);
     startTransition(async () => {
       const result = await applyRosterBuilderAction({
@@ -164,7 +207,7 @@ export function RosterBuilderDialog({
         if (!result.ok && result.code === "ROSTER_WARNING_CONFIRMATION_REQUIRED") {
           // Lockout state changed after the proposal was shown: nothing was
           // applied. Reload the proposal so the dialog shows the current warnings.
-          const refreshed = await proposeRosterBuilderAction({ runId });
+          const refreshed = await proposeRosterBuilderAction({ runId, baseSelections });
           if (refreshed.ok && refreshed.data) setData(refreshed.data);
           setError("Lockout progress changed since this proposal was generated. Review the updated warnings and apply again.");
           return;
@@ -184,7 +227,9 @@ export function RosterBuilderDialog({
   const healers = data?.proposed.filter((row) => row.bucket === "HEALER") ?? [];
   const dps = data?.proposed.filter((row) => row.bucket === "DPS") ?? [];
   const lootbuddies = data?.proposed.filter((row) => row.bucket === "LOOTBUDDY") ?? [];
-  const canApply = Boolean(data && !data.fullyStaffed && data.applySelections.length > 0);
+  const canApply = Boolean(
+    data && (stageMode && mode === "build" ? data.fullSelections.length > 0 : !data.fullyStaffed && data.applySelections.length > 0),
+  );
 
   return (
     <>
@@ -194,9 +239,39 @@ export function RosterBuilderDialog({
       className="w-[min(40rem,calc(100vw-2rem))] max-h-[min(44rem,calc(100vh-2rem))] overflow-y-auto rounded-lg border border-border bg-surface p-0 text-foreground shadow-xl backdrop:bg-black/50"
     >
       <div className="border-b border-border px-4 py-3">
-        <h2 id={titleId} className="text-base font-semibold">
-          Roster Builder
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 id={titleId} className="text-base font-semibold">
+            {stageMode ? "Auto Build Roster" : "Roster Builder"}
+          </h2>
+          {stageMode ? (
+            <div role="group" aria-label="Proposal mode" className="inline-flex rounded-md border border-border p-0.5 text-xs">
+              {(
+                [
+                  ["fill", "Fill gaps"],
+                  ["build", "Build from signups"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={mode === value}
+                  disabled={pending}
+                  onClick={() => {
+                    if (mode === value) return;
+                    setData(null);
+                    setError(null);
+                    setMode(value);
+                  }}
+                  className={`rounded px-2 py-1 font-medium ${
+                    mode === value ? "bg-surface-raised text-foreground" : "text-muted hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
         {data ? (
           <p className="mt-1 text-xs text-muted">
             {data.run.productLabel} · {DIFFICULTY_LABELS[data.run.difficulty as keyof typeof DIFFICULTY_LABELS] ?? data.run.difficulty}{" "}
@@ -208,17 +283,25 @@ export function RosterBuilderDialog({
             Deterministic proposal from this Run&apos;s signups — review, then Apply.
           </p>
         )}
+        {stageMode ? (
+          <p className="mt-1 text-xs text-muted">
+            {mode === "build"
+              ? "Proposes a whole draft from the current signups. Replaces all draft Boosters and Lootbuddies; External Boosters stay."
+              : "Keeps every current pick and fills only the missing slots from the current signups."}{" "}
+            Applies to the draft only — review, then Save / Update.
+          </p>
+        ) : null}
       </div>
 
       <div className="space-y-4 px-4 py-4">
         {pending && !data ? <p className="text-sm text-muted">Building proposal…</p> : null}
         {error ? <p className="text-sm text-danger">{error}</p> : null}
 
-        {data?.fullyStaffed ? (
+        {data?.fullyStaffed && !(stageMode && mode === "build") ? (
           <p className="text-sm font-medium text-success">Roster is fully staffed.</p>
         ) : null}
 
-        {data && !data.fullyStaffed ? (
+        {data && (!data.fullyStaffed || (stageMode && mode === "build")) ? (
           <>
             <div className="grid gap-2 text-sm sm:grid-cols-2">
               <div>
@@ -313,12 +396,22 @@ export function RosterBuilderDialog({
           type="button"
           disabled={!canApply || applying || pending}
           className="inline-flex h-8 items-center rounded-md bg-accent px-3 text-xs font-medium text-accent-foreground hover:bg-accent-hover disabled:opacity-50"
-          onClick={handleApply}
+          onClick={() => handleApply()}
         >
-          {applying ? "Applying…" : "Apply Roster"}
+          {applying ? "Applying…" : stageMode ? "Apply to draft" : "Apply Roster"}
         </button>
       </div>
     </dialog>
+    {confirmingReplace ? (
+      <ReplaceDraftConfirmDialog
+        draftCount={baseDraft?.length ?? 0}
+        onCancel={() => setConfirmingReplace(false)}
+        onConfirm={() => {
+          setConfirmingReplace(false);
+          handleApply(true);
+        }}
+      />
+    ) : null}
     {confirmingWarnings && data && data.warnings.length > 0 ? (
       <RosterWarningConfirmDialog
         title={
@@ -347,6 +440,72 @@ export function RosterBuilderDialog({
       />
     ) : null}
     </>
+  );
+}
+
+/**
+ * Build from signups replaces the local draft. Same native-dialog confirm
+ * pattern as the roster warning confirmation: Escape / Cancel never applies.
+ */
+function ReplaceDraftConfirmDialog({
+  draftCount,
+  onCancel,
+  onConfirm,
+}: {
+  draftCount: number;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (!dialog.open) dialog.showModal();
+    const onDialogCancel = (event: Event) => {
+      event.preventDefault();
+      onCancel();
+    };
+    dialog.addEventListener("cancel", onDialogCancel);
+    return () => dialog.removeEventListener("cancel", onDialogCancel);
+  }, [onCancel]);
+
+  return (
+    <dialog
+      ref={dialogRef}
+      aria-labelledby={titleId}
+      className="w-[min(26rem,calc(100vw-2rem))] rounded-lg border border-border bg-surface p-0 text-foreground shadow-xl backdrop:bg-black/50"
+    >
+      <div className="border-b border-border px-4 py-3">
+        <h2 id={titleId} className="text-base font-semibold">
+          Replace the current draft?
+        </h2>
+      </div>
+      <div className="space-y-2 px-4 py-4 text-sm">
+        <p className="text-warning">This replaces all draft Boosters and Lootbuddies. External Boosters stay.</p>
+        <p className="text-muted">
+          {draftCount} current pick{draftCount === 1 ? "" : "s"} will be replaced by the proposal. Nothing is saved until
+          you Save / Update the roster.
+        </p>
+      </div>
+      <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
+        <button
+          type="button"
+          className="inline-flex h-8 items-center rounded-md border border-border px-3 text-xs font-medium hover:bg-surface-raised"
+          onClick={onCancel}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="inline-flex h-8 items-center rounded-md border border-warning/45 bg-warning/15 px-3 text-xs font-medium text-warning hover:bg-warning/25"
+          onClick={onConfirm}
+        >
+          Replace draft
+        </button>
+      </div>
+    </dialog>
   );
 }
 
