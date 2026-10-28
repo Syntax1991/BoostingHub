@@ -4,7 +4,13 @@ import { useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
-import { resolveRunDetailTab, runDetailPath, type RunDetailTab } from "@/lib/run-routes";
+import {
+  resolveRunDetailTab,
+  runDetailPath,
+  syncRunDetailTab,
+  type RunDetailTab,
+  type RunDetailTabState,
+} from "@/lib/run-routes";
 import { RunSignupsSection } from "@/components/runs/run-signups-section";
 import { RunRosterSection } from "@/components/runs/run-roster-section";
 import { RunRosterConfigAdmin } from "@/components/runs/run-roster-config-admin";
@@ -43,13 +49,19 @@ export function RunDetailTabs({
   const router = useRouter();
   const consumables = data.consumables;
   const TABS = consumables ? [...BASE_TABS, { id: "consumables" as const, label: "Consumables" }] : BASE_TABS;
-  const [tab, setTab] = useState<RunDetailTab>(() =>
-    resolveRunDetailTab(initialTab, Boolean(consumables)),
-  );
+  const [tabState, setTabState] = useState<RunDetailTabState>(() => ({
+    tab: resolveRunDetailTab(initialTab, Boolean(consumables)),
+    initialTab,
+  }));
+  // Client-side navigation to another `?tab=` (Preflight links, back/forward) re-renders
+  // with a new initialTab: adopt it during render (no effect, no extra paint).
+  const synced = syncRunDetailTab(tabState, initialTab, Boolean(consumables));
+  if (synced !== tabState) setTabState(synced);
+  const tab = synced.tab;
 
   function selectTab(next: RunDetailTab) {
     const resolved = resolveRunDetailTab(next, Boolean(consumables));
-    setTab(resolved);
+    setTabState((previous) => ({ ...previous, tab: resolved }));
     router.replace(runDetailPath(data.run.id, resolved), { scroll: false });
   }
 

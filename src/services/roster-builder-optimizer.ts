@@ -361,18 +361,90 @@ function shortageRemaining(
   };
 }
 
+type BoosterBucket = Exclude<RosterBuilderBucket, "LOOTBUDDY">;
+
+const BOOSTER_BUCKETS: readonly BoosterBucket[] = ["TANK", "HEALER", "DPS"];
+
+/**
+ * Booster buckets each still-free User could fill with any of their remaining
+ * candidate signups (one Booster slot per User across all Characters).
+ */
+function openBoosterUsers(
+  candidates: readonly RosterBuilderCandidateInput[],
+  usedSignupIds: ReadonlySet<string>,
+  usedBoosterUserIds: ReadonlySet<string>,
+): Map<string, Set<BoosterBucket>> {
+  const users = new Map<string, Set<BoosterBucket>>();
+  for (const candidate of candidates) {
+    if (candidate.participationType !== "BOOSTER") continue;
+    if (usedSignupIds.has(candidate.signupId) || usedBoosterUserIds.has(candidate.userId)) continue;
+    const buckets = users.get(candidate.userId) ?? new Set<BoosterBucket>();
+    for (const bucket of BOOSTER_BUCKETS) {
+      if (rolesForBucket(candidate, bucket).length > 0) buckets.add(bucket);
+    }
+    if (buckets.size > 0) users.set(candidate.userId, buckets);
+  }
+  return users;
+}
+
+/**
+ * Most Booster slots fillable at once: maximum bipartite matching Users →
+ * open slots (augmenting paths; a few dozen Users × ≤ ~30 slots). This is the
+ * exact optimum, not a heuristic — the greedy below never commits to a pick
+ * that would lower it.
+ */
+function maxBoosterSlotFill(
+  users: ReadonlyMap<string, ReadonlySet<BoosterBucket>>,
+  capacity: Readonly<Record<BoosterBucket, number>>,
+): number {
+  const slots: BoosterBucket[] = [];
+  for (const bucket of BOOSTER_BUCKETS) {
+    for (let index = 0; index < capacity[bucket]; index += 1) slots.push(bucket);
+  }
+  const slotOwner: Array<string | null> = slots.map(() => null);
+  const assign = (userId: string, visited: Set<number>): boolean => {
+    const buckets = users.get(userId)!;
+    for (let slot = 0; slot < slots.length; slot += 1) {
+      if (visited.has(slot) || !buckets.has(slots[slot]!)) continue;
+      visited.add(slot);
+      const owner = slotOwner[slot];
+      if (owner == null || assign(owner, visited)) {
+        slotOwner[slot] = userId;
+        return true;
+      }
+    }
+    return false;
+  };
+  let filled = 0;
+  for (const userId of [...users.keys()].sort()) {
+    if (assign(userId, new Set())) filled += 1;
+  }
+  return filled;
+}
+
 /**
  * Deterministic roster proposal optimizer.
  *
+ * Objective, in this order:
+ * 1. Fill as many open Tank / Healer / DPS slots as the eligible signups allow
+ *    (exact maximum via `maxBoosterSlotFill`). A hybrid is never parked in a
+ *    slot a single-role player could take when that would leave another slot
+ *    empty — but single-role players are not forced first either.
+ * 2. Among equally complete rosters, soft quality: marginal raid utility, then
+ *    primary / offspec role preference, then WCL, then ilvl (stable name/id ties).
+ *
  * Algorithm:
  * 1. Seed with locked existing picks + external boosters (buff coverage baseline).
- * 2. Greedy-fill remaining Tank → Healer → DPS → Lootbuddy shortages from Run signup candidates,
- *    maximizing marginal utility, then primary/offspec role preference, then WCL, then ilvl
- *    (stable name/id ties).
- * 3. Improvement swaps within each bucket until no swap raises total soft score.
+ *    Locked picks and their Users are never replaced or reused (Fill gaps).
+ * 2. Greedy-fill remaining Tank → Healer → DPS slots with the best-scoring
+ *    candidate whose pick keeps the maximum fill reachable; a slot no maximum
+ *    assignment uses stays open. Lootbuddies fill their own bucket.
+ * 3. Improvement swaps within each bucket until no swap raises total soft score
+ *    (a swap never changes how many slots are filled).
  *
  * Hard constraints are enforced by the caller (eligible candidate universe only).
- * No Melee/Ranged quotas — DPS is aggregate.
+ * No Melee/Ranged quotas — DPS is aggregate; the Melee / Ranged choice per pick
+ * follows primary / offspec preference, then WCL.
  */
 export function optimizeRosterProposal(input: {
   shortages: RosterBuilderShortage;
@@ -420,6 +492,23 @@ export function optimizeRosterProposal(input: {
   const sortedCandidates = [...input.candidates].sort(compareCandidateOrder);
   const picks: WorkingPick[] = [...lockedPicks];
 
+  // Open slot capacity per Booster bucket and the most of them any assignment can fill.
+  const openCapacity: Record<BoosterBucket, number> = {
+    TANK: input.shortages.tanks,
+    HEALER: input.shortages.healers,
+    DPS: input.shortages.dps,
+  };
+  const openUsers = openBoosterUsers(sortedCandidates, usedSignupIds, usedBoosterUserIds);
+  let reachableFill = maxBoosterSlotFill(openUsers, openCapacity);
+
+  /** Picking `userId` for one `bucket` slot still allows the maximum fill. */
+  function keepsMaximumFill(userId: string, bucket: BoosterBucket): boolean {
+    const remainingUsers = new Map(openUsers);
+    remainingUsers.delete(userId);
+    const remainingCapacity = { ...openCapacity, [bucket]: openCapacity[bucket] - 1 };
+    return 1 + maxBoosterSlotFill(remainingUsers, remainingCapacity) === reachableFill;
+  }
+
   const buckets: Array<{ bucket: RosterBuilderBucket; count: number }> = [
     { bucket: "TANK", count: input.shortages.tanks },
     { bucket: "HEALER", count: input.shortages.healers },
@@ -445,13 +534,14 @@ export function optimizeRosterProposal(input: {
           ),
       ]);
 
-      let best: {
+      type ScoredOption = {
         candidate: RosterBuilderCandidateInput;
         role: CharacterRole | null;
         score: number;
         provided: RaidBuffId[];
         wclPct: number | null;
-      } | null = null;
+      };
+      const options: ScoredOption[] = [];
 
       for (const candidate of sortedCandidates) {
         if (usedSignupIds.has(candidate.signupId)) continue;
@@ -466,22 +556,27 @@ export function optimizeRosterProposal(input: {
         const role = pickRoleForBucket(candidate, bucket);
         if (bucket !== "LOOTBUDDY" && role == null) continue;
         const scored = scoreCandidateAgainstCoverage(candidate, role, covered);
-        if (
-          !best ||
-          scored.score > best.score ||
-          (scored.score === best.score && compareCandidateOrder(candidate, best.candidate) < 0)
-        ) {
-          best = {
-            candidate,
-            role,
-            score: scored.score,
-            provided: scored.provided,
-            wclPct: scored.wclPct,
-          };
+        options.push({ candidate, role, score: scored.score, provided: scored.provided, wclPct: scored.wclPct });
+      }
+      options.sort(
+        (left, right) => right.score - left.score || compareCandidateOrder(left.candidate, right.candidate),
+      );
+
+      let best: ScoredOption | null = null;
+      if (bucket === "LOOTBUDDY") {
+        best = options[0] ?? null;
+      } else {
+        // Best soft score that keeps the maximum number of filled slots reachable.
+        best = options.find((option) => keepsMaximumFill(option.candidate.userId, bucket)) ?? null;
+        openCapacity[bucket] -= 1;
+        if (best) {
+          openUsers.delete(best.candidate.userId);
+          reachableFill -= 1;
         }
       }
 
-      if (!best) break;
+      // No maximum assignment uses this slot: leave it open and keep filling the rest.
+      if (!best) continue;
 
       usedSignupIds.add(best.candidate.signupId);
       if (best.candidate.participationType === "BOOSTER") {
