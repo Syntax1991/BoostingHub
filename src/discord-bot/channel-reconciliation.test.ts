@@ -503,6 +503,44 @@ describe("reconcileWeekSectionPositions — marker and unmanaged channel safety"
     expect(order).toEqual([CURRENT_MARKER, "chan-1", "unmanaged-chan", NEXT_MARKER]);
   });
 
+  it("PRODUCTION: voice channels in the Run category (Raid #1 / Raid #2) are never repositioned", async () => {
+    // Live 2026-10-27: both voice channels sat at position 2 between the text
+    // markers (0 / 3); mixing them into the text re-index kept swapping them.
+    const children = [
+      child(CURRENT_MARKER, 0),
+      child("tue-run", 1),
+      { id: "raid-2-voice", position: 2, voice: true },
+      { id: "raid-1-voice", position: 2, voice: true },
+      child(NEXT_MARKER, 3),
+      child("chan-1", 4),
+    ];
+    const setPositions = vi.fn().mockResolvedValue(undefined) as PositionSetter;
+
+    await reconcileWeekSectionPositions(listerFor(children), setPositions, weekEnv, [
+      weekItem({ targetBucket: "CURRENT", existingRunChannelId: "chan-1" }),
+    ]);
+
+    expect(orderedChannelIds(setPositions)).toEqual([CURRENT_MARKER, "chan-1", "tue-run", NEXT_MARKER]);
+  });
+
+  it("voice channels alone never trigger a write", async () => {
+    const children = [
+      child(CURRENT_MARKER, 0),
+      child("chan-1", 1),
+      { id: "raid-1-voice", position: 5, voice: true },
+      { id: "raid-2-voice", position: 0, voice: true },
+      child(NEXT_MARKER, 2),
+    ];
+    const setPositions = vi.fn().mockResolvedValue(undefined) as PositionSetter;
+
+    const result = await reconcileWeekSectionPositions(listerFor(children), setPositions, weekEnv, [
+      weekItem({ targetBucket: "CURRENT", existingRunChannelId: "chan-1" }),
+    ]);
+
+    expect(setPositions).not.toHaveBeenCalled();
+    expect(result).toEqual({ status: "ok", moved: 0 });
+  });
+
   it("an unmanaged channel before #current-id is preserved in front, never reordered relative to other unmanaged channels", async () => {
     // chan-1 starts misplaced (between the markers) so an actual reorder is
     // required — the point of the test is that "unmanaged-chan" stays put

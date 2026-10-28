@@ -186,6 +186,13 @@ export type CategoryChild = {
   readonly position: number;
   /** Channel name — lets manually created Run channels (`fri-1300-…`) sort by time too. */
   readonly name?: string;
+  /**
+   * Voice / stage channels (e.g. the fixed `Raid #1` / `Raid #2`). Discord
+   * sorts them in their own group below the text channels, so their position
+   * numbers are not comparable with the markers' — the planner leaves them out
+   * and never repositions them.
+   */
+  readonly voice?: boolean;
 };
 
 /** Lists the current children of a category (Run channels, the two markers, and any unmanaged channels), or null if the category itself can't be resolved. */
@@ -307,10 +314,11 @@ type WeekSectionPlan =
  * path and post-write verification use this — never a second ordering algorithm.
  */
 export function planWeekSectionOrder(
-  children: ReadonlyArray<CategoryChild>,
+  allChildren: ReadonlyArray<CategoryChild>,
   env: WeekSectionEnv,
   items: ReadonlyArray<WeekSectionItem>,
 ): WeekSectionPlan {
+  const children = allChildren.filter((child) => !child.voice);
   if (!env.discordRunCategoryId) {
     return { status: "skipped", reason: "DISCORD_RUN_CATEGORY_ID is unset" };
   }
