@@ -955,7 +955,7 @@ export const rosterRepository = {
         const roster = await lockRosterInTx(txOrm, rosterId);
         await txOrm.RunRosterEntry.where((entry) => entry.signupId.in(uniqueIds))
           .where({ rosterId })
-          .delete();
+          .deleteAndCount();
         await txOrm.RunRoster.where({ id: rosterId }).update({ version: roster.version + 1, updatedAt: now });
       }
     });
