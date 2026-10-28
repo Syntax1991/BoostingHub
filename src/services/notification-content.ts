@@ -1,6 +1,6 @@
 import { DEFAULT_TIME_ZONE, formatDateTime } from "@/lib/datetime";
 import { discordTimestamp } from "@/lib/discord-timestamp";
-import { dmRunHeader, dmRunUrl, type DmRunContext } from "@/lib/discord-run-dm";
+import { dmLink, dmRunHeader, dmRunUrl, type DmRunContext } from "@/lib/discord-run-dm";
 import { isInQuietHours, nextQuietHoursEndUtc, type QuietHoursSnapshot } from "@/lib/quiet-hours";
 import { CHARACTER_ROLE_LABELS, CLASS_LABELS } from "@/lib/labels";
 import { runDetailPath } from "@/lib/run-routes";
@@ -145,7 +145,8 @@ export function rosterSelectedSavedSummaryWebNotification(input: {
 }): { title: string; message: string; href: string } {
   return {
     title: "Selected Characters are saved",
-    message: [savedSelectedHeadline(input.entries.length), ...savedSelectedLines(input.entries), "Check the roster."].join("\n"),
+    // No trailing "Check the roster.": the notification links the Roster tab and the DM ends with [Open Roster].
+    message: [savedSelectedHeadline(input.entries.length), ...savedSelectedLines(input.entries)].join("\n"),
     href: runDetailPath(input.runId, "roster"),
   };
 }
@@ -164,7 +165,7 @@ export function buildRosterSelectedSavedSummaryDmMessage(input: {
     ...dmRunHeader("⚠️ **Selected Characters are saved**", input.run),
     ...input.message.split(/\r?\n/).map((line) => escapeDiscordInlineText(line)),
   ];
-  if (input.rosterUrl) lines.push("", input.rosterUrl);
+  if (input.rosterUrl) lines.push("", dmLink("Open Roster", input.rosterUrl));
   return lines.join("\n");
 }
 
@@ -356,7 +357,7 @@ export function buildRosterWithdrawnDmMessage(input: {
     `Reason: ${escapeDiscordInlineText(input.reason)}`,
   ];
   if (input.rosterUrl) {
-    lines.push("", `Pick a replacement: ${input.rosterUrl}`);
+    lines.push("", dmLink("Pick a replacement", input.rosterUrl));
   }
   return lines.join("\n");
 }
@@ -390,7 +391,7 @@ export function buildRosterCharacterSavedDmMessage(input: {
     );
   }
   if (input.url) {
-    lines.push("", input.audience === "lead" ? `Check the roster: ${input.url}` : input.url);
+    lines.push("", dmLink(input.audience === "lead" ? "Open Roster" : "Open Run", input.url));
   }
   return lines.join("\n");
 }
@@ -448,7 +449,7 @@ export function buildRunScopeChangedDmMessage(input: {
     "The planned raid scope changed:",
     ...formatRunScopeChangeLines(input.changes),
     "",
-    runUrl ? `Please review the updated Run: ${runUrl}` : "Please review the updated Run.",
+    runUrl ? dmLink("Review updated Run", runUrl) : "Please review the updated Run.",
   ].join("\n");
 }
 
@@ -482,9 +483,9 @@ export function buildRunRescheduledDmMessage(input: {
   );
 }
 
-/** Closing Run link (blank line, then the URL) when the app URL is configured. */
+/** Closing "Open Run" link (blank line, then the masked link) when the app URL is configured. */
 function withRunLink(lines: string[], runUrl: string | null): string {
-  if (runUrl) lines.push("", runUrl);
+  if (runUrl) lines.push("", dmLink("Open Run", runUrl));
   return lines.join("\n");
 }
 

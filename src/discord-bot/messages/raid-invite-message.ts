@@ -1,5 +1,5 @@
 import { zonedParts } from "@/lib/datetime";
-import { dmRunHeader, dmRunUrl, type DmRunContext } from "@/lib/discord-run-dm";
+import { dmLink, dmRunHeader, dmRunUrl, type DmRunContext } from "@/lib/discord-run-dm";
 import { CHARACTER_ROLE_LABELS, CLASS_LABELS } from "@/lib/labels";
 import type { CharacterRole, RunLootType, WowClass } from "@/models/enums";
 
@@ -74,6 +74,6 @@ export function buildRaidInviteMessage(input: RaidInviteMessageInput): string {
 
   lines.push("", "Please be online 10 minutes before start.");
   const runUrl = dmRunUrl(input.run);
-  if (runUrl) lines.push("", runUrl);
+  if (runUrl) lines.push("", dmLink("Open Run", runUrl));
   return lines.join("\n");
 }

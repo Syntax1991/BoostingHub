@@ -160,10 +160,11 @@ describe("Start Run Raid Lead summary — copy, DM, idempotency key", () => {
         "2 selected Characters are saved:",
         "Synmist-Antonidas — Boss A",
         "Synblast-Antonidas — Boss B, Boss C",
-        "Check the roster.",
       ].join("\n"),
       href: runDetailPath("run-1", "roster"),
     });
+    // The action lives in the link (bell href / DM [Open Roster]) — no redundant instruction in the copy.
+    expect(rosterSelectedSavedSummaryWebNotification({ runId: "run-1", entries }).message).not.toContain("Check the roster.");
     expect(rosterSelectedSavedSummaryWebNotification({ runId: "run-1", entries: entries.slice(0, 1) }).message).toMatch(
       /^1 selected Character is saved:\n/,
     );
@@ -180,8 +181,11 @@ describe("Start Run Raid Lead summary — copy, DM, idempotency key", () => {
     expect(lines[0]).toBe("⚠️ **Selected Characters are saved**");
     expect(lines[2]).toBe("Venom & Tide & Kith'ix");
     expect(lines[3]).toMatch(/ · HEROIC · VIP$/);
-    expect(lines.slice(5, 9)).toEqual(message.split("\n"));
-    expect(dm).toContain("https://example.test/runs/run-1");
+    // The stored message is delivered unchanged, then exactly one action at the bottom: the masked link.
+    expect(lines.slice(5, 8)).toEqual(message.split("\n"));
+    expect(lines.slice(8)).toEqual(["", "[Open Roster](<https://example.test/runs/run-1>)"]);
+    expect(dm).not.toContain("Check the roster.");
+    expect(lines.filter((line) => /^https?:\/\//.test(line))).toEqual([]);
 
     // Any copy punctuation is just text: other separators are delivered verbatim, nothing is lost or split.
     const edited = "2 selected Characters are saved:\nSynmist-Antonidas – Boss A\nSyn: Blast — Boss B, Boss — C\nCheck the roster.";
@@ -255,7 +259,8 @@ describe("copy + source key", () => {
     });
     expect(dm).toContain("Picked Character got saved");
     expect(dm).toContain("**Stormhowl-Antonidas** (Kael) is picked and is now saved on **Boss 1**.");
-    expect(dm).toContain("Check the roster: https://example.test/runs/run-1");
+    expect(dm).toContain("[Open Roster](<https://example.test/runs/run-1>)");
+    expect(dm).not.toMatch(/^https?:\/\//m);
   });
 
   it("source key round-trips and changes with the boss set and audience", () => {
@@ -506,9 +511,7 @@ describe("runStartSavedCheckService (Start Run re-check)", () => {
     expect(summaries).toHaveLength(1);
     expect(summaries[0]!.title).toBe("Selected Characters are saved");
     expect(summaries[0]!.message).toBe(
-      ["1 selected Character is saved:", `Rsnsaved-Antonidas — ${bosses[0]!.name}, ${bosses[1]!.name}`, "Check the roster."].join(
-        "\n",
-      ),
+      ["1 selected Character is saved:", `Rsnsaved-Antonidas — ${bosses[0]!.name}, ${bosses[1]!.name}`].join("\n"),
     );
     expect(summaries[0]!.href).toBe(runDetailPath(runId, "roster"));
     expect(summaries[0]!.signupId).toBeNull();
@@ -558,7 +561,6 @@ describe("runStartSavedCheckService (Start Run re-check)", () => {
         "2 selected Characters are saved:",
         `Rsnblast-Antonidas — ${bosses[1]!.name}, ${bosses[2]!.name}`,
         `Rsnmist-Antonidas — ${bosses[0]!.name}`,
-        "Check the roster.",
       ].join("\n"),
     );
   });
@@ -591,7 +593,7 @@ describe("runStartSavedCheckService (Start Run re-check)", () => {
     expect(reminders[0]!.message).not.toContain(bosses[6]!.name);
     const [summary] = await notesFor(ids.lead, runId);
     expect(summary!.message).toBe(
-      ["1 selected Character is saved:", `Rsnsix-Antonidas — ${bosses[5]!.name}`, "Check the roster."].join("\n"),
+      ["1 selected Character is saved:", `Rsnsix-Antonidas — ${bosses[5]!.name}`].join("\n"),
     );
   });
 });

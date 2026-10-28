@@ -31,6 +31,16 @@ export function dmRunHeader(heading: string, run: DmRunContext): string[] {
   return [heading, "", run.contentTitle, dmRunMetaLine(run), ""];
 }
 
+/**
+ * Closing action link: a masked Markdown link with the URL in angle brackets,
+ * `[Open Run](<https://…>)`. Discord renders only the label (no long wrapped
+ * URL) and the angle brackets suppress the website preview card. The label
+ * must not contain `[`/`]` — callers pass fixed copy only.
+ */
+export function dmLink(label: string, url: string): string {
+  return `[${label}](<${url}>)`;
+}
+
 /** Absolute Run link for the closing line; null when the app URL is not configured. */
 export function dmRunUrl(run: Pick<DmRunContext, "runId">, tab?: RunDetailTab): string | null {
   return absoluteRunUrl(run.runId, tab);
