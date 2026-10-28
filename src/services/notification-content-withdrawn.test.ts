@@ -27,7 +27,7 @@ describe("roster withdrawal notification (to the Raid Lead)", () => {
     expect(dm).toContain("**Roster Withdrawal**");
     expect(dm).toContain("**Kiri** (Kirilight-Thrall) withdrew from the roster.");
     expect(dm).toContain("Reason: Sick, sorry");
-    expect(dm).toContain("Pick a replacement: https://phoenix-star.de/runs/r1?tab=roster");
+    expect(dm).toContain("[Pick a replacement](<https://phoenix-star.de/runs/r1?tab=roster>)");
   });
 
   it("player-controlled text cannot mention anyone or break the markdown", () => {

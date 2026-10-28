@@ -306,7 +306,7 @@ Voice: <#voiceChannelId>
 
 Please be online 10 minutes before start.
 
-{Run link}
+[Open Run](<Run URL>)
 ```
 
 - VIP appears once — on the meta line (the Run type); the Assignment line does not repeat it.
@@ -331,11 +331,12 @@ All Run DMs — Roster Selected / Roster Update (swap) / Roster removed / Roster
 
 {event-specific lines}
 
-{Run / Roster link}                 ← last line (labelled where the event asks for an action)
+{action link}                      ← last line: [Open Run](<url>) / [Open Roster](<url>) / …
 ```
 
 - **Run identity** is the compact content title from `contentShortTitle` (`Raid.shortName` in authoritative content order: `Venom`, `Venom & Tide`, `Venom & Tide & Kithix`) — the same identity as the Signup post and the lifecycle channel announcements. It is derived once per DM work item from the persisted Run contents (`NotificationDmWorkItem.contentTitle`); `productLabel` ("Season 2 Bundle", formal Raid names) stays for its other consumers and is only the fallback for an older API.
 - **Run Rescheduled** shows `Old:` / `New:` in place of the meta line.
+- **Action links** are masked Markdown links with the URL in angle brackets (`dmLink`: `[Open Run](<https://…>)`): Discord shows only the label (no wrapped raw URL) and attaches no website preview card (verified live: `embeds = 0`). Labels: **Open Run** (Roster Selected / Update / removed, Raid Invite, Cancelled, Reactivated, Rescheduled, Saved player, Start Run reminder), **Open Roster** (Saved Raid Lead, Start Run summary), **Pick a replacement** (Withdrawal), **Review updated Run** (scope change). Open Roster targets the Roster tab, which is the Run Detail default (`/runs/<id>`).
 - The Start Run Saved summary DM delivers the bell notification's own text (`savedSummary.message`) under the heading — the affected-set snapshot; delivery never parses notification copy.
 - Event semantics (recipients, triggers, per-event toggles, Quiet Hours, idempotency) are unchanged by the format.
 

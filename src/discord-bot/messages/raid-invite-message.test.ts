@@ -138,7 +138,7 @@ describe("buildRaidInviteMessage", () => {
       "Assignment: Healer · Synlight (Priest)",
     ];
     const runUrl = absoluteRunUrl("r1");
-    const tail = ["", "Please be online 10 minutes before start.", ...(runUrl ? ["", runUrl] : [])];
+    const tail = ["", "Please be online 10 minutes before start.", ...(runUrl ? ["", `[Open Run](<${runUrl}>)`] : [])];
 
     it("text + voice: both lines, Channel before Voice", () => {
       expect(buildRaidInviteMessage({ ...base, runChannelId: "111", voiceChannelId: "222" })).toBe(

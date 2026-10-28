@@ -181,7 +181,7 @@ describe("Start Run Raid Lead summary — copy, DM, idempotency key", () => {
     expect(lines[2]).toBe("Venom & Tide & Kith'ix");
     expect(lines[3]).toMatch(/ · HEROIC · VIP$/);
     expect(lines.slice(5, 9)).toEqual(message.split("\n"));
-    expect(dm).toContain("https://example.test/runs/run-1");
+    expect(dm).toContain("[Open Roster](<https://example.test/runs/run-1>)");
 
     // Any copy punctuation is just text: other separators are delivered verbatim, nothing is lost or split.
     const edited = "2 selected Characters are saved:\nSynmist-Antonidas – Boss A\nSyn: Blast — Boss B, Boss — C\nCheck the roster.";
@@ -255,7 +255,8 @@ describe("copy + source key", () => {
     });
     expect(dm).toContain("Picked Character got saved");
     expect(dm).toContain("**Stormhowl-Antonidas** (Kael) is picked and is now saved on **Boss 1**.");
-    expect(dm).toContain("Check the roster: https://example.test/runs/run-1");
+    expect(dm).toContain("[Open Roster](<https://example.test/runs/run-1>)");
+    expect(dm).not.toMatch(/^https?:\/\//m);
   });
 
   it("source key round-trips and changes with the boss set and audience", () => {

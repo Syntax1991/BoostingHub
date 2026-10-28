@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildRaidInviteMessage } from "@/discord-bot/messages/raid-invite-message";
 import { absoluteRunUrl } from "@/lib/app-url";
-import { dmRunMetaLine, type DmRunContext } from "@/lib/discord-run-dm";
+import { dmLink, dmRunMetaLine, dmRunUrl, type DmRunContext } from "@/lib/discord-run-dm";
 import { contentShortTitle } from "@/lib/raid-catalog";
 import {
   buildRosterCharacterSavedDmMessage,
@@ -31,7 +31,10 @@ const run: DmRunContext = {
   difficulty: "HEROIC",
   lootType: "VIP",
 };
-const RUN_URL = absoluteRunUrl(run.runId);
+const RUN_URL = absoluteRunUrl(run.runId)!;
+const EXAMPLE_URL = "https://example.test/runs/run-dm-1";
+/** The closing action link as Discord receives it: label only, URL in <> (no preview card). */
+const masked = (label: string, url: string) => `[${label}](<${url}>)`;
 const META = "<t:1797276600:F> · HEROIC · VIP";
 const FORMAL = /Season 2 Bundle|The Venomous Abyss|The Tidebound Grotto|The Unbinding of Kith/;
 
@@ -49,19 +52,19 @@ const DMS: Array<{ name: string; text: string; event: string[]; link: string | n
     name: "roster selected",
     text: buildRosterSelectedDmMessage({ run, assignment, runChannelId: null }),
     event: ["Assignment: Healer · Synmist (Monk)", "You are in the roster."],
-    link: RUN_URL,
+    link: masked("Open Run", RUN_URL),
   },
   {
     name: "roster update (Character swap)",
     text: buildRosterSelectedDmMessage({ run, assignment, runChannelId: "555", update: true }),
     event: ["Assignment: Healer · Synmist (Monk)", "Channel: <#555>", "Your character changed — you are still in the roster."],
-    link: RUN_URL,
+    link: masked("Open Run", RUN_URL),
   },
   {
     name: "roster removed",
     text: buildRosterRemovedDmMessage({ run }),
     event: ["You are no longer in the roster for this run."],
-    link: RUN_URL,
+    link: masked("Open Run", RUN_URL),
   },
   {
     name: "roster withdrawn (to the Raid Lead)",
@@ -70,10 +73,10 @@ const DMS: Array<{ name: string; text: string; event: string[]; link: string | n
       playerName: "Kiri",
       characterLabel: "Synmist-Antonidas",
       reason: "Sick",
-      rosterUrl: "https://example.test/runs/run-dm-1",
+      rosterUrl: EXAMPLE_URL,
     }),
     event: ["**Kiri** (Synmist-Antonidas) withdrew from the roster.", "Reason: Sick"],
-    link: "Pick a replacement: https://example.test/runs/run-dm-1",
+    link: masked("Pick a replacement", EXAMPLE_URL),
   },
   {
     name: "raid invite",
@@ -87,19 +90,19 @@ const DMS: Array<{ name: string; text: string; event: string[]; link: string | n
       voiceChannelId: "666",
     }),
     event: ["Assignment: Healer · Synmist (Monk)", "Channel: <#555>", "Voice: <#666>", "Please be online 10 minutes before start."],
-    link: RUN_URL,
+    link: masked("Open Run", RUN_URL),
   },
   {
     name: "run cancelled",
     text: buildRunCancelledDmMessage({ run }),
     event: ["This run has been cancelled."],
-    link: RUN_URL,
+    link: masked("Open Run", RUN_URL),
   },
   {
     name: "run reactivated",
     text: buildRunReactivatedDmMessage({ run }),
     event: ["The previously cancelled Run is active again."],
-    link: RUN_URL,
+    link: masked("Open Run", RUN_URL),
   },
   {
     name: "run scope changed",
@@ -108,7 +111,7 @@ const DMS: Array<{ name: string; text: string; event: string[]; link: string | n
       changes: [{ raidId: "venom", raidName: "Venom", totalBossCount: 8, kind: "CHANGED", beforePlannedBossCount: 8, afterPlannedBossCount: 6 }],
     }),
     event: ["The planned raid scope changed:"],
-    link: RUN_URL ? `Please review the updated Run: ${RUN_URL}` : "Please review the updated Run.",
+    link: masked("Review updated Run", RUN_URL),
   },
   {
     name: "picked Character got saved — player",
@@ -118,10 +121,10 @@ const DMS: Array<{ name: string; text: string; event: string[]; link: string | n
       characterLabel: "Synmist-Antonidas",
       playerName: "Kiri",
       bossNames: ["Boss A"],
-      url: "https://example.test/runs/run-dm-1",
+      url: EXAMPLE_URL,
     }),
     event: ["**Synmist-Antonidas** is picked for this Run but already killed **Boss A** this raid ID — no loot there."],
-    link: "https://example.test/runs/run-dm-1",
+    link: masked("Open Run", EXAMPLE_URL),
   },
   {
     name: "picked Character got saved — Raid Lead",
@@ -131,10 +134,10 @@ const DMS: Array<{ name: string; text: string; event: string[]; link: string | n
       characterLabel: "Synmist-Antonidas",
       playerName: "Kiri",
       bossNames: ["Boss A"],
-      url: "https://example.test/runs/run-dm-1",
+      url: EXAMPLE_URL,
     }),
     event: ["**Synmist-Antonidas** (Kiri) is picked and is now saved on **Boss A**."],
-    link: "Check the roster: https://example.test/runs/run-dm-1",
+    link: masked("Open Roster", EXAMPLE_URL),
   },
   {
     name: "Start Run saved reminder — player",
@@ -144,20 +147,20 @@ const DMS: Array<{ name: string; text: string; event: string[]; link: string | n
       characterLabel: "Synmist-Antonidas",
       playerName: "Kiri",
       bossNames: ["Boss A"],
-      url: "https://example.test/runs/run-dm-1",
+      url: EXAMPLE_URL,
     }),
     event: ["**Synmist-Antonidas** is saved on **Boss A** — no loot from those bosses for you this Run."],
-    link: "https://example.test/runs/run-dm-1",
+    link: masked("Open Run", EXAMPLE_URL),
   },
   {
     name: "Start Run saved summary — Raid Lead",
     text: buildRosterSelectedSavedSummaryDmMessage({
       run,
       message: "2 selected Characters are saved:\nSynblast-Antonidas — Boss B, Boss C\nSynmist-Antonidas — Boss A\nCheck the roster.",
-      rosterUrl: "https://example.test/runs/run-dm-1",
+      rosterUrl: EXAMPLE_URL,
     }),
     event: ["2 selected Characters are saved:", "Synblast-Antonidas — Boss B, Boss C", "Synmist-Antonidas — Boss A"],
-    link: "https://example.test/runs/run-dm-1",
+    link: masked("Open Roster", EXAMPLE_URL),
   },
 ];
 
@@ -178,6 +181,15 @@ describe("Run DM identity — the shared compact content title", () => {
   it("the Run link resolves in tests (so every link assertion below is exercised)", () => {
     expect(RUN_URL).toMatch(/^https?:\/\/.+\/runs\/run-dm-1$/);
   });
+
+  it("link targets: Open Run → Run Detail; Open Roster → the Roster tab (the Run Detail default tab, same URL)", () => {
+    expect(dmRunUrl(run)).toBe(RUN_URL);
+    expect(absoluteRunUrl(run.runId, "roster")).toBe(RUN_URL);
+  });
+
+  it("dmLink renders a masked link with the URL in angle brackets", () => {
+    expect(dmLink("Open Run", "https://manawyrm-boosting.com/runs/r1")).toBe("[Open Run](<https://manawyrm-boosting.com/runs/r1>)");
+  });
 });
 
 describe.each(DMS)("Run DM hierarchy — $name", ({ text, event, link }) => {
@@ -192,11 +204,15 @@ describe.each(DMS)("Run DM hierarchy — $name", ({ text, event, link }) => {
     expect(text).not.toMatch(FORMAL);
   });
 
-  it("event-specific text intact; Run / Roster link last", () => {
+  it("event-specific text intact; the action link is last — a label, never a raw URL", () => {
     for (const line of event) expect(lines).toContain(line);
     if (link) {
       expect(lines.at(-1)).toBe(link);
       expect(lines.at(-2)).toBe("");
+    }
+    // Every URL sits inside a masked link with <> (no wrapped raw URL, no website preview card).
+    for (const line of lines.filter((l) => l.includes("http"))) {
+      expect(line).toMatch(/^\[[^\]]+\]\(<https?:\/\/[^>]+>\)$/);
     }
   });
 });
@@ -215,7 +231,7 @@ describe("Run Rescheduled DM", () => {
       "",
     ]);
     expect(lines).toContain("Please check the updated run time.");
-    if (RUN_URL) expect(lines.at(-1)).toBe(RUN_URL);
+    expect(lines.at(-1)).toBe(masked("Open Run", RUN_URL));
     expect(text).not.toMatch(FORMAL);
   });
 });
