@@ -226,8 +226,9 @@ The roster stays the default: every selected Booster plays **every planned boss*
 - **Draft vs published.** Save writes the DRAFT set (a slot that leaves the draft loses its rows); Publish / Update copies DRAFT → PUBLISHED in the same transaction; Edit Published seeds DRAFT from PUBLISHED. Unpublished changes (Update needed, Start refused) include a differing exception set. The Update diff shows a kept slot's plan change as one `~` line.
 - **Reservation.** An alternate Character is reserved by the Run like a selected one (cross-Run conflict checks and commitments), and re-checked inside the write transaction.
 - **Run edits.** When contents are replaced (raid or planned boss count changed), exceptions on bosses that stay planned move to the new content row; those of a removed raid or an unplanned boss are dropped. The existing "Run changed since publish" flag then requires Update Roster.
-- **Withdrawal.** A withdrawn slot or alternate Character takes its exceptions with it.
-- **Not affected.** Attendance stays one row per roster slot; Auto Build, Fill gaps and Smart Replacement work on the default roster (a replaced slot's exceptions leave with it). There is no payout domain.
+- **Alternate signup status.** Publish / Update does not mark an alternate Character's signup NOT_SELECTED — it plays bosses of this Run (a former published slot still leaves SELECTED).
+- **Withdrawal.** A withdrawn slot takes all its exceptions with it. A withdrawn alternate Character drops only its DRAFT rows: the PUBLISHED plan stays until Update, so the roster shows "Update needed" instead of changing the published plan silently. Every affected roster is locked and its version bumped, also when the alternate holds no roster entry.
+- **Not affected.** Attendance stays one row per roster slot; Smart Replacement works on the default roster (a replaced slot's exceptions leave with it). Auto Build and Fill gaps keep existing picks (Character and role) and their exceptions untouched and never propose a player who already holds a slot — so never their alternate. There is no payout domain.
 
 ## Run commitments (informational)
 

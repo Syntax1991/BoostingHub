@@ -475,11 +475,37 @@ async function publishBossExceptionsInTx(
   }
 }
 
-/** A signup leaves the Run (withdrawal): every exception it holds as slot or as alternate Character goes too. */
-async function deleteBossExceptionsForSignupsInTx(txOrm: TxOrm, signupIds: readonly string[]): Promise<void> {
+/** Rosters holding boss exceptions of these signups, as slot or as alternate Character. */
+async function rosterIdsWithBossExceptionsForSignupsInTx(txOrm: TxOrm, signupIds: readonly string[]): Promise<string[]> {
+  if (signupIds.length === 0) return [];
+  const rows = (await txOrm.RunRosterBossException.where((row) =>
+    row.slotSignupId.in([...signupIds]),
+  ).all()) as Array<Record<string, unknown>>;
+  const played = (await txOrm.RunRosterBossException.where((row) =>
+    row.playSignupId.in([...signupIds]),
+  ).all()) as Array<Record<string, unknown>>;
+  return [...new Set([...rows, ...played].map((row) => asString(row.rosterId)))];
+}
+
+/**
+ * A signup leaves the Run (withdrawal) — call with the roster already locked.
+ * As a slot it takes every exception it holds along (the slot itself leaves
+ * both stages). As an alternate Character only the DRAFT rows go: the
+ * PUBLISHED plan keeps differing from the draft, so the Raid Lead sees
+ * "Update needed" instead of a silently changed published roster.
+ */
+async function deleteBossExceptionsForSignupsInTx(
+  txOrm: TxOrm,
+  rosterId: string,
+  signupIds: readonly string[],
+): Promise<void> {
   if (signupIds.length === 0) return;
-  await txOrm.RunRosterBossException.where((row) => row.slotSignupId.in([...signupIds])).deleteAndCount();
-  await txOrm.RunRosterBossException.where((row) => row.playSignupId.in([...signupIds])).deleteAndCount();
+  await txOrm.RunRosterBossException.where((row) => row.slotSignupId.in([...signupIds]))
+    .where({ rosterId })
+    .deleteAndCount();
+  await txOrm.RunRosterBossException.where((row) => row.playSignupId.in([...signupIds]))
+    .where({ rosterId, stage: "DRAFT" })
+    .deleteAndCount();
 }
 
 /**
@@ -1076,16 +1102,22 @@ export const rosterRepository = {
       >;
       // Lock the affected rosters first (sorted, one consistent order) — the
       // same lock-before-write order as every roster write and Start Run.
-      const rosterIds = [...new Set(entries.map((row) => asString(row.rosterId)))].sort();
+      // Includes rosters where the signup is only an alternate Character of a
+      // boss exception (no own entry).
+      const rosterIds = [
+        ...new Set([
+          ...entries.map((row) => asString(row.rosterId)),
+          ...(await rosterIdsWithBossExceptionsForSignupsInTx(txOrm, uniqueIds)),
+        ]),
+      ].sort();
       for (const rosterId of rosterIds) {
         const roster = await lockRosterInTx(txOrm, rosterId);
         await txOrm.RunRosterEntry.where((entry) => entry.signupId.in(uniqueIds))
           .where({ rosterId })
           .deleteAndCount();
+        await deleteBossExceptionsForSignupsInTx(txOrm, rosterId, uniqueIds);
         await txOrm.RunRoster.where({ id: rosterId }).update({ version: roster.version + 1, updatedAt: now });
       }
-      // Also when the signup was only an alternate Character of a boss exception (no own entry).
-      await deleteBossExceptionsForSignupsInTx(txOrm, uniqueIds);
     });
   },
 
@@ -1168,7 +1200,7 @@ export const rosterRepository = {
         for (const entry of entries as Array<Record<string, unknown>>) {
           await txOrm.RunRosterEntry.where({ id: asString(entry.id) }).delete();
         }
-        await deleteBossExceptionsForSignupsInTx(txOrm, [input.signupId]);
+        await deleteBossExceptionsForSignupsInTx(txOrm, rosterId, [input.signupId]);
         version = asNumber(roster.version, 1) + 1;
         await txOrm.RunRoster.where({ id: rosterId }).update({ version, updatedAt: now });
       }

@@ -672,9 +672,17 @@ async function planAuthoritativeRoster(
     assertRosterPublishableForSchedule(conflicted);
   }
 
-  const notSelectedIds = inspected
-    .filter((item) => item.status !== "WITHDRAWN" && !item.draftSelected)
-    .map((item) => item.id);
+  // An alternate Character of a boss exception plays some bosses: it is part of
+  // the plan, not "not selected" — its signup status stays as it is. A former
+  // published slot still leaves SELECTED (the published roster is its slots).
+  const alternateSignupIds = new Set(
+    bossPlan.exceptions.map((row) => row.playSignupId).filter((id): id is string => id != null),
+  );
+  const leavesAsNotSelected = (item: (typeof inspected)[number]) =>
+    item.status !== "WITHDRAWN" &&
+    !item.draftSelected &&
+    !(alternateSignupIds.has(item.id) && item.status !== "SELECTED");
+  const notSelectedIds = inspected.filter(leavesAsNotSelected).map((item) => item.id);
 
   for (const item of selected) {
     if (item.status !== "SELECTED" && item.status !== "WITHDRAWN") {
@@ -682,7 +690,7 @@ async function planAuthoritativeRoster(
     }
   }
   for (const item of inspected) {
-    if (item.status !== "WITHDRAWN" && !item.draftSelected && item.status !== "NOT_SELECTED") {
+    if (leavesAsNotSelected(item) && item.status !== "NOT_SELECTED") {
       assertSignupTransition(item.status, "NOT_SELECTED");
     }
   }

@@ -8,6 +8,7 @@ import { raidRepository } from "@/repositories/raid.repository";
 import { rosterRepository } from "@/repositories/roster.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { queryReservationConflicts } from "@/repositories/signup.repository";
+import { rosterBuilderService } from "@/services/roster-builder.service";
 import { rosterService } from "@/services/roster.service";
 import { signupService } from "@/services/signup.service";
 import { lockoutService } from "@/services/lockout.service";
@@ -17,13 +18,16 @@ const ids = {
   lead: "dddddddd-dddd-4ddd-8ddd-bex000000001",
   userA: "dddddddd-dddd-4ddd-8ddd-bex000000002",
   userB: "dddddddd-dddd-4ddd-8ddd-bex000000003",
+  userC: "dddddddd-dddd-4ddd-8ddd-bex000000004",
   run: "dddddddd-dddd-4ddd-8ddd-bexr00000001",
   charA: "dddddddd-dddd-4ddd-8ddd-bexc00000001",
   charAlt: "dddddddd-dddd-4ddd-8ddd-bexc00000002",
   charB: "dddddddd-dddd-4ddd-8ddd-bexc00000003",
+  charC: "dddddddd-dddd-4ddd-8ddd-bexc00000004",
   signupA: "dddddddd-dddd-4ddd-8ddd-bexs00000001",
   signupAlt: "dddddddd-dddd-4ddd-8ddd-bexs00000002",
   signupB: "dddddddd-dddd-4ddd-8ddd-bexs00000003",
+  signupC: "dddddddd-dddd-4ddd-8ddd-bexs00000004",
 };
 
 const START = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
@@ -96,7 +100,7 @@ async function cleanup() {
     await orm.RunRosterEntry.where({ rosterId: roster.id }).deleteAndCount().catch(() => {});
     await orm.RunRoster.where({ id: roster.id }).deleteAndCount().catch(() => {});
   }
-  for (const signupId of [ids.signupA, ids.signupAlt, ids.signupB]) {
+  for (const signupId of [ids.signupA, ids.signupAlt, ids.signupB, ids.signupC]) {
     await orm.UserNotification.where({ signupId }).deleteAndCount().catch(() => {});
     await orm.RunSignupRole.where({ signupId }).deleteAndCount().catch(() => {});
     await orm.RunSignup.where({ id: signupId }).deleteAndCount().catch(() => {});
@@ -107,11 +111,11 @@ async function cleanup() {
   await orm.Run.where({ id: ids.run }).deleteAndCount().catch(() => {});
   await orm.RunAttendance.where({ runId: ids.run }).deleteAndCount().catch(() => {});
   await orm.RunStartSnapshot.where({ runId: ids.run }).deleteAndCount().catch(() => {});
-  for (const id of [ids.charA, ids.charAlt, ids.charB]) {
+  for (const id of [ids.charA, ids.charAlt, ids.charB, ids.charC]) {
     await orm.CharacterRaidLockout.where({ characterId: id }).deleteAndCount().catch(() => {});
     await orm.Character.where({ id }).deleteAndCount().catch(() => {});
   }
-  for (const id of [ids.lead, ids.userA, ids.userB]) {
+  for (const id of [ids.lead, ids.userA, ids.userB, ids.userC]) {
     await orm.ActivityEvent.where({ userId: id }).deleteAndCount().catch(() => {});
     await orm.UserNotification.where({ userId: id }).deleteAndCount().catch(() => {});
     await orm.User.where({ id }).deleteAndCount().catch(() => {});
@@ -333,6 +337,71 @@ describe("boss exceptions — feature switch on", () => {
         excludeRunId: "dddddddd-dddd-4ddd-8ddd-bexr0000ffff",
       }),
     ).toEqual([]);
+  });
+
+  it("withdrawing the alternate after Publish drops only the DRAFT rows: Update needed, published plan kept until Update", async () => {
+    await saveDefault([await venomException(6, "HEALER", ids.signupAlt)]);
+    await rosterService.publishRoster(lead, { runId: ids.run, version: await version(), acknowledgeWarnings: true });
+    const before = (await rosterRepository.findByRunId(ids.run))!;
+    expect(before.bossExceptions.published).toHaveLength(1);
+    // The alternate is part of the plan: Publish does not mark it NOT_SELECTED.
+    expect(((await orm.RunSignup.where({ id: ids.signupAlt }).first()) as { status: string }).status).toBe("PENDING");
+
+    await signupService.withdrawSignup(asUser(ids.userA, "USER"), ids.signupAlt);
+    let roster = (await rosterRepository.findByRunId(ids.run))!;
+    expect(roster.bossExceptions.draft).toEqual([]);
+    expect(roster.bossExceptions.published).toEqual(before.bossExceptions.published);
+    // The roster was locked and bumped although the alternate held no roster entry.
+    expect(roster.version).toBeGreaterThan(before.version);
+    expect((await rosterService.getRosterManagementView(lead, ids.run)).roster.hasUnpublishedChanges).toBe(true);
+
+    await rosterService.updateRoster(lead, {
+      runId: ids.run,
+      version: roster.version,
+      selections: [
+        { signupId: ids.signupA, selectedRole: "HEALER" },
+        { signupId: ids.signupB, selectedRole: "RANGED_DPS" },
+      ],
+      acknowledgeWarnings: true,
+    });
+    roster = (await rosterRepository.findByRunId(ids.run))!;
+    expect(roster.bossExceptions).toEqual({ draft: [], published: [] });
+    expect((await rosterService.getRosterManagementView(lead, ids.run)).roster.hasUnpublishedChanges).toBe(false);
+  });
+
+  it("Auto Build Apply / Fill gaps never touch existing picks or their exceptions, nor propose the alternate", async () => {
+    await orm.Run.where({ id: ids.run }).update({ desiredHealerCount: 2, desiredDpsCount: 2 });
+    await createUser(ids.userC, "USER");
+    await createCharacter(ids.charC, ids.userC, "Bexhunter", "HUNTER", "Marksmanship", "RANGED_DPS");
+    await createSignup(ids.signupC, ids.userC, ids.charC, ["RANGED_DPS"]);
+    await saveDefault([await venomException(5, "HEALER", ids.signupAlt), await venomException(6, "RANGED_DPS")]);
+    const before = (await rosterRepository.findByRunId(ids.run))!;
+
+    // Fill gaps on the editor draft: the open Healer slot is not offered to the alternate (same player).
+    const fill = await rosterBuilderService.proposeRoster(lead, ids.run, {
+      baseSelections: [
+        { signupId: ids.signupA, selectedRole: "HEALER" },
+        { signupId: ids.signupB, selectedRole: "RANGED_DPS" },
+      ],
+    });
+    expect(fill.applySelections.map((row) => row.signupId)).toEqual([ids.signupC]);
+
+    const proposal = await rosterBuilderService.proposeRoster(lead, ids.run);
+    expect(proposal.applySelections).toEqual([{ signupId: ids.signupC, selectedRole: "RANGED_DPS" }]);
+    await rosterBuilderService.applyRosterProposal(lead, {
+      runId: ids.run,
+      expectedVersion: proposal.rosterVersion,
+      selections: proposal.applySelections,
+    });
+    const after = (await rosterRepository.findByRunId(ids.run))!;
+    expect(after.selections).toEqual(
+      expect.arrayContaining([
+        { signupId: ids.signupA, selectedRole: "HEALER" },
+        { signupId: ids.signupB, selectedRole: "RANGED_DPS" },
+        { signupId: ids.signupC, selectedRole: "RANGED_DPS" },
+      ]),
+    );
+    expect(after.bossExceptions.draft).toEqual(before.bossExceptions.draft);
   });
 
   it("Edit Run: fewer planned bosses keep still-planned exceptions; a removed raid drops its own", async () => {
