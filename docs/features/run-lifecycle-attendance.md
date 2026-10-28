@@ -42,6 +42,8 @@ Scheduled start time is **not** a blocker. Runs may start early or late.
 
 `runPreflightService` (`src/services/run-preflight.service.ts`) assembles an advisory checklist from the already-loaded roster management view. It is shown as the Preflight panel on Run Detail and inside the **Start Run** dialog, split into **Start will be refused** (ERROR — mirrors the hard rules above) and **Check before starting** (WARNING). Warnings never block Start; the server checks above stay authoritative.
 
+**Saved re-check after Start** (`runStartSavedCheckService`, after the Start Run response via `after()`): every SELECTED Booster Character gets a fresh Blizzard sync (trigger `RUN_START`, 3 at a time; a failing sync falls back to the last known lockouts), then each owner whose Character is saved on a **planned** boss of this Run gets a `ROSTER_CHARACTER_SAVED` reminder ("Reminder: you are saved — Boss X, no loot from those bosses"), bell + Discord DM, once per pick and boss set. The Raid Lead is not notified here — they saw saved picks in the checklist above and, before the Run, through the "picked, then saved" notice (see user-notifications).
+
 ERROR is used only for the server Start rules above (status, published roster, unpublished changes, ≥1 published selected participant). Warnings cover desired composition, a missing Raid Lead, an unseeded draft or draft publish invariants (they block the next Publish, not Start), Discord channel / signup message / integration health, and the selected registered Booster Characters:
 
 - **Schedule conflicts** — reserved on another Run or weekly unavailable (can appear after Publish)

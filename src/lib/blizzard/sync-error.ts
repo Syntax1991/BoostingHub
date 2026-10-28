@@ -53,7 +53,9 @@ export type CharacterSyncTrigger =
   | "OWNER_REGION_BULK"
   | "ADMIN_SYNC"
   | "ADMIN_FORCE"
-  | "ADMIN_BULK_FORCE";
+  | "ADMIN_BULK_FORCE"
+  /** Start Run re-checks the SELECTED Characters' lockouts (run-start-saved-check). */
+  | "RUN_START";
 
 /**
  * Safe structured failure log. Deliberately carries NO character/owner

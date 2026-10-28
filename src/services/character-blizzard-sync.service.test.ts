@@ -40,6 +40,7 @@ vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOr
 }));
 
 import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
+import { rosterSavedNoticeService } from "@/services/roster-saved-notice.service";
 import { characterBlizzardSyncService } from "@/services/character-blizzard-sync.service";
 import { characterService } from "@/services/character.service";
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
@@ -602,7 +603,18 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
     apiMocks.getCharacterRaidEncounters.mockResolvedValue(encounters);
 
     const beforeAccess = await orm.BoosterAccess.where({ characterId }).all();
+    const noticeSpy = vi.spyOn(rosterSavedNoticeService, "notifyNewKills");
     const refreshed = await characterBlizzardSyncService.refreshCharacter(owner, characterId);
+    // The sync hands the newly observed kills to the "picked, then saved" notice.
+    expect(noticeSpy).toHaveBeenCalledTimes(1);
+    const [noticeCharacterId, kills] = noticeSpy.mock.calls[0]!;
+    expect(noticeCharacterId).toBe(characterId);
+    const venomKills = (difficulty: string) =>
+      kills.find((row) => row.raidId === VENOMOUS_ABYSS_RAID_ID && row.difficulty === difficulty);
+    expect(venomKills("NORMAL")?.newBossIds).toHaveLength(8);
+    expect(venomKills("NORMAL")?.resetIdentifier).toBe(reset.resetIdentifier);
+    expect(venomKills("HEROIC")?.newBossIds).toEqual([]);
+    noticeSpy.mockRestore();
     expect(refreshed.itemLevel).toBe(700);
     expect(refreshed.specialization).toBe("Restoration");
     expect(refreshed.primaryRole).toBe("HEALER");

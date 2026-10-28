@@ -54,6 +54,10 @@ import { isSignupWindowOpen, SIGNUP_WINDOW_STATUSES } from "@/services/run-state
 import { isActiveSignupOffer, isAvailableSignup, isSignedUpSignup } from "@/services/signup-state";
 import { parseRescheduleHrefTimestamps } from "@/services/notification-content";
 import { findCharacterStillNeedingBattleNetRepair } from "@/services/character-repair-notification.service";
+import {
+  ROSTER_CHARACTER_SAVED_RUN_STATUSES,
+  parseRosterCharacterSavedSourceKey,
+} from "@/services/roster-saved-notice.service";
 
 /**
  * Where a Run's dedicated Discord channel belongs, decided once here and
@@ -485,6 +489,14 @@ export type NotificationDmWorkItem = {
     characterLabel: string | null;
     reason: string;
     rosterUrl: string | null;
+  } | null;
+  /** Set for ROSTER_CHARACTER_SAVED: the picked Character, the bosses it is saved on, and who is told. */
+  characterSaved?: {
+    audience: "player" | "lead" | "start";
+    characterLabel: string;
+    playerName: string;
+    bossNames: string[];
+    url: string | null;
   } | null;
 };
 
@@ -1157,6 +1169,34 @@ async function buildPendingNotificationDms(): Promise<{
         ...base,
         previousScheduledStartAt: parsed.previousScheduledStartAt,
         scheduledStartAt: parsed.nextScheduledStartAt ?? run.scheduledStartAt,
+      });
+      continue;
+    }
+
+    if (notification.type === "ROSTER_CHARACTER_SAVED") {
+      const parsed = parseRosterCharacterSavedSourceKey(notification.sourceKey);
+      // Started / ended before the DM went out (e.g. Quiet Hours): too late to fix the pick.
+      // The Start Run reminder is only worth sending while the Run is running.
+      const deliverable =
+        parsed &&
+        (parsed.audience === "start" ? run.status === "IN_PROGRESS" : ROSTER_CHARACTER_SAVED_RUN_STATUSES.includes(run.status));
+      if (!parsed || !deliverable) {
+        await userNotificationRepository.skipPendingDiscordDelivery(notification.id);
+        continue;
+      }
+      const savedRow = (await rosterRepository.listSignups(run.id)).find((signup) => signup.id === parsed.signupId);
+      const bossNameById = new Map(run.contents.flatMap((content) => content.bosses.map((boss) => [boss.id, boss.name])));
+      notificationDmWorkItems.push({
+        ...base,
+        characterSaved: {
+          audience: parsed.audience,
+          characterLabel: savedRow?.character
+            ? `${savedRow.character.name}-${savedRow.character.realm}`
+            : "A picked Character",
+          playerName: savedRow?.userName ?? "A player",
+          bossNames: parsed.bossIds.map((id) => bossNameById.get(id)).filter((name): name is string => Boolean(name)),
+          url: absoluteAppUrl(runDetailPath(run.id, parsed.audience === "lead" ? "roster" : undefined)),
+        },
       });
       continue;
     }

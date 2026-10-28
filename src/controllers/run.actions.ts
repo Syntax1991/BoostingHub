@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/auth/session";
 import { mapActionError, type ActionResult } from "@/lib/action-result";
 import { runService } from "@/services/run.service";
+import { runStartSavedCheckService } from "@/services/run-start-saved-check.service";
+import { runAfterResponse } from "@/lib/after-response";
 import { runIdSchema, startRunSchema, updateRunSchema } from "@/validators/run";
 import { createManyRunsSchema } from "@/validators/mass-create-runs";
 
@@ -116,6 +118,10 @@ export async function startRunAction(input: unknown): Promise<ActionResult> {
     const parsed = startRunSchema.parse(input);
     await runService.startRun(user, parsed);
     revalidateRunSurfaces(parsed.runId);
+    // Fresh lockout check of the picks; reminds saved players (after the response).
+    runAfterResponse(async () => {
+      await runStartSavedCheckService.run(parsed.runId);
+    });
     return { ok: true, message: "Run started. Attendance is ready to mark." };
   } catch (error) {
     return mapActionError(error);

@@ -30,6 +30,11 @@ export const lockoutRepository = {
       .first();
   },
 
+  /** Every stored row of one Character for one reset (raw: raidId, difficulty, bossesDefeated, killedBossIds). */
+  async listForCharacterReset(characterId: string, resetIdentifier: string): Promise<Array<Record<string, unknown>>> {
+    return (await orm.CharacterRaidLockout.where({ characterId, resetIdentifier }).all()) as Array<Record<string, unknown>>;
+  },
+
   /**
    * Replace verified current-reset lockout rows for one raid.
    * - Upserts the provided difficulties for that raid+reset

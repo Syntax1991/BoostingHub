@@ -169,7 +169,8 @@ export class BotApiClient {
           | "RUN_RESCHEDULED"
           | "RUN_SCOPE_CHANGED"
           | "ROSTER_REMOVED"
-          | "ROSTER_WITHDRAWN";
+          | "ROSTER_WITHDRAWN"
+          | "ROSTER_CHARACTER_SAVED";
         discordUserId: string;
         /** ROSTER_SELECTED for a character swap ("Roster Update"); optional for an older API. */
         rosterUpdate?: boolean;
@@ -179,6 +180,14 @@ export class BotApiClient {
           characterLabel: string | null;
           reason: string;
           rosterUrl: string | null;
+        } | null;
+        /** ROSTER_CHARACTER_SAVED only; optional for an older API. */
+        characterSaved?: {
+          audience: "player" | "lead" | "start";
+          characterLabel: string;
+          playerName: string;
+          bossNames: string[];
+          url: string | null;
         } | null;
         runId: string;
         signupId: string | null;

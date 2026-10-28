@@ -86,6 +86,44 @@ export function rosterWithdrawnWebNotification(input: {
   };
 }
 
+/**
+ * ROSTER_CHARACTER_SAVED — a picked Character newly killed planned bosses
+ * elsewhere this raid ID. Player: get it sorted with the Raid Lead. Raid Lead: check the roster.
+ */
+export function rosterCharacterSavedWebNotification(input: {
+  audience: "player" | "lead" | "start";
+  runId: string;
+  runTitle: string;
+  characterLabel: string;
+  playerName: string;
+  bossNames: readonly string[];
+}): { title: string; message: string; href: string } {
+  const bosses = input.bossNames.join(", ");
+  if (input.audience === "start") {
+    return {
+      title: "Reminder: you are saved",
+      message: `${input.characterLabel} is saved on ${bosses} for ${input.runTitle} — no loot from those bosses for you.`,
+      href: runDetailPath(input.runId),
+    };
+  }
+  if (input.audience === "player") {
+    return {
+      title: "Picked Character is saved",
+      message:
+        `${input.characterLabel} is picked for ${input.runTitle} but already killed ${bosses} this raid ID — ` +
+        "no loot there. Please contact the Raid Lead.",
+      href: runDetailPath(input.runId),
+    };
+  }
+  return {
+    title: "Picked Character got saved",
+    message:
+      `${input.characterLabel} (${input.playerName}) is picked for ${input.runTitle} and is now saved on ${bosses}. ` +
+      "Check the roster.",
+    href: runDetailPath(input.runId, "roster"),
+  };
+}
+
 export function raidInviteWebNotification(input: {
   runId: string;
   productLabel: string;
@@ -306,6 +344,45 @@ export function buildRosterWithdrawnDmMessage(input: {
   ];
   if (input.rosterUrl) {
     lines.push("", `Pick a replacement: ${input.rosterUrl}`);
+  }
+  return lines.join("\n");
+}
+
+export function buildRosterCharacterSavedDmMessage(input: {
+  audience: "player" | "lead" | "start";
+  productLabel: string;
+  scheduledStartAt: string;
+  difficulty: RaidDifficulty;
+  lootType: RunLootType;
+  characterLabel: string;
+  playerName: string;
+  bossNames: readonly string[];
+  url: string | null;
+}): string {
+  const when = discordTimestamp(input.scheduledStartAt, "F");
+  const difficulty = DIFFICULTY_LABELS[input.difficulty].toUpperCase();
+  const character = `**${escapeDiscordInlineText(input.characterLabel)}**`;
+  const bosses = input.bossNames.map((name) => escapeDiscordInlineText(name)).join(", ");
+  const heading = {
+    player: "⚠️ **Your picked Character is saved**",
+    lead: "⚠️ **Picked Character got saved**",
+    start: "⏰ **Reminder: you are saved**",
+  }[input.audience];
+  const lines = [heading, "", input.productLabel, `${when} · ${difficulty} · ${input.lootType}`, ""];
+  if (input.audience === "start") {
+    lines.push(`${character} is saved on **${bosses}** — no loot from those bosses for you this Run.`);
+  } else if (input.audience === "player") {
+    lines.push(
+      `${character} is picked for this Run but already killed **${bosses}** this raid ID — no loot there.`,
+      "Please contact the Raid Lead.",
+    );
+  } else {
+    lines.push(
+      `${character} (${escapeDiscordInlineText(input.playerName)}) is picked and is now saved on **${bosses}**.`,
+    );
+  }
+  if (input.url) {
+    lines.push("", input.audience === "lead" ? `Check the roster: ${input.url}` : input.url);
   }
   return lines.join("\n");
 }

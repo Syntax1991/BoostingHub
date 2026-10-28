@@ -69,6 +69,7 @@ import {
   buildRosterSelectedDmMessage,
   buildRosterRemovedDmMessage,
   buildRosterWithdrawnDmMessage,
+  buildRosterCharacterSavedDmMessage,
   buildRunCancelledDmMessage,
   buildRunReactivatedDmMessage,
   buildRunRescheduledDmMessage,
@@ -1290,6 +1291,16 @@ async function syncNotificationDm(
         difficulty: item.difficulty,
         lootType: item.lootType,
         ...item.withdrawal,
+      });
+      break;
+    case "ROSTER_CHARACTER_SAVED":
+      if (!item.characterSaved) return;
+      content = buildRosterCharacterSavedDmMessage({
+        productLabel: item.productLabel,
+        scheduledStartAt: item.scheduledStartAt,
+        difficulty: item.difficulty,
+        lootType: item.lootType,
+        ...item.characterSaved,
       });
       break;
     case "RUN_CANCELLED":
