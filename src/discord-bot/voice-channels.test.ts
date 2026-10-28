@@ -285,3 +285,131 @@ describe("reconcileRunVoiceChannels — isolation", () => {
     expect(resolved.get("run-b")).toBe("222");
   });
 });
+
+describe("reconcileRunVoiceChannels — fixed pool (Raid #1 / Raid #2)", () => {
+  const POOL = ["raid-1", "raid-2"];
+
+  function poolAdapters(channels: Record<string, VoiceChannelView | (() => never)>, options: { recordFails?: unknown } = {}) {
+    const a = adapters({ recordFails: options.recordFails });
+    a.value.fetchChannel = vi.fn(async (id: string): Promise<VoiceChannelView> => {
+      const channel = channels[id];
+      if (typeof channel === "function") return channel();
+      return channel ?? { kind: "unresolved" };
+    });
+    return a;
+  }
+
+  function run(runId: string, action: RunVoiceChannelWorkItem["action"], existingVoiceChannelId: string | null = null): RunVoiceChannelWorkItem {
+    return { runId, existingVoiceChannelId, desiredVoiceChannelName: "Raid with Syntax", action };
+  }
+
+  it("Start Run assigns the first pool channel — nothing is created", async () => {
+    const a = poolAdapters({ "raid-1": voice(0, "Raid #1"), "raid-2": voice(0, "Raid #2") });
+    const resolved = await reconcileRunVoiceChannels(a.value, [run("run-a", "PROVISION")], { pool: POOL });
+    expect(a.recordVoiceChannel).toHaveBeenCalledWith("run-a", "raid-1");
+    expect(a.createVoiceChannel).not.toHaveBeenCalled();
+    expect(resolved.get("run-a")).toBe("raid-1");
+  });
+
+  it("a second running Raid gets Raid #2 while Raid #1 is held", async () => {
+    const a = poolAdapters({ "raid-1": voice(4, "Raid #1"), "raid-2": voice(0, "Raid #2") });
+    const resolved = await reconcileRunVoiceChannels(
+      a.value,
+      [run("run-b", "PROVISION"), run("run-a", "RECONCILE", "raid-1")],
+      { pool: POOL },
+    );
+    expect(resolved.get("run-a")).toBe("raid-1");
+    expect(resolved.get("run-b")).toBe("raid-2");
+    expect(a.recordVoiceChannel).toHaveBeenCalledTimes(1);
+  });
+
+  it("two Runs starting in the same pass get different channels", async () => {
+    const a = poolAdapters({ "raid-1": voice(0, "Raid #1"), "raid-2": voice(0, "Raid #2") });
+    const resolved = await reconcileRunVoiceChannels(a.value, [run("run-a", "PROVISION"), run("run-b", "PROVISION")], {
+      pool: POOL,
+    });
+    expect([resolved.get("run-a"), resolved.get("run-b")]).toEqual(["raid-1", "raid-2"]);
+  });
+
+  it("pool full → temporary channel fallback", async () => {
+    const a = poolAdapters({ "raid-1": voice(1), "raid-2": voice(1) });
+    const resolved = await reconcileRunVoiceChannels(
+      a.value,
+      [run("run-a", "RECONCILE", "raid-1"), run("run-b", "RECONCILE", "raid-2"), run("run-c", "PROVISION")],
+      { pool: POOL },
+    );
+    expect(a.createVoiceChannel).toHaveBeenCalledWith("Raid with Syntax");
+    expect(resolved.get("run-c")).toBe("222");
+  });
+
+  it("a held pool channel keeps its own name (never renamed to the Raid Lead)", async () => {
+    const raid1 = voice(0, "Raid #1");
+    const a = poolAdapters({ "raid-1": raid1 });
+    await reconcileRunVoiceChannels(a.value, [run("run-a", "RECONCILE", "raid-1")], { pool: POOL });
+    expect(raid1.setName).not.toHaveBeenCalled();
+    expect(a.clearVoiceChannel).not.toHaveBeenCalled();
+  });
+
+  it("Run end releases the pool channel at once — never deleted, even while people are connected", async () => {
+    const raid1 = voice(6, "Raid #1");
+    const a = poolAdapters({ "raid-1": raid1, "raid-2": voice(0, "Raid #2") });
+    const resolved = await reconcileRunVoiceChannels(
+      a.value,
+      [run("run-new", "PROVISION"), run("run-old", "RETIRE_IF_EMPTY", "raid-1")],
+      { pool: POOL },
+    );
+    expect(raid1.delete).not.toHaveBeenCalled();
+    expect(a.clearVoiceChannel).toHaveBeenCalledWith("run-old", "raid-1");
+    expect(resolved.get("run-old")).toBeNull();
+    // Released in this pass → free for the Run that starts in the same pass.
+    expect(resolved.get("run-new")).toBe("raid-1");
+  });
+
+  it("a deleted pool channel is cleared and the Run moves to the next free one", async () => {
+    const a = poolAdapters({
+      "raid-1": () => {
+        throw unknownChannel();
+      },
+      "raid-2": voice(0, "Raid #2"),
+    });
+    const resolved = await reconcileRunVoiceChannels(a.value, [run("run-a", "RECONCILE", "raid-1")], { pool: POOL });
+    expect(a.clearVoiceChannel).toHaveBeenCalledWith("run-a", "raid-1");
+    expect(resolved.get("run-a")).toBe("raid-2");
+    expect(a.createVoiceChannel).not.toHaveBeenCalled();
+  });
+
+  it("a pool id that is not a voice channel is skipped", async () => {
+    const a = poolAdapters({ "raid-1": { kind: "other" }, "raid-2": voice(0, "Raid #2") });
+    const resolved = await reconcileRunVoiceChannels(a.value, [run("run-a", "PROVISION")], { pool: POOL });
+    expect(resolved.get("run-a")).toBe("raid-2");
+  });
+
+  it("a held channel whose fetch failed this pass stays taken", async () => {
+    const a = poolAdapters({
+      "raid-1": () => {
+        throw missingAccess();
+      },
+      "raid-2": voice(0, "Raid #2"),
+    });
+    const resolved = await reconcileRunVoiceChannels(
+      a.value,
+      [run("run-a", "RECONCILE", "raid-1"), run("run-b", "PROVISION")],
+      { pool: POOL },
+    );
+    expect(resolved.get("run-b")).toBe("raid-2");
+  });
+
+  it("assignment that cannot be recorded creates nothing and retries next poll", async () => {
+    const a = poolAdapters({ "raid-1": voice(0, "Raid #1") }, { recordFails: new Error("api down") });
+    const resolved = await reconcileRunVoiceChannels(a.value, [run("run-a", "PROVISION")], { pool: POOL });
+    expect(a.createVoiceChannel).not.toHaveBeenCalled();
+    expect(resolved.has("run-a")).toBe(false);
+  });
+
+  it("a temporary channel from before the pool keeps the old lifecycle", async () => {
+    const temp = voice(0);
+    const a = poolAdapters({ "temp-1": temp });
+    await reconcileRunVoiceChannels(a.value, [run("run-a", "RETIRE_IF_EMPTY", "temp-1")], { pool: POOL });
+    expect(temp.delete).toHaveBeenCalledTimes(1);
+  });
+});

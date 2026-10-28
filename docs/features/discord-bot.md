@@ -317,9 +317,19 @@ Please be online 10 minutes before start.
 
 Roster Pick DMs (`ROSTER_SELECTED`) use a separate message body (`buildRosterSelectedDmMessage`) and are also delivered via `notificationDms`.
 
-## Temporary Run voice channels
+## Run voice channels
 
-When a Run is `IN_PROGRESS` (after Start Run, with a start snapshot), the bot creates **one** Guild Voice channel for it:
+When a Run is `IN_PROGRESS` (after Start Run, with a start snapshot), it gets **one** Guild Voice channel.
+
+**Fixed pool first** (`DISCORD_RUN_VOICE_CHANNEL_IDS`, comma-separated, e.g. `Raid #1,Raid #2` ids):
+
+- The Run gets the **first pool channel no other Run holds** (held = some Run's `RunDiscordPost.voiceChannelId`, also when its fetch failed this pass). Two Runs starting in the same pass get different channels; a channel released in the same pass is free again.
+- Pool channels are **never created, renamed or deleted** — the bot only assigns them (`voice-channel`) and releases them (`clear-voice-channel`). They keep their own name and permissions.
+- **Run ends** (`COMPLETED` / `CANCELLED` / app-archived): released right away, even while people are still connected.
+- A pool channel deleted mid-Run (Unknown Channel) is cleared and the Run gets the next free one. A pool id that does not resolve to a GuildVoice channel is skipped.
+- Pool unset or every channel taken → the temporary channel below.
+
+**Temporary fallback** — the bot creates one channel:
 
 - **Name:** `Raid with <effective Raid Lead>` (`formatRunVoiceChannelName`), where the effective Raid Lead is the assigned Raid Lead's Discord Run channel nickname, else their name (`effectiveRaidLeadChannelName`). Human-readable (not slugged); never `Run.title`, the Start Run actor or a roster member. Renamed if the effective name changes while the Run is running.
 - **Where:** the dedicated `DISCORD_RUN_VOICE_CATEGORY_ID` category — never the text Run category (voice channels take no part in CURRENT/NEXT ordering). Permissions are inherited from that category; there are no per-participant overwrites.
@@ -348,7 +358,7 @@ Read-only, ephemeral, registered per-guild (`npm run bot:register-commands`). Gr
 - Discord bot: a second, independent long-lived Node process — it holds a persistent Gateway WebSocket, which does not fit a request-scoped Next.js process.
 - Suggested host: Plesk with SSH, `systemd` managing the bot process — see [`deploy/production/systemd/boostinghub-discord-bot.service`](../../deploy/production/systemd/boostinghub-discord-bot.service) (the tracked copy of the live production unit; installation is described in [`docs/deployment-production.md`](../deployment-production.md)), or run `npm run bot:start` under any other process supervisor. Run exactly one bot instance. Register slash commands once per deploy (or whenever the command list changes) with `npm run bot:register-commands` — the gateway process does not do this itself.
 - Required Discord bot permissions: **View Channels, Send Messages, Embed Links, Read Message History, Manage Channels** (the last one only for per-Run channel creation/rename/reposition — not requested when running in legacy single-channel mode). The Run archive log channel additionally needs **Attach Files** (HTML transcript). Never grant Administrator to solve a permission gap.
-- Environment variables: see `.env.example` (`DISCORD_BOT_TOKEN`, `DISCORD_APPLICATION_ID`, `DISCORD_GUILD_ID`, `DISCORD_RUN_CATEGORY_ID` (preferred, the one active Run category) plus `DISCORD_RUN_CURRENT_MARKER_CHANNEL_ID`/`DISCORD_RUN_NEXT_MARKER_CHANNEL_ID` (section ordering anchors) or `DISCORD_SIGNUP_CHANNEL_ID`/`DISCORD_ROSTER_CHANNEL_ID` (legacy fallback), `DISCORD_RUN_ARCHIVE_CATEGORY_ID`, `DISCORD_RUN_ARCHIVE_LOG_CHANNEL_ID`, optional `DISCORD_RUN_VOICE_CATEGORY_ID` (temporary Run voice channels), optional `DISCORD_WCL_REPORT_AUTHOR_IDS` (trusted Warcraft Logs log bots — read by the web app), `BOOSTINGHUB_API_BASE_URL`, `BOOSTINGHUB_BOT_API_TOKEN`). Secrets live only in the server environment, never in the repository.
+- Environment variables: see `.env.example` (`DISCORD_BOT_TOKEN`, `DISCORD_APPLICATION_ID`, `DISCORD_GUILD_ID`, `DISCORD_RUN_CATEGORY_ID` (preferred, the one active Run category) plus `DISCORD_RUN_CURRENT_MARKER_CHANNEL_ID`/`DISCORD_RUN_NEXT_MARKER_CHANNEL_ID` (section ordering anchors) or `DISCORD_SIGNUP_CHANNEL_ID`/`DISCORD_ROSTER_CHANNEL_ID` (legacy fallback), `DISCORD_RUN_ARCHIVE_CATEGORY_ID`, `DISCORD_RUN_ARCHIVE_LOG_CHANNEL_ID`, optional `DISCORD_RUN_VOICE_CHANNEL_IDS` (fixed Run voice channels, e.g. Raid #1 / Raid #2), optional `DISCORD_RUN_VOICE_CATEGORY_ID` (temporary fallback voice channels), optional `DISCORD_WCL_REPORT_AUTHOR_IDS` (trusted Warcraft Logs log bots — read by the web app), `BOOSTINGHUB_API_BASE_URL`, `BOOSTINGHUB_BOT_API_TOKEN`). Secrets live only in the server environment, never in the repository.
 
 ### Run lifecycle → Discord
 

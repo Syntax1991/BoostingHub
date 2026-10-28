@@ -350,12 +350,25 @@ systemctl restart boostinghub-web.service boostinghub-discord-bot.service
   run the normal `update-server.sh`. It checks out `main` and fast-forwards it.
   Running it **before** `main` is fixed redeploys the bad commit.
 
+## Optional: fixed Run voice channels (Raid #1 / Raid #2)
+
+When a Run starts, the bot assigns it the first free fixed voice channel and
+releases it when the Run ends. It never creates, renames or deletes these
+channels. Set the ids in assignment order and restart the bot:
+
+```bash
+DISCORD_RUN_VOICE_CHANNEL_IDS="<Raid #1 id>,<Raid #2 id>"
+```
+
+When every fixed channel is taken (or the variable is unset) the temporary
+channel below is used, if its category is configured.
+
 ## Optional: temporary Run voice channels
 
 When a Run starts, the bot can create a voice channel `Raid with <Raid Lead>`
 and link it in Raid Invite DMs. It is kept while the Run is `IN_PROGRESS`, then
 deleted once the Run is `COMPLETED` / `CANCELLED` / app-archived **and** nobody
-is connected (see `docs/features/discord-bot.md` § Temporary Run voice channels).
+is connected (see `docs/features/discord-bot.md` § Run voice channels).
 It is off until configured:
 
 1. In Discord, create a dedicated category for these channels (not the text Run

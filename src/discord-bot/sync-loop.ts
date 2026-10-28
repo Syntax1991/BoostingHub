@@ -665,8 +665,9 @@ async function syncOnceInner(
 }
 
 /**
- * Temporary per-Run GuildVoice channels (see voice-channels.ts).
- * DISCORD_RUN_VOICE_CATEGORY_ID controls FIRST creation only: it is resolved
+ * Per-Run GuildVoice channels (see voice-channels.ts): the fixed
+ * DISCORD_RUN_VOICE_CHANNEL_IDS pool first, temporary channels as fallback.
+ * DISCORD_RUN_VOICE_CATEGORY_ID controls FIRST temporary creation only: it is resolved
  * only when this pass has PROVISION work. Unset → nothing new is created; an
  * id that is not a GuildCategory → operator error, nothing created, no
  * fallback. Either way, already-created channels are still fetched, kept,
@@ -725,7 +726,7 @@ async function syncRunVoiceChannels(
         await api.recordDiscordState(runId, { kind: "clear-voice-channel", channelId });
       },
     };
-    return await reconcileRunVoiceChannels(adapters, items);
+    return await reconcileRunVoiceChannels(adapters, items, { pool: env.discordRunVoiceChannelIds ?? [] });
   } catch (error) {
     console.error("[discord-bot] Run voice channel sync failed", error);
     await recordDiscordLaneFailure(pass, {

@@ -369,3 +369,30 @@ describe("syncOnce — temporary Run voice channels", () => {
     expect(emptyApi.recordDiscordState).toHaveBeenCalledWith(RUN_ID, { kind: "clear-voice-channel", channelId: "333" });
   });
 });
+
+describe("syncOnce — fixed Run voice channel pool", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("Start Run assigns Raid #1 from DISCORD_RUN_VOICE_CHANNEL_IDS — nothing created, nothing renamed", async () => {
+    const { client, create, channels } = makeClient({ existingVoice: { "raid-1": 0, "raid-2": 0 } });
+    const api = makeApi([provision]);
+
+    await syncOnce(client, botEnv({ discordRunVoiceChannelIds: ["raid-1", "raid-2"] }), api);
+
+    expect(create).not.toHaveBeenCalled();
+    expect(api.recordDiscordState).toHaveBeenCalledWith(RUN_ID, { kind: "voice-channel", channelId: "raid-1" });
+    expect((channels.get("raid-1") as { setName: ReturnType<typeof vi.fn> }).setName).not.toHaveBeenCalled();
+  });
+
+  it("Run end releases the pool channel without deleting it", async () => {
+    const { client, channels } = makeClient({ existingVoice: { "raid-1": 3 } });
+    const api = makeApi([{ ...provision, existingVoiceChannelId: "raid-1", action: "RETIRE_IF_EMPTY" }]);
+
+    await syncOnce(client, botEnv({ discordRunVoiceChannelIds: ["raid-1", "raid-2"] }), api);
+
+    expect((channels.get("raid-1") as { delete: ReturnType<typeof vi.fn> }).delete).not.toHaveBeenCalled();
+    expect(api.recordDiscordState).toHaveBeenCalledWith(RUN_ID, { kind: "clear-voice-channel", channelId: "raid-1" });
+  });
+});

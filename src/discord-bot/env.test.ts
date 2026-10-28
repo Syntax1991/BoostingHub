@@ -132,6 +132,14 @@ describe("loadBotEnv — temporary Run voice channels", () => {
     expect(env.discordRunVoiceCategoryId).toBe("voice-cat");
     expect(env.discordRunCategoryId).toBe("category-1");
   });
+
+  it("parses DISCORD_RUN_VOICE_CHANNEL_IDS in order, trimmed and de-duplicated; unset = empty pool", () => {
+    expect(loadBotEnv(baseEnv({ DISCORD_RUN_CATEGORY_ID: "category-1" })).discordRunVoiceChannelIds).toEqual([]);
+    const env = loadBotEnv(
+      baseEnv({ DISCORD_RUN_CATEGORY_ID: "category-1", DISCORD_RUN_VOICE_CHANNEL_IDS: " raid-1 , raid-2,,raid-1 " }),
+    );
+    expect(env.discordRunVoiceChannelIds).toEqual(["raid-1", "raid-2"]);
+  });
 });
 
 describe("loadBotEnv — sync interval", () => {

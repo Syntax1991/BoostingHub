@@ -1,9 +1,15 @@
 /**
- * Temporary per-Run GuildVoice channel lifecycle ("Raid with <Raid Lead>").
- * Kept independent of discord.js concrete types so it is unit-testable;
- * `sync-loop.ts` supplies thin adapters.
+ * Per-Run GuildVoice channel lifecycle. Kept independent of discord.js
+ * concrete types so it is unit-testable; `sync-loop.ts` supplies thin adapters.
  *
- * Rules (see docs/features/discord-bot.md § Temporary Run voice channels):
+ * Fixed pool first (DISCORD_RUN_VOICE_CHANNEL_IDS, e.g. `Raid #1`, `Raid #2`):
+ * - PROVISION: assign the first pool channel no other Run holds. Pool channels
+ *   are never created, renamed or deleted — only assigned and released.
+ * - RECONCILE: keep the assignment; Unknown Channel clears it and assigns again.
+ * - RETIRE_IF_EMPTY: release the assignment right away (the channel stays).
+ *
+ * Temporary fallback ("Raid with <Raid Lead>") when the pool is unset or full
+ * (see docs/features/discord-bot.md § Run voice channels):
  * - PROVISION: create one GuildVoice channel in the dedicated voice category.
  * - RECONCILE (Run IN_PROGRESS): keep the channel even when nobody is in it;
  *   if Discord confirms it is gone (Unknown Channel), clear and recreate once.
@@ -56,6 +62,11 @@ export type RunVoiceChannelAdapters = {
   createVoiceChannel: ((name: string) => Promise<CreatedVoiceChannel>) | null;
   recordVoiceChannel(runId: string, channelId: string): Promise<void>;
   clearVoiceChannel(runId: string, channelId: string): Promise<void>;
+};
+
+export type RunVoiceChannelOptions = {
+  /** Fixed voice channel ids, in assignment order. Empty = temporary channels only. */
+  pool?: readonly string[];
 };
 
 /** runId → current voice channel id this pass (null = confirmed gone / deleted this pass). */
@@ -114,44 +125,95 @@ async function provision(
   resolved.set(item.runId, created.id);
 }
 
+/**
+ * Assigns the first free pool channel that still resolves to a GuildVoice
+ * channel. Returns false when none is free (caller falls back to a temporary
+ * channel). A failed record is "handled": nothing was created, the next poll retries.
+ */
+async function assignFromPool(
+  adapters: RunVoiceChannelAdapters,
+  item: RunVoiceChannelWorkItem,
+  resolved: ResolvedVoiceChannels,
+  pool: readonly string[],
+  taken: Set<string>,
+): Promise<boolean> {
+  for (const channelId of pool) {
+    if (taken.has(channelId)) continue;
+    let channel: VoiceChannelView;
+    try {
+      channel = await adapters.fetchChannel(channelId);
+    } catch (error) {
+      console.warn(`[discord-bot] pool voice channel ${channelId} is not usable — skipping it`, error);
+      continue;
+    }
+    if (channel.kind !== "voice") {
+      console.error(`[discord-bot] pool voice channel ${channelId} is not a GuildVoice channel — skipping it`);
+      continue;
+    }
+    taken.add(channelId);
+    try {
+      await adapters.recordVoiceChannel(item.runId, channelId);
+    } catch (error) {
+      console.error(`[discord-bot] could not assign voice channel ${channelId} to run ${item.runId} — will retry next poll`, error);
+      return true;
+    }
+    resolved.set(item.runId, channelId);
+    return true;
+  }
+  return false;
+}
+
+/** Returns true when the Run lost its channel and needs a new one this pass. */
 async function reconcile(
   adapters: RunVoiceChannelAdapters,
   item: RunVoiceChannelWorkItem & { existingVoiceChannelId: string },
   resolved: ResolvedVoiceChannels,
-): Promise<void> {
+  pooled: boolean,
+): Promise<boolean> {
   let channel: VoiceChannelView;
   try {
     channel = await adapters.fetchChannel(item.existingVoiceChannelId);
   } catch (error) {
     if (!isDiscordUnknownChannelError(error)) {
       console.warn(`[discord-bot] voice channel ${item.existingVoiceChannelId} for run ${item.runId} is temporarily inaccessible — keeping it`, error);
-      return;
+      return false;
     }
-    // Confirmed deleted while the Run is still running: clear, then recreate once.
+    // Confirmed deleted while the Run is still running: clear, then provide a new one once.
     await adapters.clearVoiceChannel(item.runId, item.existingVoiceChannelId);
     resolved.set(item.runId, null);
-    await provision(adapters, item, resolved);
-    return;
+    return true;
   }
 
   if (channel.kind === "unresolved") {
     console.warn(`[discord-bot] voice channel ${item.existingVoiceChannelId} for run ${item.runId} did not resolve — keeping it`);
-    return;
+    return false;
   }
   if (channel.kind !== "voice") {
     console.error(
       `[discord-bot] run ${item.runId}'s voice channel ${item.existingVoiceChannelId} is not a GuildVoice channel — leaving it untouched`,
     );
-    return;
+    return false;
   }
   resolved.set(item.runId, item.existingVoiceChannelId);
-  if (channel.name !== item.desiredVoiceChannelName) {
+  // Pool channels keep their own name (`Raid #1`); only temporary ones follow the Raid Lead.
+  if (!pooled && channel.name !== item.desiredVoiceChannelName) {
     try {
       await channel.setName(item.desiredVoiceChannelName);
     } catch (error) {
       console.warn(`[discord-bot] failed to rename voice channel for run ${item.runId}`, error);
     }
   }
+  return false;
+}
+
+/** Ended Run on a pool channel: release it right away — never delete it, even while people are connected. */
+async function releasePooled(
+  adapters: RunVoiceChannelAdapters,
+  item: RunVoiceChannelWorkItem & { existingVoiceChannelId: string },
+  resolved: ResolvedVoiceChannels,
+): Promise<void> {
+  await adapters.clearVoiceChannel(item.runId, item.existingVoiceChannelId);
+  resolved.set(item.runId, null);
 }
 
 async function retireIfEmpty(
@@ -202,17 +264,42 @@ async function retireIfEmpty(
 export async function reconcileRunVoiceChannels(
   adapters: RunVoiceChannelAdapters,
   items: ReadonlyArray<RunVoiceChannelWorkItem>,
+  options: RunVoiceChannelOptions = {},
 ): Promise<ResolvedVoiceChannels> {
+  const pool = options.pool ?? [];
   const resolved: ResolvedVoiceChannels = new Map();
+  const needsChannel: RunVoiceChannelWorkItem[] = [];
+
+  // Existing assignments first, so channels released this pass are free for new Runs.
   for (const item of items) {
     try {
       if (item.action === "PROVISION") {
-        if (!item.existingVoiceChannelId) await provision(adapters, item, resolved);
+        if (!item.existingVoiceChannelId) needsChannel.push(item);
       } else if (item.existingVoiceChannelId) {
         const withId = { ...item, existingVoiceChannelId: item.existingVoiceChannelId };
-        if (item.action === "RECONCILE") await reconcile(adapters, withId, resolved);
-        else await retireIfEmpty(adapters, withId, resolved);
+        const pooled = pool.includes(withId.existingVoiceChannelId);
+        if (item.action === "RECONCILE") {
+          if (await reconcile(adapters, withId, resolved, pooled)) needsChannel.push(item);
+        } else if (pooled) {
+          await releasePooled(adapters, withId, resolved);
+        } else {
+          await retireIfEmpty(adapters, withId, resolved);
+        }
       }
+    } catch (error) {
+      console.error(`[discord-bot] voice channel sync failed for run ${item.runId}`, error);
+    }
+  }
+
+  // A pool channel is taken while any Run still holds it (also when its fetch failed this pass).
+  const taken = new Set<string>();
+  for (const item of items) {
+    if (item.existingVoiceChannelId && resolved.get(item.runId) !== null) taken.add(item.existingVoiceChannelId);
+  }
+  for (const item of needsChannel) {
+    try {
+      if (await assignFromPool(adapters, item, resolved, pool, taken)) continue;
+      await provision(adapters, item, resolved);
     } catch (error) {
       console.error(`[discord-bot] voice channel sync failed for run ${item.runId}`, error);
     }

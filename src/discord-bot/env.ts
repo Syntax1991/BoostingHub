@@ -48,6 +48,13 @@ export type BotEnv = {
    */
   discordRunVoiceCategoryId?: string | null;
   /**
+   * Fixed voice channels (e.g. `Raid #1`, `Raid #2`) assigned to Runs at
+   * Start Run, in this order. Comma-separated ids; a Run gets the first one no
+   * other Run holds. Never created, renamed or deleted by the bot. When all are
+   * taken (or unset) the temporary-channel fallback above applies.
+   */
+  discordRunVoiceChannelIds?: readonly string[];
+  /**
    * Optional snowflake overrides for Raidboost Announce pings. When unset, the
    * bot resolves Guild roles named `tank` / `healer` / `dps` (case-insensitive).
    */
@@ -87,6 +94,9 @@ export function loadBotEnv(env: NodeJS.ProcessEnv = process.env): BotEnv {
   const runArchiveCategoryId = env.DISCORD_RUN_ARCHIVE_CATEGORY_ID?.trim() || null;
   const runArchiveLogChannelId = env.DISCORD_RUN_ARCHIVE_LOG_CHANNEL_ID?.trim() || null;
   const runVoiceCategoryId = env.DISCORD_RUN_VOICE_CATEGORY_ID?.trim() || null;
+  const runVoiceChannelIds = [
+    ...new Set((env.DISCORD_RUN_VOICE_CHANNEL_IDS ?? "").split(",").map((id) => id.trim()).filter(Boolean)),
+  ];
   const pingRoleTankId = env.DISCORD_PING_ROLE_TANK_ID?.trim() || null;
   const pingRoleHealerId = env.DISCORD_PING_ROLE_HEALER_ID?.trim() || null;
   const pingRoleDpsId = env.DISCORD_PING_ROLE_DPS_ID?.trim() || null;
@@ -110,6 +120,7 @@ export function loadBotEnv(env: NodeJS.ProcessEnv = process.env): BotEnv {
     discordRunArchiveCategoryId: runArchiveCategoryId,
     discordRunArchiveLogChannelId: runArchiveLogChannelId,
     discordRunVoiceCategoryId: runVoiceCategoryId,
+    discordRunVoiceChannelIds: runVoiceChannelIds,
     discordPingRoleTankId: pingRoleTankId,
     discordPingRoleHealerId: pingRoleHealerId,
     discordPingRoleDpsId: pingRoleDpsId,
