@@ -55,7 +55,9 @@ export type CharacterSyncTrigger =
   | "ADMIN_FORCE"
   | "ADMIN_BULK_FORCE"
   /** Start Run re-checks the SELECTED Characters' lockouts (run-start-saved-check). */
-  | "RUN_START";
+  | "RUN_START"
+  /** Raid Lead "Sync Characters" for the roster's selected Characters without a fresh sync. */
+  | "ROSTER_MANAGER";
 
 /**
  * Safe structured failure log. Deliberately carries NO character/owner

@@ -1,5 +1,33 @@
+import Link from "next/link";
 import { QuietOkIcon, WarningIcon } from "@/components/ui/ops-icons";
-import type { RunPreflightResult } from "@/services/run-preflight.service";
+import { runDetailPath } from "@/lib/run-routes";
+import type { PreflightCheck, RunPreflightResult } from "@/services/run-preflight.service";
+
+/** Anchor of the Roster tab's Needs-attention strip (roster-builder.tsx). */
+export const ROSTER_ATTENTION_ANCHOR = "roster-attention";
+
+/**
+ * The direct next step for an existing preflight warning — a link into the
+ * Roster tab, where the matching action (Find replacement / Fill gaps / Sync
+ * Characters / Update) sits. Mapping only: no new warning state.
+ */
+export function preflightCheckAction(
+  check: Pick<PreflightCheck, "id" | "status">,
+  runId: string,
+): { label: string; href: string } | null {
+  if (check.status === "PASS") return null;
+  const href = `${runDetailPath(runId)}#${ROSTER_ATTENTION_ANCHOR}`;
+  if (check.id === "selected_lockouts" || check.id === "selected_schedule_conflicts") {
+    return { label: "Find replacements", href };
+  }
+  if (check.id.startsWith("publish_blocker:CHARACTER_INACTIVE:") || check.id.startsWith("publish_blocker:BOOSTER_ACCESS_INVALID:")) {
+    return { label: "Find replacement", href };
+  }
+  if (check.id.startsWith("composition:COMPOSITION_UNDER_TARGET")) return { label: "Fill gaps", href };
+  if (check.id === "selected_blizzard_sync") return { label: "Sync Characters", href };
+  if (check.id === "unpublished_changes") return { label: "Review & Update", href: runDetailPath(runId) };
+  return null;
+}
 
 function statusTone(status: RunPreflightResult["checks"][number]["status"]): string {
   if (status === "ERROR") return "text-danger";
@@ -47,7 +75,9 @@ export function RunPreflightPanel({
         <span className="text-[11px] font-normal text-muted">{ready ? "" : "Expand"}</span>
       </summary>
       <ul className="mt-1.5 space-y-1 border-t border-border pt-1.5">
-        {preflight.checks.map((check) => (
+        {preflight.checks.map((check) => {
+          const action = preflightCheckAction(check, preflight.runId);
+          return (
           <li key={check.id} className="flex gap-2">
             <span className={`shrink-0 text-[10px] font-semibold uppercase tracking-wide ${statusTone(check.status)}`}>
               {check.status}
@@ -55,9 +85,18 @@ export function RunPreflightPanel({
             <span>
               <span className="font-medium text-foreground">{check.label}</span>
               <span className="text-muted"> — {check.summary}</span>
+              {action ? (
+                <>
+                  {" "}
+                  <Link href={action.href} className="whitespace-nowrap font-medium text-accent hover:underline">
+                    {action.label}
+                  </Link>
+                </>
+              ) : null}
             </span>
           </li>
-        ))}
+          );
+        })}
       </ul>
     </details>
   );

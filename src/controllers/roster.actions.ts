@@ -5,7 +5,12 @@ import { mapActionError, type ActionResult } from "@/lib/action-result";
 import { rosterBuilderService } from "@/services/roster-builder.service";
 import { rosterService } from "@/services/roster.service";
 import {
+  rosterCharacterSyncService,
+  type RosterCharacterSyncResult,
+} from "@/services/roster-character-sync.service";
+import {
   applyRosterBuilderSchema,
+  proposeRosterBuilderSchema,
   publishRosterSchema,
   repostRosterSchema,
   updateRosterSchema,
@@ -149,8 +154,10 @@ export async function proposeRosterBuilderAction(
 ): Promise<ActionResult & { data: RosterBuilderData | null }> {
   try {
     const user = await requireUser();
-    const parsed = rosterRunSchema.parse(input);
-    const data = await rosterBuilderService.proposeRoster(user, parsed.runId);
+    const parsed = proposeRosterBuilderSchema.parse(input);
+    const data = await rosterBuilderService.proposeRoster(user, parsed.runId, {
+      baseSelections: parsed.baseSelections,
+    });
     return { ok: true, message: "Roster proposal ready.", data };
   } catch (error) {
     return { ...mapActionError(error), data: null };
@@ -169,4 +176,25 @@ export async function applyRosterBuilderAction(
   } catch (error) {
     return { ...mapActionError(error), data: null };
   }
+}
+
+/** Raid Lead "Sync Characters": fresh Blizzard sync of the selected roster Characters without a fresh sync. */
+export async function syncRosterCharactersAction(
+  input: unknown,
+): Promise<ActionResult & { data: RosterCharacterSyncResult | null }> {
+  try {
+    const user = await requireUser();
+    const parsed = rosterRunSchema.parse(input);
+    const data = await rosterCharacterSyncService.syncStaleSelected(user, parsed.runId);
+    return { ok: true, message: rosterCharacterSyncMessage(data), data };
+  } catch (error) {
+    return { ...mapActionError(error), data: null };
+  }
+}
+
+function rosterCharacterSyncMessage(result: RosterCharacterSyncResult): string {
+  const parts = [`${result.synced} synced`];
+  if (result.failed > 0) parts.push(`${result.failed} failed`);
+  if (result.skipped > 0) parts.push(`${result.skipped} skipped (recently synced or in progress)`);
+  return `Characters: ${parts.join(" · ")}.`;
 }

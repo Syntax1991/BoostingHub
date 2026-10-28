@@ -3,6 +3,7 @@ import { assertCanManageRun } from "@/auth/authorization";
 import { isConcreteCharacterRole, type ConcreteCharacterRole } from "@/lib/character-roles";
 import { DomainError } from "@/lib/errors";
 import {
+  projectRunStaffing,
   projectRunStaffingFromRun,
   type RunStaffingProjection,
   type RunStaffingShortage,
@@ -153,11 +154,49 @@ function selectedLockedFromRoster(
 }
 
 /**
+ * The Roster Builder's own (unsaved) draft as the proposal's locked base:
+ * known, still-active offers only, one slot per signup. Anything else (a
+ * withdrawn or foreign id from a stale editor) is dropped — the proposal's
+ * fullSelections then simply no longer contain it.
+ */
+function lockedFromBaseSelections(
+  signups: RosterSignupRow[],
+  base: ReadonlyArray<{ signupId: string; selectedRole: CharacterRole | null }>,
+): Array<{ signup: RosterSignupRow; selectedRole: CharacterRole | null }> {
+  const byId = new Map(signups.map((signup) => [signup.id, signup]));
+  const seen = new Set<string>();
+  const rows: Array<{ signup: RosterSignupRow; selectedRole: CharacterRole | null }> = [];
+  for (const selection of base) {
+    const signup = byId.get(selection.signupId);
+    if (!signup || seen.has(signup.id) || !isActiveSignupOffer(signup.status)) continue;
+    seen.add(signup.id);
+    rows.push({
+      signup,
+      selectedRole: signup.participationType === "LOOTBUDDY" ? null : selection.selectedRole,
+    });
+  }
+  return rows;
+}
+
+export type RosterProposalOptions = {
+  /**
+   * Propose on top of the Roster Builder's current (possibly unsaved) draft
+   * instead of the saved / published roster: Fill Gaps passes the draft, Build
+   * from signups passes []. Read-only — the caller stages the result locally.
+   */
+  baseSelections?: ReadonlyArray<{ signupId: string; selectedRole: CharacterRole | null }>;
+};
+
+/**
  * Deterministic Roster Builder — proposes picks from actual Run signups only.
  * Opening never mutates; Apply uses rosterService.saveDraftSelection.
  */
 export const rosterBuilderService = {
-  async proposeRoster(user: AuthenticatedUser, runId: string): Promise<RosterBuilderResult> {
+  async proposeRoster(
+    user: AuthenticatedUser,
+    runId: string,
+    options: RosterProposalOptions = {},
+  ): Promise<RosterBuilderResult> {
     const run = await runRepository.findById(runId);
     if (!run) {
       throw new DomainError("NOT_FOUND", "Run was not found.", 404);
@@ -198,7 +237,27 @@ export const rosterBuilderService = {
       desiredDpsCount: run.desiredDpsCount,
       desiredLootbuddyCount: run.desiredLootbuddyCount,
     };
-    const staffing = projectRunStaffingFromRun(staffingRun);
+    const baseRows = options.baseSelections ? lockedFromBaseSelections(signups, options.baseSelections) : null;
+    const staffing = baseRows
+      ? projectRunStaffing({
+          desired: {
+            tanks: run.desiredTankCount,
+            healers: run.desiredHealerCount,
+            dps: run.desiredDpsCount,
+            lootbuddies: run.desiredLootbuddyCount,
+          },
+          selectedRoster: [
+            ...baseRows.map((row) => ({
+              participationType: row.signup.participationType,
+              selectedRole: row.selectedRole,
+            })),
+            ...roster.externalBoosters.map((booster) => ({
+              participationType: booster.participationType,
+              selectedRole: booster.participationType === "LOOTBUDDY" ? null : booster.role,
+            })),
+          ],
+        })
+      : projectRunStaffingFromRun(staffingRun);
     const shortages = staffing.missing;
     const fullyStaffed = staffing.status === "FULLY_STAFFED";
 
@@ -239,12 +298,8 @@ export const rosterBuilderService = {
       },
     };
 
-    const lockedRows = selectedLockedFromRoster(
-      run.status,
-      signups,
-      roster.selectedSignupIds,
-      roster.selections,
-    );
+    const lockedRows =
+      baseRows ?? selectedLockedFromRoster(run.status, signups, roster.selectedSignupIds, roster.selections);
 
     if (fullyStaffed) {
       const lockedProposed: RosterBuilderProposedPick[] = lockedRows.map((row) => ({

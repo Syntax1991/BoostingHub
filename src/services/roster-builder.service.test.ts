@@ -280,6 +280,92 @@ describe("rosterBuilderService", () => {
     ).rejects.toMatchObject({ code: "ROSTER_ALREADY_CHANGED" });
   });
 
+  describe("Fill gaps / Build on the editor draft (baseSelections)", () => {
+    it("Fill gaps keeps the unsaved draft's picks and fills only the missing composition — read-only", async () => {
+      const before = await rosterRepository.ensure(ids.run);
+      const result = await rosterBuilderService.proposeRoster(lead, ids.run, {
+        baseSelections: [{ signupId: ids.signupHealer, selectedRole: "HEALER" }],
+      });
+      expect(result.shortages).toMatchObject({ tanks: 0, healers: 0, dps: 2 });
+      expect(result.proposed.find((row) => row.signupId === ids.signupHealer)?.locked).toBe(true);
+      expect(result.applySelections.map((row) => row.signupId).sort()).toEqual([ids.signupMelee, ids.signupRanged].sort());
+      expect(result.fullSelections.map((row) => row.signupId).sort()).toEqual(
+        [ids.signupHealer, ids.signupMelee, ids.signupRanged].sort(),
+      );
+      // Draft only: nothing persisted, no status change.
+      const after = await rosterRepository.findByRunId(ids.run);
+      expect(after?.version).toBe(before.version);
+      expect(after?.selectedSignupIds).toEqual([]);
+      const run = (await orm.Run.where({ id: ids.run }).select("status").first()) as { status: string };
+      expect(run.status).toBe("OPEN");
+    });
+
+    it("uses the given draft, not the saved one", async () => {
+      const roster = await rosterRepository.ensure(ids.run);
+      await rosterRepository.replaceSelectedSignupIds(roster.id, roster.version, [
+        { signupId: ids.signupHealer, selectedRole: "HEALER" },
+      ]);
+      const result = await rosterBuilderService.proposeRoster(lead, ids.run, {
+        baseSelections: [
+          { signupId: ids.signupMelee, selectedRole: "MELEE_DPS" },
+          { signupId: ids.signupRanged, selectedRole: "RANGED_DPS" },
+        ],
+      });
+      // DPS full from the draft; only the Healer gap is filled, by the only Healer signup.
+      expect(result.shortages).toMatchObject({ healers: 1, dps: 0 });
+      expect(result.applySelections).toEqual([{ signupId: ids.signupHealer, selectedRole: "HEALER" }]);
+    });
+
+    it("incompatible roles are never proposed: a Healer-only signup does not fill a DPS gap", async () => {
+      const result = await rosterBuilderService.proposeRoster(lead, ids.run, {
+        baseSelections: [{ signupId: ids.signupMelee, selectedRole: "MELEE_DPS" }],
+      });
+      const healer = result.applySelections.find((row) => row.signupId === ids.signupHealer);
+      expect(healer?.selectedRole).toBe("HEALER");
+      expect(result.applySelections.every((row) => row.selectedRole !== null)).toBe(true);
+      expect(result.applySelections.find((row) => row.signupId === ids.signupRanged)?.selectedRole).toBe("RANGED_DPS");
+    });
+
+    it("a full draft is fully staffed — nothing new proposed", async () => {
+      const result = await rosterBuilderService.proposeRoster(lead, ids.run, {
+        baseSelections: [
+          { signupId: ids.signupHealer, selectedRole: "HEALER" },
+          { signupId: ids.signupMelee, selectedRole: "MELEE_DPS" },
+          { signupId: ids.signupRanged, selectedRole: "RANGED_DPS" },
+        ],
+      });
+      expect(result.fullyStaffed).toBe(true);
+      expect(result.applySelections).toEqual([]);
+    });
+
+    it("Build from signups (empty base) proposes the whole draft from current signups only", async () => {
+      const roster = await rosterRepository.ensure(ids.run);
+      await rosterRepository.replaceSelectedSignupIds(roster.id, roster.version, [
+        { signupId: ids.signupHealer, selectedRole: "HEALER" },
+      ]);
+      const result = await rosterBuilderService.proposeRoster(lead, ids.run, { baseSelections: [] });
+      expect(result.proposed.every((row) => !row.locked)).toBe(true);
+      expect(result.fullSelections.map((row) => row.signupId).sort()).toEqual(
+        [ids.signupHealer, ids.signupMelee, ids.signupRanged].sort(),
+      );
+    });
+
+    it("stale / withdrawn / foreign ids in the draft are dropped, and the result is deterministic", async () => {
+      await orm.RunSignup.where({ id: ids.signupMelee }).update({ status: "WITHDRAWN" });
+      const input = {
+        baseSelections: [
+          { signupId: ids.signupMelee, selectedRole: "MELEE_DPS" as const },
+          { signupId: "bbbbbbbb-bbbb-4bbb-8bbb-rbs00000ffff", selectedRole: "HEALER" as const },
+        ],
+      };
+      const first = await rosterBuilderService.proposeRoster(lead, ids.run, input);
+      const second = await rosterBuilderService.proposeRoster(lead, ids.run, input);
+      expect(first.fullSelections.some((row) => row.signupId === ids.signupMelee)).toBe(false);
+      expect(first.fullSelections).toEqual(second.fullSelections);
+      expect(first.fullSelections.map((row) => row.signupId).sort()).toEqual([ids.signupHealer, ids.signupRanged].sort());
+    });
+  });
+
   it("blocks USER from proposing", async () => {
     await expect(rosterBuilderService.proposeRoster(plainUser, ids.run)).rejects.toMatchObject({
       code: "RUN_NOT_MANAGEABLE",

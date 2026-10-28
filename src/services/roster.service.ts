@@ -10,6 +10,12 @@ import {
 } from "@/lib/external-booster";
 import { isApprovedBooster } from "@/services/boosting-role.service";
 import { lockoutService } from "@/services/lockout.service";
+import { isLateFillWindow } from "@/lib/roster-replacement";
+import {
+  deriveCharacterSyncHealth,
+  resolveSyncHealthStaleMinutes,
+  type CharacterSyncHealth,
+} from "@/lib/blizzard/sync-health";
 import { assertRunTransition, isSignupWindowOpen } from "@/services/run-state";
 import { assertSignupTransition } from "@/services/signup-state";
 import { validateRosterDraft, type RosterIssue, type RosterValidationResult } from "@/services/roster-validation";
@@ -112,6 +118,8 @@ type InspectedSignup = RosterSignupRow & {
   runCommitments: CharacterRunCommitment[];
   /** Informational WCL Best/Avg per Run content × offered role. */
   wclPerformance: WclPerformanceRaidSegment[];
+  /** Blizzard sync freshness of the Character (null when characterless) — ranks replacements, never blocks. */
+  syncHealth: CharacterSyncHealth | null;
 };
 
 /**
@@ -420,6 +428,9 @@ function inspectSignup(
     boosterApproved,
     contentSaves,
     issue,
+    syncHealth: character
+      ? deriveCharacterSyncHealth(character, { now: new Date(), staleMinutes: resolveSyncHealthStaleMinutes() })
+      : null,
   };
 }
 
@@ -900,6 +911,8 @@ export const rosterService = {
         publishedSelectedCount: publishedSelection.length,
         backupCount: inspected.filter((item) => item.isBackup && item.status !== "WITHDRAWN").length,
         lootbuddyCount: inspected.filter((item) => item.participationType === "LOOTBUDDY" && item.status !== "WITHDRAWN").length,
+        /** Close to the start: the Roster Builder presents open slots as Late Fill (presentation only). */
+        lateFill: canEdit && isLateFillWindow(run.scheduledStartAt, new Date()),
       },
       roster: {
         id: roster.id,
@@ -938,6 +951,28 @@ export const rosterService = {
        * Role sections below are visual projections and may repeat the same id.
        */
       boosters: projected.boosters,
+      /**
+       * Picked Boosters who withdrew with a reason (their slot was freed). The
+       * Roster Builder offers "Find replacement" while a bucket they could
+       * fill is still short in the draft.
+       */
+      withdrawnPicks: inspected
+        .filter(
+          (item) =>
+            item.status === "WITHDRAWN" &&
+            item.withdrawReason != null &&
+            item.participationType === "BOOSTER" &&
+            item.character != null,
+        )
+        .map((item) => ({
+          signupId: item.id,
+          userId: item.userId,
+          userName: item.userName,
+          characterLabel: participationLabel(item),
+          wowClass: item.character!.wowClass,
+          reason: item.withdrawReason!,
+          assignableRoles: rosterRoleSectionsForSignup(signupAssignmentInput(item)).assignableRoles,
+        })),
       groups: {
         tanks: projected.tanks,
         healers: projected.healers,

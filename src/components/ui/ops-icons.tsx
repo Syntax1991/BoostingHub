@@ -1,4 +1,5 @@
 import {
+  ArrowLeftRight,
   Ban,
   Check,
   CheckCircle2,
@@ -178,6 +179,19 @@ export function BlockerIcon({
   size?: number;
 }) {
   return <OpsGlyph icon={X} label={label} size={size} tone="danger" className={className} />;
+}
+
+/** Swap a roster slot for another signup (Find replacement). */
+export function ReplaceIcon({
+  label = "Find replacement",
+  className,
+  size = OPS_ICON_SIZE,
+}: {
+  label?: string;
+  className?: string;
+  size?: number;
+}) {
+  return <OpsGlyph icon={ArrowLeftRight} label={label} size={size} tone="inherit" className={className} />;
 }
 
 /** Saved / lockout progress indicator (quiet unless attention). */
