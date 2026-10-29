@@ -10,6 +10,7 @@ import { CHARACTER_ROLE_LABELS, CLASS_COLORS } from "@/lib/labels";
 import { formatSignupTileLockoutShort } from "@/lib/run-content-lockouts";
 import {
   rankReplacementCandidates,
+  replacementShortlist,
   replacementSignupStateLabel,
   staffingBucket,
   type ReplacementCandidate,
@@ -96,6 +97,7 @@ export function RosterReplacementDialog({
   const [role, setRole] = useState<ConcreteCharacterRole>(initialRole);
   const [sameRoleOnly, setSameRoleOnly] = useState(true);
   const [showRisky, setShowRisky] = useState(false);
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -118,6 +120,7 @@ export function RosterReplacementDialog({
       }),
     [signups, role, staged, target.signupId, target.userId, sameRoleOnly, showRisky],
   );
+  const { shown, hiddenCount } = replacementShortlist(candidates, showAll);
 
   return (
     <dialog
@@ -147,7 +150,10 @@ export function RosterReplacementDialog({
                   aria-pressed={active}
                   title={choice.label}
                   aria-label={choice.label}
-                  onClick={() => setRole(choice.role)}
+                  onClick={() => {
+                    setRole(choice.role);
+                    setShowAll(false);
+                  }}
                   className={`inline-flex items-center gap-1 rounded px-1.5 py-1 ${
                     active ? "bg-surface-raised text-foreground" : "text-muted hover:text-foreground"
                   }`}
@@ -175,7 +181,7 @@ export function RosterReplacementDialog({
         </p>
       ) : (
         <ul className="divide-y divide-border/60">
-          {candidates.map((candidate) => {
+          {shown.map((candidate) => {
             const { signup } = candidate;
             const character = signup.character!;
             const spec = candidateSpec(signup, candidate.role);
@@ -236,6 +242,17 @@ export function RosterReplacementDialog({
               </li>
             );
           })}
+          {hiddenCount > 0 ? (
+            <li>
+              <button
+                type="button"
+                onClick={() => setShowAll(true)}
+                className="w-full px-4 py-2 text-left text-xs font-medium text-accent hover:bg-surface-raised/60"
+              >
+                Show all {candidates.length} candidates
+              </button>
+            </li>
+          ) : null}
         </ul>
       )}
 

@@ -126,10 +126,11 @@ function compareNullableDesc(left: number | null, right: number | null): number 
  * silently move that slot — one selected Booster per User). The target's own
  * User stays eligible: swapping to their other Character is a valid fix.
  *
- * Order: plays the required role → no schedule conflict → not planned on
- * another Run → not saved → fresh Blizzard data → direct role fit (primary,
- * then preferred offspec) → cached WCL Best Perf. Avg → item level → name /
- * id. WCL only orders; it never excludes.
+ * Order: plays the required role → no schedule conflict → not saved (the
+ * shared selection risk: a relevant save on a planned boss) → not planned on
+ * another Run → fresh Blizzard data → direct role fit (primary, then
+ * preferred offspec) → cached WCL Best Perf. Avg → item level → name / id.
+ * WCL only orders; it never excludes.
  */
 export function rankReplacementCandidates<T extends ReplacementSignupInput>(input: {
   signups: readonly T[];
@@ -177,8 +178,8 @@ export function rankReplacementCandidates<T extends ReplacementSignupInput>(inpu
     (left, right) =>
       Number(!left.playsRequiredRole) - Number(!right.playsRequiredRole) ||
       Number(left.blocked) - Number(right.blocked) ||
-      Number(left.plannedElsewhere) - Number(right.plannedElsewhere) ||
       Number(left.saved) - Number(right.saved) ||
+      Number(left.plannedElsewhere) - Number(right.plannedElsewhere) ||
       syncRank(left.signup.syncHealth) - syncRank(right.signup.syncHealth) ||
       fitRank(left.signup, left.role) - fitRank(right.signup, right.role) ||
       compareNullableDesc(left.wclBest, right.wclBest) ||
@@ -187,6 +188,22 @@ export function rankReplacementCandidates<T extends ReplacementSignupInput>(inpu
       left.signup.character!.realm.localeCompare(right.signup.character!.realm, "en-US") ||
       left.signup.id.localeCompare(right.signup.id),
   );
+}
+
+/** How many ranked candidates Find replacement shows before "Show all". */
+export const REPLACEMENT_SHORTLIST_SIZE = 5;
+
+/**
+ * The best few candidates first: the top {@link REPLACEMENT_SHORTLIST_SIZE}
+ * of the ranked list, the rest behind "Show all" (never dropped). Conflicted
+ * candidates rank last, so they only appear in the full list.
+ */
+export function replacementShortlist<T>(
+  ranked: readonly T[],
+  showAll: boolean,
+): { shown: readonly T[]; hiddenCount: number } {
+  if (showAll || ranked.length <= REPLACEMENT_SHORTLIST_SIZE) return { shown: ranked, hiddenCount: 0 };
+  return { shown: ranked.slice(0, REPLACEMENT_SHORTLIST_SIZE), hiddenCount: ranked.length - REPLACEMENT_SHORTLIST_SIZE };
 }
 
 /** Composition bucket a concrete booster role fills (Melee and Ranged both fill DPS). */
