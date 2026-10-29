@@ -17,7 +17,7 @@ const RUN_STATUS_LABELS: Record<string, string> = {
 
 /**
  * Compact read-only staffing overlay for one Schedule occurrence.
- * Aggregate DPS only — Melee/Ranged split is informational.
+ * Aggregate DPS only — one DPS group, like the Run's composition target.
  * Auto Build Roster opens on demand for materialized shortages.
  */
 export function ScheduleOccurrenceStaffing({
@@ -55,10 +55,6 @@ export function ScheduleOccurrenceStaffing({
     lootbuddies: projection.staffed.lootbuddies,
   });
   const missing = formatMissingCounts(projection.missing);
-  const split =
-    projection.staffed.dps > 0
-      ? `${projection.staffed.meleeDps} Melee · ${projection.staffed.rangedDps} Ranged`
-      : null;
 
   return (
     <div className="mt-1.5 space-y-1 text-[11px] leading-snug text-muted">
@@ -71,7 +67,6 @@ export function ScheduleOccurrenceStaffing({
       <p>
         <span className="font-medium text-foreground/80">Staffed</span> {staffedLine}
       </p>
-      {split ? <p className="text-muted">{split}</p> : null}
       {projection.status === "FULLY_STAFFED" ? (
         <p className="font-medium text-success">Fully staffed</p>
       ) : (

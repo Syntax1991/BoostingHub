@@ -116,8 +116,10 @@ Boosters who are **not registered** on the website (e.g. in-house helpers) are m
 Targets come from the run (`desiredTankCount`, `desiredHealerCount`, `desiredDpsCount`), never hardcoded 2/4/14.
 
 - Booster slots count by `RunRosterEntry.selectedRole` (`TANK` / `HEALER` / `MELEE_DPS` / `RANGED_DPS`). Generic `DPS` is legacy-only (readable, never newly assigned).
-- Roster Builder sections: Tank · Healer · Melee DPS · Ranged DPS · (Legacy DPS when historic generic offers exist)
-- Composition target remains a single desired DPS count; UI also shows Melee / Ranged (and Legacy) breakdowns
+- Raid Leads work with **Tank · Healer · DPS**: the Signups role filter, the composition line, the Publish summary, the Schedule staffing overlay and Find replacement show one DPS group (Melee and Ranged both fill it). Concrete `MELEE_DPS` / `RANGED_DPS` stay the stored roles (WCL, buffs, specs, audit); only historic generic DPS is still called out ("Unassigned DPS")
+- Find replacement for a DPS slot ranks Melee and Ranged candidates alike; each keeps its own concrete DPS role (`rankReplacementCandidates`)
+- Boss plan role options read plain "DPS" when it is the Character's only DPS option; a Character offering both keeps "Melee DPS" / "Ranged DPS" (a real spec choice, never guessed)
+- Composition target remains a single desired DPS count
 - A multi-role Character selected once contributes to exactly one concrete slot
 - Lootbuddies (`LOOT_ONLY` and `PLAYING`) do **not** count as booster composition
 - `PLAYING` has no assigned booster role, so it stays in the lootbuddy bucket

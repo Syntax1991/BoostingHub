@@ -394,7 +394,7 @@ export const SIGNUP_MESSAGE_FORMAT_VERSION = "v14-header-grid";
  * the Guild emoji fingerprint into `RunDiscordPost.lastRosterEmojiFingerprint`
  * so existing messages refresh once after deploy — no schema migration.
  */
-export const ROSTER_EMBED_FORMAT_VERSION = "v4-run-title-link";
+export const ROSTER_EMBED_FORMAT_VERSION = "v5-one-dps-group";
 
 /** Render fingerprint stored/compared for Roster message refresh detection. */
 export function rosterEmbedRenderFingerprint(classEmojiFingerprint: string): string {

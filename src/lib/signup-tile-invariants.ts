@@ -1,3 +1,4 @@
+import { isDpsRole } from "@/lib/character-roles";
 import { resolveOfferedSpecs, type OfferedSpecChoice } from "@/lib/signup-offered-specs";
 import type { CharacterRole, WowClass } from "@/models/enums";
 
@@ -26,12 +27,17 @@ export function uniqueSignupTiles<T extends { id: string }>(rows: readonly T[]):
   return out;
 }
 
-/** Role filter: include when any offered/assignable role matches — still one tile. */
+/**
+ * Role filter: include when any offered/assignable role matches — still one
+ * tile. "DPS" is the Raid Lead's one DPS group: any Melee, Ranged or historic
+ * generic DPS offer matches.
+ */
 export function signupMatchesRoleFilter(
   assignableRoles: readonly CharacterRole[],
   roleFilter: CharacterRole | "ALL",
 ): boolean {
   if (roleFilter === "ALL") return true;
+  if (roleFilter === "DPS") return assignableRoles.some(isDpsRole);
   return assignableRoles.includes(roleFilter);
 }
 

@@ -157,6 +157,37 @@ describe("rankReplacementCandidates", () => {
     ]);
   });
 
+  it("a DPS slot is one group: Melee and Ranged both play it and keep their own concrete role", () => {
+    const melee = signup("Rogue", {
+      assignableRoles: ["MELEE_DPS"],
+      character: { name: "Rogue", realm: "Antonidas", primaryRole: "MELEE_DPS", offspecRoles: [], itemLevel: 350 },
+    });
+    const ranged = signup("Mage", {
+      assignableRoles: ["RANGED_DPS"],
+      character: { name: "Mage", realm: "Antonidas", primaryRole: "RANGED_DPS", offspecRoles: [], itemLevel: 340 },
+    });
+    const hybrid = signup("Druid", {
+      assignableRoles: ["HEALER", "MELEE_DPS", "RANGED_DPS"],
+      character: { name: "Druid", realm: "Antonidas", primaryRole: "RANGED_DPS", offspecRoles: ["HEALER"], itemLevel: 330 },
+    });
+    // Replacing a Ranged DPS: the Melee candidate is not demoted or hidden by "Same role only".
+    const forRanged = rank([ranged, melee, hybrid, signup("Priest")], { requiredRole: "RANGED_DPS" });
+    expect(forRanged.map((row) => [row.signup.id, row.role, row.playsRequiredRole])).toEqual([
+      ["Rogue", "MELEE_DPS", true],
+      ["Mage", "RANGED_DPS", true],
+      ["Druid", "RANGED_DPS", true],
+    ]);
+    // Same pool for a Melee DPS slot: a hybrid offering the exact role takes it (ranked by its fit as before),
+    // a Ranged-only Character keeps its own Ranged role — never a guessed one.
+    expect(rank([ranged, melee, hybrid], { requiredRole: "MELEE_DPS" }).map((row) => [row.signup.id, row.role])).toEqual([
+      ["Rogue", "MELEE_DPS"],
+      ["Mage", "RANGED_DPS"],
+      ["Druid", "MELEE_DPS"],
+    ]);
+    // Healer slots stay separate: a DPS-only Character does not play them.
+    expect(rank([melee, signup("Priest")]).map((row) => row.signup.id)).toEqual(["Priest"]);
+  });
+
   it("never offers the slot itself, draft picks, withdrawn / inactive / revoked rows or Lootbuddies", () => {
     const ranked = rank(
       [

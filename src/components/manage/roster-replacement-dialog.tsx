@@ -5,12 +5,13 @@ import { Button } from "@/components/ui/button";
 import { ClassIcon } from "@/components/ui/badges";
 import { LockoutIcon, RoleIcon, WarningIcon } from "@/components/ui/ops-icons";
 import { SpecIcon } from "@/components/ui/spec-icon";
-import type { ConcreteCharacterRole } from "@/lib/character-roles";
+import { isDpsRole, type ConcreteCharacterRole } from "@/lib/character-roles";
 import { CHARACTER_ROLE_LABELS, CLASS_COLORS } from "@/lib/labels";
 import { formatSignupTileLockoutShort } from "@/lib/run-content-lockouts";
 import {
   rankReplacementCandidates,
   replacementSignupStateLabel,
+  staffingBucket,
   type ReplacementCandidate,
 } from "@/lib/roster-replacement";
 import { resolveDisplaySpecForSelectedRole } from "@/lib/signup-offered-specs";
@@ -21,7 +22,18 @@ import type { rosterService } from "@/services/roster.service";
 type RosterView = Awaited<ReturnType<typeof rosterService.getRosterManagementView>>;
 type SignupRow = RosterView["boosters"][number];
 
-const ROLE_CHOICES: ConcreteCharacterRole[] = ["TANK", "HEALER", "MELEE_DPS", "RANGED_DPS"];
+/**
+ * Tank / Healer / DPS — one DPS choice for the Raid Lead: Melee and Ranged
+ * candidates both fill a DPS slot (rankReplacementCandidates), each keeping
+ * its own concrete DPS role.
+ */
+function roleChoices(dpsRole: ConcreteCharacterRole): Array<{ role: ConcreteCharacterRole; icon: CharacterRole; label: string }> {
+  return [
+    { role: "TANK", icon: "TANK", label: CHARACTER_ROLE_LABELS.TANK },
+    { role: "HEALER", icon: "HEALER", label: CHARACTER_ROLE_LABELS.HEALER },
+    { role: dpsRole, icon: "DPS", label: CHARACTER_ROLE_LABELS.DPS },
+  ];
+}
 
 export type ReplacementTarget = {
   /** The draft slot being replaced; null when filling an empty slot / a withdrawn pick's freed slot. */
@@ -126,22 +138,25 @@ export function RosterReplacementDialog({
         ) : null}
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
           <div role="group" aria-label="Required role" className="inline-flex rounded-md border border-border p-0.5">
-            {ROLE_CHOICES.map((choice) => (
-              <button
-                key={choice}
-                type="button"
-                aria-pressed={role === choice}
-                title={CHARACTER_ROLE_LABELS[choice]}
-                aria-label={CHARACTER_ROLE_LABELS[choice]}
-                onClick={() => setRole(choice)}
-                className={`inline-flex items-center gap-1 rounded px-1.5 py-1 ${
-                  role === choice ? "bg-surface-raised text-foreground" : "text-muted hover:text-foreground"
-                }`}
-              >
-                <RoleIcon role={choice} size={16} />
-                <span className="hidden sm:inline">{CHARACTER_ROLE_LABELS[choice]}</span>
-              </button>
-            ))}
+            {roleChoices(isDpsRole(initialRole) ? initialRole : "RANGED_DPS").map((choice) => {
+              const active = staffingBucket(role) === staffingBucket(choice.role);
+              return (
+                <button
+                  key={choice.label}
+                  type="button"
+                  aria-pressed={active}
+                  title={choice.label}
+                  aria-label={choice.label}
+                  onClick={() => setRole(choice.role)}
+                  className={`inline-flex items-center gap-1 rounded px-1.5 py-1 ${
+                    active ? "bg-surface-raised text-foreground" : "text-muted hover:text-foreground"
+                  }`}
+                >
+                  <RoleIcon role={choice.icon} size={16} />
+                  <span className="hidden sm:inline">{choice.label}</span>
+                </button>
+              );
+            })}
           </div>
           <label className="inline-flex items-center gap-1.5 text-muted">
             <input type="checkbox" checked={sameRoleOnly} onChange={(event) => setSameRoleOnly(event.target.checked)} />

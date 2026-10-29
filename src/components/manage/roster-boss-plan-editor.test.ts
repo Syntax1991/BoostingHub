@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyRangeAssignment,
+  bossPlanRoleLabel,
   bossesInRange,
   bossExceptionsPayload,
   bossPlanIsDirty,
@@ -319,5 +320,15 @@ describe("live per-boss warnings", () => {
     ];
     const result = evaluateLiveBossPlan({ ...base, signups: [sham, { ...priest, status: "WITHDRAWN" }, mage], payload });
     expect(result.issues.map((issue) => issue.code)).toEqual(["BOSS_EXCEPTION_CHARACTER_INVALID"]);
+  });
+});
+
+describe("boss plan role labels — one DPS group", () => {
+  it("a Character with one DPS option sees plain DPS; only Melee + Ranged offers keep the subtype", () => {
+    expect(bossPlanRoleLabel("RANGED_DPS", ["HEALER", "RANGED_DPS"])).toBe("DPS");
+    expect(bossPlanRoleLabel("HEALER", ["HEALER", "RANGED_DPS"])).toBe("Healer");
+    expect(bossPlanRoleLabel("MELEE_DPS", ["TANK", "MELEE_DPS"])).toBe("DPS");
+    expect(bossPlanRoleLabel("MELEE_DPS", ["MELEE_DPS", "RANGED_DPS"])).toBe("Melee DPS");
+    expect(bossPlanRoleLabel("RANGED_DPS", ["HEALER", "MELEE_DPS", "RANGED_DPS"])).toBe("Ranged DPS");
   });
 });
