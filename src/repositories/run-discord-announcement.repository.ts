@@ -1,5 +1,12 @@
 import { db, orm } from "@/lib/prisma";
 import {
+  parseLateFillHelpRoles,
+  serializeLateFillHelpRoles,
+  type LateFillHelpRole,
+  type LateFillHelpRoleKey,
+} from "@/lib/late-fill-help";
+import { lockRosterInTx } from "@/repositories/roster.repository";
+import {
   asString,
   asStringOrNull,
   mapDifficulty,
@@ -26,6 +33,8 @@ export type RunDiscordAnnouncementRecord = {
   lootType: RunLootType;
   /** RUN_SCOPE_CHANGED only: JSON RunScopeChange[] snapshot (lib/run-scope-change). */
   scopeChanges: string | null;
+  /** LATE_FILL_HELP only: JSON LateFillHelpRole[] snapshot (lib/late-fill-help). */
+  helpRoles: string | null;
   status: DiscordDeliveryStatus;
   createdAt: string;
   sentAt: string | null;
@@ -44,6 +53,8 @@ export type CreateRunDiscordAnnouncementInput = {
   lootType: RunLootType;
   /** RUN_SCOPE_CHANGED only: serialized RunScopeChange[]. */
   scopeChanges?: string | null;
+  /** LATE_FILL_HELP only: serialized LateFillHelpRole[]. */
+  helpRoles?: string | null;
   /** Initial status — PENDING when a channel may exist; callers may pass SKIPPED. */
   status?: DiscordDeliveryStatus;
   createdAt?: string;
@@ -69,6 +80,7 @@ function mapRunDiscordAnnouncementRow(row: Record<string, unknown>): RunDiscordA
     difficulty: mapDifficulty(row.difficulty),
     lootType: mapLootType(row.lootType),
     scopeChanges: asStringOrNull(row.scopeChanges),
+    helpRoles: asStringOrNull(row.helpRoles),
     status: asEnum(row.status, DISCORD_DELIVERY_STATUSES, "PENDING"),
     createdAt: asString(row.createdAt),
     sentAt: asStringOrNull(row.sentAt),
@@ -122,6 +134,7 @@ export async function insertAnnouncementIgnoreDuplicateTx(
     difficulty: input.difficulty,
     lootType: input.lootType,
     scopeChanges: input.scopeChanges ?? null,
+    helpRoles: input.helpRoles ?? null,
     status,
     createdAt: now,
     sentAt: null,
@@ -129,7 +142,76 @@ export async function insertAnnouncementIgnoreDuplicateTx(
   });
 }
 
+export type LateFillHelpWriteResult = {
+  /** The PENDING announcement the bot will post; null when every role was cooling down. */
+  created: RunDiscordAnnouncementRecord | null;
+  /** Roles this request pings. */
+  pinged: LateFillHelpRole[];
+  /** Roles asked for too recently on this Run, with when they may be asked again. */
+  cooling: Array<{ role: LateFillHelpRoleKey; availableAt: string }>;
+};
+
 export const runDiscordAnnouncementRepository = {
+  /**
+   * Late Fill help, serialized per Run by the roster row lock (the same lock
+   * roster and attendance writes take): roles pinged within `cooldownMs` are
+   * dropped, the rest go into ONE PENDING announcement. Concurrent clicks
+   * therefore produce one message, never two pings of the same role.
+   */
+  async createLateFillHelp(input: {
+    runId: string;
+    rosterId: string;
+    roles: readonly LateFillHelpRole[];
+    cooldownMs: number;
+    now: string;
+    scheduledStartAt: string;
+    productLabel: string;
+    difficulty: RaidDifficulty;
+    lootType: RunLootType;
+  }): Promise<LateFillHelpWriteResult> {
+    return db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      await lockRosterInTx(txOrm, input.rosterId);
+      const since = new Date(Date.parse(input.now) - input.cooldownMs).toISOString();
+      const recent = (await txOrm.RunDiscordAnnouncement.where({ runId: input.runId, type: "LATE_FILL_HELP" })
+        .where((row) => row.createdAt.gte(since))
+        .select("createdAt", "helpRoles")
+        .all()) as Array<Record<string, unknown>>;
+      const lastByRole = new Map<LateFillHelpRoleKey, number>();
+      for (const row of recent) {
+        const at = Date.parse(asString(row.createdAt));
+        for (const help of parseLateFillHelpRoles(asStringOrNull(row.helpRoles))) {
+          lastByRole.set(help.role, Math.max(lastByRole.get(help.role) ?? 0, at));
+        }
+      }
+      const cooling = input.roles
+        .filter((row) => lastByRole.has(row.role))
+        .map((row) => ({ role: row.role, availableAt: new Date(lastByRole.get(row.role)! + input.cooldownMs).toISOString() }));
+      const pinged = input.roles.filter((row) => !lastByRole.has(row.role));
+      if (pinged.length === 0) return { created: null, pinged, cooling };
+      const id = crypto.randomUUID();
+      await insertAnnouncementIgnoreDuplicateTx(txOrm, {
+        id,
+        runId: input.runId,
+        type: "LATE_FILL_HELP",
+        sourceKey: `late-fill-help:${input.runId}:${id}`,
+        previousScheduledStartAt: null,
+        scheduledStartAt: input.scheduledStartAt,
+        productLabel: input.productLabel,
+        difficulty: input.difficulty,
+        lootType: input.lootType,
+        helpRoles: serializeLateFillHelpRoles(pinged),
+        createdAt: input.now,
+      });
+      const created = await txOrm.RunDiscordAnnouncement.where({ id }).first();
+      return {
+        created: created ? mapRunDiscordAnnouncementRow(created as Record<string, unknown>) : null,
+        pinged,
+        cooling,
+      };
+    });
+  },
+
   async createIgnoreDuplicate(
     input: CreateRunDiscordAnnouncementInput,
   ): Promise<RunDiscordAnnouncementRecord | null> {

@@ -7,6 +7,7 @@ import {
   prepareRosterEditAction,
   publishRosterAction,
   repostRosterAction,
+  requestLateFillHelpAction,
   saveRosterDraftAction,
   syncRosterCharactersAction,
   updateRosterAction,
@@ -1018,6 +1019,22 @@ function RosterBuilderEditor({
     });
   }
 
+  /** Late Fill: one explicit request — the server pings the missing roles' Guild roles (cooldown per role). */
+  function requestLateFillHelp() {
+    setError(null);
+    setErrorCode(null);
+    setNotice(null);
+    startTransition(async () => {
+      const result = await requestLateFillHelpAction({ runId: data.run.id });
+      if (!result.ok) {
+        setError(result.message);
+        setErrorCode(result.code);
+        return;
+      }
+      setNotice(result.message);
+    });
+  }
+
   function seedPublished() {
     setError(null);
     setErrorCode(null);
@@ -1413,6 +1430,18 @@ function RosterBuilderEditor({
                 <Button type="button" size="sm" variant="secondary" disabled={pending} onClick={() => setBuilderMode("fill")}>
                   Fill gaps
                 </Button>
+                {data.run.lateFill && missing.tanks + missing.healers + missing.dps > 0 ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    disabled={pending}
+                    onClick={requestLateFillHelp}
+                    title="Ping the Guild Tank / Healer / DPS role in the Run channel for the saved roster's open slots"
+                  >
+                    Ask Discord for help
+                  </Button>
+                ) : null}
               </div>
             ) : null}
             {attentionSlots.map(({ signup, reasons }) => (

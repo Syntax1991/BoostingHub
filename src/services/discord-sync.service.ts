@@ -34,6 +34,11 @@ import {
   runDiscordAnnouncementRepository,
   runScopeChangedChannelSourceKey,
 } from "@/repositories/run-discord-announcement.repository";
+import {
+  LATE_FILL_HELP_RUN_STATUSES,
+  parseLateFillHelpRoles,
+  type LateFillHelpRole,
+} from "@/lib/late-fill-help";
 import { parseRunScopeChanges, type RunScopeChange } from "@/lib/run-scope-change";
 import { runDiscordPostRepository, type RunDiscordPostRecord } from "@/repositories/run-discord-post.repository";
 import { discordSchedulePostRepository } from "@/repositories/discord-schedule-post.repository";
@@ -578,12 +583,14 @@ export type AccountNotificationDmWorkItem = {
 export type RunAnnouncementWorkItem = {
   announcementId: string;
   runId: string;
-  type: "RUN_RESCHEDULED" | "RUN_CANCELLED" | "RUN_REACTIVATED" | "RUN_SCOPE_CHANGED";
+  type: "RUN_RESCHEDULED" | "RUN_CANCELLED" | "RUN_REACTIVATED" | "RUN_SCOPE_CHANGED" | "LATE_FILL_HELP";
   /** Dedicated Run channel when present — null means bot should mark SKIPPED. */
   runChannelId: string | null;
   previousScheduledStartAt: string | null;
   /** RUN_SCOPE_CHANGED only (empty otherwise): changed contents snapshot. */
   scopeChanges: RunScopeChange[];
+  /** LATE_FILL_HELP only (empty otherwise): the roles to ping and how many each still missed. */
+  helpRoles: LateFillHelpRole[];
   scheduledStartAt: string;
   productLabel: string;
   /** Compact Run identity ("Venom & Tide & Kithix") when the Run is loaded this pass. */
@@ -1683,6 +1690,7 @@ export const discordSyncService = {
       runChannelId: postsByRunId.get(row.runId)?.runChannelId ?? null,
       previousScheduledStartAt: row.previousScheduledStartAt,
       scopeChanges: row.type === "RUN_SCOPE_CHANGED" ? parseRunScopeChanges(row.scopeChanges) : [],
+      helpRoles: row.type === "LATE_FILL_HELP" ? parseLateFillHelpRoles(row.helpRoles) : [],
       scheduledStartAt: row.scheduledStartAt,
       productLabel: row.productLabel,
       contentTitle: contentTitles.get(row.runId),
@@ -2147,6 +2155,13 @@ export const discordSyncService = {
       // A cancelled Run's scope update is moot — the cancel announcement covers it.
       const run = await runRepository.findById(announcement.runId);
       return { deliver: Boolean(run && run.status !== "CANCELLED") };
+    }
+
+    if (announcement.type === "LATE_FILL_HELP") {
+      // A help request goes out only while the Run can still take players:
+      // never once it started, completed, was cancelled or archived.
+      const run = await runRepository.findById(announcement.runId);
+      return { deliver: Boolean(run && !run.archivedAt && LATE_FILL_HELP_RUN_STATUSES.includes(run.status)) };
     }
 
     // RUN_RESCHEDULED (and any future types): PENDING is sufficient.

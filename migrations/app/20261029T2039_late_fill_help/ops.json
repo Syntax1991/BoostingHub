@@ -1,0 +1,128 @@
+[
+  {
+    "id": "dropCheckConstraint.run_discord_announcement.run_discord_announcement_type_check_93ddaaed",
+    "label": "Drop check constraint \"run_discord_announcement_type_check_93ddaaed\" on \"run_discord_announcement\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_discord_announcement_type_check_93ddaaed",
+        "table": "run_discord_announcement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_discord_announcement_type_check_93ddaaed\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_discord_announcement_type_check_93ddaaed",
+          "public",
+          "\"public\".\"run_discord_announcement\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"run_discord_announcement_type_check_93ddaaed\"",
+        "sql": "ALTER TABLE \"public\".\"run_discord_announcement\" DROP CONSTRAINT \"run_discord_announcement_type_check_93ddaaed\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_discord_announcement_type_check_93ddaaed\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_discord_announcement_type_check_93ddaaed",
+          "public",
+          "\"public\".\"run_discord_announcement\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.run_discord_announcement.helpRoles",
+    "label": "Add column \"helpRoles\" to \"run_discord_announcement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "helpRoles",
+        "table": "run_discord_announcement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"helpRoles\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_discord_announcement",
+          "helpRoles"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"helpRoles\"",
+        "sql": "ALTER TABLE \"public\".\"run_discord_announcement\" ADD COLUMN \"helpRoles\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"helpRoles\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_discord_announcement",
+          "helpRoles"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.run_discord_announcement.run_discord_announcement_type_check_7dc0d0e2",
+    "label": "Add check constraint \"run_discord_announcement_type_check_7dc0d0e2\" on \"run_discord_announcement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_discord_announcement_type_check_7dc0d0e2",
+        "table": "run_discord_announcement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_discord_announcement_type_check_7dc0d0e2\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_discord_announcement_type_check_7dc0d0e2",
+          "public",
+          "\"public\".\"run_discord_announcement\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"run_discord_announcement_type_check_7dc0d0e2\"",
+        "sql": "ALTER TABLE \"public\".\"run_discord_announcement\" ADD CONSTRAINT \"run_discord_announcement_type_check_7dc0d0e2\" CHECK (\"type\" IN ('RUN_RESCHEDULED', 'RUN_CANCELLED', 'RUN_REACTIVATED', 'RUN_SCOPE_CHANGED', 'LATE_FILL_HELP'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_discord_announcement_type_check_7dc0d0e2\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_discord_announcement_type_check_7dc0d0e2",
+          "public",
+          "\"public\".\"run_discord_announcement\""
+        ]
+      }
+    ]
+  }
+]

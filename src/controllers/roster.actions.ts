@@ -2,6 +2,7 @@
 
 import { requireUser } from "@/auth/session";
 import { mapActionError, type ActionResult } from "@/lib/action-result";
+import { lateFillHelpFeedback, lateFillHelpService } from "@/services/late-fill-help.service";
 import { rosterBuilderService } from "@/services/roster-builder.service";
 import { rosterService } from "@/services/roster.service";
 import {
@@ -197,4 +198,16 @@ function rosterCharacterSyncMessage(result: RosterCharacterSyncResult): string {
   if (result.failed > 0) parts.push(`${result.failed} failed`);
   if (result.skipped > 0) parts.push(`${result.skipped} skipped (recently synced or in progress)`);
   return `Characters: ${parts.join(" · ")}.`;
+}
+
+/** Late Fill: ask the Guild ping roles in the Run channel for the missing roles (cooldown per role). */
+export async function requestLateFillHelpAction(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = rosterRunSchema.parse(input);
+    const result = await lateFillHelpService.request(user, parsed.runId);
+    return { ok: true, message: lateFillHelpFeedback(result) };
+  } catch (error) {
+    return mapActionError(error);
+  }
 }
