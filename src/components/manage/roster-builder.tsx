@@ -1548,9 +1548,6 @@ function RosterBuilderEditor({
         ) : null}
       </section>
 
-      {/* —— BUFFS: compact strip —— */}
-      <ClassBuffChecker coverage={liveRaidBuffCoverage} />
-
       {/* —— SIGNUPS: readable tile grid (4–5 / row at 1440) —— */}
       <section className="space-y-2 border-t border-border pt-3">
         <h3 className="text-base font-semibold text-foreground">
@@ -1613,6 +1610,9 @@ function RosterBuilderEditor({
           </ul>
         )}
       </section>
+
+      {/* —— BUFFS: compact strip, the Roster tab's last section —— */}
+      <ClassBuffChecker coverage={liveRaidBuffCoverage} />
 
       <dialog
         ref={dialogRef}
