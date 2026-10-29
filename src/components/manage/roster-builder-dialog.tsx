@@ -380,6 +380,23 @@ export function RosterBuilderDialog({
                 Still short after proposal: {formatMissingCounts(data.missingAfterProposal)}
               </p>
             ) : null}
+
+            {data.lockoutExcluded.length > 0 ? (
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-warning">
+                  Not auto-picked — saved for this Run · {data.lockoutExcluded.length}
+                </p>
+                <ul className="mt-1 space-y-0.5 text-xs text-warning">
+                  {data.lockoutExcluded.map((row) => (
+                    <li key={row.signupId}>{row.message}</li>
+                  ))}
+                </ul>
+                <p className="mt-1 text-[11px] text-muted">
+                  Auto Build leaves these slots open rather than pick a saved Character. Select one by hand in the
+                  roster to use it anyway — you will be asked to confirm.
+                </p>
+              </div>
+            ) : null}
           </>
         ) : null}
       </div>

@@ -198,28 +198,47 @@ async function forcePendingSignup(runId: string, userId: string, characterId: st
   return signupId;
 }
 
-/** Verified lockout row for the Character on the raid week of this Run (HEROIC, EU). */
+/**
+ * Verified lockout row for the Character on the raid week of this Run (EU;
+ * HEROIC unless given). `killedBossNumbers` (1-based, boss order) stores which
+ * bosses were killed; omitted = the boss list is unknown (older sync).
+ */
 async function setLockout(
   runId: string,
   characterId: string,
   raidId: string,
   bossesDefeated: number,
   totalBossCount: number,
+  options: { killedBossNumbers?: number[]; extraKilledBossIds?: string[]; difficulty?: "HEROIC" | "MYTHIC" } = {},
 ) {
   const run = await runRepository.findById(runId);
   const resetIdentifier = lockoutService.getResetIdentifierForRun("EU", run!.scheduledStartAt);
-  await orm.CharacterRaidLockout.where({ characterId, raidId, difficulty: "HEROIC", resetIdentifier })
+  const difficulty = options.difficulty ?? "HEROIC";
+  await orm.CharacterRaidLockout.where({ characterId, raidId, difficulty, resetIdentifier })
     .delete()
     .catch(() => {});
+  let killedBossIds: string | null = null;
+  if (options.killedBossNumbers) {
+    const bosses = (await orm.RaidBoss.where({ raidId }).select("id", "sortOrder").all()) as Array<{
+      id: string;
+      sortOrder: number;
+    }>;
+    const ordered = [...bosses].sort((a, b) => a.sortOrder - b.sortOrder);
+    killedBossIds = JSON.stringify([
+      ...options.killedBossNumbers.map((number) => ordered[number - 1]!.id),
+      ...(options.extraKilledBossIds ?? []),
+    ]);
+  }
   const now = new Date().toISOString();
   await orm.CharacterRaidLockout.create({
     id: crypto.randomUUID(),
     characterId,
     raidId,
-    difficulty: "HEROIC",
+    difficulty,
     resetIdentifier,
     bossesDefeated,
     isComplete: bossesDefeated >= totalBossCount,
+    killedBossIds,
     createdAt: now,
     updatedAt: now,
   });
@@ -693,56 +712,158 @@ describe("Add Player", () => {
 });
 
 describe("Auto Build", () => {
-  async function autoBuildRun() {
-    const runId = await createOpenRun(lead, nextRaidWeekStart());
+  async function autoBuildRun(overrides: Record<string, unknown> = {}) {
+    const runId = await createOpenRun(lead, nextRaidWeekStart(), overrides);
     const savedSignup = await forcePendingSignup(runId, ids.playerSavedA, savedA, "RANGED_DPS");
     const cleanSignup = await forcePendingSignup(runId, ids.playerClean, clean, "RANGED_DPS");
     const healerSignup = await forcePendingSignup(runId, ids.playerSavedB, savedB, "HEALER");
     return { runId, savedSignup, cleanSignup, healerSignup };
   }
 
-  function acknowledgeAll(proposal: Awaited<ReturnType<typeof rosterBuilderService.proposeRoster>>) {
-    return proposal.warnings.map((row) => ({
-      signupId: row.signupId,
-      type: row.warning.type,
-      fingerprint: row.warning.fingerprint,
-    }));
-  }
+  type Proposal = Awaited<ReturnType<typeof rosterBuilderService.proposeRoster>>;
+  const newPickIds = (proposal: Proposal) => proposal.applySelections.map((row) => row.signupId).sort();
+  const excludedIds = (proposal: Proposal) => proposal.lockoutExcluded.map((row) => row.signupId).sort();
 
-  it("keeps a WARNING candidate eligible and carries structured per-content warnings; CLEAN picks carry none", async () => {
+  it("UNSAVED: a saved candidate is left out before ranking, with per-content details; clean candidates are still picked", async () => {
     const { runId, savedSignup, cleanSignup, healerSignup } = await autoBuildRun();
     await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 6, 8);
 
     const proposal = await rosterBuilderService.proposeRoster(lead, runId);
-    expect(proposal.applySelections.map((row) => row.signupId).sort()).toEqual(
-      [savedSignup, cleanSignup, healerSignup].sort(),
-    );
-    expect(proposal.warnings).toHaveLength(1);
-    expect(proposal.warnings[0]).toMatchObject({
+    expect(newPickIds(proposal)).toEqual([cleanSignup, healerSignup].sort());
+    expect(proposal.proposed.some((row) => row.signupId === savedSignup)).toBe(false);
+    expect(proposal.unselected.some((row) => row.signupId === savedSignup)).toBe(false);
+    expect(proposal.warnings).toEqual([]);
+    expect(proposal.lockoutExcluded).toHaveLength(1);
+    expect(proposal.lockoutExcluded[0]).toMatchObject({
       signupId: savedSignup,
       characterId: savedA,
       characterLabel: `Rwsaveda-${REALM}`,
     });
-    expect(proposal.warnings[0]!.warning.contents).toMatchObject([
+    expect(proposal.lockoutExcluded[0]!.warning.contents).toMatchObject([
       { raidId: VENOMOUS_ABYSS_RAID_ID, raidName: "The Venomous Abyss", kind: "saved", bossesDefeated: 6, totalBossCount: 8 },
     ]);
-    expect(proposal.proposed.find((row) => row.signupId === savedSignup)?.lockoutAttention).toBe(true);
-    expect(proposal.proposed.find((row) => row.signupId === cleanSignup)?.lockoutAttention).toBe(false);
 
     // Same authority as the roster card — no private Auto Build rule.
     const card = await rosterCard(lead, runId, savedSignup);
-    expect(proposal.warnings[0]!.warning.fingerprint).toBe(card.selectionRisk.warnings[0]!.fingerprint);
+    expect(proposal.lockoutExcluded[0]!.warning.fingerprint).toBe(card.selectionRisk.warnings[0]!.fingerprint);
   });
 
-  it("follows the loot-type semantics of the shared authority: no warning on a SAVED Run, none for Unknown", async () => {
-    const runId = await createOpenRun(lead, nextRaidWeekStart(), { lootType: "SAVED" });
-    const savedSignup = await forcePendingSignup(runId, ids.playerSavedA, savedA, "RANGED_DPS");
-    await forcePendingSignup(runId, ids.playerClean, clean, "RANGED_DPS");
-    await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 6, 8);
+  it("VIP: a partially saved Character is not auto-picked; a verified-unsaved one is", async () => {
+    const { runId, savedSignup, cleanSignup, healerSignup } = await autoBuildRun({ lootType: "VIP" });
+    await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 2, 8);
+    await setLockout(runId, savedB, VENOMOUS_ABYSS_RAID_ID, 0, 8);
 
     const proposal = await rosterBuilderService.proposeRoster(lead, runId);
-    expect(proposal.warnings).toHaveLength(0);
+    expect(newPickIds(proposal)).toEqual([cleanSignup, healerSignup].sort());
+    expect(excludedIds(proposal)).toEqual([savedSignup]);
+    expect(proposal.lockoutExcluded[0]!.warning.contents[0]).toMatchObject({ kind: "saved", bossesDefeated: 2 });
+  });
+
+  it("every candidate saved: no saved fallback — the slots stay open and the shortage is reported", async () => {
+    const { runId, savedSignup, cleanSignup, healerSignup } = await autoBuildRun();
+    await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 6, 8);
+    await setLockout(runId, clean, VENOMOUS_ABYSS_RAID_ID, 1, 8);
+    await setLockout(runId, savedB, VENOMOUS_ABYSS_RAID_ID, 8, 8);
+
+    const proposal = await rosterBuilderService.proposeRoster(lead, runId);
+    expect(proposal.applySelections).toEqual([]);
+    expect(excludedIds(proposal)).toEqual([savedSignup, cleanSignup, healerSignup].sort());
+    expect(proposal.lockoutExcluded.find((row) => row.signupId === healerSignup)!.warning.contents[0]).toMatchObject({
+      kind: "fully_saved",
+    });
+    expect(proposal.missingAfterProposal).toEqual(proposal.shortages);
+    expect(proposal.missingAfterProposal.healers + proposal.missingAfterProposal.dps).toBeGreaterThan(0);
+  });
+
+  it("SAVED Run keeps its semantics: lockout progress is expected, the Character is picked, nothing is excluded", async () => {
+    const { runId, savedSignup, cleanSignup, healerSignup } = await autoBuildRun({ lootType: "SAVED" });
+    await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 6, 8);
+    await setLockout(runId, savedB, VENOMOUS_ABYSS_RAID_ID, 8, 8);
+
+    const proposal = await rosterBuilderService.proposeRoster(lead, runId);
+    expect(newPickIds(proposal)).toEqual([savedSignup, cleanSignup, healerSignup].sort());
+    expect(proposal.lockoutExcluded).toEqual([]);
+    expect(proposal.warnings).toEqual([]);
     expect(proposal.proposed.find((row) => row.signupId === savedSignup)?.lockoutAttention).toBe(false);
+  });
+
+  it("Bundle Run: each RunRaidContent is checked on its own — a save on one content excludes, verified-unsaved on all does not", async () => {
+    const runId = await createOpenRun(lead, nextRaidWeekStart(), { ...seededProductSelection("MIDNIGHT_S2_BUNDLE") });
+    const savedSignup = await forcePendingSignup(runId, ids.playerSavedA, savedA, "RANGED_DPS");
+    const healerSignup = await forcePendingSignup(runId, ids.playerSavedB, savedB, "HEALER");
+    // savedA: Venomous untouched, only the one-boss Tidebound content is saved.
+    await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 0, 8);
+    await setLockout(runId, savedA, TIDEBOUND_GROTTO_RAID_ID, 1, 1);
+    await setLockout(runId, savedB, VENOMOUS_ABYSS_RAID_ID, 0, 8);
+    await setLockout(runId, savedB, TIDEBOUND_GROTTO_RAID_ID, 0, 1);
+
+    const proposal = await rosterBuilderService.proposeRoster(lead, runId);
+    expect(newPickIds(proposal)).toEqual([healerSignup]);
+    expect(excludedIds(proposal)).toEqual([savedSignup]);
+    expect(proposal.lockoutExcluded[0]!.warning.contents).toMatchObject([
+      { raidId: TIDEBOUND_GROTTO_RAID_ID, kind: "fully_saved", bossesDefeated: 1, totalBossCount: 1 },
+    ]);
+  });
+
+  it("Unknown is not treated as verified unsaved: still eligible, never excluded, and its label stays Unknown", async () => {
+    const { runId, cleanSignup } = await autoBuildRun();
+    // `clean` has no verified lockout row for this reset → Unknown.
+    const proposal = await rosterBuilderService.proposeRoster(lead, runId);
+    expect(newPickIds(proposal)).toContain(cleanSignup);
+    expect(proposal.lockoutExcluded.some((row) => row.signupId === cleanSignup)).toBe(false);
+
+    const view = await rosterService.getRosterManagementView(lead, runId);
+    const saves = view.boosters.find((item) => item.id === cleanSignup)!.contentSaves;
+    expect(saves.map((row) => row.label.kind)).toEqual(["unknown"]);
+    expect(saves.every((row) => row.raidSave == null)).toBe(true);
+  });
+
+  it("Fill gaps keeps an existing saved pick (still flagged) and fills only with candidates that have no save warning", async () => {
+    const { runId, savedSignup, cleanSignup, healerSignup } = await autoBuildRun();
+    await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 6, 8);
+    await setLockout(runId, savedB, VENOMOUS_ABYSS_RAID_ID, 8, 8);
+    // The Raid Lead picked the saved Character deliberately (confirmed earlier).
+    const draft = [{ signupId: savedSignup, selectedRole: "RANGED_DPS" as CharacterRole }];
+
+    const proposal = await rosterBuilderService.proposeRoster(lead, runId, { baseSelections: draft });
+    expect(proposal.proposed.find((row) => row.signupId === savedSignup)).toMatchObject({
+      locked: true,
+      lockoutAttention: true,
+    });
+    expect(proposal.fullSelections.map((row) => row.signupId)).toContain(savedSignup);
+    expect(newPickIds(proposal)).toEqual([cleanSignup]);
+    expect(excludedIds(proposal)).toEqual([healerSignup]);
+  });
+
+  it("manual selection is unchanged: an excluded saved Character can still be selected by hand with the confirmation", async () => {
+    const { runId, savedSignup, cleanSignup } = await autoBuildRun();
+    await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 6, 8);
+    const proposal = await rosterBuilderService.proposeRoster(lead, runId);
+    expect(excludedIds(proposal)).toEqual([savedSignup]);
+    await rosterBuilderService.applyRosterProposal(lead, {
+      runId,
+      expectedVersion: proposal.rosterVersion,
+      selections: proposal.applySelections,
+    });
+    expect(await draftSelectedIds(runId)).toContain(cleanSignup);
+
+    const selections = [
+      ...proposal.applySelections,
+      { signupId: savedSignup, selectedRole: "RANGED_DPS" as CharacterRole },
+    ];
+    const rejected = await captureError(
+      rosterService.saveDraftSelection(lead, { runId, version: await rosterVersion(lead, runId), selections }),
+    );
+    expect(pendingWarningsOf(rejected).map((row) => row.signupId)).toEqual([savedSignup]);
+    expect(await draftSelectedIds(runId)).not.toContain(savedSignup);
+
+    await rosterService.saveDraftSelection(lead, {
+      runId,
+      version: await rosterVersion(lead, runId),
+      selections,
+      confirmedWarnings: confirm(await rosterCard(lead, runId, savedSignup)),
+    });
+    expect(await draftSelectedIds(runId)).toContain(savedSignup);
   });
 
   it("excludes a BLOCKED candidate (reserved on an overlapping Run)", async () => {
@@ -761,16 +882,15 @@ describe("Auto Build", () => {
     const proposal = await rosterBuilderService.proposeRoster(lead, runA);
     expect(proposal.applySelections.map((row) => row.signupId)).toEqual([cleanOnA]);
     expect(proposal.applySelections.some((row) => row.signupId === savedOnA)).toBe(false);
-    expect(proposal.warnings).toHaveLength(0);
+    expect(proposal.lockoutExcluded).toEqual([]);
   });
 
-  it("Apply without the aggregate acknowledgement is rejected and writes nothing; with it, the whole proposal is applied", async () => {
-    const { runId, savedSignup, cleanSignup, healerSignup } = await autoBuildRun();
-    await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 6, 8);
-    await setLockout(runId, savedB, VENOMOUS_ABYSS_RAID_ID, 8, 8);
-
+  it("a Character that gets saved after the proposal makes Apply stale — nothing is written", async () => {
+    const { runId, savedSignup } = await autoBuildRun();
     const proposal = await rosterBuilderService.proposeRoster(lead, runId);
-    expect(proposal.warnings.map((row) => row.signupId).sort()).toEqual([savedSignup, healerSignup].sort());
+    expect(newPickIds(proposal)).toContain(savedSignup);
+
+    await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 3, 8);
 
     const rejected = await captureError(
       rosterBuilderService.applyRosterProposal(lead, {
@@ -779,71 +899,26 @@ describe("Auto Build", () => {
         selections: proposal.applySelections,
       }),
     );
-    // ONE rejection listing every pick that needs confirmation — not one per Character.
-    expect(pendingWarningsOf(rejected).map((row) => row.signupId).sort()).toEqual([savedSignup, healerSignup].sort());
-    expect(await draftSelectedIds(runId)).toEqual([]);
-
-    // Acknowledging only one of the two is still not enough.
-    const partial = await captureError(
-      rosterBuilderService.applyRosterProposal(lead, {
-        runId,
-        expectedVersion: proposal.rosterVersion,
-        selections: proposal.applySelections,
-        confirmedWarnings: acknowledgeAll(proposal).filter((row) => row.signupId === savedSignup),
-      }),
-    );
-    expect(pendingWarningsOf(partial).map((row) => row.signupId)).toEqual([healerSignup]);
-    expect(await draftSelectedIds(runId)).toEqual([]);
-
-    await rosterBuilderService.applyRosterProposal(lead, {
-      runId,
-      expectedVersion: proposal.rosterVersion,
-      selections: proposal.applySelections,
-      confirmedWarnings: acknowledgeAll(proposal),
-    });
-    expect((await draftSelectedIds(runId)).sort()).toEqual([savedSignup, cleanSignup, healerSignup].sort());
-  });
-
-  it("a warning that changed after the proposal was confirmed is rejected on Apply", async () => {
-    const { runId } = await autoBuildRun();
-    await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 6, 8);
-    const proposal = await rosterBuilderService.proposeRoster(lead, runId);
-    const confirmedWarnings = acknowledgeAll(proposal);
-
-    await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 7, 8);
-
-    const rejected = await captureError(
-      rosterBuilderService.applyRosterProposal(lead, {
-        runId,
-        expectedVersion: proposal.rosterVersion,
-        selections: proposal.applySelections,
-        confirmedWarnings,
-      }),
-    );
-    expect(pendingWarningsOf(rejected)[0]!.warning.contents[0]).toMatchObject({ bossesDefeated: 7 });
+    expect(isDomainError(rejected)).toBe(true);
     expect(await draftSelectedIds(runId)).toEqual([]);
   });
 
-  it("a hard conflict that appears after confirmation rejects Apply — the acknowledgement cannot override it", async () => {
+  it("a hard conflict that appears after the proposal rejects Apply", async () => {
     const sched = nextRaidWeekStart();
     const runA = await createOpenRun(lead, sched);
     const runB = await createOpenRun(leadB, sched);
     const savedOnA = await forcePendingSignup(runA, ids.playerSavedA, savedA, "RANGED_DPS");
     await forcePendingSignup(runA, ids.playerClean, clean, "RANGED_DPS");
     const savedOnB = await forcePendingSignup(runB, ids.playerSavedA, savedA, "RANGED_DPS");
-    await setLockout(runA, savedA, VENOMOUS_ABYSS_RAID_ID, 6, 8);
 
     const proposal = await rosterBuilderService.proposeRoster(lead, runA);
     expect(proposal.applySelections.some((row) => row.signupId === savedOnA)).toBe(true);
-    const confirmedWarnings = acknowledgeAll(proposal);
-    expect(confirmedWarnings).toHaveLength(1);
 
     // Another Raid Lead takes the Character for the overlapping Run first.
     await rosterService.saveDraftSelection(leadB, {
       runId: runB,
       version: await rosterVersion(leadB, runB),
       selections: [{ signupId: savedOnB, selectedRole: "RANGED_DPS" }],
-      confirmedWarnings: confirm(await rosterCard(leadB, runB, savedOnB)),
     });
 
     const rejected = await captureError(
@@ -851,13 +926,200 @@ describe("Auto Build", () => {
         runId: runA,
         expectedVersion: proposal.rosterVersion,
         selections: proposal.applySelections,
-        confirmedWarnings,
       }),
     );
     // The re-proposal no longer contains the now-blocked Character → the stale proposal is refused.
     expect(isDomainError(rejected)).toBe(true);
-    expect(codeOf(rejected)).not.toBe("ROSTER_WARNING_CONFIRMATION_REQUIRED");
     expect(await draftSelectedIds(runA)).toEqual([]);
+  });
+});
+
+describe("Auto Build — only saves on planned bosses exclude", () => {
+  /** 6/8 Venomous Run (bosses 1–6 planned) with a saved-candidate DPS, a clean DPS and a healer. */
+  async function plannedRun(overrides: Record<string, unknown> = {}) {
+    const runId = await createOpenRun(lead, nextRaidWeekStart(), { plannedBossCount: 6, ...overrides });
+    const savedSignup = await forcePendingSignup(runId, ids.playerSavedA, savedA, "RANGED_DPS");
+    const cleanSignup = await forcePendingSignup(runId, ids.playerClean, clean, "RANGED_DPS");
+    const healerSignup = await forcePendingSignup(runId, ids.playerSavedB, savedB, "HEALER");
+    return { runId, savedSignup, cleanSignup, healerSignup };
+  }
+
+  type Proposal = Awaited<ReturnType<typeof rosterBuilderService.proposeRoster>>;
+  const newPickIds = (proposal: Proposal) => proposal.applySelections.map((row) => row.signupId).sort();
+  const excludedIds = (proposal: Proposal) => proposal.lockoutExcluded.map((row) => row.signupId).sort();
+
+  it("6/8 Run, boss 1 killed: a planned boss is saved → not auto-picked, and the manual pick needs confirmation", async () => {
+    const { runId, savedSignup, cleanSignup, healerSignup } = await plannedRun();
+    await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 1, 8, { killedBossNumbers: [1] });
+
+    const proposal = await rosterBuilderService.proposeRoster(lead, runId);
+    expect(excludedIds(proposal)).toEqual([savedSignup]);
+    expect(newPickIds(proposal)).toEqual([cleanSignup, healerSignup].sort());
+    expect((await rosterCard(lead, runId, savedSignup)).selectionRisk.level).toBe("WARNING");
+  });
+
+  it("6/8 Run, only boss 8 killed: no planned boss is saved → eligible, never listed as not auto-picked, no confirmation", async () => {
+    const { runId, savedSignup, cleanSignup, healerSignup } = await plannedRun();
+    await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 1, 8, { killedBossNumbers: [8] });
+
+    const proposal = await rosterBuilderService.proposeRoster(lead, runId);
+    expect(newPickIds(proposal)).toEqual([savedSignup, cleanSignup, healerSignup].sort());
+    expect(proposal.lockoutExcluded).toEqual([]);
+
+    const card = await rosterCard(lead, runId, savedSignup);
+    expect(card.selectionRisk.level).toBe("CLEAN");
+    // The informational label still shows the verified progress — it is not hidden or turned into "Unsaved".
+    const view = await rosterService.getRosterManagementView(lead, runId);
+    expect(view.boosters.find((item) => item.id === savedSignup)!.contentSaves[0]!.label).toMatchObject({
+      kind: "saved",
+      text: "HC 1/8 · Saved",
+    });
+
+    await rosterService.saveDraftSelection(lead, {
+      runId,
+      version: await rosterVersion(lead, runId),
+      selections: [{ signupId: savedSignup, selectedRole: "RANGED_DPS" }],
+    });
+    expect(await draftSelectedIds(runId)).toEqual([savedSignup]);
+  });
+
+  it("1/8 with boss 8 killed on a Run that includes boss 8 (8/8): excluded", async () => {
+    const { runId, savedSignup } = await plannedRun({ plannedBossCount: 8 });
+    await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 1, 8, { killedBossNumbers: [8] });
+
+    const proposal = await rosterBuilderService.proposeRoster(lead, runId);
+    expect(excludedIds(proposal)).toEqual([savedSignup]);
+    expect((await rosterCard(lead, runId, savedSignup)).selectionRisk.level).toBe("WARNING");
+  });
+
+  it("suggestion and Apply agree: a boss-8-only candidate is proposed and applied without any confirmation", async () => {
+    const { runId, savedSignup, cleanSignup, healerSignup } = await plannedRun();
+    await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 1, 8, { killedBossNumbers: [8] });
+    await setLockout(runId, savedB, VENOMOUS_ABYSS_RAID_ID, 2, 8, { killedBossNumbers: [7, 8] });
+
+    const proposal = await rosterBuilderService.proposeRoster(lead, runId);
+    expect(newPickIds(proposal)).toEqual([savedSignup, cleanSignup, healerSignup].sort());
+    expect(proposal.warnings).toEqual([]);
+    await rosterBuilderService.applyRosterProposal(lead, {
+      runId,
+      expectedVersion: proposal.rosterVersion,
+      selections: proposal.applySelections,
+    });
+    expect((await draftSelectedIds(runId)).sort()).toEqual([savedSignup, cleanSignup, healerSignup].sort());
+  });
+
+  it("inconsistent boss evidence is never trusted as harmless; a complete boss-8-only save stays eligible and applies", async () => {
+    const { runId, savedSignup, cleanSignup, healerSignup } = await plannedRun();
+    // 2/8 verified, only boss 8 in the stored list (e.g. an id dropped by a catalog merge).
+    await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 2, 8, { killedBossNumbers: [8] });
+    // 1/8 verified, the stored id is not a boss of this raid's catalog.
+    await setLockout(runId, clean, VENOMOUS_ABYSS_RAID_ID, 1, 8, {
+      killedBossNumbers: [],
+      extraKilledBossIds: ["00000000-0000-4000-8000-0000000000ff"],
+    });
+    // Complete evidence: exactly boss 8 of 1/8 — outside the planned 1–6.
+    await setLockout(runId, savedB, VENOMOUS_ABYSS_RAID_ID, 1, 8, { killedBossNumbers: [8] });
+
+    const proposal = await rosterBuilderService.proposeRoster(lead, runId);
+    expect(excludedIds(proposal)).toEqual([savedSignup, cleanSignup].sort());
+    expect(newPickIds(proposal)).toEqual([healerSignup]);
+    expect((await rosterCard(lead, runId, savedSignup)).selectionRisk.level).toBe("WARNING");
+    expect((await rosterCard(lead, runId, cleanSignup)).selectionRisk.level).toBe("WARNING");
+
+    // Same decision on Apply: the eligible pick needs no confirmation.
+    await rosterBuilderService.applyRosterProposal(lead, {
+      runId,
+      expectedVersion: proposal.rosterVersion,
+      selections: proposal.applySelections,
+    });
+    expect(await draftSelectedIds(runId)).toEqual([healerSignup]);
+  });
+
+  it("6/8 Run, full clear: excluded", async () => {
+    const { runId, savedSignup } = await plannedRun();
+    await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 8, 8, { killedBossNumbers: [1, 2, 3, 4, 5, 6, 7, 8] });
+
+    const proposal = await rosterBuilderService.proposeRoster(lead, runId);
+    expect(excludedIds(proposal)).toEqual([savedSignup]);
+    expect(proposal.lockoutExcluded[0]!.warning.contents[0]).toMatchObject({ kind: "fully_saved" });
+  });
+
+  it("partially saved with one planned boss among the kills (bosses 5 and 7): excluded", async () => {
+    const { runId, savedSignup } = await plannedRun({ lootType: "VIP" });
+    await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 2, 8, { killedBossNumbers: [5, 7] });
+
+    const proposal = await rosterBuilderService.proposeRoster(lead, runId);
+    expect(excludedIds(proposal)).toEqual([savedSignup]);
+    expect(proposal.lockoutExcluded[0]!.warning.contents[0]).toMatchObject({ kind: "saved", bossesDefeated: 2 });
+  });
+
+  it("Mythic binds the whole instance: a kill on an unplanned boss still excludes", async () => {
+    const { runId, savedSignup, cleanSignup } = await plannedRun({ difficulty: "MYTHIC" });
+    await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 1, 8, { killedBossNumbers: [8], difficulty: "MYTHIC" });
+    // A Heroic kill of the same week does not touch the Mythic Run (independent lockouts).
+    await setLockout(runId, clean, VENOMOUS_ABYSS_RAID_ID, 8, 8, { killedBossNumbers: [1, 2, 3, 4, 5, 6, 7, 8] });
+
+    const proposal = await rosterBuilderService.proposeRoster(lead, runId);
+    expect(excludedIds(proposal)).toEqual([savedSignup]);
+    expect(newPickIds(proposal)).toContain(cleanSignup);
+  });
+
+  it("Bundle Run: each content uses its own planned bosses", async () => {
+    const runId = await createOpenRun(lead, nextRaidWeekStart(), { ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 6) });
+    const savedSignup = await forcePendingSignup(runId, ids.playerSavedA, savedA, "RANGED_DPS");
+    const healerSignup = await forcePendingSignup(runId, ids.playerSavedB, savedB, "HEALER");
+    // savedA: Venomous boss 8 only (outside the 6 planned) and Tidebound clean → eligible.
+    await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 1, 8, { killedBossNumbers: [8] });
+    await setLockout(runId, savedA, TIDEBOUND_GROTTO_RAID_ID, 0, 1, { killedBossNumbers: [] });
+    // savedB: Venomous clean, but the single planned Tidebound boss is down → excluded for that content only.
+    await setLockout(runId, savedB, VENOMOUS_ABYSS_RAID_ID, 0, 8, { killedBossNumbers: [] });
+    await setLockout(runId, savedB, TIDEBOUND_GROTTO_RAID_ID, 1, 1, { killedBossNumbers: [1] });
+
+    const proposal = await rosterBuilderService.proposeRoster(lead, runId);
+    expect(newPickIds(proposal)).toEqual([savedSignup]);
+    expect(excludedIds(proposal)).toEqual([healerSignup]);
+    expect(proposal.lockoutExcluded[0]!.warning.contents).toMatchObject([
+      { raidId: TIDEBOUND_GROTTO_RAID_ID, kind: "fully_saved" },
+    ]);
+  });
+
+  it("SAVED Run keeps its semantics: a planned-boss save is expected and picked", async () => {
+    const { runId, savedSignup } = await plannedRun({ lootType: "SAVED" });
+    await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 3, 8, { killedBossNumbers: [1, 2, 3] });
+
+    const proposal = await rosterBuilderService.proposeRoster(lead, runId);
+    expect(newPickIds(proposal)).toContain(savedSignup);
+    expect(proposal.lockoutExcluded).toEqual([]);
+  });
+
+  it("Unknown stays Unknown and eligible; progress with an unknown boss list is treated as relevant (never guessed)", async () => {
+    const { runId, savedSignup, cleanSignup } = await plannedRun();
+    // savedA: 1/8 but no boss list (older sync) → which boss is unknown → excluded.
+    await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 1, 8);
+
+    const proposal = await rosterBuilderService.proposeRoster(lead, runId);
+    expect(excludedIds(proposal)).toEqual([savedSignup]);
+    expect(newPickIds(proposal)).toContain(cleanSignup);
+
+    const view = await rosterService.getRosterManagementView(lead, runId);
+    const cleanSaves = view.boosters.find((item) => item.id === cleanSignup)!.contentSaves;
+    expect(cleanSaves.map((row) => row.label.kind)).toEqual(["unknown"]);
+    expect(cleanSaves[0]!.raidSave).toBeNull();
+  });
+
+  it("Fill gaps keeps an existing planned-boss-saved pick (flagged) and fills with a boss-8-only Character", async () => {
+    const { runId, savedSignup, cleanSignup, healerSignup } = await plannedRun();
+    await setLockout(runId, savedB, VENOMOUS_ABYSS_RAID_ID, 2, 8, { killedBossNumbers: [1, 2] });
+    await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 1, 8, { killedBossNumbers: [8] });
+    const draft = [{ signupId: healerSignup, selectedRole: "HEALER" as CharacterRole }];
+
+    const proposal = await rosterBuilderService.proposeRoster(lead, runId, { baseSelections: draft });
+    expect(proposal.proposed.find((row) => row.signupId === healerSignup)).toMatchObject({
+      locked: true,
+      lockoutAttention: true,
+    });
+    expect(newPickIds(proposal)).toEqual([savedSignup, cleanSignup].sort());
+    expect(proposal.lockoutExcluded).toEqual([]);
   });
 });
 

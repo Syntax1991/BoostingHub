@@ -79,6 +79,41 @@ export function projectRunContentLockouts(input: {
   });
 }
 
+/**
+ * Whether a verified save keeps this Character from fresh loot on the bosses
+ * the Run actually plans (the first `plannedBossCount` in boss order — the
+ * same planned-boss rule as roster-saved-notice). Null save (Unknown) or no
+ * progress → false.
+ *
+ * - Normal / Heroic lock loot per boss: only a kill on a planned boss counts
+ *   (6/8 Run, only boss 8 killed → not relevant).
+ * - Mythic binds the Character to one raid ID: any kill in that content
+ *   keeps it out of a fresh instance (why MYTHIC + SAVED Runs do not exist).
+ * - Full clear always counts. A save whose killed bosses are unknown (older
+ *   sync, no boss list) counts too — irrelevance is never guessed from a count.
+ * - The boss list only proves a save harmless when it is consistent with
+ *   `bossesDefeated`: the stored ids are distinct, exactly that many, and all
+ *   recognised as bosses of this content. Anything else (ids dropped by a
+ *   catalog merge, unknown or duplicate ids, a list left from an earlier
+ *   sync) counts as relevant. Kills only accumulate within a reset, so a
+ *   consistent list is the exact set.
+ * - Zero kills is no save only when the stored list agrees (empty or absent);
+ *   a 0 count with stored kills is contradictory and counts as relevant.
+ */
+export function isSaveRelevantToPlannedBosses(row: RunContentRaidSaveInfo): boolean {
+  const save = row.raidSave;
+  if (!save) return false;
+  const ids = save.killedBossIds ?? null;
+  const full = save.isComplete || save.bossesDefeated >= save.totalBossCount;
+  if (save.bossesDefeated === 0 && !full) return (ids?.length ?? 0) > 0;
+  if (full || save.difficulty === "MYTHIC" || !row.bosses || !ids) return true;
+  const knownKills = row.bosses.filter((boss) => boss.killed).length;
+  const consistent =
+    new Set(ids).size === ids.length && ids.length === save.bossesDefeated && knownKills === save.bossesDefeated;
+  if (!consistent) return true;
+  return row.bosses.slice(0, row.plannedBossCount).some((boss) => boss.killed);
+}
+
 /** Aggregate attention: true if ANY content needs operational attention. */
 export function contentLockoutsNeedAttention(rows: readonly RunContentRaidSaveInfo[]): boolean {
   return rows.some((row) => row.label.attention);
