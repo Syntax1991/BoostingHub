@@ -416,6 +416,30 @@ async function writeDraftBossExceptionsInTx(
 ): Promise<void> {
   const replacement =
     options?.bossExceptions ?? (options?.seedBossExceptionsFromPublished ? roster.bossExceptions.published : null);
+  if (options?.bossExceptions) {
+    // Same in-tx re-check as for slots: an alternate withdrawn after the
+    // caller's validation must not land in the draft (its withdrawal cleanup
+    // found no row to remove yet).
+    const playSignupIds = [
+      ...new Set(
+        options.bossExceptions
+          .filter((row) => selectedSignupIds.has(row.slotSignupId))
+          .map((row) => row.playSignupId)
+          .filter((id): id is string => id != null),
+      ),
+    ];
+    if (playSignupIds.length > 0) {
+      const playRows = (await txOrm.RunSignup.where((signup) => signup.id.in(playSignupIds)).all()) as Array<
+        Record<string, unknown>
+      >;
+      if (playRows.length !== playSignupIds.length) {
+        throw new DomainError("NOT_FOUND", "Signup was not found.", 404);
+      }
+      if (playRows.some((row) => mapSignupStatus(row.status) === "WITHDRAWN")) {
+        throw new DomainError("SIGNUP_WITHDRAWN", "Withdrawn signups cannot be selected.");
+      }
+    }
+  }
   if (replacement) {
     await txOrm.RunRosterBossException.where({ rosterId: roster.id, stage: "DRAFT" }).deleteAndCount();
     for (const row of replacement) {

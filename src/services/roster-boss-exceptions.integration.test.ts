@@ -339,6 +339,28 @@ describe("boss exceptions — feature switch on", () => {
     ).toEqual([]);
   });
 
+  it("an alternate withdrawn after validation (race) is refused inside the write transaction", async () => {
+    await saveDefault();
+    const roster = (await rosterRepository.findByRunId(ids.run))!;
+    // The service validated the plan while the alternate was still PENDING;
+    // the withdrawal commits before the draft write (its cleanup found no row).
+    await orm.RunSignup.where({ id: ids.signupAlt }).update({ status: "WITHDRAWN" });
+    await expect(
+      rosterRepository.replaceSelectedSignupIds(
+        roster.id,
+        roster.version,
+        [
+          { signupId: ids.signupA, selectedRole: "HEALER" },
+          { signupId: ids.signupB, selectedRole: "RANGED_DPS" },
+        ],
+        { bossExceptions: [await venomException(6, "HEALER", ids.signupAlt)] },
+      ),
+    ).rejects.toMatchObject({ code: "SIGNUP_WITHDRAWN" });
+    const after = (await rosterRepository.findByRunId(ids.run))!;
+    expect(after.bossExceptions.draft).toEqual([]);
+    expect(after.version).toBe(roster.version);
+  });
+
   it("withdrawing the alternate after Publish drops only the DRAFT rows: Update needed, published plan kept until Update", async () => {
     await saveDefault([await venomException(6, "HEALER", ids.signupAlt)]);
     await rosterService.publishRoster(lead, { runId: ids.run, version: await version(), acknowledgeWarnings: true });
