@@ -1,5 +1,4 @@
 import { isConcreteCharacterRole, type ConcreteCharacterRole } from "@/lib/character-roles";
-import { isRosterBossExceptionsEnabled } from "@/lib/feature-flags";
 import { CHARACTER_ROLE_LABELS } from "@/lib/labels";
 import type { CharacterRole, ParticipationType, SignupStatus } from "@/models/enums";
 
@@ -437,17 +436,6 @@ export function bossExceptionFingerprint(exceptions: readonly RosterBossExceptio
 
 /** Both stored stages of a roster's boss exceptions. */
 export type BossExceptionStages = { draft: RosterBossException[]; published: RosterBossException[] };
-
-/**
- * Stored boss exceptions as every consumer sees them (roster view and
- * validation, unpublished state, reservations, Discord, DMs, Start, audit).
- * While ROSTER_BOSS_EXCEPTIONS_ENABLED is off they are inert: none, so every
- * Run behaves like its default roster. The rows stay stored untouched, so
- * switching the feature back on restores them.
- */
-export function activeBossExceptions(stages: BossExceptionStages): BossExceptionStages {
-  return isRosterBossExceptionsEnabled() ? stages : { draft: [], published: [] };
-}
 
 /**
  * One compact line per slot that deviates, in the given slot order — for the

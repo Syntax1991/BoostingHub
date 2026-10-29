@@ -34,7 +34,7 @@ import {
   mapWowClass,
 } from "@/lib/persistence";
 import { DomainError } from "@/lib/errors";
-import { activeBossExceptions, type RosterBossException } from "@/lib/roster-boss-plan";
+import type { RosterBossException } from "@/lib/roster-boss-plan";
 import { mapExternalBoosters, type ExternalBooster, type ExternalBoosterInput } from "@/lib/external-booster";
 import { userRepository } from "@/repositories/user.repository";
 import { mapOfferedRoles, queryReservationConflicts, syncOfferedRolesInTx } from "@/repositories/signup.repository";
@@ -42,6 +42,7 @@ import {
   rosterRemovedSourceKey,
   rosterSelectedSourceKey,
   rosterBossPlanSourceKey,
+  ROSTER_BOSS_PLAN_SOURCE_KEY_PREFIX,
   rosterSwappedSourceKey,
   rosterWithdrawnSourceKey,
   userNotificationRepository,
@@ -1377,7 +1378,7 @@ export const rosterRepository = {
           runChangedSinceAck: mapped.runChangedSinceAck,
           draft: mapped.selections,
           signups: signups.map(publishStateSignup),
-          bossExceptions: activeBossExceptions(mapped.bossExceptions),
+          bossExceptions: mapped.bossExceptions,
         })
       ) {
         throw new DomainError(
@@ -1515,7 +1516,11 @@ async function notifyRosterSelectionChangesInTx(
  * Publish / Update: a player who stays in the roster and was not just told
  * "selected" / "Roster Update" in this same write hears once that their
  * published boss plan changed; unchanged players hear nothing (the caller
- * only lists slots whose plan differs).
+ * only lists slots whose plan differs). DMs stay one per change: a waiting
+ * (undelivered) "Roster Selected" / "Roster Update" of that slot renders the
+ * current published plan when it goes out, so no notice is added; a waiting
+ * older Boss Plan Update is superseded (its DM skipped, compare-and-set on
+ * PENDING) by the new one.
  */
 async function notifyBossPlanChangesInTx(
   txOrm: TxOrm,
@@ -1529,18 +1534,29 @@ async function notifyBossPlanChangesInTx(
   },
 ): Promise<void> {
   if (!input.bossPlanNotices?.length) return;
-  const sameVersion = (await txOrm.UserNotification.where({ runId: input.runId, type: "ROSTER_SELECTED" }).all()) as Array<
+  const selectedRows = (await txOrm.UserNotification.where({ runId: input.runId, type: "ROSTER_SELECTED" }).all()) as Array<
     Record<string, unknown>
   >;
   const toldNow = new Set(
-    sameVersion
+    selectedRows
       .filter((row) => Number(asString(row.sourceKey).split(":")[2]) === input.version)
       .map((row) => asStringOrNull(row.signupId)),
   );
+  const pending = selectedRows.filter((row) => asString(row.discordDeliveryStatus) === "PENDING");
+  const isBossPlanNotice = (row: Record<string, unknown>) =>
+    asString(row.sourceKey).startsWith(ROSTER_BOSS_PLAN_SOURCE_KEY_PREFIX);
   const selectionById = new Map(input.selectedSelections.map((selection) => [selection.signupId, selection]));
   for (const notice of input.bossPlanNotices) {
     const selection = selectionById.get(notice.signupId);
     if (!selection || toldNow.has(notice.signupId)) continue;
+    const waiting = pending.filter((row) => asStringOrNull(row.signupId) === notice.signupId);
+    if (waiting.some((row) => !isBossPlanNotice(row))) continue;
+    for (const row of waiting) {
+      await txOrm.UserNotification.where({ id: asString(row.id), discordDeliveryStatus: "PENDING" }).update({
+        discordDeliveryStatus: "SKIPPED",
+        updatedAt: input.now,
+      });
+    }
     await createRosterSelectedNotificationInTx(txOrm, { ...input, selection, bossPlanNotice: { plan: notice.plan } });
   }
 }

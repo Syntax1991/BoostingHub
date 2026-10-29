@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import {
-  activeBossExceptions,
   bossExceptionFingerprint,
   bossPlanSummaryLines,
   type BossExceptionStages,
@@ -242,8 +241,7 @@ export type RosterEmbedData = {
   /**
    * Boss-specific deviations of the shown slots, one compact line each in
    * roster order ("Boss 5–6: Synpriest-Antonidas · Healer"). Empty for a Run
-   * without exceptions (and while the feature switch is off); optional so
-   * older payloads stay valid.
+   * without exceptions; optional so older payloads stay valid.
    */
   bossPlan?: Array<{ member: RosterEmbedMember; plan: string }>;
 };
@@ -439,8 +437,8 @@ export function rosterBossPlanRenderKey(run: {
   roster: { publishedAt: string | null; bossExceptions: BossExceptionStages } | null;
 }): string {
   if (!run.roster) return "";
-  const active = activeBossExceptions(run.roster.bossExceptions);
-  const rows = rosterShowsPublishedPicks(run) ? active.published : active.draft;
+  const stages = run.roster.bossExceptions;
+  const rows = rosterShowsPublishedPicks(run) ? stages.published : stages.draft;
   if (rows.length === 0) return "";
   return createHash("sha256").update(bossExceptionFingerprint(rows)).digest("hex").slice(0, 12);
 }
@@ -532,8 +530,8 @@ export type NotificationDmWorkItem = {
   /** ROSTER_SELECTED telling a player who stays that their published boss plan changed — "Boss Plan Update". */
   bossPlanUpdate?: boolean;
   /**
-   * ROSTER_SELECTED only: the slot's boss plan as the Roster message shows it
-   * now (null = every boss as rostered, also while the feature is off).
+   * ROSTER_SELECTED only: the slot's PUBLISHED boss plan at delivery time
+   * (null = every boss as rostered, or the roster is not published yet).
    */
   bossPlan?: string | null;
   /** Set for ROSTER_WITHDRAWN (to the Raid Lead): who left, why, and where to replace them. */
@@ -1328,14 +1326,16 @@ async function buildPendingNotificationDms(): Promise<{
         : (signupRow.lootbuddyClass ?? signupRow.character?.wowClass ?? null)
       : null;
 
-    // The slot's plan at delivery time, same stage as the Roster message.
+    // The slot's PUBLISHED plan at delivery time. A draft plan is never DMed:
+    // Publish / Update announces it (Boss Plan Update), so a Save-time
+    // "Roster Selected" and the later notice never repeat the same plan.
     const bossPlan =
-      notification.type === "ROSTER_SELECTED" && signupRow && run.roster
+      notification.type === "ROSTER_SELECTED" && signupRow && run.roster && rosterShowsPublishedPicks(run)
         ? (bossPlanSummaryLines({
             ...bossPlanForDisplay({
               run,
               stages: run.roster.bossExceptions,
-              stage: rosterShowsPublishedPicks(run) ? "PUBLISHED" : "DRAFT",
+              stage: "PUBLISHED",
               slotSignupIds: new Set([signupRow.id]),
               signups: signupRows,
             }),

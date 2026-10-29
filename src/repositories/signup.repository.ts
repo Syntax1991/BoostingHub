@@ -1,4 +1,3 @@
-import { isRosterBossExceptionsEnabled } from "@/lib/feature-flags";
 import { db, orm } from "@/lib/prisma";
 import { mapRaidBossRefs } from "@/lib/lockout-bosses";
 import type {
@@ -196,13 +195,11 @@ export type ReservationConflictQueryInput = {
 /**
  * Reserving besides published SELECTED: draft-selected into a roster, or the
  * alternate Character of a boss exception (it plays some bosses of that Run).
- * Exceptions are inert while the feature switch is off (activeBossExceptions),
- * so an alternate then reserves nothing.
  */
 function reservesAsDraftOrBossException(raw: Record<string, unknown>): boolean {
   const rosterEntries = Array.isArray(raw.rosterEntries) ? (raw.rosterEntries as Record<string, unknown>[]) : [];
   if (rosterEntries.some((entry) => asBoolean(entry.selected, true))) return true;
-  return isRosterBossExceptionsEnabled() && Array.isArray(raw.bossExceptionsPlayed) && raw.bossExceptionsPlayed.length > 0;
+  return Array.isArray(raw.bossExceptionsPlayed) && raw.bossExceptionsPlayed.length > 0;
 }
 
 export async function queryReservationConflicts(

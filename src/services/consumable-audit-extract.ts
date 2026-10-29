@@ -38,8 +38,9 @@ export type ConsumableAuditParticipant =
       role: CharacterRole | null;
       /**
        * Published boss plan: another of the player's Characters plays these
-       * bosses, so their fights are audited for that Character instead.
-       * Absent / empty: the slot's Character is audited on every fight.
+       * bosses, so their fights are audited as that Character (its own row,
+       * class and role) instead. Absent / empty: the slot's Character is
+       * audited on every fight.
        */
       bossCharacters?: ConsumableAuditBossCharacter[];
     }
@@ -57,6 +58,10 @@ export type ConsumableAuditBossCharacter = {
   characterRealm: string;
   characterRegion: WowRegion | null;
   warcraftLogsId: string | null;
+  /** The alternate's own class — class-bound checks (weapon enhancement, enchants, played spec) use it. */
+  wowClass: WowClass | null;
+  /** Planned role on its bosses (reference only, like the slot role); null when they differ. */
+  role: CharacterRole | null;
   bosses: Array<{ raidContentId: string; wclEncounterIds: number[] }>;
 };
 
@@ -285,7 +290,7 @@ export function extractConsumableAudit(input: {
     healthstoneUseSeen: healthstoneFights.has(fight.id),
   }));
 
-  const players: ExtractedPlayer[] = participants.map((participant, index) => {
+  const players: ExtractedPlayer[] = participants.flatMap((participant, index): ExtractedPlayer[] => {
     const { matchStatus, actorIds } = matchParticipantActors(participant, report);
     const base = {
       attendanceId: participant.source === "ATTENDANCE" ? participant.attendanceId : null,
@@ -297,51 +302,56 @@ export function extractConsumableAudit(input: {
       role: participant.role,
       sortOrder: index,
     };
-    // Boss plan: each fight is audited for the Character assigned to its boss.
-    const bossCharacters = participant.source === "ATTENDANCE" ? participant.bossCharacters : undefined;
-    if (participant.source === "ATTENDANCE" && bossCharacters?.length) {
-      const groups = new Map<ConsumableAuditBossCharacter | null, typeof fights>();
-      for (const fight of fights) {
-        const character = bossCharacterForFight(bossCharacters, fight);
-        groups.set(character, [...(groups.get(character) ?? []), fight]);
+    const audited = (
+      row: typeof base,
+      match: { matchStatus: ConsumableAuditMatchStatus; actorIds: number[] },
+      rowFights: typeof fights,
+    ): ExtractedPlayer => {
+      if (match.matchStatus !== "MATCHED") {
+        return { ...row, matchStatus: match.matchStatus, wclActorId: null, observations: [], gear: [] };
       }
-      const observations: ExtractedObservation[] = [];
-      const gear: ExtractedGearItem[] = [];
-      let firstActorId: number | null = null;
-      for (const [character, groupFights] of groups) {
-        const match = character
-          ? matchParticipantActors({ ...participant, ...character, bossCharacters: undefined }, report)
-          : { matchStatus, actorIds };
-        if (match.matchStatus !== "MATCHED") continue;
-        const groupActors = new Set(match.actorIds);
-        firstActorId ??= match.actorIds[0] ?? null;
-        observations.push(
-          ...observationsForActors(groupActors, groupFights, events).map((row) => ({ ...row, reportCode: report.code })),
-        );
-        gear.push(
-          ...gearForActors(groupActors, groupFights, events.combatants).map((row) => ({ ...row, reportCode: report.code })),
-        );
-      }
-      if (firstActorId == null) {
-        return { ...base, matchStatus, wclActorId: null, observations: [], gear: [] };
-      }
-      return { ...base, matchStatus: "MATCHED" as const, wclActorId: firstActorId, observations, gear };
-    }
-    if (matchStatus !== "MATCHED") {
-      return { ...base, matchStatus, wclActorId: null, observations: [], gear: [] };
-    }
-    const actors = new Set(actorIds);
-    return {
-      ...base,
-      matchStatus,
-      wclActorId: actorIds[0] ?? null,
-      observations: observationsForActors(actors, fights, events).map((row) => ({
+      const actors = new Set(match.actorIds);
+      return {
         ...row,
-        reportCode: report.code,
-      })),
-      gear: gearForActors(actors, fights, events.combatants).map((row) => ({ ...row, reportCode: report.code })),
+        matchStatus: match.matchStatus,
+        wclActorId: match.actorIds[0] ?? null,
+        observations: observationsForActors(actors, rowFights, events).map((obs) => ({ ...obs, reportCode: report.code })),
+        gear: gearForActors(actors, rowFights, events.combatants).map((item) => ({ ...item, reportCode: report.code })),
+      };
     };
-  });
+    // Boss plan: each fight is audited for the Character assigned to its boss.
+    // An alternate gets its own row (same attendance, its own name, class and
+    // role), so class-bound checks and the played spec are judged for the
+    // Character that actually played; the slot row keeps the other fights.
+    const bossCharacters = participant.source === "ATTENDANCE" ? participant.bossCharacters : undefined;
+    if (!bossCharacters?.length) return [audited(base, { matchStatus, actorIds }, fights)];
+    const groups = new Map<ConsumableAuditBossCharacter | null, typeof fights>();
+    for (const fight of fights) {
+      const character = bossCharacterForFight(bossCharacters, fight);
+      groups.set(character, [...(groups.get(character) ?? []), fight]);
+    }
+    const slotFights = groups.get(null) ?? [];
+    const rows: ExtractedPlayer[] = [];
+    // A slot Character that played none of the fights (all on alternates) has no row.
+    if (slotFights.length > 0) rows.push(audited(base, { matchStatus, actorIds }, slotFights));
+    for (const character of bossCharacters) {
+      const characterFights = groups.get(character);
+      if (!characterFights?.length) continue;
+      const row = {
+        ...base,
+        characterName: character.characterName,
+        characterRealm: character.characterRealm,
+        wowClass: character.wowClass,
+        role: character.role,
+      };
+      const match = matchParticipantActors(
+        { ...(participant as Extract<ConsumableAuditParticipant, { source: "ATTENDANCE" }>), ...character, bossCharacters: undefined },
+        report,
+      );
+      rows.push(audited(row, match, characterFights));
+    }
+    return rows.length > 0 ? rows : [audited(base, { matchStatus, actorIds }, slotFights)];
+  }).map((player, sortOrder) => ({ ...player, sortOrder }));
 
   return { fights: extractedFights, players };
 }

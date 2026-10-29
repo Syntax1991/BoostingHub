@@ -741,6 +741,7 @@ describe("boss plan — Discord, DMs, Start, audit, replacement, rollback", () =
   }
   const bossPlanRows = async () =>
     ((await orm.UserNotification.where({ runId: ids.run, type: "ROSTER_SELECTED" }).all()) as Array<{
+      id: string;
       signupId: string;
       sourceKey: string;
       message: string;
@@ -846,6 +847,8 @@ describe("boss plan — Discord, DMs, Start, audit, replacement, rollback", () =
         characterRealm: "Antonidas",
         characterRegion: "EU",
         warcraftLogsId: null,
+        wowClass: "PRIEST",
+        role: "HEALER",
         bosses: [
           { raidContentId: venom, wclEncounterIds: expect.any(Array) },
           { raidContentId: venom, wclEncounterIds: expect.any(Array) },
@@ -870,38 +873,100 @@ describe("boss plan — Discord, DMs, Start, audit, replacement, rollback", () =
     expect(afterParticipants.some((row) => row.source === "ATTENDANCE" && (row.bossCharacters?.length ?? 0) > 0)).toBe(false);
   });
 
-  it("rollback: switching the feature off with stored exceptions makes them inert everywhere; on again restores them", async () => {
+  /** Simulates a Discord-linked player: their roster DM waits for the bot. */
+  async function markPending(row: { id: string }) {
+    await orm.UserNotification.where({ id: row.id }).update({ discordDeliveryStatus: "PENDING", discordUserId: "123456789012345678" });
+  }
+  const selectedRowsOf = async (signupId: string) =>
+    (await orm.UserNotification.where({ runId: ids.run, signupId, type: "ROSTER_SELECTED" }).all()) as Array<{
+      id: string;
+      sourceKey: string;
+      discordDeliveryStatus: string;
+    }>;
+  async function pendingDmFor(notificationId: string) {
+    const work = await discordSyncService.listSyncWork();
+    return work.notificationDms.find((item) => item.notificationId === notificationId) ?? null;
+  }
+
+  it("DMs: Save with a plan, then Publish — the waiting Roster Selected carries the published plan, no extra Boss Plan Update", async () => {
+    await saveDefault(await altOn(5, 6));
+    const [selected] = await selectedRowsOf(ids.signupA);
+    await markPending(selected!);
+    // Before Publish a draft plan is never DMed.
+    expect((await pendingDmFor(selected!.id))?.bossPlan).toBeNull();
+    await publish();
+    expect(await bossPlanRows()).toEqual([]);
+    expect((await pendingDmFor(selected!.id))?.bossPlan).toBe("Venom 5–6: Bexpriest-Antonidas · Healer");
+  });
+
+  it("DMs: a Roster Selected delivered before Publish (no plan in it) is followed by exactly one Boss Plan Update", async () => {
+    await saveDefault(await altOn(5, 6));
+    // Delivered (or no Discord DM) before Publish: it carried no plan.
+    expect((await selectedRowsOf(ids.signupA)).map((row) => row.discordDeliveryStatus)).not.toContain("PENDING");
+    await publish();
+    const rows = await bossPlanRows();
+    expect(rows.map((row) => row.message)).toEqual([
+      "Your boss assignments for BEX Run changed: Venom 5–6: Bexpriest-Antonidas · Healer.",
+    ]);
+  });
+
+  it("DMs: two plan changes before the bot delivers — the older Boss Plan Update DM is superseded, one DM goes out", async () => {
+    await saveDefault();
+    await publish();
+    await update(await altOn(5, 6));
+    const [first] = await bossPlanRows();
+    await markPending(first!);
+    await update(await altOn(6));
+    const rows = (await selectedRowsOf(ids.signupA)).filter((row) => row.sourceKey.startsWith("roster-boss-plan:"));
+    expect(rows).toHaveLength(2);
+    expect(rows.find((row) => row.id === first!.id)!.discordDeliveryStatus).toBe("SKIPPED");
+    expect(await pendingDmFor(first!.id)).toBeNull();
+  });
+
+  it("rollback: with the switch off a stored plan is never silently ignored — it keeps applying, input stays refused", async () => {
     await saveDefault(await altOn(5, 6));
     await publish();
     await saveDefault(await altOn(6)); // an unpublished plan change
-    const stored = (await rosterRepository.findByRunId(ids.run))!.bossExceptions;
-    expect(stored.published).toHaveLength(2);
-    expect(stored.draft).toHaveLength(1);
-
     vi.stubEnv("ROSTER_BOSS_EXCEPTIONS_ENABLED", "false");
+
+    // Roster view: no editor, but the plan, its warnings and the unpublished state stay visible.
     const view = await rosterService.getRosterManagementView(lead, ids.run);
-    expect(view.bossPlan).toMatchObject({ enabled: false, draft: [], published: [] });
-    expect(view.roster.hasUnpublishedChanges).toBe(false);
-    expect(view.validation.warnings.filter((row) => row.code.startsWith("BOSS_"))).toEqual([]);
-    expect((await discordSyncService.getRosterEmbedData(ids.run))!.bossPlan).toEqual([]);
-    expect(rosterBossPlanRenderKey((await runRepository.findById(ids.run))!)).toBe("");
-    // The alternate is no longer reserved by this Run.
+    expect(view.bossPlan.enabled).toBe(false);
+    expect(view.bossPlan.draft).toHaveLength(1);
+    expect(view.bossPlan.published).toHaveLength(2);
+    expect(view.roster.hasUnpublishedChanges).toBe(true);
+    // Discord keeps showing what players were told (the published plan).
+    expect((await discordSyncService.getRosterEmbedData(ids.run))!.bossPlan!.map((line) => line.plan)).toEqual([
+      "Venom 5–6: Bexpriest-Antonidas · Healer",
+    ]);
+    // The alternate stays reserved by this Run.
     expect(
       await queryReservationConflicts(orm, {
         characterIds: [ids.charAlt],
         scheduledStartAt: START,
         excludeRunId: "dddddddd-dddd-4ddd-8ddd-bexr0000ffff",
       }),
-    ).toEqual([]);
-    // Normal roster actions keep working: Update (no boss input, no new boss plan notice) and Start.
-    const noticesBefore = (await bossPlanRows()).length;
+    ).not.toEqual([]);
+    // No new or changed plan through the API.
+    await expect(update(await altOn(5))).rejects.toThrow("Boss-specific roster assignments are not enabled.");
+    // Start needs the Update, like any unpublished roster change.
+    await expect(runService.startRun(lead, { runId: ids.run })).rejects.toMatchObject({ code: "ROSTER_UNPUBLISHED_CHANGES" });
+
+    // Update without boss input publishes the stored (validated) draft and tells the player once.
     await update();
-    expect(await bossPlanRows()).toHaveLength(noticesBefore);
+    expect((await rosterRepository.findByRunId(ids.run))!.bossExceptions.published).toHaveLength(1);
+    expect((await bossPlanRows()).map((row) => row.message)).toContain(
+      "Your boss assignments for BEX Run changed: Venom 6: Bexpriest-Antonidas · Healer.",
+    );
     await runService.startRun(lead, { runId: ids.run });
-    expect((await discordSyncService.getRunStartEmbedData(ids.run))!.bossPlan).toEqual([]);
-    // Rows stay stored — switching back on shows them again.
-    expect((await rosterRepository.findByRunId(ids.run))!.bossExceptions.published.length).toBeGreaterThan(0);
-    vi.stubEnv("ROSTER_BOSS_EXCEPTIONS_ENABLED", "true");
-    expect((await discordSyncService.getRunStartEmbedData(ids.run))!.bossPlan!.length).toBeGreaterThan(0);
+    expect((await discordSyncService.getRunStartEmbedData(ids.run))!.bossPlan).toEqual([
+      { discordUserId: null, userName: ids.userA, plan: "Venom 6: Bexpriest-Antonidas · Healer" },
+    ]);
+    // The audit still audits the alternate on its boss.
+    await orm.RunAttendance.where({ runId: ids.run }).updateAll({ status: "PRESENT" });
+    const sham = (await runConsumableAuditRepository.listParticipants(ids.run)).find(
+      (row) => row.source === "ATTENDANCE" && row.characterName === "Bexsham",
+    );
+    expect(sham?.source === "ATTENDANCE" ? sham.bossCharacters?.map((row) => row.characterName) : null).toEqual(["Bexpriest"]);
   });
 });

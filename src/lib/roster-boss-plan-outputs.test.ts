@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  activeBossExceptions,
   bossesPlayedBySignup,
   bossPlanSummaryLines,
   plannedRunBosses,
@@ -64,16 +63,8 @@ describe("compact boss plan lines (Discord / Final Setup / DMs)", () => {
   });
 });
 
-describe("feature switch rollback: stored exceptions are inert while off", () => {
-  const stored = { draft: [row("a", "c-venom", "v1", "TANK")], published: [row("a", "c-venom", "v2", "TANK")] };
-
-  it("off (default): none; on: the stored ones, unchanged", () => {
-    expect(activeBossExceptions(stored)).toEqual({ draft: [], published: [] });
-    vi.stubEnv("ROSTER_BOSS_EXCEPTIONS_ENABLED", "true");
-    expect(activeBossExceptions(stored)).toBe(stored);
-  });
-
-  it("the Roster render fingerprint is unchanged without a plan and changes with one (so toggling refreshes once)", () => {
+describe("Roster render fingerprint", () => {
+  it("is unchanged without a plan and changes with one (so a plan change refreshes the message)", () => {
     expect(rosterEmbedRenderFingerprint("emoji")).toBe(rosterEmbedRenderFingerprint("emoji", ""));
     expect(rosterEmbedRenderFingerprint("emoji", "abc123")).not.toBe(rosterEmbedRenderFingerprint("emoji"));
   });
@@ -232,6 +223,8 @@ describe("consumables audit: fight → assigned Character", () => {
     characterRealm: "Antonidas",
     characterRegion: "EU" as const,
     warcraftLogsId: null,
+    wowClass: "PRIEST" as const,
+    role: "HEALER" as const,
     bosses: [{ raidContentId: "c-venom", wclEncounterIds: [3005, 3006] }],
   };
 

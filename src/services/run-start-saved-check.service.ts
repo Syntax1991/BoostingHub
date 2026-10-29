@@ -1,5 +1,5 @@
 import { isDomainError } from "@/lib/errors";
-import { activeBossExceptions, bossesPlayedBySignup } from "@/lib/roster-boss-plan";
+import { bossesPlayedBySignup } from "@/lib/roster-boss-plan";
 import { runPlannedBosses } from "@/services/roster-boss-exceptions";
 import { mapWithConcurrency } from "@/lib/concurrency";
 import { parseKilledBossIds } from "@/lib/lockout-bosses";
@@ -52,7 +52,7 @@ export const runStartSavedCheckService = {
       const played = bossesPlayedBySignup({
         bosses: runPlannedBosses(run),
         slotSignupIds: slots.map((slot) => slot.id),
-        exceptions: roster ? activeBossExceptions(roster.bossExceptions).published : [],
+        exceptions: roster ? roster.bossExceptions.published : [],
       });
       const signupsById = new Map(signups.map((signup) => [signup.id, signup]));
       const picks = [...played.keys()]

@@ -179,7 +179,7 @@ export type RunListRecord = {
     selections: RosterSelectionOnRun[];
     /** Unregistered boosters added by hand; saved with the draft, count toward targets. */
     externalBoosters: ExternalBooster[];
-    /** Stored boss exceptions, both stages (consumers read them through activeBossExceptions). */
+    /** Stored boss exceptions, both stages. */
     bossExceptions: BossExceptionStages;
   } | null;
 };

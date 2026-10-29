@@ -11,7 +11,6 @@ import {
   normalizeBossExceptions,
   plannedRunBosses,
   validateBossExceptions,
-  activeBossExceptions,
   bossPlanSummaryLines,
   type BossExceptionStages,
   type BossPlanSignup,
@@ -30,8 +29,9 @@ import { lockoutService } from "@/services/lockout.service";
 /**
  * Server side of boss-specific roster exceptions: builds the pure plan inputs
  * (lib/roster-boss-plan) from the Run and its signups, runs the hard rules and
- * collects the warnings. Feature-gated: while the switch is off, any boss
- * exception input is refused and existing Runs behave exactly as before.
+ * collects the warnings. Feature-gated authoring: while the switch is off,
+ * any boss exception input is refused; exceptions already stored keep
+ * applying (lib/feature-flags), and Runs without any behave exactly as before.
  */
 
 type BossPlanRun = {
@@ -231,7 +231,7 @@ export function assertBossPlanValid(evaluation: Pick<BossPlanEvaluation, "issues
 
 export type BossPlanDisplay = {
   bosses: RunBoss[];
-  /** Exceptions of the shown slots only, from the shown stage (none while the switch is off). */
+  /** Exceptions of the shown slots only, from the shown stage. */
   exceptions: RosterBossException[];
   characterLabelBySignupId: Map<string, string>;
 };
@@ -240,8 +240,8 @@ export type BossPlanDisplay = {
  * What Discord (Roster message, Final Setup) and DMs show of a roster's boss
  * plan: the given stage's exceptions of exactly the slots being shown — a
  * slot that left the live roster (removed, replaced after Start) never shows
- * a stale plan — and only alternates that are still signed up. Empty while
- * the feature switch is off, so a Run renders as its default roster.
+ * a stale plan — and only alternates that are still signed up. Empty for a
+ * Run without exceptions, so it renders exactly as before.
  */
 export function bossPlanForDisplay(input: {
   run: Pick<BossPlanRun, "contents">;
@@ -250,8 +250,7 @@ export function bossPlanForDisplay(input: {
   slotSignupIds: ReadonlySet<string>;
   signups: readonly RosterSignupRow[];
 }): BossPlanDisplay {
-  const active = activeBossExceptions(input.stages);
-  const rows = input.stage === "PUBLISHED" ? active.published : active.draft;
+  const rows = input.stage === "PUBLISHED" ? input.stages.published : input.stages.draft;
   const signupsById = new Map(input.signups.map((signup) => [signup.id, signup]));
   const exceptions = rows.filter(
     (row) =>
@@ -296,8 +295,7 @@ export function finalSetupBossPlan(input: {
 /**
  * Publish / Update: the accepted slots whose PUBLISHED boss plan changes,
  * with the new plan text (null = every boss as rostered again). Players whose
- * plan stays the same are not listed, so they are not notified. None while
- * the feature switch is off.
+ * plan stays the same are not listed, so they are not notified.
  */
 export function bossPlanNotices(input: {
   run: Pick<BossPlanRun, "contents">;
@@ -306,7 +304,6 @@ export function bossPlanNotices(input: {
   before: readonly RosterBossException[];
   after: readonly RosterBossException[];
 }): Array<{ signupId: string; plan: string | null }> {
-  if (!isRosterBossExceptionsEnabled()) return [];
   const changed = input.selectedSignupIds.filter(
     (signupId) =>
       bossExceptionFingerprint(input.before.filter((row) => row.slotSignupId === signupId)) !==

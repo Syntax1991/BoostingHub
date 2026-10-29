@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { playedRolesByFight } from "@/services/consumable-audit-policy";
 import type {
   WarcraftLogsConsumableEvents,
   WarcraftLogsReportMetadata,
@@ -371,20 +372,69 @@ describe("extractConsumableAudit — boss plan: each fight audited for the Chara
         characterRealm: "Blackhand",
         characterRegion: "EU",
         warcraftLogsId: null,
+        wowClass: "PRIEST",
+        role: "HEALER",
         bosses: [{ raidContentId: "content-va", wclEncounterIds: [ULATEK] }],
       },
     ],
   });
-  const player = extractConsumableAudit({ report: report(), fights: assignedFights, events, participants: [withPlan] }).players[0]!;
+  const players = extractConsumableAudit({ report: report(), fights: assignedFights, events, participants: [withPlan] }).players;
 
-  it("takes the alternate's facts on its bosses and the slot Character's facts elsewhere — never both on one pull", () => {
-    expect(player.matchStatus).toBe("MATCHED");
-    expect(player.observations.map((row) => [row.wclFightId, row.kind, row.specId])).toEqual([
-      [1, "COMBATANT", 63],
+  it("audits the alternate in its own row (its name, class, role) on its bosses; the slot row keeps the rest — never both on one pull", () => {
+    expect(players.map((row) => [row.attendanceId, row.characterName, row.wowClass, row.role, row.matchStatus, row.sortOrder])).toEqual([
+      ["att-Synblast", "Synblast", "MAGE", "RANGED_DPS", "MATCHED", 0],
+      ["att-Synblast", "Synlight", "PRIEST", "HEALER", "MATCHED", 1],
+    ]);
+    expect(players[0]!.observations.map((row) => [row.wclFightId, row.kind, row.specId])).toEqual([[1, "COMBATANT", 63]]);
+    expect(players[1]!.observations.map((row) => [row.wclFightId, row.kind, row.specId])).toEqual([
       [4, "COMBATANT", 257],
       [5, "COMBATANT", 257],
       [5, "DEATH", null],
     ]);
+  });
+
+  it("class-bound evaluation sees the alternate's class: its Holy spec counts as a played Healer role", () => {
+    // Merged into the Mage slot's row, the Priest spec was judged against the Mage class and dropped.
+    const alternate = players[1]!;
+    const roles = playedRolesByFight(
+      { wowClass: alternate.wowClass },
+      alternate.observations.map((row) => ({
+        fightId: String(row.wclFightId),
+        kind: row.kind,
+        category: row.category,
+        spellId: row.spellId,
+        specId: row.specId,
+        atMs: row.atMs,
+      })),
+    );
+    expect([...roles.values()]).toEqual(["HEALER", "HEALER"]);
+  });
+
+  it("an alternate missing from the log gets its own NOT_IN_LOG row; the slot Character is not blamed for its pulls", () => {
+    const [slot, missing] = extractConsumableAudit({
+      report: report(),
+      fights: assignedFights,
+      events,
+      participants: [
+        attended("Synblast", "Twisting Nether", {
+          wowClass: "MAGE",
+          role: "RANGED_DPS",
+          bossCharacters: [
+            {
+              characterName: "Nobody",
+              characterRealm: "Blackhand",
+              characterRegion: "EU",
+              warcraftLogsId: null,
+              wowClass: "PRIEST",
+              role: "HEALER",
+              bosses: [{ raidContentId: "content-va", wclEncounterIds: [ULATEK] }],
+            },
+          ],
+        }),
+      ],
+    }).players;
+    expect(slot!.observations.map((row) => row.wclFightId)).toEqual([1]);
+    expect([missing!.characterName, missing!.matchStatus, missing!.observations]).toEqual(["Nobody", "NOT_IN_LOG", []]);
   });
 
   it("without a boss plan the slot Character is audited on every fight (unchanged)", () => {

@@ -15,7 +15,6 @@ import {
 } from "@/lib/persistence";
 import type { AttendanceStatus, RaidDifficulty, RunStatus } from "@/models/enums";
 import { parseEncounterIds } from "@/lib/raid-catalog";
-import { activeBossExceptions } from "@/lib/roster-boss-plan";
 import { mapBossExceptionRows } from "@/repositories/roster.repository";
 import type {
   ConsumableAuditMatchStatus,
@@ -122,15 +121,15 @@ async function insertChunked(
  * Published boss plan → per participant the alternate Characters that play
  * some bosses (and which: Run content + WCL encounter ids), so those fights
  * are audited for the Character actually assigned. Role-only exceptions keep
- * the slot's Character. Nothing while the feature switch is off or without
- * alternates.
+ * the slot's Character. Stored plans apply whatever the feature switch says
+ * (it gates authoring only); nothing without alternates.
  */
 async function attachBossCharacters(
   participants: ConsumableAuditParticipant[],
   slotSignupIdByAttendanceId: ReadonlyMap<string, string>,
   roster: Record<string, unknown> | null,
 ): Promise<void> {
-  const rows = activeBossExceptions(mapBossExceptionRows(roster?.bossExceptions)).published.filter(
+  const rows = mapBossExceptionRows(roster?.bossExceptions).published.filter(
     (row) => row.playSignupId != null,
   );
   if (rows.length === 0) return;
@@ -163,6 +162,8 @@ async function attachBossCharacters(
           characterRealm: asString(character.realm),
           characterRegion: mapRegion(character.region),
           warcraftLogsId: asStringOrNull(character.warcraftLogsId),
+          wowClass: character.wowClass ? mapWowClass(character.wowClass) : null,
+          role: new Set(playRows.map((row) => row.role)).size === 1 ? playRows[0]!.role : null,
           bosses: playRows.map((row) => ({
             raidContentId: row.runRaidContentId,
             wclEncounterIds: encounterIdsByBossId.get(row.raidBossId) ?? [],

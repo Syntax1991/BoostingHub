@@ -1,4 +1,3 @@
-import { activeBossExceptions } from "@/lib/roster-boss-plan";
 import { db, orm } from "@/lib/prisma";
 import { serializeRunDomainEventPayload } from "@/lib/run-domain-event";
 import { DomainError } from "@/lib/errors";
@@ -313,7 +312,7 @@ export const attendanceRepository = {
           version: lockedRoster.version,
           runChangedSinceAck: lockedRoster.runChangedSinceAck,
           draft: lockedRoster.selections,
-          bossExceptions: activeBossExceptions(lockedRoster.bossExceptions),
+          bossExceptions: lockedRoster.bossExceptions,
           signups: runSignups.map((row) => ({
             id: asString(row.id),
             status: mapSignupStatus(row.status),
