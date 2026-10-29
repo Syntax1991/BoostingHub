@@ -8,6 +8,8 @@ export type VoicePresenceReportItem = { runId: string; channelId: string; discor
  * Run is IN_PROGRESS), read from the gateway voice-state cache — no extra
  * Discord request. A channel the cache cannot read is left out (the web
  * then shows UNKNOWN once the last report expires), never reported empty.
+ * A channel with more distinct members than the Bot API accepts is left out
+ * too: a cut list would read the missing players as "not in voice".
  */
 export function buildVoicePresenceReports(input: {
   items: ReadonlyArray<{ runId: string; action: string }>;
@@ -21,7 +23,10 @@ export function buildVoicePresenceReports(input: {
     if (!channelId) continue;
     const memberIds = input.readMemberIds(channelId);
     if (!memberIds) continue;
-    reports.push({ runId: item.runId, channelId, discordUserIds: [...new Set(memberIds)].slice(0, VOICE_PRESENCE_MAX_MEMBERS) });
+    const distinct = [...new Set(memberIds)];
+    // Never report a truncated snapshot as complete.
+    if (distinct.length > VOICE_PRESENCE_MAX_MEMBERS) continue;
+    reports.push({ runId: item.runId, channelId, discordUserIds: distinct });
   }
   return reports;
 }
