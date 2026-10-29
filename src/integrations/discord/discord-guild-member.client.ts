@@ -15,20 +15,35 @@ function invalidRoleData(): Error {
   return new Error("Discord returned invalid role data.");
 }
 
+/** One authoritative guild member read: roles plus the Discord names BoostingHub displays. */
+export type DiscordGuildMember = {
+  roleIds: string[];
+  /** Server nickname; null when none is set. */
+  nick: string | null;
+  /** Global display name; null when none is set. */
+  globalName: string | null;
+  username: string | null;
+};
+
+function optionalString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
 /**
- * Minimal Discord REST client for login-time guild-role checks. It never logs
- * or includes the bot token in errors.
+ * Minimal Discord REST client for guild member reads (login-time role and
+ * name sync, the bot's bounded name refresh). It never logs or includes the
+ * bot token in errors.
  */
 export const discordGuildMemberClient = {
   /**
-   * Returns guild role IDs for the member, or `null` when the member is not in
-   * the guild (HTTP 404). Throws on transport / non-authoritative failures so
-   * callers can preserve last-known Discord grants.
+   * The guild member, or `null` when the member is not in the guild (HTTP
+   * 404). Throws on transport / non-authoritative failures (rate limits
+   * included) so callers can preserve last-known Discord state.
    */
-  async listRoleIds(
+  async getMember(
     discordUserId: string,
     config: Pick<DiscordRoleAccessSyncConfig, "botToken" | "guildId">,
-  ): Promise<string[] | null> {
+  ): Promise<DiscordGuildMember | null> {
     const url = new URL(
       `${DISCORD_API_BASE_URL}/guilds/${encodeURIComponent(config.guildId)}/members/${encodeURIComponent(discordUserId)}`,
     );
@@ -64,10 +79,26 @@ export const discordGuildMemberClient = {
       throw invalidRoleData();
     }
 
-    const roles = (body as { roles?: unknown }).roles;
+    const member = body as { roles?: unknown; nick?: unknown; user?: unknown };
+    const roles = member.roles;
     if (!Array.isArray(roles) || roles.some((role) => typeof role !== "string")) {
       throw invalidRoleData();
     }
-    return roles;
+    const user = member.user && typeof member.user === "object" ? (member.user as Record<string, unknown>) : {};
+    return {
+      roleIds: roles as string[],
+      nick: optionalString(member.nick),
+      globalName: optionalString(user.global_name),
+      username: optionalString(user.username),
+    };
+  },
+
+  /** Guild role IDs for the member, or `null` when not in the guild (see getMember). */
+  async listRoleIds(
+    discordUserId: string,
+    config: Pick<DiscordRoleAccessSyncConfig, "botToken" | "guildId">,
+  ): Promise<string[] | null> {
+    const member = await this.getMember(discordUserId, config);
+    return member ? member.roleIds : null;
   },
 };

@@ -40,7 +40,6 @@ import {
 } from "@/repositories/run-discord-announcement.repository";
 import { isUniqueViolation } from "@/repositories/community-schedule-run.repository";
 import { lockRosterInTx } from "@/repositories/roster.repository";
-import { getRaidLeadDisplayName } from "@/lib/raid-lead-display";
 import { normalizeOfferedRoles } from "@/lib/offered-roles";
 import type { InitialBoosterSignup } from "@/services/run-raid-lead-bootstrap.service";
 import type { RunDomainEventActorKind } from "@/models/enums";
@@ -132,13 +131,8 @@ export type RunListRecord = {
   raidLeadId: string;
   /** Account name of the Raid Lead (audit / account surfaces). */
   raidLeadName: string;
-  /** Run display identity: Raid Lead nickname, else raidLeadName (see getRaidLeadDisplayName). */
+  /** Run display identity of the Raid Lead: their User.name (resolved from Discord). */
   raidLeadDisplayName: string;
-  /**
-   * Raid Lead's current nickname (Settings), live. Used by Discord channel
-   * naming; Run.title snapshots the display name when it is (re)generated.
-   */
-  raidLeadDiscordRunChannelNickname: string | null;
   /** Discord snowflake for the Raid Lead User, when linked. */
   raidLeadDiscordUserId: string | null;
   notes: string | null;
@@ -420,12 +414,7 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
     status: mapRunStatus(run.status),
     raidLeadId: asString(run.raidLeadId ?? raidLead.id),
     raidLeadName: asString(raidLead.name, "Unknown lead"),
-    raidLeadDisplayName: getRaidLeadDisplayName({
-      name: asString(raidLead.name, "Unknown lead"),
-      discordRunChannelNickname: asStringOrNull(raidLead.discordRunChannelNickname),
-    }),
-    /** Live Raid Lead nickname (Run display identity) — never snapshotted onto the Run. */
-    raidLeadDiscordRunChannelNickname: asStringOrNull(raidLead.discordRunChannelNickname),
+    raidLeadDisplayName: asString(raidLead.name, "Unknown lead"),
     raidLeadDiscordUserId: asStringOrNull(raidLead.discordUserId),
     notes: asStringOrNull(run.notes),
     desiredTankCount: asNumber(run.desiredTankCount),

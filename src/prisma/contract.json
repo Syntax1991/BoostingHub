@@ -8705,10 +8705,31 @@
                   "kind": "scalar"
                 }
               },
+              "discordGlobalName": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "discordGuildNickname": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "discordLootbuddy": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "discordNameSyncedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
                   "kind": "scalar"
                 }
               },
@@ -9302,8 +9323,17 @@
                 "discordDmQuietHoursStart": {
                   "column": "discordDmQuietHoursStart"
                 },
+                "discordGlobalName": {
+                  "column": "discordGlobalName"
+                },
+                "discordGuildNickname": {
+                  "column": "discordGuildNickname"
+                },
                 "discordLootbuddy": {
                   "column": "discordLootbuddy"
+                },
+                "discordNameSyncedAt": {
+                  "column": "discordNameSyncedAt"
                 },
                 "discordRaidBooster": {
                   "column": "discordRaidBooster"
@@ -16520,6 +16550,16 @@
                   "nativeType": "text",
                   "nullable": true
                 },
+                "discordGlobalName": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "discordGuildNickname": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "discordLootbuddy": {
                   "codecId": "pg/bool@1",
                   "default": {
@@ -16528,6 +16568,11 @@
                   },
                   "nativeType": "bool",
                   "nullable": false
+                },
+                "discordNameSyncedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
                 },
                 "discordRaidBooster": {
                   "codecId": "pg/bool@1",
@@ -17526,7 +17571,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "6bf45172add1e36a8b1f7b73f96a6ed59a18db85fa7aa3ad9414f9466e9df267"
+    "storageHash": "4dc4e3e4992b86217d8fc9d3ea09bfe0b3deee47daf3a2d4e789bc0e64f58198"
   },
   "execution": {
     "executionHash": "324c5afa3b4d6d5548548ec3e865b7ab15f3ade264bd46a2057a901773b881e8",

@@ -60,7 +60,3 @@ export const updateRegionalPreferencesSchema = z.object({
 export const updateGameplayPreferencesSchema = z.object({
   defaultCharacterId: z.string().uuid().nullable(),
 });
-
-export const updateRunChannelPreferencesSchema = z.object({
-  discordRunChannelNickname: z.string().max(24).nullable(),
-});

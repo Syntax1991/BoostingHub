@@ -1,7 +1,6 @@
 import { parseKilledBossIds } from "@/lib/lockout-bosses";
 import { DomainError } from "@/lib/errors";
 import { ROLE_LABELS } from "@/lib/labels";
-import { getRaidLeadDisplayName } from "@/lib/raid-lead-display";
 import { db, orm } from "@/lib/prisma";
 import { or } from "@prisma/orm-postgres/orm-client";
 import type { AccountRole, AccountStatus, BoostingRole, RaidDifficulty, RunStatus, WowRegion } from "@/models/enums";
@@ -296,6 +295,86 @@ export const userRepository = {
     });
   },
 
+  /** Current Discord name inputs of a User (for re-resolving the display name); null when the User does not exist. */
+  async findDiscordNameState(userId: string): Promise<{
+    name: string;
+    discordUsername: string | null;
+    discordGlobalName: string | null;
+    discordGuildNickname: string | null;
+  } | null> {
+    const row = (await orm.User.where({ id: userId })
+      .select("name", "discordUsername", "discordGlobalName", "discordGuildNickname")
+      .first()) as Record<string, unknown> | null;
+    if (!row) return null;
+    return {
+      name: asString(row.name),
+      discordUsername: asStringOrNull(row.discordUsername),
+      discordGlobalName: asStringOrNull(row.discordGlobalName),
+      discordGuildNickname: asStringOrNull(row.discordGuildNickname),
+    };
+  },
+
+  /** Stores the raw Discord names of an authoritative member read and the display name resolved from them. */
+  async setDiscordName(
+    userId: string,
+    input: {
+      name: string;
+      discordUsername: string | null;
+      discordGlobalName: string | null;
+      discordGuildNickname: string | null;
+      syncedAt: string;
+    },
+  ): Promise<void> {
+    await orm.User.where({ id: userId }).update({
+      name: input.name,
+      discordUsername: input.discordUsername,
+      discordGlobalName: input.discordGlobalName,
+      discordGuildNickname: input.discordGuildNickname,
+      discordNameSyncedAt: input.syncedAt,
+    });
+  },
+
+  /**
+   * Discord-linked Users whose name was not refreshed since `staleBefore`
+   * (never refreshed first), limited to the people of upcoming Runs — signed
+   * up or Raid Lead of a Run starting at or after `runsFrom`. Three reads,
+   * no per-user query.
+   */
+  async listDueDiscordNameRefresh(input: {
+    staleBefore: string;
+    runsFrom: string;
+    limit: number;
+  }): Promise<Array<{ id: string; discordUserId: string }>> {
+    const runs = (await orm.Run.where((run) => run.scheduledStartAt.gte(input.runsFrom))
+      .select("id", "raidLeadId")
+      .all()) as Array<Record<string, unknown>>;
+    if (runs.length === 0) return [];
+    const signups = (await orm.RunSignup.where((signup) => signup.runId.in(runs.map((run) => asString(run.id))))
+      .select("userId")
+      .all()) as Array<Record<string, unknown>>;
+    const userIds = [
+      ...new Set([
+        ...runs.map((run) => asStringOrNull(run.raidLeadId)).filter((id): id is string => id != null),
+        ...signups.map((signup) => asString(signup.userId)),
+      ]),
+    ];
+    if (userIds.length === 0) return [];
+    const users = (await orm.User.where((user) => user.id.in(userIds))
+      .select("id", "discordUserId", "discordNameSyncedAt")
+      .all()) as Array<Record<string, unknown>>;
+    return users
+      .filter((user) => asStringOrNull(user.discordUserId))
+      .map((user) => ({
+        id: asString(user.id),
+        discordUserId: asString(user.discordUserId),
+        syncedAt: asStringOrNull(user.discordNameSyncedAt),
+      }))
+      .filter((user) => user.syncedAt == null || Date.parse(user.syncedAt) < Date.parse(input.staleBefore))
+      .sort((a, b) => (a.syncedAt ? Date.parse(a.syncedAt) : 0) - (b.syncedAt ? Date.parse(b.syncedAt) : 0))
+      .slice(0, input.limit)
+      .map(({ id, discordUserId }) => ({ id, discordUserId }));
+  },
+
   /**
    * Clears Discord-derived grants after an explicit Discord unlink (or when
    * discord identity is removed). Manual grants remain.
@@ -329,31 +408,21 @@ export const userRepository = {
   async listEligibleRaidLeads() {
     const users = await orm.User.orderBy((user) => user.name.asc()).all();
     return users
-      .map((row) => ({
-        user: mapAuthUser(row as Record<string, unknown>),
-        nickname: asStringOrNull((row as Record<string, unknown>).discordRunChannelNickname),
-      }))
-      .filter(({ user }) => isEligibleRaidLead(user))
-      .map(({ user, nickname }) => ({
+      .map((row) => mapAuthUser(row as Record<string, unknown>))
+      .filter((user) => isEligibleRaidLead(user))
+      .map((user) => ({
         id: user.id,
         name: user.name,
-        /** Run-facing name (Raid Lead nickname, else name) — what Run titles show. */
-        displayName: getRaidLeadDisplayName({ name: user.name, discordRunChannelNickname: nickname }),
+        /** Run-facing name — what Run titles show (User.name, resolved from Discord). */
+        displayName: user.name,
         accountRole: user.accountRole,
       }));
   },
 
-  /** Run-facing Raid Lead display name (nickname, else name); null when the User does not exist. */
+  /** Run-facing Raid Lead display name (User.name); null when the User does not exist. */
   async findRaidLeadDisplayName(id: string): Promise<string | null> {
-    const row = (await orm.User.where({ id }).select("name", "discordRunChannelNickname").first()) as Record<
-      string,
-      unknown
-    > | null;
-    if (!row) return null;
-    return getRaidLeadDisplayName({
-      name: asString(row.name),
-      discordRunChannelNickname: asStringOrNull(row.discordRunChannelNickname),
-    });
+    const row = (await orm.User.where({ id }).select("name").first()) as Record<string, unknown> | null;
+    return row ? asString(row.name) : null;
   },
 
   /** How many Users hold each Boosting Role (a User may hold both). */

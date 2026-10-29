@@ -113,7 +113,7 @@ beforeAll(async () => {
   for (const [u, isBooster] of [[lead, true], [admin, true], [actor(ids.other, "Boot Other", "USER"), true], [lead2, true], [plainLead, false]] as const) {
     await orm.User.create({
       id: u.id, name: u.name, email: u.email, emailVerified: true, accountRole: u.accountRole, accountStatus: "ACTIVE",
-      isBooster, discordRunChannelNickname: u.id === ids.lead ? "Alantra" : null, createdAt: now, updatedAt: now,
+      isBooster, createdAt: now, updatedAt: now,
     });
   }
   await character("LeadTank", ids.lead, "PALADIN", "Protection", "TANK", { playable: ["Retribution"] });
@@ -158,8 +158,8 @@ describe("Raid Lead Character bootstrap on Run creation", () => {
     const events = (await orm.RunDomainEvent.where({ runId: run.id }).all()) as Array<{ type: string }>;
     expect(events.map((event) => event.type)).toEqual(["RUN_CREATED"]);
 
-    // Title uses the Raid Lead nickname.
-    expect((await orm.Run.where({ id: run.id }).first() as { title: string }).title.endsWith(" Alantra")).toBe(true);
+    // Title uses the Raid Lead's displayed name.
+    expect((await orm.Run.where({ id: run.id }).first() as { title: string }).title.endsWith(" Nyxara")).toBe(true);
   });
 
   it("offers exactly the roles a normal signup of that Character could offer (offspecs included)", async () => {
