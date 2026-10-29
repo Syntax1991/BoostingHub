@@ -1605,9 +1605,6 @@ function RosterBuilderEditor({
         ) : null}
       </section>
 
-      {/* —— BUFFS: compact strip —— */}
-      <ClassBuffChecker coverage={liveRaidBuffCoverage} />
-
       {/* —— SIGNUPS: readable tile grid (4–5 / row at 1440) —— */}
       <section className="space-y-2 border-t border-border pt-3">
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -1680,6 +1677,9 @@ function RosterBuilderEditor({
           </div>
         )}
       </section>
+
+      {/* —— BUFFS: compact strip, the Roster tab's last section —— */}
+      <ClassBuffChecker coverage={liveRaidBuffCoverage} />
 
       <dialog
         ref={dialogRef}
