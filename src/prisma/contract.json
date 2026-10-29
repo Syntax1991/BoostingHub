@@ -710,6 +710,10 @@
               {
                 "name": "RUN_SCOPE_CHANGED",
                 "value": "RUN_SCOPE_CHANGED"
+              },
+              {
+                "name": "LATE_FILL_HELP",
+                "value": "LATE_FILL_HELP"
               }
             ]
           },
@@ -5618,6 +5622,13 @@
                   "plane": "domain"
                 }
               },
+              "helpRoles": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "id": {
                 "nullable": false,
                 "type": {
@@ -5745,6 +5756,9 @@
                 },
                 "difficulty": {
                   "column": "difficulty"
+                },
+                "helpRoles": {
+                  "column": "helpRoles"
                 },
                 "id": {
                   "column": "id"
@@ -13778,8 +13792,8 @@
                   "prefix": "run_discord_announcement_status_check"
                 },
                 {
-                  "expression": "\"type\" IN ('RUN_RESCHEDULED', 'RUN_CANCELLED', 'RUN_REACTIVATED', 'RUN_SCOPE_CHANGED')",
-                  "name": "run_discord_announcement_type_check_93ddaaed",
+                  "expression": "\"type\" IN ('RUN_RESCHEDULED', 'RUN_CANCELLED', 'RUN_REACTIVATED', 'RUN_SCOPE_CHANGED', 'LATE_FILL_HELP')",
+                  "name": "run_discord_announcement_type_check_7dc0d0e2",
                   "prefix": "run_discord_announcement_type_check"
                 }
               ],
@@ -13803,6 +13817,11 @@
                     "namespaceId": "public",
                     "plane": "storage"
                   }
+                },
+                "helpRoles": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
                 },
                 "id": {
                   "codecId": "pg/text@1",
@@ -17462,7 +17481,8 @@
                 "RUN_RESCHEDULED",
                 "RUN_CANCELLED",
                 "RUN_REACTIVATED",
-                "RUN_SCOPE_CHANGED"
+                "RUN_SCOPE_CHANGED",
+                "LATE_FILL_HELP"
               ]
             },
             "RunDomainEventActorKind": {
@@ -17571,7 +17591,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "4dc4e3e4992b86217d8fc9d3ea09bfe0b3deee47daf3a2d4e789bc0e64f58198"
+    "storageHash": "25368e38526cd62cfae17bb29020bd90a0541020d5dcf1193a0562091b451711"
   },
   "execution": {
     "executionHash": "324c5afa3b4d6d5548548ec3e865b7ab15f3ade264bd46a2057a901773b881e8",

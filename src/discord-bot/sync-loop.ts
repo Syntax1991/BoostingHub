@@ -21,6 +21,7 @@ import {
 import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
 import { syncGlobalAnnouncements } from "@/discord-bot/global-announcements";
+import { buildLateFillHelpMessage, type LateFillPingRoleIds } from "@/discord-bot/messages/late-fill-help-message";
 import {
   isDiscordPermanentDmError,
   isDiscordPermissionError,
@@ -406,6 +407,11 @@ async function syncOnceInner(
   // (cancel / reschedule) post first. RUN_REACTIVATED waits until after
   // signup provisioning so a replacement channel from continuity recovery
   // can be used in the same pass.
+  const latePingRoleIds: LateFillPingRoleIds = {
+    TANK: env.discordPingRoleTankId,
+    HEALER: env.discordPingRoleHealerId,
+    DPS: env.discordPingRoleDpsId,
+  };
   const earlyAnnouncements = (work.runAnnouncements ?? []).filter(
     (item) => item.type !== "RUN_REACTIVATED",
   );
@@ -415,7 +421,7 @@ async function syncOnceInner(
   if (earlyAnnouncements.length > 0) {
     for (const item of earlyAnnouncements) {
       try {
-        await syncRunAnnouncement(client, api, item, resolvedChannels);
+        await syncRunAnnouncement(client, api, item, resolvedChannels, latePingRoleIds);
       } catch (error) {
         console.error(
           `[discord-bot] run announcement ${item.announcementId} failed for run ${item.runId}`,
@@ -531,7 +537,7 @@ async function syncOnceInner(
     // After continuity recovery may have provisioned a replacement channel.
     for (const item of reactivatedAnnouncements) {
       try {
-        await syncRunAnnouncement(client, api, item, resolvedChannels);
+        await syncRunAnnouncement(client, api, item, resolvedChannels, latePingRoleIds);
       } catch (error) {
         console.error(
           `[discord-bot] run announcement ${item.announcementId} failed for run ${item.runId}`,
@@ -1416,8 +1422,11 @@ async function syncAccountNotificationDm(
 }
 
 /**
- * Posts a durable Run-channel lifecycle announcement (reschedule / cancel).
- * Never creates a channel; never pings roles/members.
+ * Posts a durable Run-channel lifecycle announcement (reschedule / cancel), or
+ * a Late Fill help request. Never creates a channel. Lifecycle posts never
+ * ping; a Late Fill help request pings only the requested roles' Guild ping
+ * roles (allowedMentions restricted to those ids) — SKIPPED when none is
+ * configured on the bot.
  * Unknown Channel / Missing Access → FAILED_PERMANENT (no infinite retry, no recreate).
  * No channel id → SKIPPED. Transient errors leave PENDING for a later pass.
  */
@@ -1426,6 +1435,7 @@ async function syncRunAnnouncement(
   api: BotApiClient,
   item: RunAnnouncementLaneItem,
   resolvedChannels: Map<string, string>,
+  pingRoleIds: LateFillPingRoleIds,
 ): Promise<void> {
   const runChannelId = resolvedChannels.get(item.runId) ?? item.runChannelId;
   if (!runChannelId) {
@@ -1461,6 +1471,17 @@ async function syncRunAnnouncement(
     console.warn(
       `[discord-bot] skipping announcement ${item.announcementId}: delivery no longer authorized`,
     );
+    return;
+  }
+
+  if (item.type === "LATE_FILL_HELP") {
+    const message = buildLateFillHelpMessage({ roles: item.helpRoles ?? [], pingRoleIds });
+    if (!message) {
+      console.warn(`[discord-bot] Late Fill help ${item.announcementId}: no ping role configured for its roles — skipped`);
+      await api.recordDiscordState(item.runId, { kind: "run-announcement", announcementId: item.announcementId, result: "SKIPPED" });
+      return;
+    }
+    await postRunAnnouncement(api, item, runChannelId, (channel) => channel.send(message), client);
     return;
   }
 
@@ -1503,6 +1524,21 @@ async function syncRunAnnouncement(
             lootType: item.lootType,
           });
 
+  await postRunAnnouncement(api, item, runChannelId, (channel) => channel.send({ embeds: [embed] }), client);
+}
+
+/**
+ * Sends one Run-channel announcement and records the outcome: SENT, or
+ * FAILED_PERMANENT for a missing / non-text channel or missing access (no
+ * retry, no recreate). Transient errors propagate so the row stays PENDING.
+ */
+async function postRunAnnouncement(
+  api: BotApiClient,
+  item: RunAnnouncementLaneItem,
+  runChannelId: string,
+  send: (channel: TextChannel) => Promise<unknown>,
+  client: Client,
+): Promise<void> {
   try {
     const channel = await client.channels.fetch(runChannelId);
     if (!channel || !channel.isTextBased() || !("send" in channel)) {
@@ -1513,7 +1549,7 @@ async function syncRunAnnouncement(
       });
       return;
     }
-    await (channel as TextChannel).send({ embeds: [embed] });
+    await send(channel as TextChannel);
     await api.recordDiscordState(item.runId, {
       kind: "run-announcement",
       announcementId: item.announcementId,

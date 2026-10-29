@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'4dc4e3e4992b86217d8fc9d3ea09bfe0b3deee47daf3a2d4e789bc0e64f58198'>;
+  StorageHashBase<'25368e38526cd62cfae17bb29020bd90a0541020d5dcf1193a0562091b451711'>;
 export type ExecutionHash =
   ExecutionHashBase<'324c5afa3b4d6d5548548ec3e865b7ab15f3ade264bd46a2057a901773b881e8'>;
 export type ProfileHash =
@@ -654,7 +654,12 @@ export type FieldOutputTypes = {
     readonly RunDiscordAnnouncement: {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly runId: CodecTypes['pg/text@1']['output'];
-      readonly type: 'RUN_RESCHEDULED' | 'RUN_CANCELLED' | 'RUN_REACTIVATED' | 'RUN_SCOPE_CHANGED';
+      readonly type:
+        | 'RUN_RESCHEDULED'
+        | 'RUN_CANCELLED'
+        | 'RUN_REACTIVATED'
+        | 'RUN_SCOPE_CHANGED'
+        | 'LATE_FILL_HELP';
       readonly sourceKey: CodecTypes['pg/text@1']['output'];
       readonly previousScheduledStartAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly scheduledStartAt: CodecTypes['pg/timestamptz-string@1']['output'];
@@ -662,6 +667,7 @@ export type FieldOutputTypes = {
       readonly difficulty: 'NORMAL' | 'HEROIC' | 'MYTHIC';
       readonly lootType: 'SAVED' | 'UNSAVED' | 'VIP' | 'COMMUNITY';
       readonly scopeChanges: CodecTypes['pg/text@1']['output'] | null;
+      readonly helpRoles: CodecTypes['pg/text@1']['output'] | null;
       readonly status: 'PENDING' | 'SENT' | 'SKIPPED' | 'FAILED_PERMANENT';
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly sentAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
@@ -1411,7 +1417,12 @@ export type FieldInputTypes = {
     readonly RunDiscordAnnouncement: {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly runId: CodecTypes['pg/text@1']['input'];
-      readonly type: 'RUN_RESCHEDULED' | 'RUN_CANCELLED' | 'RUN_REACTIVATED' | 'RUN_SCOPE_CHANGED';
+      readonly type:
+        | 'RUN_RESCHEDULED'
+        | 'RUN_CANCELLED'
+        | 'RUN_REACTIVATED'
+        | 'RUN_SCOPE_CHANGED'
+        | 'LATE_FILL_HELP';
       readonly sourceKey: CodecTypes['pg/text@1']['input'];
       readonly previousScheduledStartAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly scheduledStartAt: CodecTypes['pg/timestamptz-string@1']['input'];
@@ -1419,6 +1430,7 @@ export type FieldInputTypes = {
       readonly difficulty: 'NORMAL' | 'HEROIC' | 'MYTHIC';
       readonly lootType: 'SAVED' | 'UNSAVED' | 'VIP' | 'COMMUNITY';
       readonly scopeChanges: CodecTypes['pg/text@1']['input'] | null;
+      readonly helpRoles: CodecTypes['pg/text@1']['input'] | null;
       readonly status: 'PENDING' | 'SENT' | 'SKIPPED' | 'FAILED_PERMANENT';
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly sentAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
@@ -2168,6 +2180,7 @@ export type StorageColumnTypes = {
     readonly run_discord_announcement: {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly difficulty: 'NORMAL' | 'HEROIC' | 'MYTHIC';
+      readonly helpRoles: CodecTypes['pg/text@1']['output'] | null;
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly lootType: 'SAVED' | 'UNSAVED' | 'VIP' | 'COMMUNITY';
       readonly previousScheduledStartAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
@@ -2178,7 +2191,12 @@ export type StorageColumnTypes = {
       readonly sentAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly sourceKey: CodecTypes['pg/text@1']['output'];
       readonly status: 'PENDING' | 'SENT' | 'SKIPPED' | 'FAILED_PERMANENT';
-      readonly type: 'RUN_RESCHEDULED' | 'RUN_CANCELLED' | 'RUN_REACTIVATED' | 'RUN_SCOPE_CHANGED';
+      readonly type:
+        | 'RUN_RESCHEDULED'
+        | 'RUN_CANCELLED'
+        | 'RUN_REACTIVATED'
+        | 'RUN_SCOPE_CHANGED'
+        | 'LATE_FILL_HELP';
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
     };
     readonly run_discord_post: {
@@ -2925,6 +2943,7 @@ export type StorageColumnInputTypes = {
     readonly run_discord_announcement: {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly difficulty: 'NORMAL' | 'HEROIC' | 'MYTHIC';
+      readonly helpRoles: CodecTypes['pg/text@1']['input'] | null;
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly lootType: 'SAVED' | 'UNSAVED' | 'VIP' | 'COMMUNITY';
       readonly previousScheduledStartAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
@@ -2935,7 +2954,12 @@ export type StorageColumnInputTypes = {
       readonly sentAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly sourceKey: CodecTypes['pg/text@1']['input'];
       readonly status: 'PENDING' | 'SENT' | 'SKIPPED' | 'FAILED_PERMANENT';
-      readonly type: 'RUN_RESCHEDULED' | 'RUN_CANCELLED' | 'RUN_REACTIVATED' | 'RUN_SCOPE_CHANGED';
+      readonly type:
+        | 'RUN_RESCHEDULED'
+        | 'RUN_CANCELLED'
+        | 'RUN_REACTIVATED'
+        | 'RUN_SCOPE_CHANGED'
+        | 'LATE_FILL_HELP';
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
     };
     readonly run_discord_post: {
@@ -6092,6 +6116,11 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: true;
                 };
+                readonly helpRoles: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
                 readonly status: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -8727,6 +8756,7 @@ type ContractBase = Omit<
                 'RUN_CANCELLED',
                 'RUN_REACTIVATED',
                 'RUN_SCOPE_CHANGED',
+                'LATE_FILL_HELP',
               ];
             };
             readonly RunDomainEventActorKind: {
@@ -11841,6 +11871,10 @@ type ContractBase = Omit<
                 readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
+              readonly helpRoles: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
               readonly status: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
@@ -11891,6 +11925,7 @@ type ContractBase = Omit<
                 readonly difficulty: { readonly column: 'difficulty' };
                 readonly lootType: { readonly column: 'lootType' };
                 readonly scopeChanges: { readonly column: 'scopeChanges' };
+                readonly helpRoles: { readonly column: 'helpRoles' };
                 readonly status: { readonly column: 'status' };
                 readonly createdAt: { readonly column: 'createdAt' };
                 readonly sentAt: { readonly column: 'sentAt' };
@@ -14653,6 +14688,7 @@ type ContractBase = Omit<
               { readonly name: 'RUN_CANCELLED'; readonly value: 'RUN_CANCELLED' },
               { readonly name: 'RUN_REACTIVATED'; readonly value: 'RUN_REACTIVATED' },
               { readonly name: 'RUN_SCOPE_CHANGED'; readonly value: 'RUN_SCOPE_CHANGED' },
+              { readonly name: 'LATE_FILL_HELP'; readonly value: 'LATE_FILL_HELP' },
             ];
           };
           readonly ProductBossCountMode: {

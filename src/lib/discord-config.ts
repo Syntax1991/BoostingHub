@@ -41,6 +41,23 @@ export function getDiscordGuildId(): string | null {
   return value && value.length > 0 ? value : null;
 }
 
+/**
+ * Guild ping role ids per Run role (same DISCORD_PING_ROLE_* the bot uses for
+ * the Raidboost announce). The web only needs to know which are configured —
+ * the bot resolves the ids itself when it posts.
+ */
+export function getDiscordPingRoleConfig(): { TANK: string | null; HEALER: string | null; DPS: string | null } {
+  const read = (key: string) => {
+    const value = process.env[key]?.trim();
+    return value && value.length > 0 ? value : null;
+  };
+  return {
+    TANK: read("DISCORD_PING_ROLE_TANK_ID"),
+    HEALER: read("DISCORD_PING_ROLE_HEALER_ID"),
+    DPS: read("DISCORD_PING_ROLE_DPS_ID"),
+  };
+}
+
 /** Management role ping for Community Schedule Share copy (not auto-posted). */
 export function getDiscordManagementScheduleRoleId(): string | null {
   const value = process.env.DISCORD_MANAGEMENT_SCHEDULE_ROLE_ID?.trim();

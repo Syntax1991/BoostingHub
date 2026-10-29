@@ -1,3 +1,4 @@
+import type { LateFillHelpRole } from "@/lib/late-fill-help";
 import type { RunScopeChange } from "@/lib/run-scope-change";
 import type { BotEnv } from "@/discord-bot/env";
 import type { RaidDifficulty, RunLootType } from "@/models/enums";
@@ -238,11 +239,13 @@ export class BotApiClient {
       runAnnouncements: Array<{
         announcementId: string;
         runId: string;
-        type: "RUN_RESCHEDULED" | "RUN_CANCELLED" | "RUN_REACTIVATED" | "RUN_SCOPE_CHANGED";
+        type: "RUN_RESCHEDULED" | "RUN_CANCELLED" | "RUN_REACTIVATED" | "RUN_SCOPE_CHANGED" | "LATE_FILL_HELP";
         runChannelId: string | null;
         previousScheduledStartAt: string | null;
         /** RUN_SCOPE_CHANGED only; optional for an older API. */
         scopeChanges?: RunScopeChange[];
+        /** LATE_FILL_HELP only: roles to ping with their missing counts; optional for an older API. */
+        helpRoles?: LateFillHelpRole[];
         scheduledStartAt: string;
         productLabel: string;
         /** Compact Run identity; optional for an older API. */
