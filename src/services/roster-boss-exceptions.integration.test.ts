@@ -1,7 +1,18 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { orm } from "@/lib/prisma";
-import type { RosterBossException } from "@/lib/roster-boss-plan";
+import {
+  applyRangeAssignment,
+  bossesInRange,
+  bossExceptionsPayload,
+  bossPlanIsDirty,
+  evaluateLiveBossPlan,
+  nextBossRange,
+  resetSlotBosses,
+  slotCharacterChoices,
+} from "@/components/manage/roster-boss-plan-editor";
+import { describeSlotBossPlan, type RosterBossException } from "@/lib/roster-boss-plan";
+import { diffBossPlans } from "@/lib/roster-diff";
 import { TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import type { AccountRole, CharacterRole, WowClass } from "@/models/enums";
 import { raidRepository } from "@/repositories/raid.repository";
@@ -466,5 +477,221 @@ describe("boss exceptions — feature switch on", () => {
     await saveDefault([await venomException(5, "HEALER", ids.signupAlt), await venomException(6, "HEALER", ids.signupAlt)]);
     const view = await rosterService.getRosterManagementView(lead, ids.run);
     expect(view.validation.warnings.map((row) => row.message)).toEqual(["Venom 6: Bexpriest-Antonidas is already saved."]);
+  });
+});
+
+/**
+ * Roster Builder flows (PR B): the client helpers build the payload and the
+ * live warnings from the very view the Roster tab renders; the server must
+ * accept, store and judge them the same way.
+ */
+describe("boss plan — Roster Builder flows (feature switch on)", () => {
+  beforeEach(() => {
+    vi.stubEnv("ROSTER_BOSS_EXCEPTIONS_ENABLED", "true");
+  });
+
+  type View = Awaited<ReturnType<typeof rosterService.getRosterManagementView>>;
+  const view = () => rosterService.getRosterManagementView(lead, ids.run);
+  const editorSignups = (data: View) => data.boosters.concat(data.groups.lootbuddies);
+  const stagedOf = (data: View) =>
+    new Map(editorSignups(data).filter((signup) => signup.draftSelected).map((signup) => [signup.id, signup.selectedRole]));
+  const payloadOf = (data: View, exceptions: RosterBossException[]) =>
+    bossExceptionsPayload({ exceptions, staged: stagedOf(data), signups: editorSignups(data), bosses: data.bossPlan.bosses });
+  const liveOf = (data: View, payload: RosterBossException[]) =>
+    evaluateLiveBossPlan({
+      bosses: data.bossPlan.bosses,
+      payload,
+      staged: stagedOf(data),
+      signups: editorSignups(data),
+      externalRoles: [],
+      targets: { tanks: data.run.desiredTankCount, healers: data.run.desiredHealerCount, dps: data.run.desiredDpsCount },
+      lootType: data.run.lootType,
+    });
+  const bossWarnings = (data: View) =>
+    data.validation.warnings.filter((row) => row.code.startsWith("BOSS_")).map((row) => row.message);
+  const selections = [
+    { signupId: ids.signupA, selectedRole: "HEALER" as const },
+    { signupId: ids.signupB, selectedRole: "RANGED_DPS" as const },
+  ];
+  const save = async (data: View, bossExceptions?: RosterBossException[]) =>
+    rosterService.saveDraftSelection(lead, { runId: ids.run, version: data.roster.version, selections, bossExceptions });
+
+  it("Boss 1–6 on the alternate Character (Bundle: Tide stays default): saved as staged, described per content, warnings match the server", async () => {
+    await orm.CharacterRaidLockout.create({
+      id: crypto.randomUUID(),
+      characterId: ids.charAlt,
+      raidId: VENOMOUS_ABYSS_RAID_ID,
+      difficulty: "HEROIC",
+      resetIdentifier: lockoutService.getResetIdentifierForRun("EU", START),
+      bossesDefeated: 1,
+      isComplete: false,
+      killedBossIds: JSON.stringify([venomBosses[1]]),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    await saveDefault();
+    let data = await view();
+    const bosses = data.bossPlan.bosses;
+    expect(bosses).toHaveLength(7);
+    const range = bossesInRange(bosses, nextBossRange(nextBossRange(null, bosses[0]!.key), bosses[5]!.key));
+    const slot = data.boosters.find((signup) => signup.id === ids.signupA)!;
+    const choices = slotCharacterChoices(slot, editorSignups(data), new Set(stagedOf(data).keys()));
+    expect(choices.map((choice) => choice.playSignupId)).toEqual([null, ids.signupAlt]);
+    const payload = payloadOf(
+      data,
+      applyRangeAssignment({
+        exceptions: [],
+        slotSignupId: ids.signupA,
+        slotRole: "HEALER",
+        range,
+        assignment: { playSignupId: ids.signupAlt, role: "HEALER" },
+      }),
+    );
+    const live = liveOf(data, payload);
+
+    await save(data, payload);
+    data = await view();
+    expect(data.bossPlan.draft).toEqual(payload);
+    expect(bossPlanIsDirty(payloadOf(data, data.bossPlan.draft), data.bossPlan.draft)).toBe(false);
+    expect(
+      describeSlotBossPlan({
+        exceptions: data.bossPlan.draft,
+        bosses: data.bossPlan.bosses,
+        characterLabelBySignupId: new Map([[ids.signupAlt, "Bexpriest-Antonidas"]]),
+      }),
+    ).toBe("Venom 1–6: Bexpriest-Antonidas · Healer");
+    expect(live.warnings.map((warning) => warning.message)).toEqual(["Venom 2: Bexpriest-Antonidas is already saved."]);
+    expect(bossWarnings(data)).toEqual(live.warnings.map((warning) => warning.message));
+  });
+
+  it("role switch on one boss: the per-boss Healer warning shows live and on the server; Save is not blocked", async () => {
+    await saveDefault();
+    let data = await view();
+    const payload = payloadOf(
+      data,
+      applyRangeAssignment({
+        exceptions: [],
+        slotSignupId: ids.signupA,
+        slotRole: "HEALER",
+        range: [data.bossPlan.bosses[2]!],
+        assignment: { playSignupId: null, role: "RANGED_DPS" },
+      }),
+    );
+    const expected = ["Venom 3: 0 of 1 Healer.", "Venom 3: 2 of 1 DPS."];
+    expect(liveOf(data, payload).warnings.map((warning) => warning.message)).toEqual(expected);
+    await save(data, payload);
+    data = await view();
+    expect(bossWarnings(data)).toEqual(expected);
+    expect(data.validation.canPublish).toBe(true);
+  });
+
+  it("reset: Save without the field keeps the plan; Save with the slot reset clears it", async () => {
+    await saveDefault([await venomException(5, "RANGED_DPS")]);
+    let data = await view();
+    await save(data);
+    data = await view();
+    expect(data.bossPlan.draft).toHaveLength(1);
+    await save(data, payloadOf(data, resetSlotBosses(data.bossPlan.draft, ids.signupA)));
+    data = await view();
+    expect(data.bossPlan.draft).toEqual([]);
+  });
+
+  it("Publish → change → Update: the diff shows the boss plan change, Update accepts the staged set, nothing unpublished afterwards", async () => {
+    await saveDefault([await venomException(6, "HEALER", ids.signupAlt)]);
+    await rosterService.publishRoster(lead, { runId: ids.run, version: await version(), acknowledgeWarnings: true });
+    let data = await view();
+    expect(data.roster.hasUnpublishedChanges).toBe(false);
+    const bosses = data.bossPlan.bosses;
+    const payload = payloadOf(
+      data,
+      applyRangeAssignment({
+        exceptions: data.bossPlan.draft,
+        slotSignupId: ids.signupA,
+        slotRole: "HEALER",
+        range: bosses.slice(4, 6),
+        assignment: { playSignupId: ids.signupAlt, role: "HEALER" },
+      }),
+    );
+    const member = {
+      signupId: ids.signupA,
+      userId: ids.userA,
+      participationType: "BOOSTER" as const,
+      role: "HEALER" as const,
+      label: "Bexsham-Antonidas",
+    };
+    expect(
+      diffBossPlans({
+        published: data.bossPlan.published,
+        draft: payload,
+        members: new Map([[ids.signupA, member]]),
+        publishedSlotIds: new Set([ids.signupA, ids.signupB]),
+        bosses,
+        characterLabelBySignupId: new Map([[ids.signupAlt, "Bexpriest-Antonidas"]]),
+      }),
+    ).toEqual([
+      {
+        kind: "BOSS_PLAN_CHANGED",
+        member,
+        before: "Venom 6: Bexpriest-Antonidas · Healer",
+        after: "Venom 5–6: Bexpriest-Antonidas · Healer",
+      },
+    ]);
+    await rosterService.updateRoster(lead, {
+      runId: ids.run,
+      version: data.roster.version,
+      selections,
+      acknowledgeWarnings: true,
+      bossExceptions: payload,
+    });
+    data = await view();
+    expect(data.bossPlan.published).toEqual(payload);
+    expect(data.bossPlan.draft).toEqual(payload);
+    expect(data.roster.hasUnpublishedChanges).toBe(false);
+  });
+
+  it("stale editor: a second Save on the old version is ROSTER_ALREADY_CHANGED and keeps the first plan", async () => {
+    await saveDefault();
+    const stale = await view();
+    await save(stale, [await venomException(5, "RANGED_DPS")]);
+    await expect(save(stale, [await venomException(6, "RANGED_DPS")])).rejects.toMatchObject({ code: "ROSTER_ALREADY_CHANGED" });
+    expect((await view()).bossPlan.draft.map((row) => row.raidBossId)).toEqual([venomBosses[4]]);
+  });
+
+  it("alternate withdrawn while the editor was open: Save refuses with a named message; after Refresh the payload no longer carries it", async () => {
+    await saveDefault();
+    const open = await view();
+    await signupService.withdrawSignup(asUser(ids.userA, "USER"), ids.signupAlt);
+    const fresh = await view();
+    await expect(save(fresh, [await venomException(6, "HEALER", ids.signupAlt)])).rejects.toMatchObject({
+      code: "INVALID_ROSTER_SELECTION",
+      message: expect.stringContaining("was withdrawn"),
+    });
+    expect(open.boosters.some((signup) => signup.id === ids.signupAlt)).toBe(true);
+    expect(fresh.boosters.some((signup) => signup.id === ids.signupAlt)).toBe(false);
+    expect(payloadOf(fresh, [await venomException(6, "HEALER", ids.signupAlt)])).toEqual([]);
+  });
+
+  it("Edit Run that re-binds exceptions bumps the roster version, so the open editor refreshes instead of sending old content ids", async () => {
+    await saveDefault([await venomException(3, "RANGED_DPS")]);
+    const open = await view();
+    await runRepository.updatePreStartAtomic(ids.run, {}, {
+      contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 6 }],
+    });
+    const after = await view();
+    expect(after.roster.version).toBe(open.roster.version + 1);
+    expect(after.bossPlan.draft).toHaveLength(1);
+    expect(after.bossPlan.draft[0]!.runRaidContentId).not.toBe(open.bossPlan.draft[0]!.runRaidContentId);
+    await expect(save(open, open.bossPlan.draft)).rejects.toMatchObject({ code: "ROSTER_ALREADY_CHANGED" });
+    await save(after, after.bossPlan.draft);
+    expect((await view()).bossPlan.draft).toEqual(after.bossPlan.draft);
+  });
+
+  it("Edit Run without boss exceptions leaves the roster version alone", async () => {
+    await saveDefault();
+    const before = await version();
+    await runRepository.updatePreStartAtomic(ids.run, {}, {
+      contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 5 }],
+    });
+    expect(await version()).toBe(before);
   });
 });

@@ -12,13 +12,18 @@ import {
   updateRosterAction,
 } from "@/controllers/roster.actions";
 import { Button } from "@/components/ui/button";
-import { AddBoosterDialog } from "@/components/manage/add-booster-dialog";
+import { AddBoosterEntryDialog, type AddBoosterMode } from "@/components/manage/add-booster-entry-dialog";
 import { RosterBuilderDialog, type RosterBuilderMode } from "@/components/manage/roster-builder-dialog";
 import { RosterReplacementDialog, type ReplacementTarget } from "@/components/manage/roster-replacement-dialog";
 import { RosterUpdateDiff } from "@/components/manage/roster-update-diff";
+import { RosterBossPlanPanel } from "@/components/manage/roster-boss-plan-panel";
+import {
+  bossExceptionsPayload,
+  bossPlanIsDirty,
+  evaluateLiveBossPlan,
+} from "@/components/manage/roster-boss-plan-editor";
 import { ROSTER_ATTENTION_ANCHOR } from "@/components/runs/run-preflight-panel";
 import { SIGNUP_TILE_TONE_CLASSES, signupTileTone } from "@/lib/signup-tile-tone";
-import { setRosterHasUnsavedEdits } from "@/components/manage/roster-unsaved-store";
 import { resolveRosterActions } from "@/components/manage/roster-actions";
 import {
   ClassIcon,
@@ -53,7 +58,8 @@ import {
   formatSignupTileLockoutShort,
 } from "@/lib/run-content-lockouts";
 import { isConcreteCharacterRole, type ConcreteCharacterRole } from "@/lib/character-roles";
-import { diffRoster, type RosterDiffMember } from "@/lib/roster-diff";
+import { diffBossPlans, diffRoster, type RosterDiffMember } from "@/lib/roster-diff";
+import { describeSlotBossPlan, type RosterBossException } from "@/lib/roster-boss-plan";
 import {
   rosterReplacementReasons,
   withdrawnPickOpenRole,
@@ -137,6 +143,8 @@ type DraftRosterSlot = {
   warningReasons: string[];
   /** An existing warning a replacement fixes (saved / conflict / inactive / revoked) — shows Find replacement. */
   replaceable?: boolean;
+  /** Compact boss exceptions ("Boss 5–6: Synpriest-Antonidas · Healer"); null = plays every boss as rostered. */
+  bossPlan?: string | null;
   external?: boolean;
 };
 
@@ -253,7 +261,8 @@ function RosterBuilderEditor({
   const [perfFilter, setPerfFilter] = useState<WclPerfFilter>("ALL");
   const [perfSort, setPerfSort] = useState<WclPerfSort>("DEFAULT");
   const [acknowledge, setAcknowledge] = useState(false);
-  const [addBoosterOpen, setAddBoosterOpen] = useState(false);
+  /** Open shared Add Booster entry: a registered player or the External Boosters list. */
+  const [addBoosterMode, setAddBoosterMode] = useState<AddBoosterMode | null>(null);
   /** Which confirmation the roster dialog shows: first Publish, Update, or an explicit repost. */
   const [dialogMode, setDialogMode] = useState<"publish" | "update" | "repost">("publish");
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -304,15 +313,36 @@ function RosterBuilderEditor({
   }, []);
   const [stagedSelections, setStagedSelections] = useState<StagedSelections>(() => new Map(savedSelections));
   const [stagedSpecs, setStagedSpecs] = useState<StagedSpecs>(() => collectInitialStagedSpecs(data, savedSelections));
-  // Edited in the Run header's External Boosters dialog; counted here as saved.
+  // Edited on the External side of Add Booster (saved on their own); counted here as saved.
   const externalBoosters = data.roster.externalBoosters;
 
-  const isDirty = selectionKey(stagedSelections) !== selectionKey(savedSelections);
-  // Tell the Run header's Add Booster button about unsaved local edits.
-  useEffect(() => {
-    setRosterHasUnsavedEdits(data.run.id, isDirty);
-  }, [data.run.id, isDirty]);
-  useEffect(() => () => setRosterHasUnsavedEdits(data.run.id, false), [data.run.id]);
+  /**
+   * Boss plan (behind ROSTER_BOSS_EXCEPTIONS_ENABLED): staged DRAFT exceptions
+   * on top of the staged roster. The payload drops rows the staged roster made
+   * meaningless; Save / Update send it as the full set.
+   */
+  const bossPlanEditable = data.bossPlan.enabled && data.bossPlan.bosses.length > 0;
+  const [stagedBossExceptions, setStagedBossExceptions] = useState<RosterBossException[]>(() => [
+    ...data.bossPlan.draft,
+  ]);
+  const [bossPlanOpen, setBossPlanOpen] = useState(false);
+  const bossPayload = useMemo(
+    () =>
+      bossExceptionsPayload({
+        exceptions: stagedBossExceptions,
+        staged: stagedSelections,
+        signups: domainSignups,
+        bosses: data.bossPlan.bosses,
+      }),
+    [stagedBossExceptions, stagedSelections, domainSignups, data.bossPlan.bosses],
+  );
+  const bossPlanDirty = bossPlanEditable && bossPlanIsDirty(bossPayload, data.bossPlan.draft);
+  const characterLabelBySignupId = useMemo(
+    () => new Map(domainSignups.map((signup) => [signup.id, signupDisplayName(signup)])),
+    [domainSignups],
+  );
+
+  const isDirty = selectionKey(stagedSelections) !== selectionKey(savedSelections) || bossPlanDirty;
 
   /** Live Class Buff coverage from the staged draft — updates immediately on select/deselect. */
   const liveRaidBuffCoverage = useMemo(() => {
@@ -343,7 +373,7 @@ function RosterBuilderEditor({
   }, [domainSignups, stagedSelections, externalBoosters]);
 
   /** Live composition + publish validation from staged draft selections. */
-  const liveValidation = useMemo(
+  const defaultLiveValidation = useMemo(
     () =>
       validateRosterDraft({
         runStatus: data.run.status,
@@ -386,7 +416,50 @@ function RosterBuilderEditor({
       externalBoosters,
     ],
   );
-  const liveComposition = liveValidation.composition;
+  /** Per-boss warnings and hard issues of the staged boss plan (none without exceptions). */
+  const bossEvaluation = useMemo(
+    () =>
+      evaluateLiveBossPlan({
+        bosses: data.bossPlan.bosses,
+        payload: bossPayload,
+        staged: stagedSelections,
+        signups: domainSignups,
+        externalRoles: externalBoosters
+          .filter((booster) => booster.participationType === "BOOSTER")
+          .map((booster) => booster.role),
+        targets: { tanks: data.run.desiredTankCount, healers: data.run.desiredHealerCount, dps: data.run.desiredDpsCount },
+        lootType: data.run.lootType,
+      }),
+    [
+      data.bossPlan.bosses,
+      bossPayload,
+      stagedSelections,
+      domainSignups,
+      externalBoosters,
+      data.run.desiredTankCount,
+      data.run.desiredHealerCount,
+      data.run.desiredDpsCount,
+      data.run.lootType,
+    ],
+  );
+  // Same merge as the server's roster validation: boss issues block Publish /
+  // Update, boss warnings join the acknowledgeable warnings.
+  const liveValidation =
+    bossEvaluation.issues.length === 0 && bossEvaluation.warnings.length === 0
+      ? defaultLiveValidation
+      : {
+          ...defaultLiveValidation,
+          canPublish: defaultLiveValidation.canPublish && bossEvaluation.issues.length === 0,
+          blockers: [
+            ...defaultLiveValidation.blockers,
+            ...bossEvaluation.issues.map((issue) => ({ code: issue.code, message: issue.message, signupId: issue.slotSignupId })),
+          ],
+          warnings: [
+            ...defaultLiveValidation.warnings,
+            ...bossEvaluation.warnings.map((warning) => ({ code: warning.code, message: warning.message })),
+          ],
+        };
+  const liveComposition = defaultLiveValidation.composition;
 
   const roleBreakdown = useMemo(() => {
     const stagedRoles = domainSignups
@@ -535,6 +608,11 @@ function RosterBuilderEditor({
         wowClass: lootbuddyDisplayClass(signup) ?? signup.character?.wowClass ?? null,
         warningReasons: rosterSlotWarningReasons(signup),
         replaceable: rosterReplacementReasons(signup).length > 0,
+        bossPlan: describeSlotBossPlan({
+          exceptions: bossPayload.filter((row) => row.slotSignupId === signup.id),
+          bosses: data.bossPlan.bosses,
+          characterLabelBySignupId,
+        }),
       });
     }
     for (const booster of externalBoosters) {
@@ -550,10 +628,16 @@ function RosterBuilderEditor({
     }
     slots.sort((a, b) => (roleOrder[a.role ?? ""] ?? 9) - (roleOrder[b.role ?? ""] ?? 9));
     return slots;
-  }, [domainSignups, stagedSelections, stagedSpecs, externalBoosters]);
+  }, [domainSignups, stagedSelections, stagedSpecs, externalBoosters, bossPayload, data.bossPlan.bosses, characterLabelBySignupId]);
 
   const draftSlotCount = draftSlots.length;
   const draftGroups = useMemo(() => packDraftIntoGroups(draftSlots, 4, Math.max(5, Math.ceil(rosterCapacity / 4) || 5)), [draftSlots, rosterCapacity]);
+
+  /** Both paths save on their own and reload the roster, so unsaved draft edits must be saved first. */
+  function openAddBooster(mode: AddBoosterMode) {
+    if (!data.roster.canEdit || isDirty || pending) return;
+    setAddBoosterMode(mode);
+  }
 
   function deselectSignup(signup: SignupRow) {
     if (!data.roster.canEdit || data.roster.needsPublishSeed || pending) return;
@@ -758,6 +842,7 @@ function RosterBuilderEditor({
     setErrorCode(null);
     setStagedSelections(new Map(savedSelections));
     setStagedSpecs(collectInitialStagedSpecs(data, savedSelections));
+    setStagedBossExceptions([...data.bossPlan.draft]);
   }
 
   /** Acknowledgements for the currently staged slots only — a deselected pick's confirmation is not sent. */
@@ -789,7 +874,12 @@ function RosterBuilderEditor({
       setWarningPrompt({ kind: "server", action, pending: result.pendingWarnings });
       return;
     }
-    setError(result.message);
+    // Also an alternate Character of the boss plan: say so, Refresh drops it.
+    setError(
+      result.code === "SIGNUP_WITHDRAWN"
+        ? `${result.message} A Character on this roster or in its boss plan withdrew — refresh to load the current signups.`
+        : result.message,
+    );
     setErrorCode(result.code);
   }
 
@@ -803,6 +893,8 @@ function RosterBuilderEditor({
         version: data.roster.version,
         selections: [...stagedSelections].map(([signupId, selectedRole]) => ({ signupId, selectedRole })),
         confirmedWarnings: stagedConfirmedWarnings(confirmed),
+        // Full DRAFT set; omitted while the feature is off (the saved ones stay).
+        ...(bossPlanEditable ? { bossExceptions: bossPayload } : {}),
       });
       if (!result.ok) {
         handleRosterWriteFailure("save", result);
@@ -944,6 +1036,7 @@ function RosterBuilderEditor({
               selections: [...stagedSelections].map(([signupId, selectedRole]) => ({ signupId, selectedRole })),
               acknowledgeWarnings,
               confirmedWarnings: stagedConfirmedWarnings(confirmed),
+              ...(bossPlanEditable ? { bossExceptions: bossPayload } : {}),
             })
           : dialogMode === "repost"
             ? await repostRosterAction({
@@ -1022,20 +1115,43 @@ function RosterBuilderEditor({
       role: signup.participationType === "LOOTBUDDY" ? null : role,
       label: signupDisplayName(signup),
     });
-    return diffRoster(
-      domainSignups.filter((signup) => signup.status === "SELECTED").map((signup) => member(signup, signup.publishedRole)),
-      domainSignups
-        .filter((signup) => stagedSelections.has(signup.id))
-        .map((signup) => member(signup, stagedSelections.get(signup.id) ?? null)),
+    const publishedSignups = domainSignups.filter((signup) => signup.status === "SELECTED");
+    const draftMembers = domainSignups
+      .filter((signup) => stagedSelections.has(signup.id))
+      .map((signup) => member(signup, stagedSelections.get(signup.id) ?? null));
+    const changes = diffRoster(
+      publishedSignups.map((signup) => member(signup, signup.publishedRole)),
+      draftMembers,
     );
-  }, [data.roster.publishedAt, domainSignups, stagedSelections]);
+    if (!bossPlanEditable) return changes;
+    return [
+      ...changes,
+      ...diffBossPlans({
+        published: data.bossPlan.published,
+        draft: bossPayload,
+        members: new Map(draftMembers.map((row) => [row.signupId, row])),
+        publishedSlotIds: new Set(publishedSignups.map((signup) => signup.id)),
+        bosses: data.bossPlan.bosses,
+        characterLabelBySignupId,
+      }),
+    ];
+  }, [
+    data.roster.publishedAt,
+    domainSignups,
+    stagedSelections,
+    bossPlanEditable,
+    data.bossPlan.published,
+    data.bossPlan.bosses,
+    bossPayload,
+    characterLabelBySignupId,
+  ]);
 
   return (
     <div className="space-y-4">
       {error ? (
         <div role="alert" className="space-y-2 text-sm text-danger">
           <p>{error}</p>
-          {errorCode === "ROSTER_ALREADY_CHANGED" ? (
+          {errorCode === "ROSTER_ALREADY_CHANGED" || errorCode === "SIGNUP_WITHDRAWN" ? (
             <Button type="button" variant="ghost" disabled={pending} onClick={() => router.refresh()}>
               Refresh roster
             </Button>
@@ -1082,142 +1198,48 @@ function RosterBuilderEditor({
       </Card>
       )}
 
-      {embedded ? (
-        <div className="flex flex-wrap items-center gap-1.5 text-sm">
-          {validationIssueCount > 0 ? (
-            <Link
-              href={runDetailPath(data.run.id, "operations") + "#operations-validation"}
-              className="inline-flex items-center gap-1 rounded-md border border-warning/35 bg-warning/10 px-2 py-1 text-warning hover:bg-warning/15"
-            >
-              <WarningIcon label="Validation" size={14} />
-              Validation · {validationIssueCount}
-            </Link>
-          ) : (
-            <Link
-              href={runDetailPath(data.run.id, "operations") + "#operations-validation"}
-              className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-muted hover:text-foreground"
-            >
-              <QuietOkIcon label="Validation OK" size={14} />
-              Validation
-            </Link>
-          )}
-          {preflightAttentionCount > 0 ? (
-            <Link
-              href={runDetailPath(data.run.id, "operations") + "#operations-preflight"}
-              className="inline-flex items-center gap-1 rounded-md border border-warning/35 bg-warning/10 px-2 py-1 text-warning hover:bg-warning/15"
-            >
-              <WarningIcon label="Preflight" size={14} />
-              Preflight · {preflightAttentionCount}
-            </Link>
-          ) : (
-            <Link
-              href={runDetailPath(data.run.id, "operations") + "#operations-preflight"}
-              className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-muted hover:text-foreground"
-            >
-              <QuietOkIcon label="Preflight OK" size={14} />
-              Preflight
-            </Link>
-          )}
-        </div>
-      ) : null}
-
       {afterContext}
 
-      {/* —— SIGNUPS: readable tile grid (4–5 / row at 1440) —— */}
-      <section className="space-y-2">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <h3 className="text-base font-semibold text-foreground">
-              Signups{" "}
-              <span className="font-normal tabular-nums text-muted">{gridSignups.length}</span>
-            </h3>
-            <p className="text-sm text-muted">Click a tile to add/remove draft</p>
-          </div>
-          {data.roster.canEdit ? (
-            <Button
-              type="button"
-              size="md"
-              variant="secondary"
-              disabled={pending || isDirty}
-              onClick={() => setAddBoosterOpen(true)}
-            >
-              Add Booster
-            </Button>
-          ) : null}
-        </div>
-
-        <CompactRosterFilters
-          search={search}
-          setSearch={setSearch}
-          roleFilter={roleFilter}
-          setRoleFilter={setRoleFilter}
-          selectedFilter={selectedFilter}
-          setSelectedFilter={setSelectedFilter}
-          participation={participation}
-          setParticipation={setParticipation}
-          backupFilter={backupFilter}
-          setBackupFilter={setBackupFilter}
-          perfFilter={perfFilter}
-          setPerfFilter={setPerfFilter}
-          perfSort={perfSort}
-          setPerfSort={setPerfSort}
-        />
-
-        {gridSignups.length === 0 && externalBoosters.length === 0 ? (
-          <p className="py-3 text-sm text-muted">No signups match these filters.</p>
-        ) : (
-          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 [&>li]:h-[54px]">
-            {externalBoosters.map((booster) => (
-              <li key={`ext-${booster.id}`}>
-                <div
-                  className="flex h-full items-center gap-2 rounded-md border border-accent/30 bg-accent/5 px-2.5 text-sm"
-                  title="External · edit via External Boosters"
-                >
-                  <ClassIcon wowClass={booster.wowClass} size={24} />
-                  <span className="min-w-0 truncate text-sm font-semibold" style={{ color: CLASS_COLORS[booster.wowClass] }}>
-                    @{booster.name}
-                  </span>
-                  <span className="ml-auto shrink-0 text-xs text-accent">EXT</span>
-                </div>
-              </li>
-            ))}
-            {gridSignups.map((signup) => (
-              <li key={signup.id}>
-                <SignupTile
-                  signup={signup}
-                  difficulty={data.run.difficulty}
-                  editing={editing}
-                  locked={togglesLocked}
-                  selected={isStagedSelected(signup.id)}
-                  assignedRole={stagedRole(signup.id)}
-                  assignedSpec={stagedSpecs.get(signup.id) ?? null}
-                  onToggle={toggleRoleCopy}
-                  onSelectWithRole={selectWithRole}
-                  onChangeRole={assignRole}
-                  onDeselect={() => deselectSignup(signup)}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* —— ROSTER: 4-group grid + actions —— */}
-      <section id={ROSTER_ATTENTION_ANCHOR} className="scroll-mt-20 space-y-2 border-t border-border pt-3">
+      {/* —— ROSTER: status, checks and every roster action first; then the 4-group grid —— */}
+      <section id={ROSTER_ATTENTION_ANCHOR} className="scroll-mt-20 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-base font-semibold text-foreground">
-            Roster{" "}
-            <span className="font-normal tabular-nums text-muted">
-              {draftSlotCount}/{rosterCapacity}
-            </span>
-            {isDirty ? (
-              <span className="ml-2 text-sm font-normal text-warning">Unsaved</span>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <h3 className="text-base font-semibold text-foreground">
+              Roster{" "}
+              <span className="font-normal tabular-nums text-muted">
+                {draftSlotCount}/{rosterCapacity}
+              </span>
+              {isDirty ? (
+                <span className="ml-2 text-sm font-normal text-warning">Unsaved</span>
+              ) : null}
+              {data.roster.canEdit && data.roster.hasUnpublishedChanges && !isDirty ? (
+                <span className="ml-2 text-sm font-normal text-warning">Unpublished</span>
+              ) : null}
+            </h3>
+            {embedded ? (
+              <RosterContextChips
+                runId={data.run.id}
+                validationIssueCount={validationIssueCount}
+                preflightAttentionCount={preflightAttentionCount}
+              />
             ) : null}
-            {data.roster.canEdit && data.roster.hasUnpublishedChanges && !isDirty ? (
-              <span className="ml-2 text-sm font-normal text-warning">Unpublished</span>
-            ) : null}
-          </h3>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
+            {data.roster.canEdit ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={pending || isDirty}
+                title={isDirty ? "Save or discard your roster changes first" : undefined}
+                onClick={() => openAddBooster("registered")}
+              >
+                Add Booster
+                {externalBoosters.length > 0 ? (
+                  <span className="tabular-nums text-muted">· {externalBoosters.length} ext</span>
+                ) : null}
+              </Button>
+            ) : null}
             {data.roster.canEdit ? (
               <Button
                 type="button"
@@ -1227,6 +1249,23 @@ function RosterBuilderEditor({
                 onClick={() => setBuilderMode(stagedSelections.size > 0 ? "fill" : "build")}
               >
                 Auto Build Roster
+              </Button>
+            ) : null}
+            {bossPlanEditable && editing ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                aria-expanded={bossPlanOpen}
+                aria-controls="roster-boss-plan"
+                onClick={() => setBossPlanOpen((open) => !open)}
+              >
+                Boss plan
+                {bossPayload.length > 0 ? (
+                  <span className="tabular-nums text-accent">
+                    {new Set(bossPayload.map((row) => row.slotSignupId)).size}
+                  </span>
+                ) : null}
               </Button>
             ) : null}
             {actions.seed ? (
@@ -1386,20 +1425,35 @@ function RosterBuilderEditor({
                       <>
                       <button
                         type="button"
-                        disabled={!editing || togglesLocked || !slot.signup}
+                        disabled={!editing || togglesLocked || (!slot.signup && isDirty)}
                         onClick={() => {
                           if (slot.signup) deselectSignup(slot.signup);
+                          else openAddBooster("external");
                         }}
-                        title={slot.external ? "External — edit via External Boosters" : "Remove from draft"}
+                        title={slot.external ? "External — click to edit External Boosters" : "Remove from draft"}
                         className="flex min-h-[40px] min-w-0 flex-1 items-center gap-2 rounded-md border border-border/80 bg-surface-raised/40 px-2.5 py-2 text-left text-sm hover:border-danger/50 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {slot.wowClass ? <ClassIcon wowClass={slot.wowClass} size={22} /> : null}
-                        <span
-                          className="min-w-0 flex-1 truncate text-[13px] font-semibold"
-                          style={slot.wowClass ? { color: CLASS_COLORS[slot.wowClass] } : undefined}
-                        >
-                          {slot.name}
-                        </span>
+                        {slot.bossPlan ? (
+                          <span className="flex min-w-0 flex-1 flex-col">
+                            <span
+                              className="truncate text-[13px] font-semibold"
+                              style={slot.wowClass ? { color: CLASS_COLORS[slot.wowClass] } : undefined}
+                            >
+                              {slot.name}
+                            </span>
+                            <span className="truncate text-xs text-accent" title={slot.bossPlan}>
+                              {slot.bossPlan}
+                            </span>
+                          </span>
+                        ) : (
+                          <span
+                            className="min-w-0 flex-1 truncate text-[13px] font-semibold"
+                            style={slot.wowClass ? { color: CLASS_COLORS[slot.wowClass] } : undefined}
+                          >
+                            {slot.name}
+                          </span>
+                        )}
                         {slot.wowClass && slot.specialization ? (
                           // A replaceable slot also carries the Replace button: keep the name readable on phones.
                           <span className={editing && slot.replaceable ? "hidden sm:inline-flex" : "inline-flex"}>
@@ -1436,6 +1490,46 @@ function RosterBuilderEditor({
           ))}
         </div>
 
+        {bossPlanEditable && editing && bossPlanOpen ? (
+          <div id="roster-boss-plan">
+            <RosterBossPlanPanel
+              bosses={data.bossPlan.bosses}
+              exceptions={bossPayload}
+              slots={draftSlots
+                .filter((slot) => slot.signup?.participationType === "BOOSTER")
+                .map((slot) => ({ signup: slot.signup!, name: slot.name, wowClass: slot.wowClass, role: slot.role }))}
+              signups={data.boosters}
+              stagedSlotIds={new Set(stagedSelections.keys())}
+              evaluation={bossEvaluation}
+              editing={!togglesLocked}
+              onChange={(next) => {
+                setError(null);
+                setErrorCode(null);
+                setStagedBossExceptions(next);
+              }}
+            />
+          </div>
+        ) : bossEvaluation.issues.length > 0 || bossEvaluation.warnings.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+            <WarningIcon label="Boss plan" size={14} />
+            <span className={bossEvaluation.issues.length > 0 ? "text-danger" : "text-warning"}>
+              {(bossEvaluation.issues[0] ?? bossEvaluation.warnings[0])!.message}
+              {bossEvaluation.issues.length + bossEvaluation.warnings.length > 1
+                ? ` (+${bossEvaluation.issues.length + bossEvaluation.warnings.length - 1} more)`
+                : ""}
+            </span>
+            {bossPlanEditable && editing ? (
+              <button
+                type="button"
+                onClick={() => setBossPlanOpen(true)}
+                className="inline-flex h-7 items-center rounded-md px-2 text-xs font-medium text-accent hover:bg-accent/10"
+              >
+                Review boss plan
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
           <CompositionMeter label="T" slot={liveComposition.tanks} compact />
           <CompositionMeter label="H" slot={liveComposition.healers} compact />
@@ -1456,6 +1550,69 @@ function RosterBuilderEditor({
 
       {/* —— BUFFS: compact strip —— */}
       <ClassBuffChecker coverage={liveRaidBuffCoverage} />
+
+      {/* —— SIGNUPS: readable tile grid (4–5 / row at 1440) —— */}
+      <section className="space-y-2 border-t border-border pt-3">
+        <h3 className="text-base font-semibold text-foreground">
+          Signups <span className="font-normal tabular-nums text-muted">{gridSignups.length}</span>
+          {editing ? <span className="ml-2 text-sm font-normal text-muted">Click a tile to add or remove it</span> : null}
+        </h3>
+
+        <CompactRosterFilters
+          search={search}
+          setSearch={setSearch}
+          roleFilter={roleFilter}
+          setRoleFilter={setRoleFilter}
+          selectedFilter={selectedFilter}
+          setSelectedFilter={setSelectedFilter}
+          participation={participation}
+          setParticipation={setParticipation}
+          backupFilter={backupFilter}
+          setBackupFilter={setBackupFilter}
+          perfFilter={perfFilter}
+          setPerfFilter={setPerfFilter}
+          perfSort={perfSort}
+          setPerfSort={setPerfSort}
+        />
+
+        {gridSignups.length === 0 && externalBoosters.length === 0 ? (
+          <p className="py-3 text-sm text-muted">No signups match these filters.</p>
+        ) : (
+          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 [&>li]:h-[54px]">
+            {externalBoosters.map((booster) => (
+              <li key={`ext-${booster.id}`}>
+                <div
+                  className="flex h-full items-center gap-2 rounded-md border border-accent/30 bg-accent/5 px-2.5 text-sm"
+                  title="External · edit via Add Booster"
+                >
+                  <ClassIcon wowClass={booster.wowClass} size={24} />
+                  <span className="min-w-0 truncate text-sm font-semibold" style={{ color: CLASS_COLORS[booster.wowClass] }}>
+                    @{booster.name}
+                  </span>
+                  <span className="ml-auto shrink-0 text-xs text-accent">EXT</span>
+                </div>
+              </li>
+            ))}
+            {gridSignups.map((signup) => (
+              <li key={signup.id}>
+                <SignupTile
+                  signup={signup}
+                  difficulty={data.run.difficulty}
+                  editing={editing}
+                  locked={togglesLocked}
+                  selected={isStagedSelected(signup.id)}
+                  assignedRole={stagedRole(signup.id)}
+                  assignedSpec={stagedSpecs.get(signup.id) ?? null}
+                  onToggle={toggleRoleCopy}
+                  onSelectWithRole={selectWithRole}
+                  onChangeRole={assignRole}
+                  onDeselect={() => deselectSignup(signup)}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <dialog
         ref={dialogRef}
@@ -1594,11 +1751,13 @@ function RosterBuilderEditor({
           onClose={() => setBuilderMode(null)}
         />
       ) : null}
-      {addBoosterOpen ? (
-        <AddBoosterDialog
+      {addBoosterMode ? (
+        <AddBoosterEntryDialog
           runId={data.run.id}
           rosterVersion={data.roster.version}
-          onClose={() => setAddBoosterOpen(false)}
+          externalBoosters={externalBoosters}
+          initialMode={addBoosterMode}
+          onClose={() => setAddBoosterMode(null)}
           onAdded={() => router.refresh()}
         />
       ) : null}
@@ -2099,6 +2258,44 @@ function FilterSelect({
         ))}
       </select>
     </label>
+  );
+}
+
+/** Validation / Preflight status next to the roster actions they gate (details on Operations). */
+function RosterContextChips({
+  runId,
+  validationIssueCount,
+  preflightAttentionCount,
+}: {
+  runId: string;
+  validationIssueCount: number;
+  preflightAttentionCount: number;
+}) {
+  const chips = [
+    { label: "Validation", count: validationIssueCount, anchor: "#operations-validation" },
+    { label: "Preflight", count: preflightAttentionCount, anchor: "#operations-preflight" },
+  ];
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+      {chips.map((chip) => (
+        <Link
+          key={chip.label}
+          href={runDetailPath(runId, "operations") + chip.anchor}
+          className={
+            chip.count > 0
+              ? "inline-flex h-7 items-center gap-1 rounded-md border border-warning/35 bg-warning/10 px-2 text-warning hover:bg-warning/15"
+              : "inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 text-muted hover:text-foreground"
+          }
+        >
+          {chip.count > 0 ? (
+            <WarningIcon label={chip.label} size={13} />
+          ) : (
+            <QuietOkIcon label={`${chip.label} OK`} size={13} />
+          )}
+          {chip.count > 0 ? `${chip.label} · ${chip.count}` : chip.label}
+        </Link>
+      ))}
+    </div>
   );
 }
 
