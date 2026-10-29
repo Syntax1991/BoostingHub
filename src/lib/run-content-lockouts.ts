@@ -91,6 +91,12 @@ export function projectRunContentLockouts(input: {
  *   keeps it out of a fresh instance (why MYTHIC + SAVED Runs do not exist).
  * - Full clear always counts. A save whose killed bosses are unknown (older
  *   sync, no boss list) counts too — irrelevance is never guessed from a count.
+ * - The boss list only proves a save harmless when it accounts for every
+ *   verified kill: as many recognised catalog bosses killed as
+ *   `bossesDefeated`. A shorter or unrecognised list (ids dropped by a catalog
+ *   merge, ids outside this content's catalog, a list left from an earlier
+ *   sync) counts as relevant. Kills only accumulate within a reset, so a
+ *   complete count also means the list is the exact set.
  */
 export function isSaveRelevantToPlannedBosses(row: RunContentRaidSaveInfo): boolean {
   const save = row.raidSave;
@@ -98,6 +104,8 @@ export function isSaveRelevantToPlannedBosses(row: RunContentRaidSaveInfo): bool
   const full = save.isComplete || save.bossesDefeated >= save.totalBossCount;
   if (save.bossesDefeated === 0 && !full) return false;
   if (full || save.difficulty === "MYTHIC" || !row.bosses) return true;
+  const knownKills = row.bosses.filter((boss) => boss.killed).length;
+  if (knownKills !== save.bossesDefeated) return true;
   return row.bosses.slice(0, row.plannedBossCount).some((boss) => boss.killed);
 }
 

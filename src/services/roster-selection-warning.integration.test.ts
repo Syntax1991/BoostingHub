@@ -209,7 +209,7 @@ async function setLockout(
   raidId: string,
   bossesDefeated: number,
   totalBossCount: number,
-  options: { killedBossNumbers?: number[]; difficulty?: "HEROIC" | "MYTHIC" } = {},
+  options: { killedBossNumbers?: number[]; extraKilledBossIds?: string[]; difficulty?: "HEROIC" | "MYTHIC" } = {},
 ) {
   const run = await runRepository.findById(runId);
   const resetIdentifier = lockoutService.getResetIdentifierForRun("EU", run!.scheduledStartAt);
@@ -224,7 +224,10 @@ async function setLockout(
       sortOrder: number;
     }>;
     const ordered = [...bosses].sort((a, b) => a.sortOrder - b.sortOrder);
-    killedBossIds = JSON.stringify(options.killedBossNumbers.map((number) => ordered[number - 1]!.id));
+    killedBossIds = JSON.stringify([
+      ...options.killedBossNumbers.map((number) => ordered[number - 1]!.id),
+      ...(options.extraKilledBossIds ?? []),
+    ]);
   }
   const now = new Date().toISOString();
   await orm.CharacterRaidLockout.create({
@@ -1003,6 +1006,33 @@ describe("Auto Build — only saves on planned bosses exclude", () => {
       selections: proposal.applySelections,
     });
     expect((await draftSelectedIds(runId)).sort()).toEqual([savedSignup, cleanSignup, healerSignup].sort());
+  });
+
+  it("inconsistent boss evidence is never trusted as harmless; a complete boss-8-only save stays eligible and applies", async () => {
+    const { runId, savedSignup, cleanSignup, healerSignup } = await plannedRun();
+    // 2/8 verified, only boss 8 in the stored list (e.g. an id dropped by a catalog merge).
+    await setLockout(runId, savedA, VENOMOUS_ABYSS_RAID_ID, 2, 8, { killedBossNumbers: [8] });
+    // 1/8 verified, the stored id is not a boss of this raid's catalog.
+    await setLockout(runId, clean, VENOMOUS_ABYSS_RAID_ID, 1, 8, {
+      killedBossNumbers: [],
+      extraKilledBossIds: ["00000000-0000-4000-8000-0000000000ff"],
+    });
+    // Complete evidence: exactly boss 8 of 1/8 — outside the planned 1–6.
+    await setLockout(runId, savedB, VENOMOUS_ABYSS_RAID_ID, 1, 8, { killedBossNumbers: [8] });
+
+    const proposal = await rosterBuilderService.proposeRoster(lead, runId);
+    expect(excludedIds(proposal)).toEqual([savedSignup, cleanSignup].sort());
+    expect(newPickIds(proposal)).toEqual([healerSignup]);
+    expect((await rosterCard(lead, runId, savedSignup)).selectionRisk.level).toBe("WARNING");
+    expect((await rosterCard(lead, runId, cleanSignup)).selectionRisk.level).toBe("WARNING");
+
+    // Same decision on Apply: the eligible pick needs no confirmation.
+    await rosterBuilderService.applyRosterProposal(lead, {
+      runId,
+      expectedVersion: proposal.rosterVersion,
+      selections: proposal.applySelections,
+    });
+    expect(await draftSelectedIds(runId)).toEqual([healerSignup]);
   });
 
   it("6/8 Run, full clear: excluded", async () => {

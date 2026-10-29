@@ -12,7 +12,7 @@ const bossId = (number: number) => [...venomousBosses].sort((a, b) => a.sortOrde
 function row(input: {
   planned: number;
   difficulty?: RaidDifficulty;
-  save?: { killed: number[] | null; defeated?: number; complete?: boolean } | null;
+  save?: { killed: number[] | null; defeated?: number; complete?: boolean; unknownIds?: string[] } | null;
   bosses?: typeof venomousBosses;
 }) {
   const difficulty = input.difficulty ?? "HEROIC";
@@ -40,7 +40,7 @@ function row(input: {
             bossesDefeated: save.defeated ?? save.killed?.length ?? 0,
             totalBossCount: 8,
             isComplete: save.complete ?? false,
-            ...(save.killed ? { killedBossIds: save.killed.map(bossId) } : {}),
+            ...(save.killed ? { killedBossIds: [...save.killed.map(bossId), ...(save.unknownIds ?? [])] } : {}),
           },
   })[0]!;
 }
@@ -74,10 +74,23 @@ describe("isSaveRelevantToPlannedBosses", () => {
     expect(isSaveRelevantToPlannedBosses(row({ planned: 6, bosses: [], save: { killed: [8] } }))).toBe(true);
   });
 
+  it("an incomplete or unrecognised boss list never proves a save harmless", () => {
+    // 2/8 verified, but only boss 8 is in the list (e.g. an id dropped by a catalog merge) → relevant.
+    expect(isSaveRelevantToPlannedBosses(row({ planned: 6, save: { killed: [8], defeated: 2 } }))).toBe(true);
+    // 1/8 verified, the only stored id is not a boss of this content's catalog → relevant.
+    expect(
+      isSaveRelevantToPlannedBosses(row({ planned: 6, save: { killed: [], defeated: 1, unknownIds: ["not-a-catalog-boss"] } })),
+    ).toBe(true);
+    // A complete list still proves it: 1/8 with exactly boss 8 → not relevant, 1/8 with boss 2 → relevant.
+    expect(isSaveRelevantToPlannedBosses(row({ planned: 6, save: { killed: [8], defeated: 1 } }))).toBe(false);
+    expect(isSaveRelevantToPlannedBosses(row({ planned: 6, save: { killed: [2], defeated: 1 } }))).toBe(true);
+  });
+
   it("no verified save (Unknown) or verified 0 kills is not a save", () => {
     const unknown = row({ planned: 6, save: null });
     expect(unknown.label.kind).toBe("unknown");
     expect(isSaveRelevantToPlannedBosses(unknown)).toBe(false);
-    expect(isSaveRelevantToPlannedBosses(row({ planned: 6, save: { killed: [] } }))).toBe(false);
+    // Zero progress with consistent empty kill data.
+    expect(isSaveRelevantToPlannedBosses(row({ planned: 6, save: { killed: [], defeated: 0 } }))).toBe(false);
   });
 });
