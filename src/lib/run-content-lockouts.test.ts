@@ -86,6 +86,30 @@ describe("isSaveRelevantToPlannedBosses", () => {
     expect(isSaveRelevantToPlannedBosses(row({ planned: 6, save: { killed: [2], defeated: 1 } }))).toBe(true);
   });
 
+  it("extra, unknown or duplicate stored ids cannot pass as a consistent boss-8-only save", () => {
+    const unknownId = "not-a-catalog-boss";
+    // 1 verified kill, stored [boss 8, unknown id] → the raw list disagrees with the count → relevant.
+    expect(
+      isSaveRelevantToPlannedBosses(row({ planned: 6, save: { killed: [8], defeated: 1, unknownIds: [unknownId] } })),
+    ).toBe(true);
+    // Duplicates: [boss 8, boss 8] with 1 or 2 verified kills → relevant.
+    expect(isSaveRelevantToPlannedBosses(row({ planned: 6, save: { killed: [8, 8], defeated: 1 } }))).toBe(true);
+    expect(isSaveRelevantToPlannedBosses(row({ planned: 6, save: { killed: [8, 8], defeated: 2 } }))).toBe(true);
+    // The normal case stays eligible: exactly [boss 8] for 1 verified kill.
+    expect(isSaveRelevantToPlannedBosses(row({ planned: 6, save: { killed: [8], defeated: 1 } }))).toBe(false);
+  });
+
+  it("a 0-kill record is no save only when its stored list agrees", () => {
+    expect(isSaveRelevantToPlannedBosses(row({ planned: 6, save: { killed: [], defeated: 0 } }))).toBe(false);
+    expect(isSaveRelevantToPlannedBosses(row({ planned: 6, save: { killed: null, defeated: 0 } }))).toBe(false);
+    // Contradictory: count 0, but kills stored (planned or not, known or not) → relevant.
+    expect(isSaveRelevantToPlannedBosses(row({ planned: 6, save: { killed: [1], defeated: 0 } }))).toBe(true);
+    expect(isSaveRelevantToPlannedBosses(row({ planned: 6, save: { killed: [8], defeated: 0 } }))).toBe(true);
+    expect(
+      isSaveRelevantToPlannedBosses(row({ planned: 6, save: { killed: [], defeated: 0, unknownIds: ["x"] } })),
+    ).toBe(true);
+  });
+
   it("no verified save (Unknown) or verified 0 kills is not a save", () => {
     const unknown = row({ planned: 6, save: null });
     expect(unknown.label.kind).toBe("unknown");
