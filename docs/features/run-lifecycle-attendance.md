@@ -128,6 +128,10 @@ The manager UI shows Backup clearly and offers an easy Standby action for those 
 
 `canManageRun` remains the ownership check. Capabilities (`canStart`, `canManageAttendance`, `canComplete`) are server-derived.
 
+## Discord voice hint
+
+While the Run is IN_PROGRESS each manager row shows *In voice* / *Not in voice* / *Voice unknown* from the bot's short-lived report of the Run's assigned voice channel (see [discord-bot.md § Run voice channels](discord-bot.md#run-voice-channels)). It is information only: it never sets, suggests or bulk-applies an attendance status — manual attendance stays the only authority.
+
 ## Bulk Mark Present
 
 **Mark all unmarked as Present** is a single service/repository operation.

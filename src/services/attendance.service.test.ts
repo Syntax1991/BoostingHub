@@ -1,4 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { NextRequest } from "next/server";
+import { POST as voicePresencePost } from "@/app/api/bot/discord/voice-presence/route";
+import { VOICE_PRESENCE_TTL_MS } from "@/lib/voice-presence";
+import { voicePresenceService } from "@/services/voice-presence.service";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
@@ -922,5 +926,108 @@ describe("post-completion attendance correction", () => {
       attendanceService.setStatus(lead, { attendanceId: leadView.attendance.manager!.rows[0]!.id, status: "NO_SHOW" }),
       "ATTENDANCE_NOT_MANAGEABLE",
     );
+  });
+});
+
+describe("Discord voice hint in Attendance (information only, never a status)", () => {
+  const TOKEN = "voice-presence-test-token-0123456789";
+  const VOICE = "1500000000000000001";
+  const OTHER_VOICE = "1500000000000000002";
+  const DISCORD = { user: "1400000000000000001", playerB: "1400000000000000002" };
+
+  function post(body: unknown, token: string | null = TOKEN) {
+    return voicePresencePost(
+      new NextRequest(new URL("/api/bot/discord/voice-presence", "http://bot-api.test"), {
+        method: "POST",
+        headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    );
+  }
+
+  /** A started Run (attendance rows for user + playerB + playerD), its voice channel assigned, two players linked to Discord. */
+  async function runningRunWithVoice() {
+    const { runId } = await publishedRunWithRoster();
+    await runService.startRun(lead, { runId });
+    const now = new Date().toISOString();
+    await orm.RunDiscordPost.create({ id: crypto.randomUUID(), runId, voiceChannelId: VOICE, createdAt: now, updatedAt: now });
+    await orm.User.where({ id: ids.user }).update({ discordUserId: DISCORD.user });
+    await orm.User.where({ id: ids.playerB }).update({ discordUserId: DISCORD.playerB });
+    await orm.User.where({ id: ids.playerD }).update({ discordUserId: null });
+    return runId;
+  }
+
+  async function voiceByUser(runId: string) {
+    const view = await attendanceService.getManagerAttendance(lead, runId);
+    return Object.fromEntries(view.rows.map((row) => [row.userName, row.voicePresence]));
+  }
+
+  beforeAll(() => {
+    process.env.BOOSTINGHUB_BOT_API_TOKEN = TOKEN;
+  });
+  afterAll(async () => {
+    voicePresenceService.resetForTests();
+    for (const id of [ids.user, ids.playerB, ids.playerD]) await orm.User.where({ id }).update({ discordUserId: null });
+    await orm.RunDiscordPost.where({ voiceChannelId: VOICE }).delete().catch(() => {});
+  });
+
+  it("connected → In voice, disconnected → Not in voice, unlinked Discord → Unknown; statuses stay manual", async () => {
+    voicePresenceService.resetForTests();
+    const runId = await runningRunWithVoice();
+    const before = (await attendanceService.getManagerAttendance(lead, runId)).rows.map((row) => row.status);
+
+    const res = await post({ runs: [{ runId, channelId: VOICE, discordUserIds: [DISCORD.user, "1999999999999999999"] }] });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({ accepted: 1, ignored: 0 });
+
+    const voice = await voiceByUser(runId);
+    expect(voice["Attendance User"]).toBe("IN_VOICE");
+    expect(voice["Attendance Player B"]).toBe("NOT_IN_VOICE");
+    expect(voice["Attendance Player D"]).toBe("UNKNOWN");
+    // Never marks attendance.
+    expect((await attendanceService.getManagerAttendance(lead, runId)).rows.map((row) => row.status)).toEqual(before);
+  });
+
+  it("a later report without the player (left the channel) → Not in voice", async () => {
+    voicePresenceService.resetForTests();
+    const runId = await runningRunWithVoice();
+    await post({ runs: [{ runId, channelId: VOICE, discordUserIds: [DISCORD.user] }] });
+    await post({ runs: [{ runId, channelId: VOICE, discordUserIds: [] }] });
+    expect((await voiceByUser(runId))["Attendance User"]).toBe("NOT_IN_VOICE");
+  });
+
+  it("a report for another voice channel than the Run's is ignored → Unknown", async () => {
+    voicePresenceService.resetForTests();
+    const runId = await runningRunWithVoice();
+    const res = await post({ runs: [{ runId, channelId: OTHER_VOICE, discordUserIds: [DISCORD.user] }] });
+    expect((await res.json()).data).toEqual({ accepted: 0, ignored: 1 });
+    expect((await voiceByUser(runId))["Attendance User"]).toBe("UNKNOWN");
+  });
+
+  it("bot unavailable (no report) and stale reports → Unknown", async () => {
+    voicePresenceService.resetForTests();
+    const runId = await runningRunWithVoice();
+    expect((await voiceByUser(runId))["Attendance User"]).toBe("UNKNOWN");
+    await voicePresenceService.record([{ runId, channelId: VOICE, discordUserIds: [DISCORD.user] }], Date.now() - VOICE_PRESENCE_TTL_MS - 1_000);
+    expect((await voiceByUser(runId))["Attendance User"]).toBe("UNKNOWN");
+  });
+
+  it("a Run that is no longer running: reports are ignored and no hint is shown", async () => {
+    voicePresenceService.resetForTests();
+    const runId = await runningRunWithVoice();
+    await orm.Run.where({ id: runId }).update({ status: "COMPLETED" });
+    const res = await post({ runs: [{ runId, channelId: VOICE, discordUserIds: [DISCORD.user] }] });
+    expect((await res.json()).data).toEqual({ accepted: 0, ignored: 1 });
+    const view = await attendanceService.getManagerAttendance(lead, runId);
+    expect(view.rows.every((row) => row.voicePresence === null)).toBe(true);
+  });
+
+  it("unauthorized or malformed bot requests are refused", async () => {
+    expect((await post({ runs: [] }, null)).status).toBe(401);
+    expect((await post({ runs: [] }, "wrong-token")).status).toBe(401);
+    expect((await post({ runs: [{ runId: "not-a-uuid", channelId: VOICE, discordUserIds: [] }] })).status).toBe(400);
+    expect((await post({ runs: [{ runId: crypto.randomUUID(), channelId: VOICE, discordUserIds: ["<@everyone>"] }] })).status).toBe(400);
+    const tooMany = Array.from({ length: 101 }, (_, index) => `13000000000000${String(index).padStart(5, "0")}`);
+    expect((await post({ runs: [{ runId: crypto.randomUUID(), channelId: VOICE, discordUserIds: tooMany }] })).status).toBe(400);
   });
 });

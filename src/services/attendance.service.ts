@@ -5,6 +5,10 @@ import { ATTENDANCE_STATUSES, type AttendanceStatus } from "@/models/enums";
 import { attendanceRepository, type AttendanceRecord } from "@/repositories/attendance.repository";
 import { rosterRepository } from "@/repositories/roster.repository";
 import { runRepository } from "@/repositories/run.repository";
+import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
+import { userRepository } from "@/repositories/user.repository";
+import { voicePresenceService } from "@/services/voice-presence.service";
+import type { VoicePresence } from "@/lib/voice-presence";
 import { ATTENDANCE_NOTE_MAX } from "@/services/run-state";
 import {
   externalBoosterInputError,
@@ -152,6 +156,21 @@ export const attendanceService = {
         participationType: signup.participationType,
         offeredRoles: signup.offeredRoles,
       }));
+    // Voice hint (information only, never a status): who is in the Run's voice
+    // channel right now, from the bot's short-lived report. Only while running.
+    let voiceByUserId = new Map<string, VoicePresence>();
+    if (canMutate) {
+      const post = await runDiscordPostRepository.findByRunId(runId);
+      const discordByUser = await userRepository.listDiscordUserIds(rows.map((row) => row.userId));
+      const presence = voicePresenceService.presenceFor({
+        runId,
+        runVoiceChannelId: post?.voiceChannelId ?? null,
+        discordUserIds: [...discordByUser.values()],
+      });
+      voiceByUserId = new Map(
+        rows.map((row) => [row.userId, presence.get(discordByUser.get(row.userId) ?? null) ?? "UNKNOWN"]),
+      );
+    }
     return {
       runStatus: run.status,
       started: rows.length > 0,
@@ -159,7 +178,11 @@ export const attendanceService = {
       /** COMPLETED only: explicit, audited "Correct Attendance" (normal controls stay read-only). */
       canCorrect: canCorrectCompletedAttendance(user, run),
       summary: summaryFrom(rows),
-      rows: rows.map(toManagerRow),
+      rows: rows.map((row) => ({
+        ...toManagerRow(row),
+        /** Running Runs only: Discord voice hint; null otherwise. Never sets attendance. */
+        voicePresence: canMutate ? (voiceByUserId.get(row.userId) ?? "UNKNOWN") : null,
+      })),
       replacementCandidates,
       /** Hand-added boosters in the raid (Final Setup only — no attendance). */
       externalBoosters: run.roster?.externalBoosters ?? [],
