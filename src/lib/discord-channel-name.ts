@@ -1,4 +1,3 @@
-import { getRaidLeadDisplayName } from "@/lib/raid-lead-display";
 import type { RaidDifficulty, RunLootType } from "@/models/enums";
 import { DEFAULT_TIME_ZONE, zonedParts } from "@/lib/datetime";
 import { DIFFICULTY_ABBREVIATIONS, RUN_LOOT_TYPE_CHANNEL_TOKENS } from "@/lib/labels";
@@ -10,8 +9,9 @@ import { DIFFICULTY_ABBREVIATIONS, RUN_LOOT_TYPE_CHANNEL_TOKENS } from "@/lib/la
  * `coverage` comes from `projectRunContentDisplay(...).channelCoverage`
  * (e.g. `8of8` or Bundle `9of9`) — never from singular Run.plannedBossCount.
  *
- * `raidLeadChannelName` is the Raid Lead segment source (nickname or User.name).
- * It never comes from Discord guild nicknames or Run.title.
+ * `raidLeadChannelName` is the Raid Lead segment source: the Raid Lead's
+ * User.name (resolved from Discord, see lib/discord-display-name). It never
+ * comes from Run.title.
  */
 export type RunChannelNameInput = {
   scheduledStartAt: string;
@@ -26,9 +26,6 @@ export type RunChannelNameInput = {
 
 /** Discord text channel names are capped at 100 characters. */
 const MAX_CHANNEL_NAME_LENGTH = 100;
-
-/** Max raw length for the Raid Lead nickname (`discordRunChannelNickname`) before slugifying. */
-export const DISCORD_RUN_CHANNEL_NICKNAME_MAX_LENGTH = 24;
 
 const COMBINING_MARKS_PATTERN = new RegExp("[\\u0300-\\u036f]", "g");
 
@@ -113,7 +110,6 @@ export function raidWeekMinuteFromChannelName(name: string): number | null {
   return raidWeekMinute(CHANNEL_WEEKDAY_INDEX[match[1]!]!, hour, minute);
 }
 
-/** Prefer nickname when set; otherwise BoostingHub User.name. Never Discord guild nick. */
 /** Discord channel names are 1–100 characters. */
 export const DISCORD_CHANNEL_NAME_MAX = 100;
 const RUN_VOICE_CHANNEL_PREFIX = "Raid with ";
@@ -124,7 +120,7 @@ function isControlOrLineBreak(codePoint: number): boolean {
 
 /**
  * Human-readable name for a Run's temporary GuildVoice channel:
- * `Raid with <effective Raid Lead>` (see `effectiveRaidLeadChannelName`).
+ * `Raid with <Raid Lead name>` (the Raid Lead's User.name).
  * Not a text-channel slug. Control characters and line breaks become spaces,
  * whitespace collapses, and the Raid Lead part is cut (by code point) so the
  * whole name fits Discord's 100-character limit.
@@ -139,10 +135,3 @@ export function formatRunVoiceChannelName(raidLeadDisplayName: string): string {
   return `${RUN_VOICE_CHANNEL_PREFIX}${lead}`.trim();
 }
 
-/** The Raid Lead part of a Run channel name — the Run display identity ({@link getRaidLeadDisplayName}). */
-export function effectiveRaidLeadChannelName(input: {
-  raidLeadName: string;
-  discordRunChannelNickname: string | null | undefined;
-}): string {
-  return getRaidLeadDisplayName({ name: input.raidLeadName, discordRunChannelNickname: input.discordRunChannelNickname });
-}

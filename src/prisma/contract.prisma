@@ -205,6 +205,13 @@ model User {
   image           String?
   discordUserId   String?       @unique
   discordUsername String?
+  /// Discord server (guild) nickname from the last authoritative member read; null = none set
+  /// or not in the guild. Raw input of the resolved display name in `name` — never an identity.
+  discordGuildNickname String?
+  /// Discord global display name from the last member read (raw, like discordGuildNickname).
+  discordGlobalName    String?
+  /// Last authoritative Discord member read that refreshed the name fields (login or bot refresh).
+  discordNameSyncedAt  TimestamptzString?
   accountStatus   AccountStatus @default(ACTIVE)
   accountRole     AccountRole   @default(USER)
   /// Manual Boosting Role: approved to sign up and be rostered as a Booster.
@@ -238,8 +245,8 @@ model User {
   /// Preferred Character for signup UX only — never bypasses eligibility.
   defaultCharacterId          String?
   defaultCharacter            Character? @relation("UserDefaultCharacter", fields: [defaultCharacterId], references: [id], onDelete: SetNull)
-  /// Optional short name for Discord Run channel Raid Lead segment only.
-  /// Null falls back to User.name. Does not affect Run.title or web identity.
+  /// DEPRECATED — no longer read or written (Discord is the name source, see `name`).
+  /// Kept until the follow-up migration drops it, so a rollback deploy stays possible.
   discordRunChannelNickname   String?
   /// When true, optional personal Discord DMs are deferred during Quiet Hours.
   /// Does not affect in-app notifications or shared Run-channel messages.

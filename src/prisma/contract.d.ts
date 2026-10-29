@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'6bf45172add1e36a8b1f7b73f96a6ed59a18db85fa7aa3ad9414f9466e9df267'>;
+  StorageHashBase<'4dc4e3e4992b86217d8fc9d3ea09bfe0b3deee47daf3a2d4e789bc0e64f58198'>;
 export type ExecutionHash =
   ExecutionHashBase<'324c5afa3b4d6d5548548ec3e865b7ab15f3ade264bd46a2057a901773b881e8'>;
 export type ProfileHash =
@@ -906,6 +906,9 @@ export type FieldOutputTypes = {
       readonly image: CodecTypes['pg/text@1']['output'] | null;
       readonly discordUserId: CodecTypes['pg/text@1']['output'] | null;
       readonly discordUsername: CodecTypes['pg/text@1']['output'] | null;
+      readonly discordGuildNickname: CodecTypes['pg/text@1']['output'] | null;
+      readonly discordGlobalName: CodecTypes['pg/text@1']['output'] | null;
+      readonly discordNameSyncedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly accountStatus: 'ACTIVE' | 'DISABLED';
       readonly accountRole: 'USER' | 'RAID_LEAD' | 'ADMIN' | 'OWNER';
       readonly isBooster: CodecTypes['pg/bool@1']['output'];
@@ -1660,6 +1663,9 @@ export type FieldInputTypes = {
       readonly image: CodecTypes['pg/text@1']['input'] | null;
       readonly discordUserId: CodecTypes['pg/text@1']['input'] | null;
       readonly discordUsername: CodecTypes['pg/text@1']['input'] | null;
+      readonly discordGuildNickname: CodecTypes['pg/text@1']['input'] | null;
+      readonly discordGlobalName: CodecTypes['pg/text@1']['input'] | null;
+      readonly discordNameSyncedAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly accountStatus: 'ACTIVE' | 'DISABLED';
       readonly accountRole: 'USER' | 'RAID_LEAD' | 'ADMIN' | 'OWNER';
       readonly isBooster: CodecTypes['pg/bool@1']['input'];
@@ -2415,7 +2421,10 @@ export type StorageColumnTypes = {
       readonly discordDmQuietHoursEnabled: CodecTypes['pg/bool@1']['output'];
       readonly discordDmQuietHoursEnd: CodecTypes['pg/text@1']['output'] | null;
       readonly discordDmQuietHoursStart: CodecTypes['pg/text@1']['output'] | null;
+      readonly discordGlobalName: CodecTypes['pg/text@1']['output'] | null;
+      readonly discordGuildNickname: CodecTypes['pg/text@1']['output'] | null;
       readonly discordLootbuddy: CodecTypes['pg/bool@1']['output'];
+      readonly discordNameSyncedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly discordRaidBooster: CodecTypes['pg/bool@1']['output'];
       readonly discordRunChannelNickname: CodecTypes['pg/text@1']['output'] | null;
       readonly discordUserId: CodecTypes['pg/text@1']['output'] | null;
@@ -3169,7 +3178,10 @@ export type StorageColumnInputTypes = {
       readonly discordDmQuietHoursEnabled: CodecTypes['pg/bool@1']['input'];
       readonly discordDmQuietHoursEnd: CodecTypes['pg/text@1']['input'] | null;
       readonly discordDmQuietHoursStart: CodecTypes['pg/text@1']['input'] | null;
+      readonly discordGlobalName: CodecTypes['pg/text@1']['input'] | null;
+      readonly discordGuildNickname: CodecTypes['pg/text@1']['input'] | null;
       readonly discordLootbuddy: CodecTypes['pg/bool@1']['input'];
+      readonly discordNameSyncedAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly discordRaidBooster: CodecTypes['pg/bool@1']['input'];
       readonly discordRunChannelNickname: CodecTypes['pg/text@1']['input'] | null;
       readonly discordUserId: CodecTypes['pg/text@1']['input'] | null;
@@ -7987,6 +7999,21 @@ type ContractBase = Omit<
                 readonly discordUsername: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly discordGuildNickname: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly discordGlobalName: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly discordNameSyncedAt: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-string@1';
                   readonly nullable: true;
                 };
                 readonly accountStatus: {
@@ -13595,6 +13622,21 @@ type ContractBase = Omit<
                 readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
+              readonly discordGuildNickname: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly discordGlobalName: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly discordNameSyncedAt: {
+                readonly nullable: true;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                };
+              };
               readonly accountStatus: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
@@ -14011,6 +14053,9 @@ type ContractBase = Omit<
                 readonly image: { readonly column: 'image' };
                 readonly discordUserId: { readonly column: 'discordUserId' };
                 readonly discordUsername: { readonly column: 'discordUsername' };
+                readonly discordGuildNickname: { readonly column: 'discordGuildNickname' };
+                readonly discordGlobalName: { readonly column: 'discordGlobalName' };
+                readonly discordNameSyncedAt: { readonly column: 'discordNameSyncedAt' };
                 readonly accountStatus: { readonly column: 'accountStatus' };
                 readonly accountRole: { readonly column: 'accountRole' };
                 readonly isBooster: { readonly column: 'isBooster' };

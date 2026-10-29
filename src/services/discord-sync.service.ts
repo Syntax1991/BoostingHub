@@ -9,7 +9,6 @@ export const WCL_SCAN_START_MARGIN_MINUTES = 10;
 import {
   buildClosedDiscordRunChannelName,
   buildDiscordRunChannelName,
-  effectiveRaidLeadChannelName,
   formatRunVoiceChannelName,
 } from "@/lib/discord-channel-name";
 import { isDpsRole } from "@/lib/character-roles";
@@ -593,7 +592,6 @@ function desiredChannelNameFor(run: {
   difficulty: RaidDifficulty;
   lootType: RunLootType;
   raidLeadName: string;
-  raidLeadDiscordRunChannelNickname?: string | null;
   contentDisplay: { channelCoverage: string };
   status?: RunStatus;
   archivedAt?: string | null;
@@ -603,10 +601,7 @@ function desiredChannelNameFor(run: {
     difficulty: run.difficulty,
     lootType: run.lootType,
     coverage: run.contentDisplay.channelCoverage,
-    raidLeadChannelName: effectiveRaidLeadChannelName({
-      raidLeadName: run.raidLeadName,
-      discordRunChannelNickname: run.raidLeadDiscordRunChannelNickname,
-    }),
+    raidLeadChannelName: run.raidLeadName,
   };
   if (shouldUseClosedDiscordRunChannelName(run)) return buildClosedDiscordRunChannelName(input);
   return buildDiscordRunChannelName(input);
@@ -1461,12 +1456,7 @@ export const discordSyncService = {
         voiceChannels.push({
           runId: run.id,
           existingVoiceChannelId: voiceChannelId,
-          desiredVoiceChannelName: formatRunVoiceChannelName(
-            effectiveRaidLeadChannelName({
-              raidLeadName: run.raidLeadName,
-              discordRunChannelNickname: run.raidLeadDiscordRunChannelNickname,
-            }),
-          ),
+          desiredVoiceChannelName: formatRunVoiceChannelName(run.raidLeadName),
           action: voiceAction,
         });
       }
@@ -1640,10 +1630,7 @@ export const discordSyncService = {
         difficulty: run.difficulty,
         lootType: run.lootType,
         titleCoverage: run.contentDisplay.titleCoverage,
-        raidLeadDisplay: effectiveRaidLeadChannelName({
-          raidLeadName: run.raidLeadName,
-          discordRunChannelNickname: run.raidLeadDiscordRunChannelNickname,
-        }),
+        raidLeadDisplay: run.raidLeadName,
         runChannelId: postsByRunId.get(run.id)?.runChannelId ?? null,
       }));
     const schedulePostsByBucket = new Map(schedulePosts.map((row) => [row.bucket, row]));

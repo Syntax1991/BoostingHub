@@ -78,9 +78,8 @@ Stored on `User`:
   `dmRunRescheduledEnabled` / `dmRosterRemovedEnabled` (default `true`)
 - `timeZone` (default `Europe/Berlin`) — personal presentation only
 - `defaultCharacterId` (nullable) — signup UX preference only
-- `discordRunChannelNickname` (nullable) — RAID_LEAD/ADMIN only; the **Raid Lead
-  nickname** (Run display identity): Run title, Discord Run channel and Run views.
-  Null falls back to `User.name`. Account surfaces keep `User.name`.
+- `discordRunChannelNickname` — deprecated, no longer read or written (the Raid
+  Lead name comes from Discord, see domain model); dropped by a follow-up migration.
 - `discordDmQuietHoursEnabled` (default `false`) — defer optional personal Discord
   DMs during a daily local window
 - `discordDmQuietHoursStart` / `discordDmQuietHoursEnd` (nullable `HH:MM`) —

@@ -2675,8 +2675,9 @@ describe("planRunVoiceChannel — temporary Run voice lifecycle decision", () =>
 });
 
 describe("listSyncWork — voiceChannels lane", () => {
-  async function setLeadNickname(nickname: string | null) {
-    await orm.User.where({ id: ids.lead }).update({ discordRunChannelNickname: nickname, updatedAt: new Date().toISOString() });
+  /** The Raid Lead's displayed name (User.name, resolved from Discord) — what the voice channel shows. */
+  async function setLeadName(name: string) {
+    await orm.User.where({ id: ids.lead }).update({ name, updatedAt: new Date().toISOString() });
   }
 
   async function publishedRun(): Promise<string> {
@@ -2774,7 +2775,7 @@ describe("listSyncWork — voiceChannels lane", () => {
 
   it("PUBLISHED → none; started by an ADMIN → PROVISION `Raid with <assigned Raid Lead>`; recorded → RECONCILE; terminal → RETIRE_IF_EMPTY", async () => {
     try {
-      await setLeadNickname("Syntax");
+      await setLeadName("Syntax");
       const id = await publishedRun();
       expect(await voiceItem(id)).toBeUndefined();
 
@@ -2786,7 +2787,7 @@ describe("listSyncWork — voiceChannels lane", () => {
         action: "PROVISION",
       });
 
-      await setLeadNickname(null);
+      await setLeadName("Discord Lead");
       expect((await voiceItem(id))?.desiredVoiceChannelName).toBe("Raid with Discord Lead");
 
       await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-9" });
@@ -2801,7 +2802,7 @@ describe("listSyncWork — voiceChannels lane", () => {
       await orm.Run.where({ id }).update({ archivedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
       expect(await voiceItem(id)).toMatchObject({ existingVoiceChannelId: "voice-9", action: "RETIRE_IF_EMPTY" });
     } finally {
-      await setLeadNickname(null);
+      await setLeadName("Discord Lead");
     }
   });
 

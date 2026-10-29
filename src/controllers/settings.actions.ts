@@ -8,7 +8,6 @@ import {
   updateNotificationPreferencesSchema,
   updateGameplayPreferencesSchema,
   updateRegionalPreferencesSchema,
-  updateRunChannelPreferencesSchema,
 } from "@/validators/notification";
 
 export async function updateNotificationSettingsAction(input: unknown): Promise<ActionResult> {
@@ -45,18 +44,6 @@ export async function updateGameplaySettingsAction(input: unknown): Promise<Acti
     await settingsService.updateGameplayPreferences(user, parsed);
     revalidatePath("/settings");
     return { ok: true, message: "Gameplay preferences saved." };
-  } catch (error) {
-    return mapActionError(error);
-  }
-}
-
-export async function updateRunChannelSettingsAction(input: unknown): Promise<ActionResult> {
-  try {
-    const user = await requireUser();
-    const parsed = updateRunChannelPreferencesSchema.parse(input);
-    await settingsService.updateRunChannelPreferences(user, parsed);
-    revalidatePath("/settings");
-    return { ok: true, message: "Run channel preferences saved." };
   } catch (error) {
     return mapActionError(error);
   }
