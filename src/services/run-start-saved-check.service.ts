@@ -71,7 +71,9 @@ export const runStartSavedCheckService = {
           rows.map((row) => ({
             raidId: String(row.raidId),
             difficulty: String(row.difficulty) as RaidDifficulty,
-            killedBossIds: parseKilledBossIds(row.killedBossIds) ?? [],
+            bossesDefeated: Number(row.bossesDefeated ?? 0),
+            isComplete: row.isComplete === true,
+            killedBossIds: parseKilledBossIds(row.killedBossIds),
           })),
         );
         if (bosses.length === 0) continue;

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { isDomainError } from "@/lib/errors";
-import type { RaidBossRef } from "@/lib/lockout-bosses";
+import { lockoutBossBreakdown, type RaidBossRef } from "@/lib/lockout-bosses";
+import { isSaveRelevantToPlannedBosses } from "@/lib/run-content-lockouts";
 import type { RaidDifficulty, RunStatus, WowRegion } from "@/models/enums";
 import { characterRepository } from "@/repositories/character.repository";
 import { runRepository } from "@/repositories/run.repository";
@@ -110,19 +111,49 @@ export function planSavedNotices(input: {
 }
 
 /**
- * Planned bosses of `run` this Character is saved on, from its stored lockout
- * rows of the Run's raid ID (same difficulty), in boss order.
+ * Planned bosses of `run` this Character cannot get fresh loot on, from its
+ * stored lockout rows of the Run's raid ID (same difficulty, the caller's
+ * reset), in boss order — decided per content by the shared selection-risk
+ * rule (isSaveRelevantToPlannedBosses, the same one the roster warning and
+ * Auto Build use): per boss on Normal / Heroic, the whole content on Mythic;
+ * a full clear, or progress whose boss list is unknown or inconsistent,
+ * counts. A relevant save names its killed planned bosses; when it names
+ * none (a Mythic kill on an unplanned boss, an unknown or inconsistent list)
+ * every planned boss of that content is listed — loot there is not safe.
  */
 export function savedPlannedBosses(
   run: Pick<SavedNoticeCommitment["run"], "difficulty" | "contents">,
-  lockouts: ReadonlyArray<{ raidId: string; difficulty: RaidDifficulty; killedBossIds: readonly string[] }>,
+  lockouts: ReadonlyArray<{
+    raidId: string;
+    difficulty: RaidDifficulty;
+    bossesDefeated: number;
+    isComplete: boolean;
+    /** Null = which bosses is unknown (older sync). */
+    killedBossIds: readonly string[] | null;
+  }>,
 ): RaidBossRef[] {
   const bosses: RaidBossRef[] = [];
   for (const content of run.contents) {
     const row = lockouts.find((lockout) => lockout.raidId === content.raidId && lockout.difficulty === run.difficulty);
     if (!row) continue;
-    const killed = new Set(row.killedBossIds);
-    bosses.push(...plannedBosses(content).filter((boss) => killed.has(boss.id)));
+    const relevant = isSaveRelevantToPlannedBosses({
+      raidSave: {
+        raidId: row.raidId,
+        difficulty: row.difficulty,
+        resetIdentifier: "",
+        bossesDefeated: row.bossesDefeated,
+        totalBossCount: content.bosses.length,
+        isComplete: row.isComplete,
+        killedBossIds: row.killedBossIds ? [...row.killedBossIds] : null,
+      },
+      bosses: lockoutBossBreakdown(content.bosses, row.killedBossIds),
+      plannedBossCount: content.plannedBossCount,
+    });
+    if (!relevant) continue;
+    const killed = new Set(row.killedBossIds ?? []);
+    const planned = plannedBosses(content);
+    const named = planned.filter((boss) => killed.has(boss.id));
+    bosses.push(...(named.length > 0 ? named : planned));
   }
   return bosses;
 }
