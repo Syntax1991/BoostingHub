@@ -100,7 +100,9 @@ export function projectRunContentLockouts(input: {
  * - Zero kills is no save only when the stored list agrees (empty or absent);
  *   a 0 count with stored kills is contradictory and counts as relevant.
  */
-export function isSaveRelevantToPlannedBosses(row: RunContentRaidSaveInfo): boolean {
+export function isSaveRelevantToPlannedBosses(
+  row: Pick<RunContentRaidSaveInfo, "raidSave" | "bosses" | "plannedBossCount">,
+): boolean {
   const save = row.raidSave;
   if (!save) return false;
   const ids = save.killedBossIds ?? null;
