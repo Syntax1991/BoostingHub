@@ -71,6 +71,8 @@ export type SlotCharacterChoice = {
   playSignupId: string | null;
   label: string;
   roles: ConcreteCharacterRole[];
+  /** The plan's current pick, no longer offered (alternate became ineligible) — shown, not choosable. */
+  unavailable?: boolean;
 };
 
 /**
@@ -112,6 +114,25 @@ export function slotHasBossChoices(choices: readonly SlotCharacterChoice[]): boo
   return choices.length > 1 || (choices[0]?.roles.length ?? 0) > 1;
 }
 
+/**
+ * Slots the Boss plan lists: every slot that can deviate, plus every slot
+ * that already deviates even when nothing else is choosable now (its
+ * alternate became ineligible) — so it can still be seen and reset.
+ */
+export function bossPlanRows<Slot extends { signup: BossPlanEditorSignup }>(input: {
+  slots: readonly Slot[];
+  signups: readonly BossPlanEditorSignup[];
+  stagedSlotIds: ReadonlySet<string>;
+  exceptions: readonly RosterBossException[];
+}): Array<{ slot: Slot; choices: SlotCharacterChoice[] }> {
+  return input.slots
+    .map((slot) => ({ slot, choices: slotCharacterChoices(slot.signup, input.signups, input.stagedSlotIds) }))
+    .filter(
+      (row) =>
+        slotHasBossChoices(row.choices) || input.exceptions.some((exception) => exception.slotSignupId === row.slot.signup.id),
+    );
+}
+
 export type SlotAssignment = { playSignupId: string | null; role: CharacterRole | null };
 
 function sameBoss(row: RosterBossException, boss: RunBoss): boolean {
@@ -136,6 +157,38 @@ export function rangeAssignment(input: {
     result = assignment;
   }
   return result ?? { playSignupId: null, role: input.slotRole };
+}
+
+/**
+ * The choices as the selects show them for the range: a saved pick that is
+ * no longer offered (alternate deactivated, lost the Booster role, got a
+ * schedule conflict; or a role the Character no longer offers) stays visible
+ * and marked, so the select never silently shows another Character. The
+ * plan's hard issue explains it; Reset or another pick fixes it.
+ */
+export function choicesWithCurrent(
+  choices: readonly SlotCharacterChoice[],
+  current: SlotAssignment | "MIXED",
+  signups: readonly BossPlanEditorSignup[],
+): SlotCharacterChoice[] {
+  if (current === "MIXED") return [...choices];
+  const role = current.role && isConcreteCharacterRole(current.role) ? current.role : null;
+  const index = choices.findIndex((choice) => choice.playSignupId === current.playSignupId);
+  if (index < 0) {
+    const signup = signups.find((row) => row.id === current.playSignupId);
+    return [
+      ...choices,
+      {
+        playSignupId: current.playSignupId,
+        label: `${signup ? signupCharacterLabel(signup) : "Other Character"} (not available)`,
+        roles: role ? [role] : [],
+        unavailable: true,
+      },
+    ];
+  }
+  const choice = choices[index]!;
+  if (!role || choice.roles.includes(role)) return [...choices];
+  return choices.map((row, position) => (position === index ? { ...row, roles: [...row.roles, role] } : row));
 }
 
 /**

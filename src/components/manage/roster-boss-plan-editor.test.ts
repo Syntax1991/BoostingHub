@@ -4,6 +4,8 @@ import {
   bossesInRange,
   bossExceptionsPayload,
   bossPlanIsDirty,
+  bossPlanRows,
+  choicesWithCurrent,
   evaluateLiveBossPlan,
   nextBossRange,
   rangeAssignment,
@@ -109,6 +111,45 @@ describe("slot Character choices", () => {
 
   it("a single-role slot without alternates has nothing to change", () => {
     expect(slotHasBossChoices(slotCharacterChoices(mage, signups, new Set(staged.keys())))).toBe(false);
+  });
+});
+
+describe("saved pick that is no longer offered (regression)", () => {
+  const savedAlt: RosterBossException[] = [venom(5), venom(6)].map((boss) => ({
+    slotSignupId: "sham",
+    runRaidContentId: boss.runRaidContentId,
+    raidBossId: boss.raidBossId,
+    playSignupId: "priest",
+    role: "HEALER",
+  }));
+  const inactivePriest = { ...priest, characterActive: false };
+  const stagedIds = new Set(staged.keys());
+
+  it("an alternate that became ineligible stays shown and marked instead of the select silently showing the own Character", () => {
+    const offered = slotCharacterChoices(sham, [sham, inactivePriest, mage], stagedIds);
+    expect(offered.map((choice) => choice.playSignupId)).toEqual([null]);
+    const current = rangeAssignment({ exceptions: savedAlt, slotSignupId: "sham", slotRole: "HEALER", range: [venom(5), venom(6)] });
+    expect(choicesWithCurrent(offered, current, [sham, inactivePriest, mage])).toEqual([
+      ...offered,
+      { playSignupId: "priest", label: "Bexpriest-Antonidas (not available)", roles: ["HEALER"], unavailable: true },
+    ]);
+  });
+
+  it("a role the Character no longer offers stays in the role options; offered picks are unchanged; Mixed adds nothing", () => {
+    const offered = slotCharacterChoices(mage, signups, stagedIds);
+    expect(choicesWithCurrent(offered, { playSignupId: null, role: "TANK" }, signups)[0]!.roles).toEqual(["RANGED_DPS", "TANK"]);
+    expect(choicesWithCurrent(offered, { playSignupId: null, role: "RANGED_DPS" }, signups)).toEqual(offered);
+    expect(choicesWithCurrent(offered, "MIXED", signups)).toEqual(offered);
+  });
+
+  it("a deviating slot stays listed (and resettable) even without any choice left; a plain fixed slot is not listed", () => {
+    const slots = [{ signup: { ...sham, assignableRoles: ["HEALER" as const] } }, { signup: mage }];
+    const rows = (exceptions: RosterBossException[]) =>
+      bossPlanRows({ slots, signups: [slots[0]!.signup, inactivePriest, mage], stagedSlotIds: stagedIds, exceptions }).map(
+        (row) => row.slot.signup.id,
+      );
+    expect(rows([])).toEqual([]);
+    expect(rows(savedAlt)).toEqual(["sham"]);
   });
 });
 

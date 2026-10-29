@@ -6,12 +6,12 @@ import { ClassIcon } from "@/components/ui/badges";
 import { WarningIcon } from "@/components/ui/ops-icons";
 import {
   applyRangeAssignment,
+  bossPlanRows,
   bossesInRange,
+  choicesWithCurrent,
   nextBossRange,
   rangeAssignment,
   resetSlotBosses,
-  slotCharacterChoices,
-  slotHasBossChoices,
   type BossPlanEditorSignup,
   type BossRange,
   type LiveBossPlanEvaluation,
@@ -62,9 +62,7 @@ export function RosterBossPlanPanel({
   const contentCount = new Set(bosses.map((boss) => boss.runRaidContentId)).size;
   const exceptionBossKeys = new Set(exceptions.map((row) => `${row.runRaidContentId}:${row.raidBossId}`));
   const warningBossKeys = new Set(evaluation.warnings.flatMap((warning) => warning.bossKeys));
-  const rows = slots
-    .map((slot) => ({ slot, choices: slotCharacterChoices(slot.signup, signups, stagedSlotIds) }))
-    .filter((row) => slotHasBossChoices(row.choices));
+  const rows = bossPlanRows({ slots, signups, stagedSlotIds, exceptions });
   const fixedCount = slots.length - rows.length;
 
   const byContent = new Map<string, RunBoss[]>();
@@ -152,13 +150,14 @@ export function RosterBossPlanPanel({
             <p className="text-xs text-muted">No slot has another Character or role to switch to.</p>
           ) : (
             <ul className="divide-y divide-border/60">
-              {rows.map(({ slot, choices }) => {
+              {rows.map(({ slot, choices: offered }) => {
                 const current = rangeAssignment({
                   exceptions,
                   slotSignupId: slot.signup.id,
                   slotRole: slot.role,
                   range: rangeBosses,
                 });
+                const choices = choicesWithCurrent(offered, current, signups);
                 const mixed = current === "MIXED";
                 const playChoice = mixed ? null : (choices.find((choice) => choice.playSignupId === current.playSignupId) ?? choices[0]!);
                 const roleOptions = playChoice?.roles ?? [];
@@ -182,7 +181,7 @@ export function RosterBossPlanPanel({
                       value={mixed ? MIXED : (current.playSignupId ?? OWN)}
                       onChange={(event) => {
                         const choice = choices.find((row) => (row.playSignupId ?? OWN) === event.target.value);
-                        if (!choice) return;
+                        if (!choice || choice.unavailable) return;
                         const role =
                           slot.role && (choice.roles as readonly CharacterRole[]).includes(slot.role) ? slot.role : choice.roles[0];
                         if (role) assign(slot, choice.playSignupId, role);
@@ -195,7 +194,11 @@ export function RosterBossPlanPanel({
                         </option>
                       ) : null}
                       {choices.map((choice) => (
-                        <option key={choice.playSignupId ?? OWN} value={choice.playSignupId ?? OWN}>
+                        <option
+                          key={choice.playSignupId ?? OWN}
+                          value={choice.playSignupId ?? OWN}
+                          disabled={choice.unavailable}
+                        >
                           {choice.label}
                           {choice.playSignupId == null ? " (roster)" : ""}
                         </option>
