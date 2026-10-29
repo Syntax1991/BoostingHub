@@ -247,6 +247,12 @@ async function withOwnerBoosterRole(characters: CharacterPageRecord[]): Promise<
 }
 
 export const characterRepository = {
+  /** Distinct realm names of every stored Character — the known realms for display-name cleanup. */
+  async listDistinctRealms(): Promise<string[]> {
+    const rows = (await orm.Character.select("realm").all()) as Array<Record<string, unknown>>;
+    return [...new Set(rows.map((row) => String(row.realm ?? "")).filter((realm) => realm.trim().length > 0))];
+  },
+
   async listByUserId(userId: string): Promise<CharacterPageRecord[]> {
     const characters = await orm.Character
       .where({ userId })

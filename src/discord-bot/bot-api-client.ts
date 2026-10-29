@@ -511,4 +511,9 @@ export class BotApiClient {
   runWarcraftLogsAutoAudit() {
     return this.request<unknown>("/api/bot/warcraft-logs/auto-audit", { method: "POST" });
   }
+
+  /** One bounded pass of the Discord player name refresh (people of upcoming Runs). */
+  refreshDiscordMemberNames() {
+    return this.request<unknown>("/api/bot/discord/member-names", { method: "POST" });
+  }
 }

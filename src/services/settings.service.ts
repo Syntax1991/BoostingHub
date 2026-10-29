@@ -1,32 +1,24 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { hasRaidLeadAccess } from "@/auth/authorization";
 import { DomainError } from "@/lib/errors";
-import { runService } from "@/services/run.service";
 import { characterRepository } from "@/repositories/character.repository";
 import {
   settingsRepository,
   type GameplayPreferences,
   type NotificationDmPreferences,
   type RegionalPreferences,
-  type RunChannelPreferences,
   type UserSettingsRecord,
 } from "@/repositories/settings.repository";
-import {
-  DISCORD_RUN_CHANNEL_NICKNAME_MAX_LENGTH,
-  slugDiscordChannelSegment,
-} from "@/lib/discord-channel-name";
 import { isValidIanaTimeZone, listIanaTimeZones } from "@/lib/timezone";
 import { updateNotificationPreferencesSchema } from "@/validators/notification";
 
-export type SettingsDto = Omit<UserSettingsRecord, "runChannels"> & {
-  runChannels: RunChannelPreferences & { canConfigure: boolean };
+export type SettingsDto = UserSettingsRecord & {
   /** Active owned characters for the Default Character selector. */
   characters: Array<{ id: string; name: string; realm: string; isActive: boolean }>;
   /** IANA zones for the timezone selector. */
   timeZones: string[];
 };
 
-export type { NotificationDmPreferences, RegionalPreferences, GameplayPreferences, RunChannelPreferences };
+export type { NotificationDmPreferences, RegionalPreferences, GameplayPreferences };
 
 /**
  * User-owned application preferences and account security controls (sessions).
@@ -57,18 +49,10 @@ export const settingsService = {
       }
     }
 
-    const canConfigureRunChannels = hasRaidLeadAccess(user.accountRole);
-
     return {
       notifications: settings.notifications,
       regional: settings.regional,
       gameplay,
-      runChannels: {
-        canConfigure: canConfigureRunChannels,
-        discordRunChannelNickname: canConfigureRunChannels
-          ? settings.runChannels.discordRunChannelNickname
-          : null,
-      },
       characters: active,
       timeZones: listIanaTimeZones(),
     };
@@ -127,48 +111,4 @@ export const settingsService = {
     });
     return this.getSettings(user);
   },
-
-  async updateRunChannelPreferences(
-    user: AuthenticatedUser,
-    prefs: { discordRunChannelNickname: string | null },
-  ): Promise<SettingsDto> {
-    if (!hasRaidLeadAccess(user.accountRole)) {
-      throw new DomainError(
-        "NOT_AUTHORIZED",
-        "Only raid leads and admins can configure Run channel nicknames.",
-        403,
-      );
-    }
-
-    const normalized = normalizeRunChannelNickname(prefs.discordRunChannelNickname);
-    await settingsRepository.updateRunChannelPreferences(user.id, {
-      discordRunChannelNickname: normalized,
-    });
-    // The nickname is the Run display identity: keep active Run titles consistent.
-    await runService.retitleActiveRunsForRaidLead(user.id);
-    return this.getSettings(user);
-  },
 };
-
-/** Trim → null when empty; enforce max length and non-empty channel slug. */
-export function normalizeRunChannelNickname(raw: string | null | undefined): string | null {
-  if (raw == null) return null;
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  if (trimmed.length > DISCORD_RUN_CHANNEL_NICKNAME_MAX_LENGTH) {
-    throw new DomainError(
-      "VALIDATION_FAILED",
-      `Run channel nickname must be at most ${DISCORD_RUN_CHANNEL_NICKNAME_MAX_LENGTH} characters.`,
-      400,
-    );
-  }
-  const slug = slugDiscordChannelSegment(trimmed);
-  if (!slug) {
-    throw new DomainError(
-      "VALIDATION_FAILED",
-      "Run channel nickname must include at least one letter or number.",
-      400,
-    );
-  }
-  return trimmed;
-}
