@@ -1,6 +1,7 @@
 import { EmbedBuilder } from "discord.js";
 import type { GuildRoleIndicators, RoleDiscordEmojiKey } from "@/discord-bot/class-emoji-lookup";
 import { characterLabel } from "@/discord-bot/format";
+import { chunkEmbedFieldLines } from "@/lib/discord-embed-field-chunking";
 import { formatDiscordRunTitleLink } from "@/lib/discord-run-title-link";
 import { classIndicator } from "@/lib/run-start-message";
 import type { RosterEmbedData, RosterEmbedMember } from "@/services/discord-sync.service";
@@ -57,6 +58,26 @@ function memberList(
 ): string {
   if (members.length === 0) return emptyValue;
   return members.map((member) => formatRosterParticipantLine(member, classIndicators)).join("\n");
+}
+
+/**
+ * One compact line per slot that deviates on some bosses: who (mention, else
+ * the slot Character) and the grouped plan, e.g.
+ * `<@id> — Venom 5–6: Synpriest-Antonidas · Healer; Tide 1: Ranged DPS`.
+ */
+export function formatRosterBossPlanLine(member: RosterEmbedMember, plan: string): string {
+  const who = member.discordUserId ? `<@${member.discordUserId}>` : characterLabel(member.characterName, member.characterRealm);
+  return `${who} — ${plan}`;
+}
+
+/** "📋 Boss plan" field(s); none for a roster without boss exceptions, so such a Run renders exactly as before. */
+function bossPlanFields(data: RosterEmbedData): Array<{ name: string; value: string }> {
+  const lines = (data.bossPlan ?? []).map((line) => formatRosterBossPlanLine(line.member, line.plan));
+  if (lines.length === 0) return [];
+  return chunkEmbedFieldLines(lines).map((chunk, index) => ({
+    name: index === 0 ? "📋 Boss plan" : "📋 Boss plan (cont.)",
+    value: chunk.join("\n"),
+  }));
 }
 
 /**
@@ -122,6 +143,7 @@ export function buildRosterEmbed(data: RosterEmbedData, options?: BuildRosterEmb
             },
           ]
         : []),
+      ...bossPlanFields(data),
     )
     .setColor(data.publishedAt ? 0x2ecc71 : 0x3498db)
     .setFooter({

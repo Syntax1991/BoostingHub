@@ -428,6 +428,8 @@ export const attendanceRepository = {
    *   gets its own PRESENT attendance row (full cut) plus a Raid Invite
    * - an external replacement is added to the roster as an external booster
    *   (Final Setup only — no account, so no attendance)
+   * - the replaced slot drops its boss exceptions (both stages); a
+   *   replacement that was an alternate Character stops being one
    * - the roster version is bumped so the Discord roster and Final Setup
    *   posts are edited
    */
@@ -588,6 +590,19 @@ export const attendanceRepository = {
           publishedRole: null,
           updatedAt: now,
         });
+      }
+
+      // Boss exceptions follow the live roster: the replaced slot is gone, so
+      // its per-boss plan (both stages) goes with it — the replacement plays
+      // every boss in the slot's role. A replacement that was some slot's
+      // alternate Character now holds its own slot and stops being one.
+      // Otherwise Discord and the consumables audit would keep a stale
+      // PUBLISHED plan.
+      if (originalRecord.signupId) {
+        await txOrm.RunRosterBossException.where({ rosterId, slotSignupId: originalRecord.signupId }).deleteAndCount();
+      }
+      if (input.replacement.kind === "signup") {
+        await txOrm.RunRosterBossException.where({ rosterId, playSignupId: input.replacement.signupId }).deleteAndCount();
       }
 
       const previousVersion = asNumber(roster.version, 1);

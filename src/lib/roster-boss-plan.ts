@@ -433,3 +433,63 @@ export function bossExceptionFingerprint(exceptions: readonly RosterBossExceptio
     .sort()
     .join(",");
 }
+
+/** Both stored stages of a roster's boss exceptions. */
+export type BossExceptionStages = { draft: RosterBossException[]; published: RosterBossException[] };
+
+/**
+ * One compact line per slot that deviates, in the given slot order — for the
+ * Discord roster, Final Setup and DMs. Consecutive bosses with the same
+ * Character + role collapse into ranges (formatBossRanges); Bundles name each
+ * content. Slots without exceptions produce no line.
+ */
+export function bossPlanSummaryLines<Slot extends { signupId: string }>(input: {
+  bosses: readonly RunBoss[];
+  exceptions: readonly RosterBossException[];
+  slots: readonly Slot[];
+  characterLabelBySignupId: ReadonlyMap<string, string>;
+}): Array<{ slot: Slot; plan: string }> {
+  const lines: Array<{ slot: Slot; plan: string }> = [];
+  for (const slot of input.slots) {
+    const plan = describeSlotBossPlan({
+      exceptions: input.exceptions.filter((row) => row.slotSignupId === slot.signupId),
+      bosses: input.bosses,
+      characterLabelBySignupId: input.characterLabelBySignupId,
+    });
+    if (plan) lines.push({ slot, plan });
+  }
+  return lines;
+}
+
+/**
+ * Which signup's Character plays which planned bosses (by RaidBoss id): a
+ * slot's own Character plays every planned boss it is not replaced on by an
+ * alternate (a role-only exception keeps its Character); an alternate plays
+ * exactly its exception bosses. Without exceptions every slot plays every
+ * planned boss. Slot order first, then alternates in first-use order.
+ */
+export function bossesPlayedBySignup(input: {
+  bosses: readonly RunBoss[];
+  slotSignupIds: readonly string[];
+  exceptions: readonly RosterBossException[];
+}): Map<string, Set<string>> {
+  const played = new Map<string, Set<string>>();
+  for (const slotSignupId of input.slotSignupIds) {
+    const replaced = new Set(
+      input.exceptions
+        .filter((row) => row.slotSignupId === slotSignupId && row.playSignupId != null)
+        .map((row) => runBossKey(row.runRaidContentId, row.raidBossId)),
+    );
+    played.set(slotSignupId, new Set(input.bosses.filter((boss) => !replaced.has(boss.key)).map((boss) => boss.raidBossId)));
+  }
+  const planned = new Set(input.bosses.map((boss) => boss.key));
+  const slots = new Set(input.slotSignupIds);
+  for (const row of input.exceptions) {
+    if (row.playSignupId == null || !slots.has(row.slotSignupId)) continue;
+    if (!planned.has(runBossKey(row.runRaidContentId, row.raidBossId))) continue;
+    const set = played.get(row.playSignupId) ?? new Set<string>();
+    set.add(row.raidBossId);
+    played.set(row.playSignupId, set);
+  }
+  return played;
+}

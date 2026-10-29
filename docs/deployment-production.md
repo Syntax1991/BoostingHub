@@ -352,10 +352,13 @@ systemctl restart boostinghub-web.service boostinghub-discord-bot.service
 
 ## Feature switch: boss-specific roster exceptions
 
-`ROSTER_BOSS_EXCEPTIONS_ENABLED` is **unset (off) in production** until the
-feature's UI, Discord and consumables-audit integration are complete. While
-off, the roster API refuses boss exception input; the additive table
-`run_roster_boss_exception` stays empty and every Run behaves as before. See
+`ROSTER_BOSS_EXCEPTIONS_ENABLED` is **unset (off) in production** until it is
+deliberately switched on. While off, the roster API refuses boss exception
+input, so the additive table `run_roster_boss_exception` stays empty and every
+Run behaves as before. Switching it off again later stops new or changed plans
+only: plans already stored keep applying (Discord, DMs, Start checks, audit,
+reservations) so nothing is judged against the wrong Character (see
+roster-management.md, Switching off). See
 [roster-management.md](features/roster-management.md#boss-specific-exceptions).
 
 ## Optional: fixed Run voice channels (Raid #1 / Raid #2)

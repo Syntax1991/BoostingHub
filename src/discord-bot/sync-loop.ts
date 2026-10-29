@@ -1276,6 +1276,8 @@ async function syncNotificationDm(
         },
         runChannelId: item.runChannelId,
         update: item.rosterUpdate === true,
+        bossPlan: item.bossPlan ?? null,
+        bossPlanUpdate: item.bossPlanUpdate === true,
       });
       break;
     case "RAID_INVITE":

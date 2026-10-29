@@ -15,6 +15,7 @@ import { isRosterBossExceptionsEnabled } from "@/lib/feature-flags";
 import type { RosterBossException } from "@/lib/roster-boss-plan";
 import {
   assertBossPlanValid,
+  bossPlanNotices,
   evaluateBossPlan,
   requestedBossExceptions,
   runPlannedBosses,
@@ -1691,6 +1692,13 @@ export const rosterService = {
       ...plan.publish,
       publisherId: user.id,
       runTitle: run.title,
+      bossPlanNotices: bossPlanNotices({
+        run,
+        signups,
+        selectedSignupIds: plan.publish.selectedSelections.map((selection) => selection.signupId),
+        before: roster.bossExceptions.published,
+        after: plan.bossExceptions,
+      }),
     });
     await runDomainEventService.record({
       runId: run.id,
@@ -1797,6 +1805,13 @@ export const rosterService = {
       bossExceptions: requestedPlan ? plan.bossExceptions : undefined,
       publisherId: user.id,
       runTitle: run.title,
+      bossPlanNotices: bossPlanNotices({
+        run,
+        signups,
+        selectedSignupIds: plan.publish.selectedSelections.map((selection) => selection.signupId),
+        before: roster.bossExceptions.published,
+        after: plan.bossExceptions,
+      }),
     });
     await runDomainEventService.record({
       runId: run.id,
