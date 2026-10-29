@@ -562,7 +562,7 @@ function RosterBuilderEditor({
     if (selectedFilter === "SELECTED" && !staged) return false;
     if (selectedFilter === "UNSELECTED" && staged) return false;
     const scopeRole =
-      roleFilter !== "ALL" && signup.assignableRoles.includes(roleFilter as (typeof signup.assignableRoles)[number])
+      roleFilter !== "ALL" && signupMatchesRoleFilter(signup.assignableRoles, roleFilter as CharacterRole)
         ? (roleFilter as CharacterRole)
         : null;
     if (!matchesWclPerfFilter(signup.wclPerformance, scopeRole, perfFilter)) return false;
@@ -1592,10 +1592,7 @@ function RosterBuilderEditor({
           <CompositionMeter label="H" slot={liveComposition.healers} compact />
           <CompositionMeter label="D" slot={liveComposition.dps} compact />
           <CompositionMeter label="LB" slot={liveComposition.lootbuddies} compact />
-          <span>
-            Melee {roleBreakdown.meleeDps} · Ranged {roleBreakdown.rangedDps}
-            {roleBreakdown.legacyDps > 0 ? ` · Unassigned ${roleBreakdown.legacyDps}` : ""}
-          </span>
+          {roleBreakdown.legacyDps > 0 ? <span>Unassigned DPS {roleBreakdown.legacyDps}</span> : null}
         </div>
 
         {data.roster.canEdit && data.roster.runChangedSinceAck ? (
@@ -1718,9 +1715,9 @@ function RosterBuilderEditor({
           )}
           <p>
             {liveComposition.tanks.selected} Tanks · {liveComposition.healers.selected} Healers ·{" "}
-            {roleBreakdown.meleeDps} Melee · {roleBreakdown.rangedDps} Ranged
-            {roleBreakdown.legacyDps > 0 ? ` · ${roleBreakdown.legacyDps} Unassigned DPS` : ""} ·{" "}
-            {liveComposition.dps.selected} DPS · {liveComposition.lootbuddies.selected} Lootbuddies
+            {liveComposition.dps.selected} DPS
+            {roleBreakdown.legacyDps > 0 ? ` (${roleBreakdown.legacyDps} unassigned)` : ""} ·{" "}
+            {liveComposition.lootbuddies.selected} Lootbuddies
           </p>
           <p>
             {liveComposition.boosterTotal} Boosters · {liveComposition.lootbuddies.selected} Lootbuddies ·{" "}
@@ -1884,8 +1881,7 @@ function CompactRosterFilters({
           <option value="ALL">All</option>
           <option value="TANK">Tank</option>
           <option value="HEALER">Healer</option>
-          <option value="MELEE_DPS">Melee</option>
-          <option value="RANGED_DPS">Ranged</option>
+          <option value="DPS">DPS</option>
         </select>
       </label>
       <label className="text-sm">

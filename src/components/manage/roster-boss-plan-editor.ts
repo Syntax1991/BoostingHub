@@ -1,4 +1,5 @@
-import { isConcreteCharacterRole, type ConcreteCharacterRole } from "@/lib/character-roles";
+import { isConcreteCharacterRole, isDpsRole, type ConcreteCharacterRole } from "@/lib/character-roles";
+import { CHARACTER_ROLE_LABELS } from "@/lib/labels";
 import { requiresFreshRaidLockout } from "@/lib/raid-lockout-label";
 import {
   bossCompositionWarnings,
@@ -39,6 +40,17 @@ export type BossPlanEditorSignup = {
 
 /** Selected boss range: from `anchor` to `end` in Run order (equal = one boss). */
 export type BossRange = { anchor: string; end: string };
+
+/**
+ * Role option text in the boss plan: plain "DPS" when it is the Character's
+ * only DPS option (a Holy Priest's Shadow spec) — the Raid Lead does not have
+ * to think Melee vs Ranged. Only a Character offering both keeps "Melee DPS" /
+ * "Ranged DPS": that is a real spec choice, never guessed.
+ */
+export function bossPlanRoleLabel(role: ConcreteCharacterRole, options: readonly ConcreteCharacterRole[]): string {
+  if (isDpsRole(role) && options.filter(isDpsRole).length === 1) return CHARACTER_ROLE_LABELS.DPS;
+  return CHARACTER_ROLE_LABELS[role];
+}
 
 export function signupCharacterLabel(signup: Pick<BossPlanEditorSignup, "character">): string {
   return signup.character ? `${signup.character.name}-${signup.character.realm}` : "Unknown character";

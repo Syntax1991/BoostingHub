@@ -6,6 +6,7 @@ import { ClassIcon } from "@/components/ui/badges";
 import { WarningIcon } from "@/components/ui/ops-icons";
 import {
   applyRangeAssignment,
+  bossPlanRoleLabel,
   bossPlanRows,
   bossesInRange,
   choicesWithCurrent,
@@ -17,7 +18,7 @@ import {
   type LiveBossPlanEvaluation,
 } from "@/components/manage/roster-boss-plan-editor";
 import { formatBossRanges, type RosterBossException, type RunBoss } from "@/lib/roster-boss-plan";
-import { CHARACTER_ROLE_LABELS, CLASS_COLORS } from "@/lib/labels";
+import { CLASS_COLORS } from "@/lib/labels";
 import type { CharacterRole, WowClass } from "@/models/enums";
 
 export type BossPlanPanelSlot = {
@@ -218,7 +219,7 @@ export function RosterBossPlanPanel({
                       {!mixed && current.role == null ? <option value="">Choose role</option> : null}
                       {roleOptions.map((role) => (
                         <option key={role} value={role}>
-                          {CHARACTER_ROLE_LABELS[role]}
+                          {bossPlanRoleLabel(role, roleOptions)}
                         </option>
                       ))}
                     </select>

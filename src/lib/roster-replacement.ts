@@ -1,5 +1,5 @@
 import type { CharacterSyncHealth } from "@/lib/blizzard/sync-health";
-import type { ConcreteCharacterRole } from "@/lib/character-roles";
+import { isDpsRole, type ConcreteCharacterRole } from "@/lib/character-roles";
 import { wclPerformanceMetricValue, type WclPerformanceRaidSegment } from "@/lib/wcl-performance-display";
 import type { CharacterRole, ParticipationType, SignupStatus } from "@/models/enums";
 import type { RosterSelectionRisk } from "@/services/roster-selection-risk";
@@ -95,9 +95,18 @@ function fitRank(signup: ReplacementSignupInput, role: CharacterRole): number {
   return 2;
 }
 
+/**
+ * The role a candidate takes: the required role when it can play it. A DPS
+ * slot is one group — Melee and Ranged both fill it — so a DPS candidate
+ * keeps its own concrete DPS role (primary first), never a guessed one.
+ */
 function candidateRole(signup: ReplacementSignupInput, required: ConcreteCharacterRole): ConcreteCharacterRole | null {
   if (signup.assignableRoles.includes(required)) return required;
   const primary = signup.assignableRoles.find((role) => role === signup.character?.primaryRole);
+  if (isDpsRole(required)) {
+    const dps = signup.assignableRoles.filter(isDpsRole);
+    if (dps.length > 0) return dps.find((role) => role === primary) ?? dps[0]!;
+  }
   return primary ?? signup.assignableRoles[0] ?? null;
 }
 
@@ -149,7 +158,7 @@ export function rankReplacementCandidates<T extends ReplacementSignupInput>(inpu
     if (usersWithOtherSlot.has(signup.userId)) continue;
     const role = candidateRole(signup, input.requiredRole);
     if (!role) continue;
-    const playsRequiredRole = role === input.requiredRole;
+    const playsRequiredRole = staffingBucket(role) === staffingBucket(input.requiredRole);
     if (input.sameRoleOnly && !playsRequiredRole) continue;
     const blocked = signup.scheduleConflicts.length > 0;
     if (blocked && !input.includeBlocked) continue;

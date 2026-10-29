@@ -81,16 +81,15 @@ describe("buildRosterEmbed", () => {
     vi.unstubAllEnvs();
   });
 
-  it("titles the embed Roster and keeps Tank/Healer targets with melee/ranged DPS counts", () => {
+  it("titles the embed Roster and shows Tank / Healer / DPS against their targets — one DPS group", () => {
     const embed = buildRosterEmbed(data).toJSON();
     expect(embed.title).toBe("Roster");
     expect(embed.description).toContain("Weekend Heroic Catch-up");
     const byName = new Map(embed.fields?.map((field) => [field.name, field.value]));
     expect([...byName.keys()].find((name) => name?.includes("Tanks"))).toContain("(1/2)");
     expect([...byName.keys()].find((name) => name?.includes("Healers"))).toContain("(1/4)");
-    expect([...byName.keys()].find((name) => name?.includes("Melee DPS"))).toContain("(1)");
-    expect([...byName.keys()].find((name) => name?.includes("Melee DPS"))).not.toContain("/");
-    expect([...byName.keys()].find((name) => name?.includes("Ranged DPS"))).toContain("(0)");
+    expect([...byName.keys()].find((name) => name?.includes("DPS"))).toContain("DPS (1/14)");
+    expect([...byName.keys()].some((name) => name?.includes("Melee") || name?.includes("Ranged"))).toBe(false);
     expect(embed.footer?.text).toContain("DPS 1/14");
   });
 
@@ -98,8 +97,39 @@ describe("buildRosterEmbed", () => {
     const embed = buildRosterEmbed(data).toJSON();
     expect(embed.fields?.some((field) => field.name?.startsWith("🛡 Tanks"))).toBe(true);
     expect(embed.fields?.some((field) => field.name?.startsWith("✚ Healers"))).toBe(true);
-    expect(embed.fields?.some((field) => field.name?.startsWith("⚔ Melee DPS"))).toBe(true);
-    expect(embed.fields?.some((field) => field.name?.startsWith("⚔ Ranged DPS"))).toBe(true);
+    expect(embed.fields?.some((field) => field.name?.startsWith("⚔ DPS"))).toBe(true);
+  });
+
+  it("lists Melee, Ranged and unspecified DPS in one DPS group and continues a long list without cutting anyone", () => {
+    const member = (index: number, wowClass: "ROGUE" | "MAGE" | "DRUID") => ({
+      userId: `dps${index}`,
+      userName: `Dps${index}`,
+      discordUserId: `9000000000000000${String(index).padStart(2, "0")}`,
+      characterName: `Longcharactername${index}`,
+      characterRealm: "Twisting Nether",
+      wowClass,
+    });
+    const melee = Array.from({ length: 8 }, (_, index) => member(index, "ROGUE"));
+    const ranged = Array.from({ length: 8 }, (_, index) => member(index + 8, "MAGE"));
+    const unspecified = [member(16, "DRUID")];
+    const embed = buildRosterEmbed(
+      {
+        ...data,
+        totalSelected: 19,
+        groups: { ...data.groups, meleeDps: melee, rangedDps: ranged, unspecifiedDps: unspecified },
+      },
+      { classIndicators: { ROGUE: "<:rogue:1553000000000000001>", MAGE: "<:mage:1553000000000000002>" } },
+    ).toJSON();
+    const dpsFields = (embed.fields ?? []).filter((field) => field.name?.includes("DPS"));
+    expect(dpsFields[0]!.name).toBe("⚔ DPS (17/14)");
+    expect(dpsFields.length).toBeGreaterThan(1);
+    expect(dpsFields.slice(1).every((field) => field.name === "⚔ DPS (cont.)")).toBe(true);
+    expect(dpsFields.every((field) => field.value.length <= 1024)).toBe(true);
+    const lines = dpsFields.flatMap((field) => field.value.split("\n"));
+    expect(lines).toHaveLength(17);
+    expect(lines[0]).toContain("Longcharactername0");
+    expect(lines[16]).toContain("Longcharactername16");
+    expect(embed.footer?.text).toContain("DPS 17/14");
   });
 
   it("prefers guild custom role emojis when provided", () => {
@@ -108,7 +138,7 @@ describe("buildRosterEmbed", () => {
     }).toJSON();
     expect(embed.fields?.some((field) => field.name?.startsWith("<:tank:9> Tanks"))).toBe(true);
     expect(embed.fields?.some((field) => field.name?.startsWith("<:healer:8> Healers"))).toBe(true);
-    expect(embed.fields?.some((field) => field.name?.startsWith("<:dps:7> Melee DPS"))).toBe(true);
+    expect(embed.fields?.some((field) => field.name?.startsWith("<:dps:7> DPS"))).toBe(true);
   });
 
   it("mentions a linked Discord user and falls back to Character-Realm otherwise", () => {

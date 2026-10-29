@@ -1275,7 +1275,7 @@ describe("discordSyncService.getRosterEmbedData", () => {
     expect((await runDiscordPostRepository.findByRunId(runId))?.lastRosterEmojiFingerprint).toBe(
       rosterEmbedRenderFingerprint("emoji-b"),
     );
-    expect(ROSTER_EMBED_FORMAT_VERSION).toBe("v4-run-title-link");
+    expect(ROSTER_EMBED_FORMAT_VERSION).toBe("v5-one-dps-group");
 
     await orm.RunDiscordPost.where({ runId }).update({
       lastRosterEmojiFingerprint: "v3-canonical-run-url|emoji-b",
@@ -1303,7 +1303,7 @@ describe("discordSyncService.getRosterEmbedData", () => {
     });
     const after = await runDiscordPostRepository.findByRunId(runId);
     expect(after?.rosterMessageId).toBe("roster-msg-url");
-    expect(after?.lastRosterEmojiFingerprint).toBe(`v4-run-title-link|emoji-b`);
+    expect(after?.lastRosterEmojiFingerprint).toBe(`v5-one-dps-group|emoji-b`);
 
     expect(
       (await discordSyncService.listSyncWork(now, { classEmojiFingerprint: "emoji-b" })).roster.find(

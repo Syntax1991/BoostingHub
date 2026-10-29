@@ -28,6 +28,19 @@ const segments: WclPerformanceRaidSegment[] = [
   },
 ];
 
+describe("role filter — one DPS group", () => {
+  it("DPS matches Melee, Ranged and historic generic DPS offers; Tank / Healer stay exact", () => {
+    expect(signupMatchesRoleFilter(["MELEE_DPS"], "DPS")).toBe(true);
+    expect(signupMatchesRoleFilter(["RANGED_DPS"], "DPS")).toBe(true);
+    expect(signupMatchesRoleFilter(["HEALER", "RANGED_DPS"], "DPS")).toBe(true);
+    expect(signupMatchesRoleFilter(["DPS"], "DPS")).toBe(true);
+    expect(signupMatchesRoleFilter(["HEALER"], "DPS")).toBe(false);
+    expect(signupMatchesRoleFilter(["HEALER", "RANGED_DPS"], "HEALER")).toBe(true);
+    expect(signupMatchesRoleFilter(["RANGED_DPS"], "TANK")).toBe(false);
+    expect(signupMatchesRoleFilter(["TANK"], "ALL")).toBe(true);
+  });
+});
+
 describe("signup tile — one Character = one tile", () => {
   it("single-spec Character → one offered choice", () => {
     const specs = offeredSpecsForTile({

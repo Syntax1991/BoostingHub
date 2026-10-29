@@ -82,8 +82,10 @@ function bossPlanFields(data: RosterEmbedData): Array<{ name: string; value: str
 
 /**
  * Selected lineup only — never the volunteered signup pool.
- * Tank/Healer/DPS/Lootbuddy targets come from the Run. Melee/ranged DPS stay a
- * display split of selected DPS (no melee/ranged target in the schema).
+ * Tank/Healer/DPS/Lootbuddy targets come from the Run. DPS is one group, like
+ * the Run's composition target (no melee/ranged target in the schema): melee,
+ * ranged, then DPS whose subtype is unspecified; the class icon shows the rest.
+ * A long DPS list continues in "(cont.)" fields — never cut, never over 1024.
  * Role column icons match the signup embed (guild custom tank/healer/dps/lootbuddy).
  * Display-only: no buttons.
  */
@@ -94,11 +96,16 @@ export function buildRosterEmbed(data: RosterEmbedData, options?: BuildRosterEmb
   const healer = roleEmoji("healer", roleIndicators);
   const dps = roleEmoji("dps", roleIndicators);
   const lootbuddy = roleEmoji("lootbuddy", roleIndicators);
-  const dpsSelected =
-    data.groups.meleeDps.length + data.groups.rangedDps.length + data.groups.unspecifiedDps.length;
+  const dpsMembers = [...data.groups.meleeDps, ...data.groups.rangedDps, ...data.groups.unspecifiedDps];
+  const dpsSelected = dpsMembers.length;
   const emptyValue = data.totalSelected === 0 ? EMPTY_SELECTION : "—";
   const showLootbuddy = data.groups.lootbuddies.length > 0 || data.targets.lootbuddies > 0;
-  const showUnspecifiedDps = data.groups.unspecifiedDps.length > 0;
+  const dpsFields = chunkEmbedFieldLines(
+    dpsMembers.map((member) => formatRosterParticipantLine(member, classIndicators)),
+  ).map((chunk, index) => ({
+    name: index === 0 ? `${dps} DPS (${dpsSelected}/${data.targets.dps})` : `${dps} DPS (cont.)`,
+    value: chunk.length > 0 ? chunk.join("\n") : emptyValue,
+  }));
   const lootbuddyCount =
     data.targets.lootbuddies > 0
       ? `${data.groups.lootbuddies.length}/${data.targets.lootbuddies}`
@@ -119,22 +126,7 @@ export function buildRosterEmbed(data: RosterEmbedData, options?: BuildRosterEmb
         name: `${healer} Healers (${data.groups.healers.length}/${data.targets.healers})`,
         value: memberList(data.groups.healers, classIndicators, emptyValue),
       },
-      {
-        name: `${dps} Melee DPS (${data.groups.meleeDps.length})`,
-        value: memberList(data.groups.meleeDps, classIndicators, emptyValue),
-      },
-      {
-        name: `${dps} Ranged DPS (${data.groups.rangedDps.length})`,
-        value: memberList(data.groups.rangedDps, classIndicators, emptyValue),
-      },
-      ...(showUnspecifiedDps
-        ? [
-            {
-              name: `${dps} DPS (unspecified) (${data.groups.unspecifiedDps.length})`,
-              value: memberList(data.groups.unspecifiedDps, classIndicators, emptyValue),
-            },
-          ]
-        : []),
+      ...dpsFields,
       ...(showLootbuddy
         ? [
             {
