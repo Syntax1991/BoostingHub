@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -16,6 +16,16 @@ import { AddBoosterEntryDialog, type AddBoosterMode } from "@/components/manage/
 import { RosterBuilderDialog, type RosterBuilderMode } from "@/components/manage/roster-builder-dialog";
 import { RosterReplacementDialog, type ReplacementTarget } from "@/components/manage/roster-replacement-dialog";
 import { RosterUpdateDiff } from "@/components/manage/roster-update-diff";
+import {
+  SIGNUP_GROUP_BY_LABELS,
+  SIGNUP_GROUP_BY_MODES,
+  buildSignupGroups,
+  getSignupGroupByServerSnapshot,
+  getSignupGroupBySnapshot,
+  setSignupGroupBy,
+  signupGroupCountLabel,
+  subscribeSignupGroupBy,
+} from "@/components/manage/roster-signup-grouping";
 import { RosterBossPlanPanel } from "@/components/manage/roster-boss-plan-panel";
 import {
   bossExceptionsPayload,
@@ -107,6 +117,10 @@ import {
 } from "@/services/roster-selection-risk";
 
 type RosterView = Awaited<ReturnType<typeof rosterService.getRosterManagementView>>;
+
+/** Dense responsive Signups grid — the same in every Group by mode. */
+const SIGNUP_GRID_CLASS =
+  "grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 [&>li]:h-[54px]";
 type SignupRow = RosterView["groups"]["tanks"][number];
 
 function lootbuddyDisplayClass(signup: SignupRow): WowClass | null {
@@ -301,6 +315,12 @@ function RosterBuilderEditor({
   /** Open Auto Build on top of the current draft (Fill gaps) or from the signups only (Build). */
   const [builderMode, setBuilderMode] = useState<RosterBuilderMode | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /** Signups "Group by" (presentation only), remembered in this browser; None on the server render. */
+  const groupBy = useSyncExternalStore(
+    subscribeSignupGroupBy,
+    getSignupGroupBySnapshot,
+    getSignupGroupByServerSnapshot,
+  );
 
   const domainSignups = useMemo(() => domainSignupsFrom(data), [data]);
 
@@ -1146,6 +1166,43 @@ function RosterBuilderEditor({
     characterLabelBySignupId,
   ]);
 
+  function renderSignupTile(signup: SignupRow) {
+    return (
+      <li key={signup.id}>
+        <SignupTile
+          signup={signup}
+          difficulty={data.run.difficulty}
+          editing={editing}
+          locked={togglesLocked}
+          selected={isStagedSelected(signup.id)}
+          assignedRole={stagedRole(signup.id)}
+          assignedSpec={stagedSpecs.get(signup.id) ?? null}
+          onToggle={toggleRoleCopy}
+          onSelectWithRole={selectWithRole}
+          onChangeRole={assignRole}
+          onDeselect={() => deselectSignup(signup)}
+        />
+      </li>
+    );
+  }
+
+  function renderExternalTile(booster: (typeof externalBoosters)[number]) {
+    return (
+      <li key={`ext-${booster.id}`}>
+        <div
+          className="flex h-full items-center gap-2 rounded-md border border-accent/30 bg-accent/5 px-2.5 text-sm"
+          title="External · edit via Add Booster"
+        >
+          <ClassIcon wowClass={booster.wowClass} size={24} />
+          <span className="min-w-0 truncate text-sm font-semibold" style={{ color: CLASS_COLORS[booster.wowClass] }}>
+            @{booster.name}
+          </span>
+          <span className="ml-auto shrink-0 text-xs text-accent">EXT</span>
+        </div>
+      </li>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {error ? (
@@ -1553,10 +1610,29 @@ function RosterBuilderEditor({
 
       {/* —— SIGNUPS: readable tile grid (4–5 / row at 1440) —— */}
       <section className="space-y-2 border-t border-border pt-3">
-        <h3 className="text-base font-semibold text-foreground">
-          Signups <span className="font-normal tabular-nums text-muted">{gridSignups.length}</span>
-          {editing ? <span className="ml-2 text-sm font-normal text-muted">Click a tile to add or remove it</span> : null}
-        </h3>
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <h3 className="text-base font-semibold text-foreground">
+            Signups <span className="font-normal tabular-nums text-muted">{gridSignups.length}</span>
+            {editing ? <span className="ml-2 text-sm font-normal text-muted">Click a tile to add or remove it</span> : null}
+          </h3>
+          <label className="inline-flex items-center gap-1.5 text-xs text-muted">
+            Group by
+            <select
+              value={groupBy}
+              onChange={(event) => {
+                const mode = SIGNUP_GROUP_BY_MODES.find((value) => value === event.target.value);
+                if (mode) setSignupGroupBy(mode);
+              }}
+              className="h-7 rounded-md border border-border bg-surface px-1.5 text-xs text-foreground"
+            >
+              {SIGNUP_GROUP_BY_MODES.map((mode) => (
+                <option key={mode} value={mode}>
+                  {SIGNUP_GROUP_BY_LABELS[mode]}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
 
         <CompactRosterFilters
           search={search}
@@ -1577,40 +1653,31 @@ function RosterBuilderEditor({
 
         {gridSignups.length === 0 && externalBoosters.length === 0 ? (
           <p className="py-3 text-sm text-muted">No signups match these filters.</p>
-        ) : (
-          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 [&>li]:h-[54px]">
-            {externalBoosters.map((booster) => (
-              <li key={`ext-${booster.id}`}>
-                <div
-                  className="flex h-full items-center gap-2 rounded-md border border-accent/30 bg-accent/5 px-2.5 text-sm"
-                  title="External · edit via Add Booster"
-                >
-                  <ClassIcon wowClass={booster.wowClass} size={24} />
-                  <span className="min-w-0 truncate text-sm font-semibold" style={{ color: CLASS_COLORS[booster.wowClass] }}>
-                    @{booster.name}
-                  </span>
-                  <span className="ml-auto shrink-0 text-xs text-accent">EXT</span>
-                </div>
-              </li>
-            ))}
-            {gridSignups.map((signup) => (
-              <li key={signup.id}>
-                <SignupTile
-                  signup={signup}
-                  difficulty={data.run.difficulty}
-                  editing={editing}
-                  locked={togglesLocked}
-                  selected={isStagedSelected(signup.id)}
-                  assignedRole={stagedRole(signup.id)}
-                  assignedSpec={stagedSpecs.get(signup.id) ?? null}
-                  onToggle={toggleRoleCopy}
-                  onSelectWithRole={selectWithRole}
-                  onChangeRole={assignRole}
-                  onDeselect={() => deselectSignup(signup)}
-                />
-              </li>
-            ))}
+        ) : groupBy === "NONE" ? (
+          <ul className={SIGNUP_GRID_CLASS}>
+            {externalBoosters.map(renderExternalTile)}
+            {gridSignups.map(renderSignupTile)}
           </ul>
+        ) : (
+          // Same tiles and actions, laid out per player / role (presentation only).
+          <div className="space-y-2.5">
+            {buildSignupGroups({ mode: groupBy, tiles: gridSignups, externals: externalBoosters, roleFilter }).map(
+              (group) => (
+                <section key={group.key} aria-label={group.label ?? undefined}>
+                  <h4 className="mb-1 flex items-baseline gap-1.5 text-xs font-semibold text-foreground">
+                    <span className="truncate">{group.label}</span>
+                    <span className="shrink-0 font-normal tabular-nums text-muted">
+                      · {signupGroupCountLabel(group.tiles.length + group.externals.length)}
+                    </span>
+                  </h4>
+                  <ul className={SIGNUP_GRID_CLASS}>
+                    {group.externals.map(renderExternalTile)}
+                    {group.tiles.map(renderSignupTile)}
+                  </ul>
+                </section>
+              ),
+            )}
+          </div>
         )}
       </section>
 
