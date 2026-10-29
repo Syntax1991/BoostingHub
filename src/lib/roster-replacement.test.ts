@@ -3,6 +3,8 @@ import type { CharacterRole } from "@/models/enums";
 import {
   isLateFillWindow,
   rankReplacementCandidates,
+  REPLACEMENT_SHORTLIST_SIZE,
+  replacementShortlist,
   replacementSignupStateLabel,
   rosterReplacementReasons,
   withdrawnPickOpenRole,
@@ -136,6 +138,24 @@ describe("rankReplacementCandidates", () => {
       ["Clean", false],
       ["Conflicted", true],
     ]);
+  });
+
+  it("lockout eligibility ranks before availability: a saved Character ranks below one only planned on another Run", () => {
+    const ranked = rank([
+      signup("Saved", { selectionRisk: SAVED_RISK }),
+      signup("Planned", { runCommitments: [{}] }),
+      signup("Free"),
+    ]);
+    expect(ranked.map((row) => row.signup.id)).toEqual(["Free", "Planned", "Saved"]);
+  });
+
+  it("shortlist: the best five first, the rest behind Show all — never dropped", () => {
+    const ranked = Array.from({ length: 8 }, (_, index) => `c${index}`);
+    expect(REPLACEMENT_SHORTLIST_SIZE).toBe(5);
+    expect(replacementShortlist(ranked, false)).toEqual({ shown: ["c0", "c1", "c2", "c3", "c4"], hiddenCount: 3 });
+    expect(replacementShortlist(ranked, true)).toEqual({ shown: ranked, hiddenCount: 0 });
+    expect(replacementShortlist(ranked.slice(0, 5), false)).toEqual({ shown: ranked.slice(0, 5), hiddenCount: 0 });
+    expect(replacementShortlist([], false)).toEqual({ shown: [], hiddenCount: 0 });
   });
 
   it("planned on another Run ranks below available candidates", () => {
