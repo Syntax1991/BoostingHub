@@ -280,7 +280,8 @@ export function buildRunPreflight(ctx: RunPreflightContext): RunPreflightResult 
   for (const blocker of manager.validation.blockers) {
     checks.push({
       id: `publish_blocker:${blocker.code}:${blocker.signupId ?? "run"}`,
-      label: "Roster publish invariant",
+      // Boss plan issues (invalid / conflicted alternate Character, role, boss) read as such.
+      label: blocker.code.startsWith("BOSS_EXCEPTION") ? "Boss plan" : "Roster publish invariant",
       status: "WARNING",
       summary: blocker.message,
     });
@@ -298,8 +299,10 @@ export function buildRunPreflight(ctx: RunPreflightContext): RunPreflightResult 
   for (const warning of manager.validation.warnings) {
     if (checks.some((check) => check.summary === warning.message)) continue;
     checks.push({
-      id: `roster_warning:${warning.code}:${warning.signupId ?? "run"}`,
-      label: "Roster warning",
+      // Boss plan warnings carry no signup (they are per boss range): the message keeps ids unique.
+      id: `roster_warning:${warning.code}:${warning.signupId ?? (warning.code.startsWith("BOSS_") ? warning.message : "run")}`,
+      // Per-boss composition / boss-exact lockouts of the boss plan.
+      label: warning.code.startsWith("BOSS_") ? "Boss plan" : "Roster warning",
       status: "WARNING",
       summary: warning.message,
     });

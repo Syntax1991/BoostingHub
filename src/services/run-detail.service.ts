@@ -20,6 +20,7 @@ import {
   type FinalSetupInput,
   type FinalSetupParticipant,
 } from "@/lib/run-start-message";
+import { finalSetupBossPlan } from "@/services/roster-boss-exceptions";
 import { rosterRepository } from "@/repositories/roster.repository";
 import { rosterService, type RosterManagementView } from "@/services/roster.service";
 import { signupService } from "@/services/signup.service";
@@ -193,9 +194,8 @@ export const runDetailService = {
 
     let finalSetupPreview: FinalSetupInput | null = null;
     if (manage && publishedRoster && run.status === "PUBLISHED") {
-      const selectedSignups = (await rosterRepository.listSignups(runId)).filter(
-        (signup) => signup.status === "SELECTED",
-      );
+      const runSignups = await rosterRepository.listSignups(runId);
+      const selectedSignups = runSignups.filter((signup) => signup.status === "SELECTED");
       const externalBoosters = run.roster?.externalBoosters ?? [];
       if (selectedSignups.length > 0 || externalBoosters.length > 0) {
         finalSetupPreview = {
@@ -214,6 +214,10 @@ export const runDetailService = {
             ...selectedSignups.map(toFinalSetupParticipant),
             ...externalBoosters.map(externalFinalSetupParticipant),
           ]),
+          // Same boss plan section the Discord start post will carry.
+          bossPlan: run.roster
+            ? finalSetupBossPlan({ run, stages: run.roster.bossExceptions, slots: selectedSignups, signups: runSignups })
+            : [],
         };
       }
     }

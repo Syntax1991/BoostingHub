@@ -36,6 +36,12 @@ export type ConsumableAuditParticipant =
       wowClass: WowClass | null;
       /** Planned/published roster role — never the role played in the log. */
       role: CharacterRole | null;
+      /**
+       * Published boss plan: another of the player's Characters plays these
+       * bosses, so their fights are audited for that Character instead.
+       * Absent / empty: the slot's Character is audited on every fight.
+       */
+      bossCharacters?: ConsumableAuditBossCharacter[];
     }
   | {
       source: "EXTERNAL";
@@ -44,6 +50,30 @@ export type ConsumableAuditParticipant =
       wowClass: WowClass;
       role: CharacterRole | null;
     };
+
+/** An alternate Character of a slot and the bosses it plays (by Run content + WCL encounter). */
+export type ConsumableAuditBossCharacter = {
+  characterName: string;
+  characterRealm: string;
+  characterRegion: WowRegion | null;
+  warcraftLogsId: string | null;
+  bosses: Array<{ raidContentId: string; wclEncounterIds: number[] }>;
+};
+
+/** The alternate Character that plays this fight's boss, if any (fights without a content never match). */
+export function bossCharacterForFight(
+  bossCharacters: readonly ConsumableAuditBossCharacter[] | undefined,
+  fight: { raidContentId: string | null; encounterId: number },
+): ConsumableAuditBossCharacter | null {
+  if (!bossCharacters?.length || !fight.raidContentId) return null;
+  return (
+    bossCharacters.find((character) =>
+      character.bosses.some(
+        (boss) => boss.raidContentId === fight.raidContentId && boss.wclEncounterIds.includes(fight.encounterId),
+      ),
+    ) ?? null
+  );
+}
 
 export type ExtractedFight = {
   reportCode: string;
@@ -267,6 +297,36 @@ export function extractConsumableAudit(input: {
       role: participant.role,
       sortOrder: index,
     };
+    // Boss plan: each fight is audited for the Character assigned to its boss.
+    const bossCharacters = participant.source === "ATTENDANCE" ? participant.bossCharacters : undefined;
+    if (participant.source === "ATTENDANCE" && bossCharacters?.length) {
+      const groups = new Map<ConsumableAuditBossCharacter | null, typeof fights>();
+      for (const fight of fights) {
+        const character = bossCharacterForFight(bossCharacters, fight);
+        groups.set(character, [...(groups.get(character) ?? []), fight]);
+      }
+      const observations: ExtractedObservation[] = [];
+      const gear: ExtractedGearItem[] = [];
+      let firstActorId: number | null = null;
+      for (const [character, groupFights] of groups) {
+        const match = character
+          ? matchParticipantActors({ ...participant, ...character, bossCharacters: undefined }, report)
+          : { matchStatus, actorIds };
+        if (match.matchStatus !== "MATCHED") continue;
+        const groupActors = new Set(match.actorIds);
+        firstActorId ??= match.actorIds[0] ?? null;
+        observations.push(
+          ...observationsForActors(groupActors, groupFights, events).map((row) => ({ ...row, reportCode: report.code })),
+        );
+        gear.push(
+          ...gearForActors(groupActors, groupFights, events.combatants).map((row) => ({ ...row, reportCode: report.code })),
+        );
+      }
+      if (firstActorId == null) {
+        return { ...base, matchStatus, wclActorId: null, observations: [], gear: [] };
+      }
+      return { ...base, matchStatus: "MATCHED" as const, wclActorId: firstActorId, observations, gear };
+    }
     if (matchStatus !== "MATCHED") {
       return { ...base, matchStatus, wclActorId: null, observations: [], gear: [] };
     }

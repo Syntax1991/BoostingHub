@@ -349,3 +349,55 @@ describe("extractConsumableAudit — food, runes and gear at pull", () => {
     expect(player.gear.every((row) => row.reportCode === report().code && row.wclFightId === 1)).toBe(true);
   });
 });
+
+describe("extractConsumableAudit — boss plan: each fight audited for the Character assigned to its boss", () => {
+  // Synblast's player plays the Ula'tek pulls (content-va) on Synlight; Nymrissa (content-tide) stays Synblast.
+  const events: WarcraftLogsConsumableEvents = {
+    combatants: [
+      { fight: 1, timestamp: 10_000, sourceId: 2, specId: 63, auraIds: [] },
+      { fight: 4, timestamp: 400_000, sourceId: 1, specId: 257, auraIds: [] },
+      { fight: 4, timestamp: 400_000, sourceId: 2, specId: 63, auraIds: [] },
+      { fight: 5, timestamp: 800_000, sourceId: 1, specId: 257, auraIds: [] },
+    ],
+    casts: [],
+    deaths: [{ fight: 5, timestamp: 900_000, targetId: 1 }],
+  };
+  const withPlan = attended("Synblast", "Twisting Nether", {
+    wowClass: "MAGE",
+    role: "RANGED_DPS",
+    bossCharacters: [
+      {
+        characterName: "Synlight",
+        characterRealm: "Blackhand",
+        characterRegion: "EU",
+        warcraftLogsId: null,
+        bosses: [{ raidContentId: "content-va", wclEncounterIds: [ULATEK] }],
+      },
+    ],
+  });
+  const player = extractConsumableAudit({ report: report(), fights: assignedFights, events, participants: [withPlan] }).players[0]!;
+
+  it("takes the alternate's facts on its bosses and the slot Character's facts elsewhere — never both on one pull", () => {
+    expect(player.matchStatus).toBe("MATCHED");
+    expect(player.observations.map((row) => [row.wclFightId, row.kind, row.specId])).toEqual([
+      [1, "COMBATANT", 63],
+      [4, "COMBATANT", 257],
+      [5, "COMBATANT", 257],
+      [5, "DEATH", null],
+    ]);
+  });
+
+  it("without a boss plan the slot Character is audited on every fight (unchanged)", () => {
+    const plain = extractConsumableAudit({
+      report: report(),
+      fights: assignedFights,
+      events,
+      participants: [attended("Synblast", "Twisting Nether", { wowClass: "MAGE", role: "RANGED_DPS" })],
+    }).players[0]!;
+    expect(plain.observations.map((row) => [row.wclFightId, row.kind])).toEqual([
+      [1, "COMBATANT"],
+      [4, "COMBATANT"],
+      [5, "PARTICIPANT"], // in the pull without a snapshot — with the plan, pull 5 belongs to Synlight
+    ]);
+  });
+});

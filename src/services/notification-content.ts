@@ -57,6 +57,21 @@ export function rosterSwappedWebNotification(input: {
   };
 }
 
+/** A player who stays in the roster: their published boss plan changed (null = every boss as rostered again). */
+export function rosterBossPlanWebNotification(input: {
+  runId: string;
+  runTitle: string;
+  plan: string | null;
+}): { title: string; message: string; href: string } {
+  return {
+    title: "Boss plan updated",
+    message: input.plan
+      ? `Your boss assignments for ${input.runTitle} changed: ${input.plan}.`
+      : `You now play every boss of ${input.runTitle} as rostered.`,
+    href: runDetailPath(input.runId),
+  };
+}
+
 export function rosterRemovedWebNotification(input: {
   runId: string;
   runTitle: string;
@@ -317,16 +332,34 @@ export function buildRosterSelectedDmMessage(input: {
   runChannelId: string | null;
   /** Character swap for a player already in the roster: "Roster Update" instead of "Roster Selected". */
   update?: boolean;
+  /** The slot's current boss plan ("Boss 5–6: Synpriest-Antonidas · Healer"); null / absent = every boss as rostered. */
+  bossPlan?: string | null;
+  /** Only the published boss plan changed for a player who stays in the roster: "Boss Plan Update". */
+  bossPlanUpdate?: boolean;
 }): string {
-  const lines = [
-    ...dmRunHeader(input.update ? "🔁 **Roster Update**" : "✅ **Roster Selected**", input.run),
-    `Assignment: ${formatRosterDmAssignment(input.assignment)}`,
-  ];
+  const header = input.bossPlanUpdate
+    ? "📋 **Boss Plan Update**"
+    : input.update
+      ? "🔁 **Roster Update**"
+      : "✅ **Roster Selected**";
+  const lines = [...dmRunHeader(header, input.run), `Assignment: ${formatRosterDmAssignment(input.assignment)}`];
+  if (input.bossPlan) {
+    lines.push(`Boss plan: ${input.bossPlan}`);
+  } else if (input.bossPlanUpdate) {
+    lines.push("Boss plan: every boss as rostered");
+  }
   const channelId = input.runChannelId?.trim() || null;
   if (channelId) {
     lines.push(`Channel: <#${channelId}>`);
   }
-  lines.push("", input.update ? "Your character changed — you are still in the roster." : "You are in the roster.");
+  lines.push(
+    "",
+    input.bossPlanUpdate
+      ? "Your boss assignments changed — you are still in the roster."
+      : input.update
+        ? "Your character changed — you are still in the roster."
+        : "You are in the roster.",
+  );
   return withRunLink(lines, dmRunUrl(input.run));
 }
 

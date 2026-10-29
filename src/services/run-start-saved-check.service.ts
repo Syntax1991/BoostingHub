@@ -1,4 +1,6 @@
 import { isDomainError } from "@/lib/errors";
+import { activeBossExceptions, bossesPlayedBySignup } from "@/lib/roster-boss-plan";
+import { runPlannedBosses } from "@/services/roster-boss-exceptions";
 import { mapWithConcurrency } from "@/lib/concurrency";
 import { parseKilledBossIds } from "@/lib/lockout-bosses";
 import type { RaidDifficulty } from "@/models/enums";
@@ -31,17 +33,34 @@ const START_SYNC_CONCURRENCY = 3;
  * no loot there" — and ONE grouped summary of all of them to the Raid Lead.
  * Runs after the Start Run response (never delays it), once per pick and boss
  * set (summary: once per affected set). A Character whose sync fails is still checked against its
- * last known lockouts. Best-effort — never throws.
+ * last known lockouts. With a boss plan, every Character that plays is checked for exactly the
+ * bosses it plays (an alternate for its exception bosses). Best-effort — never throws.
  */
 export const runStartSavedCheckService = {
   async run(runId: string): Promise<number> {
     try {
       const run = await runRepository.findById(runId);
       if (!run || run.status !== "IN_PROGRESS") return 0;
-      const picks = (await rosterRepository.listSignups(runId)).filter(
+      const signups = await rosterRepository.listSignups(runId);
+      const slots = signups.filter(
         (signup) => signup.status === "SELECTED" && signup.participationType === "BOOSTER" && signup.character,
       );
-      if (picks.length === 0) return 0;
+      if (slots.length === 0) return 0;
+      // Boss plan: every Character that actually plays, each for exactly its
+      // bosses (alternates included). No exceptions: every slot, every boss.
+      const roster = await rosterRepository.findByRunId(runId);
+      const played = bossesPlayedBySignup({
+        bosses: runPlannedBosses(run),
+        slotSignupIds: slots.map((slot) => slot.id),
+        exceptions: roster ? activeBossExceptions(roster.bossExceptions).published : [],
+      });
+      const signupsById = new Map(signups.map((signup) => [signup.id, signup]));
+      const picks = [...played.keys()]
+        .map((signupId) => signupsById.get(signupId))
+        .filter(
+          (signup): signup is NonNullable<typeof signup> =>
+            signup != null && signup.status !== "WITHDRAWN" && signup.character != null,
+        );
 
       await mapWithConcurrency(picks, START_SYNC_CONCURRENCY, async (pick) => {
         try {
@@ -66,6 +85,7 @@ export const runStartSavedCheckService = {
         if (!character) continue;
         const resetIdentifier = lockoutService.getResetIdentifierForRun(character.region, run.scheduledStartAt);
         const rows = await lockoutRepository.listForCharacterReset(character.id, resetIdentifier);
+        const plays = played.get(pick.id) ?? new Set<string>();
         const bosses = savedPlannedBosses(
           run,
           rows.map((row) => ({
@@ -73,7 +93,7 @@ export const runStartSavedCheckService = {
             difficulty: String(row.difficulty) as RaidDifficulty,
             killedBossIds: parseKilledBossIds(row.killedBossIds) ?? [],
           })),
-        );
+        ).filter((boss) => plays.has(boss.id));
         if (bosses.length === 0) continue;
         const characterLabel = `${character.name}-${character.realm}`;
         affected.push({

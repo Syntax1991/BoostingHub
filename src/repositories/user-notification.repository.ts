@@ -103,6 +103,18 @@ export function rosterSwappedSourceKey(runId: string, publishedVersion: number, 
   return `${ROSTER_SWAPPED_SOURCE_KEY_PREFIX}${runId}:${publishedVersion}:${signupId}`;
 }
 
+/**
+ * A ROSTER_SELECTED telling a player who stays in the roster that their
+ * published boss plan changed (Publish / Update). Same shape as
+ * rosterSelectedSourceKey (version = 3rd segment); the prefix tells the DM
+ * renderer to say "Boss Plan Update".
+ */
+export const ROSTER_BOSS_PLAN_SOURCE_KEY_PREFIX = "roster-boss-plan:";
+
+export function rosterBossPlanSourceKey(runId: string, publishedVersion: number, signupId: string): string {
+  return `${ROSTER_BOSS_PLAN_SOURCE_KEY_PREFIX}${runId}:${publishedVersion}:${signupId}`;
+}
+
 export function rosterRemovedSourceKey(runId: string, publishedVersion: number, signupId: string): string {
   return `roster-removed:${runId}:${publishedVersion}:${signupId}`;
 }

@@ -24,6 +24,13 @@ import { rosterService } from "@/services/roster.service";
 import { signupService } from "@/services/signup.service";
 import { lockoutService } from "@/services/lockout.service";
 import { runService } from "@/services/run.service";
+import { attendanceService } from "@/services/attendance.service";
+import { attendanceRepository } from "@/repositories/attendance.repository";
+import { discordSyncService, rosterBossPlanRenderKey } from "@/services/discord-sync.service";
+import { runPreflightService } from "@/services/run-preflight.service";
+import { runConsumableAuditRepository } from "@/repositories/run-consumable-audit.repository";
+import { buildRosterEmbed } from "@/discord-bot/embeds/roster-embed";
+import { renderRunStartMessageText } from "@/discord-bot/messages/run-start-message";
 
 const ids = {
   lead: "dddddddd-dddd-4ddd-8ddd-bex000000001",
@@ -105,6 +112,9 @@ async function createSignup(id: string, userId: string, characterId: string, rol
 }
 
 async function cleanup() {
+  // Attendance references roster entries: remove it (and the start snapshot) first.
+  await orm.RunAttendance.where({ runId: ids.run }).deleteAndCount().catch(() => {});
+  await orm.RunStartSnapshot.where({ runId: ids.run }).deleteAndCount().catch(() => {});
   const roster = (await orm.RunRoster.where({ runId: ids.run }).first()) as { id: string } | null;
   if (roster) {
     await orm.RunRosterBossException.where({ rosterId: roster.id }).deleteAndCount().catch(() => {});
@@ -693,5 +703,205 @@ describe("boss plan — Roster Builder flows (feature switch on)", () => {
       contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 5 }],
     });
     expect(await version()).toBe(before);
+  });
+});
+
+/**
+ * PR C — Discord, DMs, Start, consumables audit, replacements and the
+ * feature-switch rollback, on the same fixture (Venom 6/8 + Tide 1/1 Bundle;
+ * userA: Bexsham slot + Bexpriest alternate; userB: Bexmage).
+ */
+describe("boss plan — Discord, DMs, Start, audit, replacement, rollback", () => {
+  beforeEach(() => {
+    vi.stubEnv("ROSTER_BOSS_EXCEPTIONS_ENABLED", "true");
+  });
+
+  const selections = [
+    { signupId: ids.signupA, selectedRole: "HEALER" as const },
+    { signupId: ids.signupB, selectedRole: "RANGED_DPS" as const },
+  ];
+  async function altOn(...bosses: number[]) {
+    return Promise.all(bosses.map((boss) => venomException(boss, "HEALER", ids.signupAlt)));
+  }
+  async function tideDps(): Promise<RosterBossException> {
+    const contents = await contentIds();
+    return { slotSignupId: ids.signupA, runRaidContentId: contents.tide!, raidBossId: tideBosses[0]!, playSignupId: null, role: "RANGED_DPS" };
+  }
+  async function publish() {
+    await rosterService.publishRoster(lead, { runId: ids.run, version: await version(), acknowledgeWarnings: true });
+  }
+  async function update(bossExceptions?: RosterBossException[]) {
+    await rosterService.updateRoster(lead, {
+      runId: ids.run,
+      version: await version(),
+      selections,
+      acknowledgeWarnings: true,
+      bossExceptions,
+    });
+  }
+  const bossPlanRows = async () =>
+    ((await orm.UserNotification.where({ runId: ids.run, type: "ROSTER_SELECTED" }).all()) as Array<{
+      signupId: string;
+      sourceKey: string;
+      message: string;
+    }>).filter((row) => row.sourceKey.startsWith("roster-boss-plan:"));
+
+  it("Discord Roster message: draft plan before Publish, published plan after; grouped ranges, Bundle content names", async () => {
+    await saveDefault([...(await altOn(5, 6)), await tideDps()]);
+    const draft = (await discordSyncService.getRosterEmbedData(ids.run))!;
+    expect(draft.publishedAt).toBeNull();
+    expect(draft.bossPlan!.map((line) => [line.member.characterName, line.plan])).toEqual([
+      ["Bexsham", "Venom 5–6: Bexpriest-Antonidas · Healer; Tide 1: Ranged DPS"],
+    ]);
+    await publish();
+    const published = (await discordSyncService.getRosterEmbedData(ids.run))!;
+    expect(published.bossPlan).toEqual(draft.bossPlan);
+    const embed = buildRosterEmbed(published).toJSON();
+    expect(embed.fields!.find((field) => field.name === "📋 Boss plan")!.value).toBe(
+      "Bexsham-Antonidas — Venom 5–6: Bexpriest-Antonidas · Healer; Tide 1: Ranged DPS",
+    );
+    expect(rosterBossPlanRenderKey((await runRepository.findById(ids.run))!)).toMatch(/^[0-9a-f]{12}$/);
+  });
+
+  it("a Run without exceptions: no Boss plan anywhere, render key empty, no boss plan notices", async () => {
+    await saveDefault();
+    await publish();
+    const data = (await discordSyncService.getRosterEmbedData(ids.run))!;
+    expect(data.bossPlan).toEqual([]);
+    expect(JSON.stringify(buildRosterEmbed(data).toJSON())).not.toContain("Boss plan");
+    expect(rosterBossPlanRenderKey((await runRepository.findById(ids.run))!)).toBe("");
+    expect(await bossPlanRows()).toEqual([]);
+  });
+
+  it("DMs: only the player whose published plan changed hears Boss Plan Update, once per change, never when unchanged", async () => {
+    await saveDefault();
+    await publish();
+    expect(await bossPlanRows()).toEqual([]);
+
+    await update(await altOn(5, 6));
+    let rows = await bossPlanRows();
+    expect(rows.map((row) => row.signupId)).toEqual([ids.signupA]);
+    expect(rows[0]!.message).toBe("Your boss assignments for BEX Run changed: Venom 5–6: Bexpriest-Antonidas · Healer.");
+
+    await update(await altOn(5, 6)); // same plan again: nobody is told
+    expect(await bossPlanRows()).toHaveLength(1);
+
+    await update([]); // back to the default roster
+    rows = await bossPlanRows();
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.message)).toContain("You now play every boss of BEX Run as rostered.");
+    // The Bexmage slot never changed, so its player is never told.
+    expect(rows.every((row) => row.signupId === ids.signupA)).toBe(true);
+  });
+
+  it("DMs: a player newly selected together with a plan gets the selected notice only (no extra Boss Plan Update)", async () => {
+    await rosterService.saveDraftSelection(lead, {
+      runId: ids.run,
+      version: await version(),
+      selections: [{ signupId: ids.signupB, selectedRole: "RANGED_DPS" }],
+    });
+    await publish();
+    await update(await altOn(5));
+    expect(await bossPlanRows()).toEqual([]);
+    const selected = (await orm.UserNotification.where({
+      runId: ids.run,
+      signupId: ids.signupA,
+      type: "ROSTER_SELECTED",
+    }).all()) as Array<{ sourceKey: string }>;
+    expect(selected.map((row) => row.sourceKey.split(":")[0])).toEqual(["roster-selected"]);
+  });
+
+  it("Start checks: an alternate that became inactive after Publish shows as a Boss plan item in the preflight", async () => {
+    await saveDefault(await altOn(5, 6));
+    await publish();
+    await orm.Character.where({ id: ids.charAlt }).update({ isActive: false });
+    const preflight = await runPreflightService.evaluate(lead, ids.run);
+    const bossPlan = preflight.checks.filter((check) => check.label === "Boss plan");
+    // One item per affected boss (Venom 5 and 6), each naming the alternate and why.
+    expect(bossPlan).toHaveLength(2);
+    expect(bossPlan.every((check) => check.summary.includes("Bexpriest-Antonidas is inactive"))).toBe(true);
+    expect(preflight.overall).not.toBe("READY");
+  });
+
+  it("Final Setup, audit participants and replacement after Start: the replaced slot's published plan leaves with it", async () => {
+    await createUser(ids.userC, "USER");
+    await createCharacter(ids.charC, ids.userC, "Bexhunter", "HUNTER", "Marksmanship", "RANGED_DPS");
+    await createSignup(ids.signupC, ids.userC, ids.charC, ["HEALER", "RANGED_DPS"]);
+    await saveDefault(await altOn(5, 6));
+    await publish();
+    await runService.startRun(lead, { runId: ids.run });
+
+    const start = (await discordSyncService.getRunStartEmbedData(ids.run))!;
+    expect(start.bossPlan).toEqual([{ discordUserId: null, userName: ids.userA, plan: "Venom 5–6: Bexpriest-Antonidas · Healer" }]);
+    expect(renderRunStartMessageText(start)).toContain(`📋 **Boss plan**\n@${ids.userA} · Venom 5–6: Bexpriest-Antonidas · Healer`);
+
+    const venom = (await contentIds()).venom;
+    // The audit covers attended players only.
+    await orm.RunAttendance.where({ runId: ids.run }).updateAll({ status: "PRESENT" });
+    const participants = await runConsumableAuditRepository.listParticipants(ids.run);
+    const sham = participants.find((row) => row.source === "ATTENDANCE" && row.characterName === "Bexsham");
+    expect(sham?.source === "ATTENDANCE" ? sham.bossCharacters : null).toEqual([
+      {
+        characterName: "Bexpriest",
+        characterRealm: "Antonidas",
+        characterRegion: "EU",
+        warcraftLogsId: null,
+        bosses: [
+          { raidContentId: venom, wclEncounterIds: expect.any(Array) },
+          { raidContentId: venom, wclEncounterIds: expect.any(Array) },
+        ],
+      },
+    ]);
+    const mage = participants.find((row) => row.source === "ATTENDANCE" && row.characterName === "Bexmage");
+    expect(mage?.source === "ATTENDANCE" ? mage.bossCharacters : "missing").toBeUndefined();
+
+    const shamRow = (await attendanceRepository.listByRunId(ids.run)).find((row) => row.signupId === ids.signupA)!;
+    await attendanceService.replaceParticipant(lead, {
+      attendanceId: shamRow.id,
+      replacement: { kind: "signup", signupId: ids.signupC },
+    });
+
+    expect((await rosterRepository.findByRunId(ids.run))!.bossExceptions).toEqual({ draft: [], published: [] });
+    const after = (await discordSyncService.getRunStartEmbedData(ids.run))!;
+    expect(after.bossPlan).toEqual([]);
+    expect(renderRunStartMessageText(after)).not.toContain("Boss plan");
+    expect((await discordSyncService.getRosterEmbedData(ids.run))!.bossPlan).toEqual([]);
+    const afterParticipants = await runConsumableAuditRepository.listParticipants(ids.run);
+    expect(afterParticipants.some((row) => row.source === "ATTENDANCE" && (row.bossCharacters?.length ?? 0) > 0)).toBe(false);
+  });
+
+  it("rollback: switching the feature off with stored exceptions makes them inert everywhere; on again restores them", async () => {
+    await saveDefault(await altOn(5, 6));
+    await publish();
+    await saveDefault(await altOn(6)); // an unpublished plan change
+    const stored = (await rosterRepository.findByRunId(ids.run))!.bossExceptions;
+    expect(stored.published).toHaveLength(2);
+    expect(stored.draft).toHaveLength(1);
+
+    vi.stubEnv("ROSTER_BOSS_EXCEPTIONS_ENABLED", "false");
+    const view = await rosterService.getRosterManagementView(lead, ids.run);
+    expect(view.bossPlan).toMatchObject({ enabled: false, draft: [], published: [] });
+    expect(view.roster.hasUnpublishedChanges).toBe(false);
+    expect(view.validation.warnings.filter((row) => row.code.startsWith("BOSS_"))).toEqual([]);
+    expect((await discordSyncService.getRosterEmbedData(ids.run))!.bossPlan).toEqual([]);
+    expect(rosterBossPlanRenderKey((await runRepository.findById(ids.run))!)).toBe("");
+    // The alternate is no longer reserved by this Run.
+    expect(
+      await queryReservationConflicts(orm, {
+        characterIds: [ids.charAlt],
+        scheduledStartAt: START,
+        excludeRunId: "dddddddd-dddd-4ddd-8ddd-bexr0000ffff",
+      }),
+    ).toEqual([]);
+    // Normal roster actions keep working: Update (no boss input, no new boss plan notice) and Start.
+    const noticesBefore = (await bossPlanRows()).length;
+    await update();
+    expect(await bossPlanRows()).toHaveLength(noticesBefore);
+    await runService.startRun(lead, { runId: ids.run });
+    expect((await discordSyncService.getRunStartEmbedData(ids.run))!.bossPlan).toEqual([]);
+    // Rows stay stored — switching back on shows them again.
+    expect((await rosterRepository.findByRunId(ids.run))!.bossExceptions.published.length).toBeGreaterThan(0);
+    vi.stubEnv("ROSTER_BOSS_EXCEPTIONS_ENABLED", "true");
+    expect((await discordSyncService.getRunStartEmbedData(ids.run))!.bossPlan!.length).toBeGreaterThan(0);
   });
 });

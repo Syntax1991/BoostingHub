@@ -4,11 +4,16 @@ import { isRosterBossExceptionsEnabled } from "@/lib/feature-flags";
 import { requiresFreshRaidLockout } from "@/lib/raid-lockout-label";
 import {
   bossCompositionWarnings,
+  bossExceptionFingerprint,
   bossLockoutWarnings,
+  describeSlotBossPlan,
   effectiveBossRoster,
   normalizeBossExceptions,
   plannedRunBosses,
   validateBossExceptions,
+  activeBossExceptions,
+  bossPlanSummaryLines,
+  type BossExceptionStages,
   type BossPlanSignup,
   type BossPlanSlot,
   type RosterBossException,
@@ -222,4 +227,100 @@ export async function evaluateBossPlan(input: {
 export function assertBossPlanValid(evaluation: Pick<BossPlanEvaluation, "issues">): void {
   const issue = evaluation.issues[0];
   if (issue) throw new DomainError("INVALID_ROSTER_SELECTION", issue.message);
+}
+
+export type BossPlanDisplay = {
+  bosses: RunBoss[];
+  /** Exceptions of the shown slots only, from the shown stage (none while the switch is off). */
+  exceptions: RosterBossException[];
+  characterLabelBySignupId: Map<string, string>;
+};
+
+/**
+ * What Discord (Roster message, Final Setup) and DMs show of a roster's boss
+ * plan: the given stage's exceptions of exactly the slots being shown — a
+ * slot that left the live roster (removed, replaced after Start) never shows
+ * a stale plan — and only alternates that are still signed up. Empty while
+ * the feature switch is off, so a Run renders as its default roster.
+ */
+export function bossPlanForDisplay(input: {
+  run: Pick<BossPlanRun, "contents">;
+  stages: BossExceptionStages;
+  stage: "DRAFT" | "PUBLISHED";
+  slotSignupIds: ReadonlySet<string>;
+  signups: readonly RosterSignupRow[];
+}): BossPlanDisplay {
+  const active = activeBossExceptions(input.stages);
+  const rows = input.stage === "PUBLISHED" ? active.published : active.draft;
+  const signupsById = new Map(input.signups.map((signup) => [signup.id, signup]));
+  const exceptions = rows.filter(
+    (row) =>
+      input.slotSignupIds.has(row.slotSignupId) &&
+      (row.playSignupId == null || (signupsById.get(row.playSignupId)?.status ?? "WITHDRAWN") !== "WITHDRAWN"),
+  );
+  return {
+    bosses: exceptions.length > 0 ? runPlannedBosses(input.run) : [],
+    exceptions,
+    characterLabelBySignupId: new Map(input.signups.map((signup) => [signup.id, characterLabel(signup)])),
+  };
+}
+
+/**
+ * Final Setup "Boss plan" lines (Discord start post and the web Start
+ * preview): the PUBLISHED plan of the given live Booster slots, ordered by
+ * Character like the Final Setup rows. Empty without exceptions.
+ */
+export function finalSetupBossPlan(input: {
+  run: Pick<BossPlanRun, "contents">;
+  stages: BossExceptionStages;
+  slots: readonly RosterSignupRow[];
+  signups: readonly RosterSignupRow[];
+}): Array<{ discordUserId: string | null; userName: string; plan: string }> {
+  const slots = input.slots
+    .filter((slot) => slot.participationType === "BOOSTER")
+    .sort((a, b) => characterLabel(a).localeCompare(characterLabel(b), "en"));
+  const display = bossPlanForDisplay({
+    run: input.run,
+    stages: input.stages,
+    stage: "PUBLISHED",
+    slotSignupIds: new Set(slots.map((slot) => slot.id)),
+    signups: input.signups,
+  });
+  return bossPlanSummaryLines({ ...display, slots: slots.map((row) => ({ signupId: row.id, row })) }).map((line) => ({
+    discordUserId: line.slot.row.discordUserId,
+    userName: line.slot.row.userName,
+    plan: line.plan,
+  }));
+}
+
+/**
+ * Publish / Update: the accepted slots whose PUBLISHED boss plan changes,
+ * with the new plan text (null = every boss as rostered again). Players whose
+ * plan stays the same are not listed, so they are not notified. None while
+ * the feature switch is off.
+ */
+export function bossPlanNotices(input: {
+  run: Pick<BossPlanRun, "contents">;
+  signups: readonly RosterSignupRow[];
+  selectedSignupIds: readonly string[];
+  before: readonly RosterBossException[];
+  after: readonly RosterBossException[];
+}): Array<{ signupId: string; plan: string | null }> {
+  if (!isRosterBossExceptionsEnabled()) return [];
+  const changed = input.selectedSignupIds.filter(
+    (signupId) =>
+      bossExceptionFingerprint(input.before.filter((row) => row.slotSignupId === signupId)) !==
+      bossExceptionFingerprint(input.after.filter((row) => row.slotSignupId === signupId)),
+  );
+  if (changed.length === 0) return [];
+  const bosses = runPlannedBosses(input.run);
+  const characterLabelBySignupId = new Map(input.signups.map((signup) => [signup.id, characterLabel(signup)]));
+  return changed.map((signupId) => ({
+    signupId,
+    plan: describeSlotBossPlan({
+      exceptions: input.after.filter((row) => row.slotSignupId === signupId),
+      bosses,
+      characterLabelBySignupId,
+    }),
+  }));
 }

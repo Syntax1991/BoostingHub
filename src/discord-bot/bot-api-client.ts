@@ -174,6 +174,10 @@ export class BotApiClient {
         discordUserId: string;
         /** ROSTER_SELECTED for a character swap ("Roster Update"); optional for an older API. */
         rosterUpdate?: boolean;
+        /** ROSTER_SELECTED: only the boss plan changed ("Boss Plan Update"); optional for an older API. */
+        bossPlanUpdate?: boolean;
+        /** ROSTER_SELECTED: the slot's current boss plan; optional for an older API. */
+        bossPlan?: string | null;
         /** ROSTER_WITHDRAWN only; optional for an older API. */
         withdrawal?: {
           playerName: string;

@@ -39,7 +39,8 @@ import {
   type CreateRunDiscordAnnouncementInput,
 } from "@/repositories/run-discord-announcement.repository";
 import { isUniqueViolation } from "@/repositories/community-schedule-run.repository";
-import { lockRosterInTx } from "@/repositories/roster.repository";
+import { lockRosterInTx, mapBossExceptionRows } from "@/repositories/roster.repository";
+import type { BossExceptionStages } from "@/lib/roster-boss-plan";
 import { getRaidLeadDisplayName } from "@/lib/raid-lead-display";
 import { normalizeOfferedRoles } from "@/lib/offered-roles";
 import type { InitialBoosterSignup } from "@/services/run-raid-lead-bootstrap.service";
@@ -178,6 +179,8 @@ export type RunListRecord = {
     selections: RosterSelectionOnRun[];
     /** Unregistered boosters added by hand; saved with the draft, count toward targets. */
     externalBoosters: ExternalBooster[];
+    /** Stored boss exceptions, both stages (consumers read them through activeBossExceptions). */
+    bossExceptions: BossExceptionStages;
   } | null;
 };
 
@@ -492,6 +495,7 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
             };
           }),
           externalBoosters: mapExternalBoosters(roster.externalBoosters),
+          bossExceptions: mapBossExceptionRows(roster.bossExceptions),
         }
       : null,
   };
@@ -522,7 +526,7 @@ export const runRepository = {
       .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
       .include("raidLead")
       .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
-      .include("roster", (roster) => roster.include("entries").include("externalBoosters"))
+      .include("roster", (roster) => roster.include("entries").include("externalBoosters").include("bossExceptions"))
       .orderBy((run) => run.scheduledStartAt.asc());
 
     if (filters.difficulty) {
@@ -549,7 +553,7 @@ export const runRepository = {
       .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
       .include("raidLead")
       .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
-      .include("roster", (roster) => roster.include("entries").include("externalBoosters"))
+      .include("roster", (roster) => roster.include("entries").include("externalBoosters").include("bossExceptions"))
       .first();
 
     return run ? mapRun(run as Record<string, unknown>) : null;
@@ -570,7 +574,7 @@ export const runRepository = {
       .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
       .include("raidLead")
       .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
-      .include("roster", (roster) => roster.include("entries").include("externalBoosters"))
+      .include("roster", (roster) => roster.include("entries").include("externalBoosters").include("bossExceptions"))
       .orderBy((run) => run.scheduledStartAt.asc())
       .all();
 
@@ -582,7 +586,7 @@ export const runRepository = {
       .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
       .include("raidLead")
       .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
-      .include("roster", (roster) => roster.include("entries").include("externalBoosters"))
+      .include("roster", (roster) => roster.include("entries").include("externalBoosters").include("bossExceptions"))
       .orderBy((run) => run.scheduledStartAt.asc())
       .all();
 
@@ -697,7 +701,7 @@ export const runRepository = {
       .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
       .include("raidLead")
       .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
-      .include("roster", (roster) => roster.include("entries").include("externalBoosters"))
+      .include("roster", (roster) => roster.include("entries").include("externalBoosters").include("bossExceptions"))
       .orderBy((run) => run.scheduledStartAt.asc())
       .all();
 

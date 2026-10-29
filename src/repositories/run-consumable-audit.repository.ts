@@ -14,6 +14,9 @@ import {
   mapWowClass,
 } from "@/lib/persistence";
 import type { AttendanceStatus, RaidDifficulty, RunStatus } from "@/models/enums";
+import { parseEncounterIds } from "@/lib/raid-catalog";
+import { activeBossExceptions } from "@/lib/roster-boss-plan";
+import { mapBossExceptionRows } from "@/repositories/roster.repository";
 import type {
   ConsumableAuditMatchStatus,
   ConsumableAuditParticipant,
@@ -115,6 +118,61 @@ async function insertChunked(
   }
 }
 
+/**
+ * Published boss plan → per participant the alternate Characters that play
+ * some bosses (and which: Run content + WCL encounter ids), so those fights
+ * are audited for the Character actually assigned. Role-only exceptions keep
+ * the slot's Character. Nothing while the feature switch is off or without
+ * alternates.
+ */
+async function attachBossCharacters(
+  participants: ConsumableAuditParticipant[],
+  slotSignupIdByAttendanceId: ReadonlyMap<string, string>,
+  roster: Record<string, unknown> | null,
+): Promise<void> {
+  const rows = activeBossExceptions(mapBossExceptionRows(roster?.bossExceptions)).published.filter(
+    (row) => row.playSignupId != null,
+  );
+  if (rows.length === 0) return;
+  const playSignupIds = [...new Set(rows.map((row) => row.playSignupId!))];
+  const playSignups = (await orm.RunSignup.where((signup) => signup.id.in(playSignupIds))
+    .include("character")
+    .all()) as Array<Record<string, unknown>>;
+  const characterBySignupId = new Map(
+    playSignups
+      .filter((signup) => signup.character)
+      .map((signup) => [asString(signup.id), signup.character as Record<string, unknown>]),
+  );
+  const bossRows = (await orm.RaidBoss.where((boss) => boss.id.in([...new Set(rows.map((row) => row.raidBossId))])).all()) as Array<
+    Record<string, unknown>
+  >;
+  const encounterIdsByBossId = new Map(bossRows.map((boss) => [asString(boss.id), parseEncounterIds(boss.wclEncounterIds)]));
+  for (const participant of participants) {
+    if (participant.source !== "ATTENDANCE") continue;
+    const slotSignupId = slotSignupIdByAttendanceId.get(participant.attendanceId);
+    const slotRows = rows.filter((row) => row.slotSignupId === slotSignupId);
+    if (slotRows.length === 0) continue;
+    const byPlay = new Map<string, typeof slotRows>();
+    for (const row of slotRows) byPlay.set(row.playSignupId!, [...(byPlay.get(row.playSignupId!) ?? []), row]);
+    participant.bossCharacters = [...byPlay.entries()].flatMap(([playSignupId, playRows]) => {
+      const character = characterBySignupId.get(playSignupId);
+      if (!character) return [];
+      return [
+        {
+          characterName: asString(character.name),
+          characterRealm: asString(character.realm),
+          characterRegion: mapRegion(character.region),
+          warcraftLogsId: asStringOrNull(character.warcraftLogsId),
+          bosses: playRows.map((row) => ({
+            raidContentId: row.runRaidContentId,
+            wclEncounterIds: encounterIdsByBossId.get(row.raidBossId) ?? [],
+          })),
+        },
+      ];
+    });
+  }
+}
+
 export const runConsumableAuditRepository = {
   /** Only what authorization and fight selection need — no roster/signup payload. */
   async findRunContext(runId: string): Promise<RunConsumableAuditRunContext | null> {
@@ -160,6 +218,7 @@ export const runConsumableAuditRepository = {
       .all()) as Array<Record<string, unknown>>;
 
     const participants: ConsumableAuditParticipant[] = [];
+    const slotSignupIdByAttendanceId = new Map<string, string>();
     for (const row of attendanceRows) {
       if (!AUDITED_ATTENDANCE.includes(mapAttendanceStatus(row.status))) continue;
       const entry = (row.rosterEntry as Record<string, unknown> | undefined) ?? {};
@@ -168,6 +227,7 @@ export const runConsumableAuditRepository = {
       const user = (signup.user as Record<string, unknown> | undefined) ?? {};
       const character = signup.character as Record<string, unknown> | undefined | null;
       const roleRaw = signup.publishedRole ?? entry.selectedRole;
+      slotSignupIdByAttendanceId.set(asString(row.id), asString(signup.id));
       participants.push({
         source: "ATTENDANCE",
         attendanceId: asString(row.id),
@@ -182,9 +242,10 @@ export const runConsumableAuditRepository = {
     }
     participants.sort((a, b) => a.displayName.localeCompare(b.displayName));
 
-    const roster = (await orm.RunRoster.where({ runId }).include("externalBoosters").first()) as
+    const roster = (await orm.RunRoster.where({ runId }).include("externalBoosters").include("bossExceptions").first()) as
       | Record<string, unknown>
       | null;
+    await attachBossCharacters(participants, slotSignupIdByAttendanceId, roster);
     const externals = (Array.isArray(roster?.externalBoosters) ? roster.externalBoosters : []) as Array<
       Record<string, unknown>
     >;

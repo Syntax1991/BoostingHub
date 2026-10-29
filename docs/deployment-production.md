@@ -352,8 +352,9 @@ systemctl restart boostinghub-web.service boostinghub-discord-bot.service
 
 ## Feature switch: boss-specific roster exceptions
 
-`ROSTER_BOSS_EXCEPTIONS_ENABLED` is **unset (off) in production** until the
-feature's UI, Discord and consumables-audit integration are complete. While
+`ROSTER_BOSS_EXCEPTIONS_ENABLED` is **unset (off) in production** until it is
+deliberately switched on. Switching it off again later is safe: stored
+exceptions become inert everywhere (see roster-management.md, Switching off). While
 off, the roster API refuses boss exception input; the additive table
 `run_roster_boss_exception` stays empty and every Run behaves as before. See
 [roster-management.md](features/roster-management.md#boss-specific-exceptions).

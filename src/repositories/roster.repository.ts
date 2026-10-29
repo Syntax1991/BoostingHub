@@ -34,13 +34,14 @@ import {
   mapWowClass,
 } from "@/lib/persistence";
 import { DomainError } from "@/lib/errors";
-import type { RosterBossException } from "@/lib/roster-boss-plan";
+import { activeBossExceptions, type RosterBossException } from "@/lib/roster-boss-plan";
 import { mapExternalBoosters, type ExternalBooster, type ExternalBoosterInput } from "@/lib/external-booster";
 import { userRepository } from "@/repositories/user.repository";
 import { mapOfferedRoles, queryReservationConflicts, syncOfferedRolesInTx } from "@/repositories/signup.repository";
 import {
   rosterRemovedSourceKey,
   rosterSelectedSourceKey,
+  rosterBossPlanSourceKey,
   rosterSwappedSourceKey,
   rosterWithdrawnSourceKey,
   userNotificationRepository,
@@ -49,6 +50,7 @@ import {
   resolveDiscordDelivery,
   rosterRemovedWebNotification,
   rosterSelectedWebNotification,
+  rosterBossPlanWebNotification,
   rosterSwappedWebNotification,
   rosterWithdrawnWebNotification,
   type NotificationAssignmentInput,
@@ -141,7 +143,7 @@ export type RosterRecord = {
   bossExceptions: { draft: RosterBossException[]; published: RosterBossException[] };
 };
 
-function mapBossExceptionRows(value: unknown): RosterRecord["bossExceptions"] {
+export function mapBossExceptionRows(value: unknown): RosterRecord["bossExceptions"] {
   const rows = Array.isArray(value) ? (value as Record<string, unknown>[]) : [];
   const draft: RosterBossException[] = [];
   const published: RosterBossException[] = [];
@@ -638,6 +640,12 @@ type PublishSelectionsInput = {
   publisherId: string;
   /** Display title for ROSTER_SELECTED web/DM copy. */
   runTitle: string;
+  /**
+   * Slots whose PUBLISHED boss plan this publish changes, with the new plan
+   * text (null = every boss as rostered). Computed by the caller; each such
+   * player who stays in the roster hears "Boss Plan Update" once.
+   */
+  bossPlanNotices?: Array<{ signupId: string; plan: string | null }>;
 };
 
 /** RunSignup row → the shape hasUnpublishedRosterChanges compares. */
@@ -688,6 +696,7 @@ async function publishSelectionsInTx(
     selections: input.selectedSelections,
     now,
   });
+  await notifyBossPlanChangesInTx(txOrm, { ...input, version: nextVersion, now });
   const draftRole = new Map(mapped.selections.map((selection) => [selection.signupId, selection.selectedRole]));
   for (const selection of input.selectedSelections) {
     await txOrm.RunSignup.where({ id: selection.signupId }).update({
@@ -1368,7 +1377,7 @@ export const rosterRepository = {
           runChangedSinceAck: mapped.runChangedSinceAck,
           draft: mapped.selections,
           signups: signups.map(publishStateSignup),
-          bossExceptions: mapped.bossExceptions,
+          bossExceptions: activeBossExceptions(mapped.bossExceptions),
         })
       ) {
         throw new DomainError(
@@ -1502,6 +1511,40 @@ async function notifyRosterSelectionChangesInTx(
   }
 }
 
+/**
+ * Publish / Update: a player who stays in the roster and was not just told
+ * "selected" / "Roster Update" in this same write hears once that their
+ * published boss plan changed; unchanged players hear nothing (the caller
+ * only lists slots whose plan differs).
+ */
+async function notifyBossPlanChangesInTx(
+  txOrm: TxOrm,
+  input: {
+    runId: string;
+    runTitle: string;
+    version: number;
+    now: string;
+    selectedSelections: RosterNotificationSelection[];
+    bossPlanNotices?: Array<{ signupId: string; plan: string | null }>;
+  },
+): Promise<void> {
+  if (!input.bossPlanNotices?.length) return;
+  const sameVersion = (await txOrm.UserNotification.where({ runId: input.runId, type: "ROSTER_SELECTED" }).all()) as Array<
+    Record<string, unknown>
+  >;
+  const toldNow = new Set(
+    sameVersion
+      .filter((row) => Number(asString(row.sourceKey).split(":")[2]) === input.version)
+      .map((row) => asStringOrNull(row.signupId)),
+  );
+  const selectionById = new Map(input.selectedSelections.map((selection) => [selection.signupId, selection]));
+  for (const notice of input.bossPlanNotices) {
+    const selection = selectionById.get(notice.signupId);
+    if (!selection || toldNow.has(notice.signupId)) continue;
+    await createRosterSelectedNotificationInTx(txOrm, { ...input, selection, bossPlanNotice: { plan: notice.plan } });
+  }
+}
+
 async function createRosterSelectedNotificationInTx(
   txOrm: TxOrm,
   input: {
@@ -1512,6 +1555,8 @@ async function createRosterSelectedNotificationInTx(
     selection: RosterNotificationSelection;
     /** Character swap of a player already in the roster — rendered as "Roster Update". */
     swap?: boolean;
+    /** Only the published boss plan changed for a player who stays — rendered as "Boss Plan Update". */
+    bossPlanNotice?: { plan: string | null };
   },
 ): Promise<void> {
   const signup = (await txOrm.RunSignup.where({ id: input.selection.signupId })
@@ -1547,11 +1592,13 @@ async function createRosterSelectedNotificationInTx(
           ? mapWowClass(character.wowClass)
           : null,
   };
-  const copy = (input.swap ? rosterSwappedWebNotification : rosterSelectedWebNotification)({
-    runId: input.runId,
-    runTitle: input.runTitle,
-    assignment,
-  });
+  const copy = input.bossPlanNotice
+    ? rosterBossPlanWebNotification({ runId: input.runId, runTitle: input.runTitle, plan: input.bossPlanNotice.plan })
+    : (input.swap ? rosterSwappedWebNotification : rosterSelectedWebNotification)({
+        runId: input.runId,
+        runTitle: input.runTitle,
+        assignment,
+      });
   const { quietHours, timeZone } = quietHoursDeliveryContextFromUserRow(userRow);
   const discordDmDelivery = resolveDiscordDelivery({
     discordDmEnabled,
@@ -1565,7 +1612,7 @@ async function createRosterSelectedNotificationInTx(
     type: "ROSTER_SELECTED",
     runId: input.runId,
     signupId: input.selection.signupId,
-    sourceKey: (input.swap ? rosterSwappedSourceKey : rosterSelectedSourceKey)(
+    sourceKey: (input.bossPlanNotice ? rosterBossPlanSourceKey : input.swap ? rosterSwappedSourceKey : rosterSelectedSourceKey)(
       input.runId,
       input.version,
       input.selection.signupId,

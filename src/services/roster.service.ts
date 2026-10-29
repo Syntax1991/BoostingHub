@@ -12,9 +12,10 @@ import { isApprovedBooster } from "@/services/boosting-role.service";
 import { lockoutService } from "@/services/lockout.service";
 import { isLateFillWindow } from "@/lib/roster-replacement";
 import { isRosterBossExceptionsEnabled } from "@/lib/feature-flags";
-import type { RosterBossException } from "@/lib/roster-boss-plan";
+import { activeBossExceptions, type RosterBossException } from "@/lib/roster-boss-plan";
 import {
   assertBossPlanValid,
+  bossPlanNotices,
   evaluateBossPlan,
   requestedBossExceptions,
   runPlannedBosses,
@@ -919,7 +920,7 @@ export const rosterService = {
     // and their per-boss warnings show with the roster's other warnings
     // (Preflight included). No exceptions → no extra work, identical result.
     const bossPlanEvaluation =
-      roster.bossExceptions.draft.length > 0
+      activeBossExceptions(roster.bossExceptions).draft.length > 0
         ? await evaluateBossPlan({
             run,
             signups,
@@ -929,7 +930,7 @@ export const rosterService = {
             externalRoles: roster.externalBoosters
               .filter((booster) => booster.participationType === "BOOSTER")
               .map((booster) => booster.role),
-            exceptions: roster.bossExceptions.draft,
+            exceptions: activeBossExceptions(roster.bossExceptions).draft,
           })
         : null;
     const validation =
@@ -1013,7 +1014,7 @@ export const rosterService = {
           runChangedSinceAck: roster.runChangedSinceAck,
           draft: roster.selections,
           signups,
-          bossExceptions: roster.bossExceptions,
+          bossExceptions: activeBossExceptions(roster.bossExceptions),
         }),
       },
       composition,
@@ -1036,8 +1037,8 @@ export const rosterService = {
       bossPlan: {
         enabled: isRosterBossExceptionsEnabled(),
         bosses: runPlannedBosses(run),
-        draft: roster.bossExceptions.draft,
-        published: roster.bossExceptions.published,
+        draft: activeBossExceptions(roster.bossExceptions).draft,
+        published: activeBossExceptions(roster.bossExceptions).published,
       },
       withdrawnPicks: inspected
         .filter(
@@ -1681,7 +1682,7 @@ export const rosterService = {
       signups,
       effectiveSelectionMap(signups, roster.selections),
       input.acknowledgeWarnings,
-      roster.bossExceptions.draft,
+      activeBossExceptions(roster.bossExceptions).draft,
     );
 
     await rosterRepository.publishAtomic({
@@ -1691,6 +1692,13 @@ export const rosterService = {
       ...plan.publish,
       publisherId: user.id,
       runTitle: run.title,
+      bossPlanNotices: bossPlanNotices({
+        run,
+        signups,
+        selectedSignupIds: plan.publish.selectedSelections.map((selection) => selection.signupId),
+        before: activeBossExceptions(roster.bossExceptions).published,
+        after: plan.bossExceptions,
+      }),
     });
     await runDomainEventService.record({
       runId: run.id,
@@ -1761,7 +1769,7 @@ export const rosterService = {
       signups,
       canonical,
       input.acknowledgeWarnings,
-      requestedPlan ?? roster.bossExceptions.draft,
+      requestedPlan ?? activeBossExceptions(roster.bossExceptions).draft,
     );
 
     // WARNING gate for picks this Update newly introduces — after the plan's
@@ -1797,6 +1805,13 @@ export const rosterService = {
       bossExceptions: requestedPlan ? plan.bossExceptions : undefined,
       publisherId: user.id,
       runTitle: run.title,
+      bossPlanNotices: bossPlanNotices({
+        run,
+        signups,
+        selectedSignupIds: plan.publish.selectedSelections.map((selection) => selection.signupId),
+        before: activeBossExceptions(roster.bossExceptions).published,
+        after: plan.bossExceptions,
+      }),
     });
     await runDomainEventService.record({
       runId: run.id,
