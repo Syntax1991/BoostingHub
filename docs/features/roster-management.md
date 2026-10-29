@@ -187,7 +187,7 @@ Nothing about a confirmation is persisted. Only **new** picks are checked: a slo
 | Roster card checkbox → **Save Roster** (`saveDraftSelection`) | "Pick saved Character?" dialog per new pick; acknowledgements sent with Save |
 | **Update Roster** (`updateRoster`) | same, for picks new to the roster |
 | **Add Booster** (`addRegisteredParticipant`) | warning shown on the Character, confirmation on Add; schedule-conflicted Characters are listed as not eligible |
-| **Auto Build Apply** (`applyRosterProposal`) | warning candidates stay eligible (not scored down), blocked ones are never proposed; **one** aggregate dialog for all warning picks |
+| **Auto Build / Fill gaps** (`proposeRoster`, `applyRosterProposal`) | warning (known relevant save) and blocked candidates are never proposed — left out before ranking, listed as `lockoutExcluded` ("Not auto-picked — saved for this Run"); the slot stays open instead of a saved fallback. Existing picks (Fill gaps) are kept and still flagged. Manual selection is unchanged |
 | **Publish Roster** of a saved draft | none — nothing new is selected |
 
 **Known limitation:** the attention rule compares the Character's save with the whole raid, not with the Run's `plannedBossCount`. A Character saved only on bosses outside a partial Run still warns.
@@ -202,7 +202,7 @@ All of these work on the **CURRENT** Run only — its signups, availability, loc
 
 **Update Roster diff** (`lib/roster-diff.ts`, `roster-update-diff.tsx`). The Update dialog lists exactly what the draft changes against the published roster: `+` added, `−` removed, `⇄` Character changed (same User's removed + added Booster), `~` role changed — identity by signup / User, never row order. Lootbuddies appear as added / removed. External Boosters are live roster data, not draft data, so they never appear. First publish is unchanged.
 
-**Auto Build Roster in the editor** opens on top of the current (possibly unsaved) draft (`rosterBuilderService.proposeRoster(…, { baseSelections })`, read-only; same candidate rules, selection risk and aggregate saved-warning confirmation as before):
+**Auto Build Roster in the editor** opens on top of the current (possibly unsaved) draft (`rosterBuilderService.proposeRoster(…, { baseSelections })`, read-only; same candidate rules and selection risk; saved candidates are never auto-picked):
 
 - **Fill gaps** keeps every draft pick locked — Boosters and Lootbuddies, including a `NOT_SELECTED` signup re-selected on a published roster, with its role and chosen spec — and fills only the missing composition. Only `WITHDRAWN` (or unknown) ids drop out of the base. No extra confirmation.
 - **Build from signups** proposes a whole draft from the current signups and **replaces all draft Boosters and Lootbuddies**; External Boosters stay (they are not draft data). When the draft holds at least one Booster or Lootbuddy, Apply first asks "Replace the current draft?" — Cancel (or Escape) leaves the draft exactly as it was; an empty draft applies without asking.

@@ -63,9 +63,17 @@ export type RosterBuilderResult = {
   /**
    * NEW picks that need the Raid Lead's confirmation before Apply — one entry
    * per signup, each with per-RunRaidContent details from the shared roster
-   * selection risk. Existing (locked) selections never appear here.
+   * selection risk. Existing (locked) selections never appear here. Saved
+   * candidates are left out of the proposal (see `lockoutExcluded`), so this
+   * stays empty unless the risk gains another confirmable warning type.
    */
   warnings: RosterBuilderWarning[];
+  /**
+   * Candidates Auto Build / Fill gaps did not pick because the shared roster
+   * selection risk flags a known relevant save (LOCKOUT_ATTENTION) for this
+   * Run. The Raid Lead can still select them by hand and confirm the warning.
+   */
+  lockoutExcluded: RosterBuilderWarning[];
   observability: RosterBuilderOptimizeResult["observability"];
 };
 
@@ -289,6 +297,7 @@ export const rosterBuilderService = {
       } as RosterBuilderOptimizeResult["buffCoverage"],
       missingAfterProposal: shortages,
       warnings: [] as RosterBuilderWarning[],
+      lockoutExcluded: [] as RosterBuilderWarning[],
       observability: {
         candidateCount: 0,
         selectedCount: 0,
@@ -414,7 +423,7 @@ export const rosterBuilderService = {
     });
 
     const candidates: RosterBuilderCandidateInput[] = [];
-    const warningBySignupId = new Map<string, RosterBuilderWarning>();
+    const lockoutExcluded: RosterBuilderWarning[] = [];
     for (const signup of signups) {
       if (lockedSignupIds.has(signup.id)) continue;
       // WITHDRAWN never; NOT_SELECTED remains re-selectable (same as roster management).
@@ -447,8 +456,11 @@ export const rosterBuilderService = {
       if (signup.offeredRoles.length === 0) continue;
 
       // Shared CLEAN / WARNING / BLOCKED: BLOCKED (cross-Run reservation, weekly
-      // unavailability) is never proposed; WARNING stays a normal candidate —
-      // it is not scored down — and is confirmed once, in aggregate, on Apply.
+      // unavailability) is never proposed. A LOCKOUT_ATTENTION warning (a known
+      // save the Run's loot type cares about, per RunRaidContent — never on a
+      // SAVED Run, never for Unknown) is left out of the pool before ranking:
+      // automation never picks a saved Character, not even to fill a slot. The
+      // Raid Lead can still select it by hand and confirm the warning.
       const risk = classifyRosterSelectionRisk({
         scheduleConflicts: scheduleConflictsByCharacter.get(signup.character.id) ?? [],
         contentSaves: projectRosterSignupContentSaves(signup, run),
@@ -456,7 +468,7 @@ export const rosterBuilderService = {
       if (risk.level === "BLOCKED") continue;
       const lockoutWarning = risk.warnings.find((row) => row.type === "LOCKOUT_ATTENTION") ?? null;
       if (lockoutWarning) {
-        warningBySignupId.set(signup.id, {
+        lockoutExcluded.push({
           signupId: signup.id,
           characterId: signup.character.id,
           characterLabel: `${signup.character.name}-${signup.character.realm}`,
@@ -465,6 +477,7 @@ export const rosterBuilderService = {
             .join(", ")}.`,
           warning: lockoutWarning,
         });
+        continue;
       }
 
       const assignableRoles = resolveSignupAssignableRoles({
@@ -489,7 +502,7 @@ export const rosterBuilderService = {
         characterName: signup.character.name,
         itemLevel: signup.character.itemLevel,
         wclByRole: wclPctForRoles(segments, assignableRoles),
-        lockoutAttention: lockoutWarning != null,
+        lockoutAttention: false,
         lootbuddyMode: null,
       });
     }
@@ -517,10 +530,6 @@ export const rosterBuilderService = {
       selectedRole: row.selectedRole,
     }));
 
-    const warnings = newlyProposed
-      .map((row) => warningBySignupId.get(row.signupId))
-      .filter((row): row is RosterBuilderWarning => row != null);
-
     return {
       ...emptyBase,
       proposed: optimized.proposed,
@@ -529,7 +538,7 @@ export const rosterBuilderService = {
       unselected: optimized.unselected,
       buffCoverage: optimized.buffCoverage,
       missingAfterProposal: optimized.missingAfterProposal,
-      warnings,
+      lockoutExcluded,
       observability: optimized.observability,
     };
   },
