@@ -515,6 +515,11 @@ export class BotApiClient {
     return this.request<unknown>("/api/bot/warcraft-logs/auto-audit", { method: "POST" });
   }
 
+  /** Who is in each running Run's voice channel (Attendance hint; ignored server-side unless it matches). */
+  reportVoicePresence(runs: Array<{ runId: string; channelId: string; discordUserIds: string[] }>) {
+    return this.request<unknown>("/api/bot/discord/voice-presence", { method: "POST", body: JSON.stringify({ runs }) });
+  }
+
   /** One bounded pass of the Discord player name refresh (people of upcoming Runs). */
   refreshDiscordMemberNames() {
     return this.request<unknown>("/api/bot/discord/member-names", { method: "POST" });

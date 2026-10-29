@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
+import { VOICE_PRESENCE_LABELS, type VoicePresence } from "@/lib/voice-presence";
 import { useRouter } from "next/navigation";
 import { markAllPresentAction, replaceParticipantAction, setAttendanceAction } from "@/controllers/attendance.actions";
 import { Button } from "@/components/ui/button";
@@ -259,6 +260,7 @@ function ManagerAttendancePanel({
                 <td className="px-4 py-2">
                   <div className="font-medium">{row.characterName}</div>
                   <div className="text-xs text-muted">{row.userName}</div>
+                  {row.voicePresence ? <VoicePresenceHint presence={row.voicePresence} /> : null}
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap items-center gap-2">
@@ -783,5 +785,18 @@ function AttendanceNoteDialog({
         </div>
       </form>
     </dialog>
+  );
+}
+
+/** Discord voice hint for a running Run — information only; attendance stays manual. */
+function VoicePresenceHint({ presence }: { presence: VoicePresence }) {
+  const tone = presence === "IN_VOICE" ? "text-success" : presence === "NOT_IN_VOICE" ? "text-warning" : "text-muted/70";
+  return (
+    <div
+      className={`mt-0.5 text-[11px] ${tone}`}
+      title="From the Run's Discord voice channel (updated about once a minute). Never sets attendance."
+    >
+      {VOICE_PRESENCE_LABELS[presence]}
+    </div>
   );
 }

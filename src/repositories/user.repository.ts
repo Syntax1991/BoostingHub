@@ -262,6 +262,16 @@ export const userRepository = {
   },
 
   /** Boosting Roles for several Users at once; missing Users are absent from the map. */
+  /** Linked Discord user id per User (null when unlinked), one read. */
+  async listDiscordUserIds(userIds: readonly string[]): Promise<Map<string, string | null>> {
+    const unique = [...new Set(userIds)];
+    if (unique.length === 0) return new Map();
+    const rows = (await orm.User.where((user) => user.id.in(unique)).select("id", "discordUserId").all()) as Array<
+      Record<string, unknown>
+    >;
+    return new Map(rows.map((row) => [asString(row.id), asStringOrNull(row.discordUserId)]));
+  },
+
   async listBoostingRolesByUserIds(userIds: string[]): Promise<Map<string, BoostingRoles>> {
     const unique = [...new Set(userIds)];
     if (unique.length === 0) return new Map();

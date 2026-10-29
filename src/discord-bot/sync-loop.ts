@@ -5,6 +5,7 @@ import {
   ButtonStyle,
   EmbedBuilder,
   ChannelType,
+  Status as WebSocketStatus,
   type CategoryChannel,
   type Client,
   type MessageEditOptions,
@@ -29,6 +30,7 @@ import {
   isDiscordUnknownMessageError,
 } from "@/discord-bot/discord-api-errors";
 import { fetchChannelTranscript } from "@/discord-bot/transcript-fetch";
+import { buildVoicePresenceReports, isVoiceCacheTrusted, shouldReportVoicePresence } from "@/discord-bot/voice-presence-report";
 import {
   createReportScanState,
   scanReportChannels,
@@ -172,6 +174,54 @@ export function startSyncLoop(client: Client, env: BotEnv, api: BotApiClient): N
   return setInterval(() => {
     void triggerSync();
   }, env.syncIntervalMs);
+}
+
+let lastVoicePresenceReportAt: number | null = null;
+
+/**
+ * Attendance voice hint: at most once a minute, report who is connected to
+ * each running Run's voice channel (gateway cache, bots excluded). Best
+ * effort — a failure only means the web shows UNKNOWN after the TTL.
+ */
+async function reportRunVoicePresence(
+  client: Client,
+  api: BotApiClient,
+  items: ReadonlyArray<{ runId: string; action: string }>,
+  resolved: ReadonlyMap<string, string | null>,
+): Promise<void> {
+  const now = Date.now();
+  if (!shouldReportVoicePresence(lastVoicePresenceReportAt, now)) return;
+  const gatewayReady = (() => {
+    try {
+      return client.isReady() && client.ws.status === WebSocketStatus.Ready;
+    } catch {
+      return false;
+    }
+  })();
+  // Not READY (reconnecting / resuming): try again next pass, report nothing now.
+  if (!gatewayReady) return;
+  const reports = buildVoicePresenceReports({
+    items,
+    resolved,
+    readMemberIds: (channelId) => {
+      try {
+        const channel = client.channels.cache.get(channelId);
+        if (!channel || channel.type !== ChannelType.GuildVoice) return null;
+        const voice = channel as VoiceChannel;
+        if (!isVoiceCacheTrusted({ clientReady: true, gatewayReady, guildAvailable: voice.guild.available })) return null;
+        return [...voice.members.values()].filter((member) => !member.user.bot).map((member) => member.id);
+      } catch {
+        return null;
+      }
+    },
+  });
+  lastVoicePresenceReportAt = now;
+  if (reports.length === 0) return;
+  try {
+    await api.reportVoicePresence(reports);
+  } catch (error) {
+    console.warn("[discord-bot] voice presence report failed (Attendance shows Voice unknown until the next one)", error);
+  }
 }
 
 /**
@@ -349,6 +399,7 @@ async function syncOnceInner(
   // their ordering — so Raid Invite DMs later in this same pass can link a
   // voice channel created now.
   const resolvedVoiceChannels = await syncRunVoiceChannels(client, env, api, work.voiceChannels ?? [], pass);
+  await reportRunVoicePresence(client, api, work.voiceChannels ?? [], resolvedVoiceChannels);
 
   // Trusted log-bot Warcraft Logs links in running / just-completed Run
   // channels: every message after the durable per-channel cursor, oldest →
