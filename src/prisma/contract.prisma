@@ -633,6 +633,8 @@ model RaidBoss {
   /// JSON number array: Warcraft Logs encounter ids (`ReportFight.encounterID`).
   wclEncounterIds String @default("[]")
 
+  rosterBossExceptions RunRosterBossException[]
+
   @@index([raidId])
   @@map("raid_boss")
 }
@@ -788,6 +790,7 @@ model RunRaidContent {
 
   consumableAuditFights RunConsumableAuditFight[]
   warcraftLogsFights    RunWarcraftLogsFight[]
+  rosterBossExceptions  RunRosterBossException[]
 
   @@unique([runId, raidId])
   @@unique([runId, sortOrder])
@@ -1031,6 +1034,10 @@ model RunSignup {
 
   offeredRoles  RunSignupRole[]
   rosterEntries RunRosterEntry[]
+  /// Boss exceptions of the roster slot this signup holds.
+  bossExceptionSlots   RunRosterBossException[] @relation("RosterBossExceptionSlot")
+  /// Boss exceptions that play this signup's Character instead of the slot's own.
+  bossExceptionsPlayed RunRosterBossException[] @relation("RosterBossExceptionPlay")
   notifications UserNotification[]
 
   /// NULL is distinct per row under Postgres unique-index semantics, so this does
@@ -1084,6 +1091,7 @@ model RunRoster {
   updatedAt     temporal.updatedAtString()
 
   entries          RunRosterEntry[]
+  bossExceptions   RunRosterBossException[]
   externalBoosters RunExternalBooster[]
 
   @@map("run_roster")
@@ -1154,6 +1162,42 @@ model RunRosterEntry {
   @@unique([rosterId, signupId])
   @@index([rosterId])
   @@map("run_roster_entry")
+}
+
+/// Boss-specific exception to one roster slot: for this planned boss the slot's
+/// player plays another of their own signed-up Characters and/or another role.
+/// No row = the slot plays every planned boss with its default Character and
+/// role, so Runs without exceptions behave exactly as before. Only deviations
+/// are stored — never a roster per boss.
+///
+/// `stage` mirrors draft vs published (RunRosterEntry.selectedRole vs
+/// RunSignup.publishedRole): Save Roster writes DRAFT rows, Publish / Update
+/// Roster copies DRAFT → PUBLISHED in the same transaction.
+model RunRosterBossException {
+  id               String         @id @default(uuid())
+  rosterId         String
+  roster           RunRoster      @relation(fields: [rosterId], references: [id], onDelete: Cascade)
+  stage            RosterState
+  /// The roster slot (its default Character's signup).
+  slotSignupId     String
+  slotSignup       RunSignup      @relation("RosterBossExceptionSlot", fields: [slotSignupId], references: [id], onDelete: Cascade)
+  /// The Run content the boss belongs to (Bundles: one Run can hold several raids).
+  runRaidContentId String
+  runRaidContent   RunRaidContent @relation(fields: [runRaidContentId], references: [id], onDelete: Cascade)
+  /// A planned boss of that content (within the first plannedBossCount by sortOrder).
+  raidBossId       String
+  raidBoss         RaidBoss       @relation(fields: [raidBossId], references: [id], onDelete: Cascade)
+  /// Null = the slot's own Character; else another BOOSTER signup of the SAME User on this Run.
+  playSignupId     String?
+  playSignup       RunSignup?     @relation("RosterBossExceptionPlay", fields: [playSignupId], references: [id], onDelete: Cascade)
+  /// Concrete role for this boss (TANK / HEALER / MELEE_DPS / RANGED_DPS).
+  role             CharacterRole
+  createdAt        TimestamptzString @default(now())
+
+  @@unique([rosterId, stage, slotSignupId, runRaidContentId, raidBossId])
+  @@index([rosterId, stage])
+  @@index([playSignupId])
+  @@map("run_roster_boss_exception")
 }
 
 model ActivityEvent {

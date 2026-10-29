@@ -350,6 +350,14 @@ systemctl restart boostinghub-web.service boostinghub-discord-bot.service
   run the normal `update-server.sh`. It checks out `main` and fast-forwards it.
   Running it **before** `main` is fixed redeploys the bad commit.
 
+## Feature switch: boss-specific roster exceptions
+
+`ROSTER_BOSS_EXCEPTIONS_ENABLED` is **unset (off) in production** until the
+feature's UI, Discord and consumables-audit integration are complete. While
+off, the roster API refuses boss exception input; the additive table
+`run_roster_boss_exception` stays empty and every Run behaves as before. See
+[roster-management.md](features/roster-management.md#boss-specific-exceptions).
+
 ## Optional: fixed Run voice channels (Raid #1 / Raid #2)
 
 When a Run starts, the bot assigns it the first free fixed voice channel and

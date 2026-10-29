@@ -11,6 +11,14 @@ import {
 import { isApprovedBooster } from "@/services/boosting-role.service";
 import { lockoutService } from "@/services/lockout.service";
 import { isLateFillWindow } from "@/lib/roster-replacement";
+import { isRosterBossExceptionsEnabled } from "@/lib/feature-flags";
+import type { RosterBossException } from "@/lib/roster-boss-plan";
+import {
+  assertBossPlanValid,
+  evaluateBossPlan,
+  requestedBossExceptions,
+  runPlannedBosses,
+} from "@/services/roster-boss-exceptions";
 import {
   deriveCharacterSyncHealth,
   resolveSyncHealthStaleMinutes,
@@ -561,6 +569,8 @@ async function planAuthoritativeRoster(
   signups: RosterSignupRow[],
   selections: Map<string, CharacterRole | null>,
   acknowledgeWarnings: boolean,
+  /** Boss exceptions being accepted with this selection (none = default plan only). */
+  bossExceptions: readonly RosterBossException[] = [],
 ) {
   const knownIds = new Set(signups.map((signup) => signup.id));
   for (const signupId of selections.keys()) {
@@ -590,7 +600,7 @@ async function planAuthoritativeRoster(
   const selected = inspected.filter(
     (item) => item.draftSelected && item.status !== "WITHDRAWN",
   );
-  const validation = validateRosterDraft({
+  const defaultValidation = validateRosterDraft({
     runStatus: run.status,
     selected: selected.map(asMember),
     targets: {
@@ -602,12 +612,31 @@ async function planAuthoritativeRoster(
     externalBoosters: roster.externalBoosters,
   });
 
-  if (!validation.canPublish) {
+  if (!defaultValidation.canPublish) {
     throw new DomainError(
       "ROSTER_VALIDATION_FAILED",
-      validation.blockers[0]?.message ?? "This roster cannot be published.",
+      defaultValidation.blockers[0]?.message ?? "This roster cannot be published.",
     );
   }
+
+  // Boss exceptions: hard rules refuse, per-boss composition / lockouts join
+  // the acknowledgeable warnings. No exceptions → identical to before.
+  const bossPlan = await evaluateBossPlan({
+    run,
+    signups,
+    selections: new Map(
+      selected.map((item) => [item.id, item.participationType === "BOOSTER" ? item.selectedRole : null]),
+    ),
+    externalRoles: roster.externalBoosters
+      .filter((booster) => booster.participationType === "BOOSTER")
+      .map((booster) => booster.role),
+    exceptions: bossExceptions,
+  });
+  assertBossPlanValid(bossPlan);
+  const validation =
+    bossPlan.warnings.length === 0
+      ? defaultValidation
+      : { ...defaultValidation, warnings: [...defaultValidation.warnings, ...bossPlan.warnings] };
   if (validation.warnings.length > 0 && !acknowledgeWarnings) {
     throw new DomainError(
       "ROSTER_VALIDATION_FAILED",
@@ -643,9 +672,17 @@ async function planAuthoritativeRoster(
     assertRosterPublishableForSchedule(conflicted);
   }
 
-  const notSelectedIds = inspected
-    .filter((item) => item.status !== "WITHDRAWN" && !item.draftSelected)
-    .map((item) => item.id);
+  // An alternate Character of a boss exception plays some bosses: it is part of
+  // the plan, not "not selected" — its signup status stays as it is. A former
+  // published slot still leaves SELECTED (the published roster is its slots).
+  const alternateSignupIds = new Set(
+    bossPlan.exceptions.map((row) => row.playSignupId).filter((id): id is string => id != null),
+  );
+  const leavesAsNotSelected = (item: (typeof inspected)[number]) =>
+    item.status !== "WITHDRAWN" &&
+    !item.draftSelected &&
+    !(alternateSignupIds.has(item.id) && item.status !== "SELECTED");
+  const notSelectedIds = inspected.filter(leavesAsNotSelected).map((item) => item.id);
 
   for (const item of selected) {
     if (item.status !== "SELECTED" && item.status !== "WITHDRAWN") {
@@ -653,7 +690,7 @@ async function planAuthoritativeRoster(
     }
   }
   for (const item of inspected) {
-    if (item.status !== "WITHDRAWN" && !item.draftSelected && item.status !== "NOT_SELECTED") {
+    if (leavesAsNotSelected(item) && item.status !== "NOT_SELECTED") {
       assertSignupTransition(item.status, "NOT_SELECTED");
     }
   }
@@ -690,9 +727,11 @@ async function planAuthoritativeRoster(
 
   return {
     validation,
+    bossExceptions: bossPlan.exceptions,
     publish: {
       selectedSelections,
-      selectedCharacterIds: selectedCharacters.map((row) => row.id),
+      // Alternate Characters of boss exceptions are reserved by this Run too.
+      selectedCharacterIds: [...new Set([...selectedCharacters.map((row) => row.id), ...bossPlan.alternateCharacterIds])],
       scheduledStartAt: run.scheduledStartAt,
       notSelectedSignupIds: notSelectedIds,
       fromStatus: run.status,
@@ -865,7 +904,7 @@ export const rosterService = {
     const selected = inspected.filter(
       (item) => item.draftSelected && item.status !== "WITHDRAWN",
     );
-    const validation = validateRosterDraft({
+    const defaultValidation = validateRosterDraft({
       runStatus: run.status,
       selected: selected.map(asMember),
       targets: {
@@ -876,6 +915,39 @@ export const rosterService = {
       },
       externalBoosters: roster.externalBoosters,
     });
+    // Saved draft boss exceptions: their issues block the next Publish / Update
+    // and their per-boss warnings show with the roster's other warnings
+    // (Preflight included). No exceptions → no extra work, identical result.
+    const bossPlanEvaluation =
+      roster.bossExceptions.draft.length > 0
+        ? await evaluateBossPlan({
+            run,
+            signups,
+            selections: new Map(
+              selected.map((item) => [item.id, item.participationType === "BOOSTER" ? item.selectedRole : null]),
+            ),
+            externalRoles: roster.externalBoosters
+              .filter((booster) => booster.participationType === "BOOSTER")
+              .map((booster) => booster.role),
+            exceptions: roster.bossExceptions.draft,
+          })
+        : null;
+    const validation =
+      bossPlanEvaluation && (bossPlanEvaluation.issues.length > 0 || bossPlanEvaluation.warnings.length > 0)
+        ? {
+            ...defaultValidation,
+            canPublish: defaultValidation.canPublish && bossPlanEvaluation.issues.length === 0,
+            blockers: [
+              ...defaultValidation.blockers,
+              ...bossPlanEvaluation.issues.map((issue) => ({
+                code: issue.code,
+                message: issue.message,
+                signupId: issue.slotSignupId,
+              })),
+            ],
+            warnings: [...defaultValidation.warnings, ...bossPlanEvaluation.warnings],
+          }
+        : defaultValidation;
     const composition = validation.composition;
     const raidBuffCoverage: RaidBuffCoverage = evaluateRaidBuffCoverage([
       ...selected.map(asRaidBuffParticipant),
@@ -941,6 +1013,7 @@ export const rosterService = {
           runChangedSinceAck: roster.runChangedSinceAck,
           draft: roster.selections,
           signups,
+          bossExceptions: roster.bossExceptions,
         }),
       },
       composition,
@@ -956,6 +1029,16 @@ export const rosterService = {
        * Roster Builder offers "Find replacement" while a bucket they could
        * fill is still short in the draft.
        */
+      /**
+       * Boss-specific exceptions (UI behind ROSTER_BOSS_EXCEPTIONS_ENABLED): the
+       * Run's planned bosses in order and both exception stages.
+       */
+      bossPlan: {
+        enabled: isRosterBossExceptionsEnabled(),
+        bosses: runPlannedBosses(run),
+        draft: roster.bossExceptions.draft,
+        published: roster.bossExceptions.published,
+      },
       withdrawnPicks: inspected
         .filter(
           (item) =>
@@ -1193,8 +1276,14 @@ export const rosterService = {
        * Save Roster and Auto Build Apply). Already-selected slots never need one.
        */
       confirmedWarnings?: ConfirmedRosterWarning[];
+      /**
+       * Full DRAFT set of boss exceptions. Omitted (older clients, feature off)
+       * keeps the saved ones for slots that stay selected.
+       */
+      bossExceptions?: RosterBossException[];
     },
   ) {
+    const requestedPlan = requestedBossExceptions(input.bossExceptions);
     const run = await runRepository.findById(input.runId);
     if (!run) {
       throw new DomainError("NOT_FOUND", "Run was not found.", 404);
@@ -1338,14 +1427,32 @@ export const rosterService = {
         })),
     );
 
+    // Boss exceptions sent with this Save: hard rules refuse the whole Save.
+    const bossPlan = requestedPlan
+      ? await evaluateBossPlan({
+          run,
+          signups,
+          selections: new Map(selections.map((selection) => [selection.signupId, selection.selectedRole])),
+          externalRoles: (externalBoosters ?? roster.externalBoosters)
+            .filter((booster) => booster.participationType === "BOOSTER")
+            .map((booster) => booster.role),
+          exceptions: requestedPlan,
+        })
+      : null;
+    if (bossPlan) assertBossPlanValid(bossPlan);
+
     await rosterRepository.replaceSelectedSignupIds(roster.id, input.version, selections, {
       targetRunId: input.runId,
       scheduledStartAt: run.scheduledStartAt,
-      // Repository race-check only newly added Characters (already-selected stay).
-      selectedCharacterIds: newlySelectedCharacters.map((row) => row.id),
+      // Repository race-check only newly added Characters (already-selected stay)
+      // plus the alternate Characters of boss exceptions.
+      selectedCharacterIds: [
+        ...new Set([...newlySelectedCharacters.map((row) => row.id), ...(bossPlan?.alternateCharacterIds ?? [])]),
+      ],
       // Save Roster already DMs players; Publish later only DMs what changed since.
       notify: { runId: input.runId, runTitle: run.title },
       externalBoosters,
+      bossExceptions: bossPlan?.exceptions,
     });
 
     if (run.status === "OPEN" && selectedIds.length > 0) {
@@ -1519,7 +1626,9 @@ export const rosterService = {
                   : null,
         };
       });
-    await rosterRepository.replaceSelectedSignupIds(view.roster.id, input.version, selections);
+    await rosterRepository.replaceSelectedSignupIds(view.roster.id, input.version, selections, {
+      seedBossExceptionsFromPublished: true,
+    });
   },
 
   async validateDraft(user: AuthenticatedUser, runId: string): Promise<RosterValidationResult> {
@@ -1572,6 +1681,7 @@ export const rosterService = {
       signups,
       effectiveSelectionMap(signups, roster.selections),
       input.acknowledgeWarnings,
+      roster.bossExceptions.draft,
     );
 
     await rosterRepository.publishAtomic({
@@ -1612,8 +1722,11 @@ export const rosterService = {
       acknowledgeWarnings: boolean;
       /** Acknowledged selection warnings for picks NEW to the roster. */
       confirmedWarnings?: ConfirmedRosterWarning[];
+      /** Full boss exception set accepted with this Update; omitted keeps the saved draft ones. */
+      bossExceptions?: RosterBossException[];
     },
   ) {
+    const requestedPlan = requestedBossExceptions(input.bossExceptions);
     const run = await loadEditableRun(user, input.runId);
     const roster = await rosterRepository.ensure(input.runId);
     await rosterRepository.assertVersion(roster, input.version);
@@ -1642,7 +1755,14 @@ export const rosterService = {
       );
     }
 
-    const plan = await planAuthoritativeRoster(run, roster, signups, canonical, input.acknowledgeWarnings);
+    const plan = await planAuthoritativeRoster(
+      run,
+      roster,
+      signups,
+      canonical,
+      input.acknowledgeWarnings,
+      requestedPlan ?? roster.bossExceptions.draft,
+    );
 
     // WARNING gate for picks this Update newly introduces — after the plan's
     // hard blockers (schedule conflicts included), before the write. Slots that
@@ -1674,6 +1794,7 @@ export const rosterService = {
       expectedVersion: input.version,
       draftSelections: plan.publish.selectedSelections,
       ...plan.publish,
+      bossExceptions: requestedPlan ? plan.bossExceptions : undefined,
       publisherId: user.id,
       runTitle: run.title,
     });
