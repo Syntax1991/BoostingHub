@@ -12,16 +12,19 @@
  *
  * CLEAN   → select normally.
  * WARNING → known saved / fully-saved content the label authority marks as
- *           attention-worthy; needs an explicit, server-validated
- *           acknowledgement. "Unknown" lockout state is CLEAN here (it may
- *           still render yellow in the UI) — it means "not verified", and
- *           prompting on it would be confirmation noise.
+ *           attention-worthy AND whose save hits the Run's planned bosses
+ *           (isSaveRelevantToPlannedBosses: per boss on Normal / Heroic, the
+ *           whole content on Mythic); needs an explicit, server-validated
+ *           acknowledgement. Auto Build never picks such a Character.
+ *           "Unknown" lockout state is CLEAN here (it may still render yellow
+ *           in the UI) — it means "not verified", and prompting on it would be
+ *           confirmation noise.
  * BLOCKED → any schedule conflict. Always wins over WARNING.
  *
  * Safe for client imports (types + pure functions only).
  */
 
-import type { RunContentRaidSaveInfo } from "@/lib/run-content-lockouts";
+import { isSaveRelevantToPlannedBosses, type RunContentRaidSaveInfo } from "@/lib/run-content-lockouts";
 import type { CharacterScheduleConflict } from "@/services/character-schedule-conflict";
 
 export type RosterSelectionRiskLevel = "CLEAN" | "WARNING" | "BLOCKED";
@@ -90,7 +93,8 @@ function isKnownSavedAttention(
   return (
     row.label.attention &&
     row.raidSave != null &&
-    (row.label.kind === "saved" || row.label.kind === "fully_saved")
+    (row.label.kind === "saved" || row.label.kind === "fully_saved") &&
+    isSaveRelevantToPlannedBosses(row)
   );
 }
 

@@ -79,6 +79,28 @@ export function projectRunContentLockouts(input: {
   });
 }
 
+/**
+ * Whether a verified save keeps this Character from fresh loot on the bosses
+ * the Run actually plans (the first `plannedBossCount` in boss order — the
+ * same planned-boss rule as roster-saved-notice). Null save (Unknown) or no
+ * progress → false.
+ *
+ * - Normal / Heroic lock loot per boss: only a kill on a planned boss counts
+ *   (6/8 Run, only boss 8 killed → not relevant).
+ * - Mythic binds the Character to one raid ID: any kill in that content
+ *   keeps it out of a fresh instance (why MYTHIC + SAVED Runs do not exist).
+ * - Full clear always counts. A save whose killed bosses are unknown (older
+ *   sync, no boss list) counts too — irrelevance is never guessed from a count.
+ */
+export function isSaveRelevantToPlannedBosses(row: RunContentRaidSaveInfo): boolean {
+  const save = row.raidSave;
+  if (!save) return false;
+  const full = save.isComplete || save.bossesDefeated >= save.totalBossCount;
+  if (save.bossesDefeated === 0 && !full) return false;
+  if (full || save.difficulty === "MYTHIC" || !row.bosses) return true;
+  return row.bosses.slice(0, row.plannedBossCount).some((boss) => boss.killed);
+}
+
 /** Aggregate attention: true if ANY content needs operational attention. */
 export function contentLockoutsNeedAttention(rows: readonly RunContentRaidSaveInfo[]): boolean {
   return rows.some((row) => row.label.attention);
