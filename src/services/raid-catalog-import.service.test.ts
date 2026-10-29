@@ -574,7 +574,8 @@ describe("Lockouts", () => {
     const raid = (await raidByInstance(994001))!;
 
     const now = new Date();
-    const killedAt = now.getTime() - 60 * 60 * 1000;
+    const resetWindow = getRegionalWeeklyReset("EU", now);
+    const killedAt = resetWindow.start.getTime() + 3_600_000;
     const encounter = (id: number, name: string) => ({
       encounter: {
         key: { href: `https://eu.api.blizzard.com/data/wow/journal-encounter/${id}` },
@@ -624,7 +625,7 @@ describe("Lockouts", () => {
       encounters,
       lockoutRaids: catalog.lockoutRaids,
       now,
-      resetWindow: getRegionalWeeklyReset("EU", now),
+      resetWindow,
     });
     expect(derived.status).toBe("derived");
     if (derived.status !== "derived") return;
