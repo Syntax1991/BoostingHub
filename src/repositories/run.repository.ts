@@ -320,13 +320,17 @@ async function insertRaidContents(
  * content row; the rest — removed raid or a boss no longer planned — are
  * dropped. Both stages are kept as they were, so the existing "Run changed
  * since publish" flag still drives Update Roster.
+ *
+ * Returns true when exception rows existed (re-bound to new content ids or
+ * dropped): an open Roster Builder holds the old ids, so the caller bumps the
+ * roster version and its next Save / Update gets ROSTER_ALREADY_CHANGED.
  */
 async function replaceRaidContentsTx(
   ormLike: TxOrm,
   runId: string,
   contents: RunContentWriteSpec[],
   now: string,
-) {
+): Promise<boolean> {
   const existing = (await ormLike.RunRaidContent.where({ runId }).all()) as Record<string, unknown>[];
   const raidIdByContentId = new Map(existing.map((row) => [asString(row.id), asString(row.raidId)]));
   const keptExceptions =
@@ -339,7 +343,7 @@ async function replaceRaidContentsTx(
     await ormLike.RunRaidContent.where({ id: asString(row.id) }).delete();
   }
   await insertRaidContents(ormLike, runId, contents, now);
-  if (keptExceptions.length === 0) return;
+  if (keptExceptions.length === 0) return false;
 
   const inserted = (await ormLike.RunRaidContent.where({ runId }).all()) as Record<string, unknown>[];
   const contentByRaidId = new Map(inserted.map((row) => [asString(row.raidId), row]));
@@ -369,6 +373,7 @@ async function replaceRaidContentsTx(
       createdAt: asString(row.createdAt) || now,
     });
   }
+  return true;
 }
 
 /**
@@ -1155,6 +1160,8 @@ export const runRepository = {
    *   derived title after a Raid Lead change) — bump the roster version so the
    *   current Discord roster message is edited in place;
    * - "NONE": nothing roster-related changed.
+   * Independently, a content replacement that re-binds or drops boss
+   * exceptions bumps the roster version (draft or published).
    * An edit that commits first makes a concurrent Start refuse (unpublished
    * changes); an edit queued behind a committed Start fails here.
    */
@@ -1192,9 +1199,12 @@ export const runRepository = {
       }
       const now = new Date().toISOString();
       await txOrm.Run.where({ id }).update({ ...fields, updatedAt: now });
-      if (options.contents) {
-        await replaceRaidContentsTx(txOrm, id, options.contents, now);
-      }
+      // Boss exceptions re-bound / dropped by a content replacement: the roster
+      // version moves so an open Roster Builder refreshes instead of sending
+      // exceptions for content ids that no longer exist.
+      const bossExceptionsMoved = options.contents
+        ? await replaceRaidContentsTx(txOrm, id, options.contents, now)
+        : false;
       if (hooks.failAfterRunUpdate) {
         throw new Error("TEST_HOOK_FAIL_AFTER_RUN_UPDATE");
       }
@@ -1209,10 +1219,16 @@ export const runRepository = {
       if (options.scopeAnnouncement) {
         await insertAnnouncementIgnoreDuplicateTx(txOrm, options.scopeAnnouncement);
       }
-      if (roster?.publishedAt && options.rosterEffect === "MARK_CHANGED") {
-        await txOrm.RunRoster.where({ id: roster.id }).update({ runChangedSinceAck: true, updatedAt: now });
-      } else if (roster?.publishedAt && options.rosterEffect === "REFRESH_EMBED") {
-        await txOrm.RunRoster.where({ id: roster.id }).update({ version: roster.version + 1, updatedAt: now });
+      const bumpVersion = Boolean(
+        roster && (bossExceptionsMoved || (roster.publishedAt && options.rosterEffect === "REFRESH_EMBED")),
+      );
+      const markChanged = Boolean(roster?.publishedAt && options.rosterEffect === "MARK_CHANGED");
+      if (roster && (bumpVersion || markChanged)) {
+        await txOrm.RunRoster.where({ id: roster.id }).update({
+          ...(markChanged ? { runChangedSinceAck: true } : {}),
+          ...(bumpVersion ? { version: roster.version + 1 } : {}),
+          updatedAt: now,
+        });
       }
       if (options.writeInTx) {
         await options.writeInTx(txOrm);
