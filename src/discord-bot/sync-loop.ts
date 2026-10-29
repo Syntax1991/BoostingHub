@@ -22,7 +22,6 @@ import {
 import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
 import { syncGlobalAnnouncements } from "@/discord-bot/global-announcements";
-import { buildVoicePresenceReports, isVoiceCacheTrusted, shouldReportVoicePresence } from "@/discord-bot/voice-presence-report";
 import {
   isDiscordPermanentDmError,
   isDiscordPermissionError,
@@ -30,6 +29,7 @@ import {
   isDiscordUnknownMessageError,
 } from "@/discord-bot/discord-api-errors";
 import { fetchChannelTranscript } from "@/discord-bot/transcript-fetch";
+import { buildVoicePresenceReports, isVoiceCacheTrusted, shouldReportVoicePresence } from "@/discord-bot/voice-presence-report";
 import {
   createReportScanState,
   scanReportChannels,
