@@ -1,7 +1,7 @@
 import type { LateFillHelpRole } from "@/lib/late-fill-help";
 import type { RunScopeChange } from "@/lib/run-scope-change";
 import type { BotEnv } from "@/discord-bot/env";
-import type { RaidDifficulty, RunLootType } from "@/models/enums";
+import type { RaidDifficulty, RunLootType, WowClass } from "@/models/enums";
 
 export class BotApiError extends Error {
   readonly status: number;
@@ -250,6 +250,8 @@ export class BotApiClient {
         scopeChanges?: RunScopeChange[];
         /** LATE_FILL_HELP only: roles to ping with their missing counts; optional for an older API. */
         helpRoles?: LateFillHelpRole[];
+        /** LATE_FILL_HELP only: classes whose buffs the roster misses; optional for an older API. */
+        helpClasses?: WowClass[];
         scheduledStartAt: string;
         productLabel: string;
         /** Compact Run identity; optional for an older API. */

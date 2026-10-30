@@ -22,7 +22,11 @@ import {
 import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
 import { syncGlobalAnnouncements } from "@/discord-bot/global-announcements";
-import { buildLateFillHelpMessage, type LateFillPingRoleIds } from "@/discord-bot/messages/late-fill-help-message";
+import {
+  buildLateFillHelpMessage,
+  resolveClassRoleIds,
+  type LateFillPingRoleIds,
+} from "@/discord-bot/messages/late-fill-help-message";
 import {
   isDiscordPermanentDmError,
   isDiscordPermissionError,
@@ -30,6 +34,7 @@ import {
   isDiscordUnknownMessageError,
 } from "@/discord-bot/discord-api-errors";
 import { fetchChannelTranscript } from "@/discord-bot/transcript-fetch";
+import type { WowClass } from "@/models/enums";
 import { buildVoicePresenceReports, isVoiceCacheTrusted, shouldReportVoicePresence } from "@/discord-bot/voice-presence-report";
 import {
   createReportScanState,
@@ -1528,7 +1533,14 @@ async function syncRunAnnouncement(
   }
 
   if (item.type === "LATE_FILL_HELP") {
-    const message = buildLateFillHelpMessage({ roles: item.helpRoles ?? [], pingRoleIds });
+    const classes = item.helpClasses ?? [];
+    const { roleIds: classRoleIds, unresolved } = await guildClassRoleIds(client, runChannelId, classes);
+    if (unresolved.length > 0) {
+      console.warn(
+        `[discord-bot] Late Fill help ${item.announcementId}: no unique Guild role for ${unresolved.join(", ")} — named without a ping`,
+      );
+    }
+    const message = buildLateFillHelpMessage({ roles: item.helpRoles ?? [], pingRoleIds, classes, classRoleIds });
     if (!message) {
       console.warn(`[discord-bot] Late Fill help ${item.announcementId}: no ping role configured for its roles — skipped`);
       await api.recordDiscordState(item.runId, { kind: "run-announcement", announcementId: item.announcementId, result: "SKIPPED" });
@@ -1578,6 +1590,23 @@ async function syncRunAnnouncement(
           });
 
   await postRunAnnouncement(api, item, runChannelId, (channel) => channel.send({ embeds: [embed] }), client);
+}
+
+/** Class → Guild role id from the Guild of the Run channel (gateway role cache, no extra Discord request). */
+async function guildClassRoleIds(client: Client, runChannelId: string, classes: readonly WowClass[]) {
+  if (classes.length === 0) return resolveClassRoleIds([], []);
+  try {
+    const channel = await client.channels.fetch(runChannelId);
+    const roles = (channel as TextChannel).guild.roles.cache.map((role) => ({
+      id: role.id,
+      name: role.name,
+      managed: role.managed,
+    }));
+    return resolveClassRoleIds(roles, classes);
+  } catch {
+    // Unknown channel / missing access: the post below reports that properly.
+    return resolveClassRoleIds([], classes);
+  }
 }
 
 /**

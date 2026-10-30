@@ -162,6 +162,19 @@ export function summarizeRaidBuffCoverageByClass(coverage: RaidBuffCoverage): Ra
 }
 
 /**
+ * Provider classes whose tracked buffs nothing on this roster covers, deduped,
+ * in definition order — from the same coverage as the Roster tab. Empty when
+ * any participant's class is unknown: that participant may well bring the
+ * buff, so "missing" could not be proven.
+ */
+export function missingBuffProviderClasses(participants: readonly RaidBuffParticipant[]): WowClass[] {
+  if (participants.some((participant) => !participant.wowClass)) return [];
+  return summarizeRaidBuffCoverageByClass(evaluateRaidBuffCoverage(participants))
+    .classes.filter((item) => !item.covered)
+    .map((item) => item.wowClass);
+}
+
+/**
  * Resolves the class a draft-selected participation contributes to buff coverage.
  * Returns null only when no class is known.
  */

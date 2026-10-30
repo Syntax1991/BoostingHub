@@ -10,20 +10,55 @@ import {
   type LateFillHelpRole,
   type LateFillHelpRoleKey,
 } from "@/lib/late-fill-help";
-import { projectRunStaffingFromRun } from "@/lib/run-staffing";
+import { CLASS_LABELS } from "@/lib/labels";
+import { projectRunStaffingFromRun, selectedRosterSignups } from "@/lib/run-staffing";
+import type { WowClass } from "@/models/enums";
 import { rosterRepository } from "@/repositories/roster.repository";
 import { runDiscordAnnouncementRepository } from "@/repositories/run-discord-announcement.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
-import { runRepository } from "@/repositories/run.repository";
+import { runRepository, type RunListRecord } from "@/repositories/run.repository";
+import { missingBuffProviderClasses, resolveBuffContributorClass } from "@/services/roster-raid-buffs";
 
 export type LateFillHelpResult = {
   /** Roles the request pings (one Run-channel message, sent by the bot). */
   pinged: LateFillHelpRole[];
+  /** Classes whose buffs the saved roster misses, named in the same message. */
+  missingClassBuffs: WowClass[];
   /** Roles asked for too recently — not pinged again yet. */
   cooling: Array<{ role: LateFillHelpRoleKey; availableAt: string }>;
   /** Missing roles without a Guild ping role configured. */
   notConfigured: LateFillHelpRoleKey[];
 };
+
+/**
+ * Classes whose buffs the SAVED roster misses (same picks as the staffing, same
+ * coverage as the Roster tab). Unknown classes → none, see missingBuffProviderClasses.
+ */
+function savedRosterMissingClassBuffs(run: RunListRecord): WowClass[] {
+  return missingBuffProviderClasses([
+    ...selectedRosterSignups(run).map(({ signup }) => ({
+      signupId: signup.id,
+      userName: signup.userName,
+      participationType: signup.participationType,
+      lootbuddyMode: null,
+      wowClass: resolveBuffContributorClass({
+        participationType: signup.participationType,
+        lootbuddyMode: null,
+        lootbuddyClass: signup.lootbuddyClass,
+        characterWowClass: signup.character?.wowClass ?? null,
+      }),
+      characterName: signup.character?.name ?? null,
+    })),
+    ...(run.roster?.externalBoosters ?? []).map((booster) => ({
+      signupId: `external:${booster.id}`,
+      userName: booster.name,
+      participationType: booster.participationType,
+      lootbuddyMode: null,
+      wowClass: booster.wowClass,
+      characterName: booster.name,
+    })),
+  ]);
+}
 
 function roleList(roles: readonly LateFillHelpRoleKey[]): string {
   return roles.map((role) => LATE_FILL_HELP_ROLE_LABELS[role].many).join(", ");
@@ -40,7 +75,10 @@ function roleList(roles: readonly LateFillHelpRoleKey[]): string {
  *   right before posting (getRunAnnouncementDeliveryAuthority).
  * - What: only roles the SAVED roster is short of (authoritative staffing, not
  *   an unsaved draft) and that have a DISCORD_PING_ROLE_* configured.
- * - Anti-spam: each role at most once per LATE_FILL_HELP_COOLDOWN_MS per Run,
+ * - Also names the classes whose buffs the saved roster misses (their Guild
+ *   roles are pinged in the same message, resolved by the bot; see
+ *   lib/late-fill-help and discord-bot/messages/late-fill-help-message).
+ * - Anti-spam: each role and class at most once per LATE_FILL_HELP_COOLDOWN_MS per Run,
  *   enforced under the roster row lock, so concurrent clicks send one message.
  * - Never changes the roster, signups or the Run.
  */
@@ -81,6 +119,7 @@ export const lateFillHelpService = {
       runId: run.id,
       rosterId: roster.id,
       roles: configured,
+      classes: savedRosterMissingClassBuffs(run),
       cooldownMs: LATE_FILL_HELP_COOLDOWN_MS,
       now: now.toISOString(),
       scheduledStartAt: run.scheduledStartAt,
@@ -96,13 +135,16 @@ export const lateFillHelpService = {
         429,
       );
     }
-    return { pinged: result.pinged, cooling: result.cooling, notConfigured };
+    return { pinged: result.pinged, missingClassBuffs: result.pingedClasses, cooling: result.cooling, notConfigured };
   },
 };
 
 /** One-line feedback for the Raid Lead after a successful request. */
 export function lateFillHelpFeedback(result: LateFillHelpResult): string {
   const parts = [`Pinged ${formatLateFillHelpRoles(result.pinged)} on Discord.`];
+  if (result.missingClassBuffs.length > 0) {
+    parts.push(`Missing class buffs: ${result.missingClassBuffs.map((wowClass) => CLASS_LABELS[wowClass]).join(", ")}.`);
+  }
   if (result.cooling.length > 0) parts.push(`${roleList(result.cooling.map((row) => row.role))} were asked for recently.`);
   if (result.notConfigured.length > 0) parts.push(`No ping role for ${roleList(result.notConfigured)}.`);
   return parts.join(" ");
