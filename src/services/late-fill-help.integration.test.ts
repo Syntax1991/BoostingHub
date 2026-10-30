@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import {
   buildCustomPingMessage,
@@ -9,6 +9,7 @@ import {
 import { isDomainError } from "@/lib/errors";
 import {
   LATE_FILL_HELP_COOLDOWN_MS,
+  PING_DELIVERY_LABELS,
   parseLateFillHelpClasses,
   parseLateFillHelpCustom,
   parseLateFillHelpRoles,
@@ -21,7 +22,9 @@ import { customPingSchema } from "@/validators/roster";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
 import { venomousCreateInput } from "@/lib/test-run-input";
+import { WOW_CLASSES, type WowClass } from "@/models/enums";
 import { raidRepository } from "@/repositories/raid.repository";
+import { rosterRepository } from "@/repositories/roster.repository";
 import { discordSyncService } from "@/services/discord-sync.service";
 import { lateFillHelpFeedback, lateFillHelpService } from "@/services/late-fill-help.service";
 import { rosterService } from "@/services/roster.service";
@@ -62,6 +65,7 @@ async function cleanupRun(runId: string) {
   await orm.RunDiscordPost.where({ runId }).delete().catch(() => {});
   const roster = (await orm.RunRoster.where({ runId }).first()) as { id: string } | null;
   if (roster) {
+    await orm.RunExternalBooster.where({ rosterId: roster.id }).delete().catch(() => {});
     await orm.RunRosterEntry.where({ rosterId: roster.id }).delete().catch(() => {});
     await orm.RunRoster.where({ id: roster.id }).delete().catch(() => {});
   }
@@ -141,6 +145,25 @@ async function lateFillRun(options: { hoursAhead?: number; channel?: boolean } =
   return runId;
 }
 
+/** No open Tank / Healer / DPS slot; externals bring every class except `missing`. */
+async function fillRosterAndCoverBuffs(runId: string, missing: readonly WowClass[] = []) {
+  await orm.Run.where({ id: runId }).update({ desiredTankCount: 0, desiredHealerCount: 0, desiredDpsCount: 0 });
+  const roster = await rosterRepository.ensure(runId);
+  const now = new Date().toISOString();
+  for (const wowClass of WOW_CLASSES.filter((row) => !missing.includes(row))) {
+    await orm.RunExternalBooster.create({
+      id: crypto.randomUUID(),
+      rosterId: roster.id,
+      name: `Ext ${wowClass}`,
+      wowClass,
+      participationType: "BOOSTER",
+      role: "RANGED_DPS",
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+}
+
 async function helpRows(runId: string) {
   return (await orm.RunDiscordAnnouncement.where({ runId, type: "LATE_FILL_HELP" }).all()) as Array<{
     id: string;
@@ -185,6 +208,11 @@ beforeAll(async () => {
     });
   }
 }, 60_000);
+
+beforeEach(() => {
+  // No test reaches Discord unless it stubs the role list itself.
+  vi.stubEnv("DISCORD_BOT_TOKEN", "");
+});
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -286,11 +314,12 @@ describe("Late Fill help request", () => {
     for (const runId of [noChannel, cancelled, started]) expect(await helpRows(runId)).toHaveLength(0);
   });
 
-  it("nothing missing: refused (a full saved roster needs no help)", async () => {
+  it("nothing missing: no role and no class buff is refused, no message", async () => {
     configurePingRoles({ tank: "1", healer: "2", dps: "3" });
     const runId = await lateFillRun();
-    await orm.Run.where({ id: runId }).update({ desiredTankCount: 0, desiredHealerCount: 0, desiredDpsCount: 0 });
+    await fillRosterAndCoverBuffs(runId);
     expect(await codeOf(lateFillHelpService.request(lead, runId))).toBe("LATE_FILL_HELP_NOTHING_MISSING");
+    expect(await helpRows(runId)).toHaveLength(0);
   });
 
   it("the bot posts only while the Run can still take players: cancelled after the request → no delivery", async () => {
@@ -344,7 +373,85 @@ describe("Late Fill help — missing class buffs", () => {
     expect(third.missingClassBuffs).toEqual(firstResult.missingClassBuffs);
   });
 
-  it("every role cooling down: nothing goes out, classes alone never trigger a message", async () => {
+  it("a full roster that misses only class buffs: one message pinging exactly those classes", async () => {
+    configurePingRoles({ tank: "1", healer: "2", dps: "3" });
+    const runId = await lateFillRun();
+    await fillRosterAndCoverBuffs(runId, ["WARLOCK", "MAGE"]);
+
+    const result = await lateFillHelpService.request(lead, runId);
+    expect(result.pinged).toEqual([]);
+    expect([...result.missingClassBuffs].sort()).toEqual(["MAGE", "WARLOCK"]);
+    expect(lateFillHelpFeedback(result)).toMatch(/^Ping queued\. Missing class buffs: /);
+    const rows = await helpRows(runId);
+    expect(rows).toHaveLength(1);
+    expect(parseLateFillHelpRoles(rows[0]!.helpRoles)).toEqual([]);
+    expect(parseLateFillHelpClasses(rows[0]!.helpRoles).sort()).toEqual(["MAGE", "WARLOCK"]);
+  });
+
+  it("buffs alone share the cooldown: a second click is refused, a newly missing class still goes out", async () => {
+    configurePingRoles({ tank: "1", healer: "2", dps: "3" });
+    const runId = await lateFillRun();
+    await fillRosterAndCoverBuffs(runId, ["WARLOCK"]);
+    const first = new Date();
+    await lateFillHelpService.request(lead, runId, first);
+    const soon = new Date(first.getTime() + 60_000);
+    expect(await codeOf(lateFillHelpService.request(lead, runId, soon))).toBe("LATE_FILL_HELP_COOLDOWN");
+    expect(await helpRows(runId)).toHaveLength(1);
+    await orm.RunExternalBooster.where({ name: "Ext MAGE", rosterId: (await rosterRepository.ensure(runId)).id }).delete();
+    const next = await lateFillHelpService.request(lead, runId, soon);
+    expect(next.missingClassBuffs).toEqual(["MAGE"]);
+    expect(await helpRows(runId)).toHaveLength(2);
+  });
+
+  it("concurrent clicks on a buffs-only request send one message", async () => {
+    configurePingRoles({ tank: "1", healer: "2", dps: "3" });
+    const runId = await lateFillRun();
+    await fillRosterAndCoverBuffs(runId, ["WARLOCK"]);
+    const now = new Date();
+    const results = await Promise.allSettled([1, 2, 3].map(() => lateFillHelpService.request(lead, runId, now)));
+    expect(results.filter((row) => row.status === "fulfilled")).toHaveLength(1);
+    expect(await helpRows(runId)).toHaveLength(1);
+  });
+
+  it("buffs alone with no class role on Discord: refused clearly, nothing queued", async () => {
+    configurePingRoles({ tank: "1", healer: "2", dps: "3" });
+    vi.stubEnv("DISCORD_BOT_TOKEN", "token");
+    vi.stubEnv("DISCORD_GUILD_ID", "guild-1");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify([{ id: "1", name: "Tank", managed: false }]), { status: 200 })));
+    const runId = await lateFillRun();
+    await fillRosterAndCoverBuffs(runId, ["WARLOCK"]);
+    expect(await codeOf(lateFillHelpService.request(lead, runId))).toBe("LATE_FILL_HELP_NOT_CONFIGURED");
+    expect(await helpRows(runId)).toHaveLength(0);
+    vi.unstubAllGlobals();
+  });
+
+  it("an unknown rostered class proves no buff missing: a full roster sends nothing", async () => {
+    configurePingRoles({ tank: "1", healer: "2", dps: "3" });
+    const runId = await lateFillRun();
+    await orm.Run.where({ id: runId }).update({ desiredTankCount: 0, desiredHealerCount: 0, desiredDpsCount: 0 });
+    const now = new Date().toISOString();
+    const signupId = crypto.randomUUID();
+    await orm.RunSignup.create({
+      id: signupId,
+      runId,
+      userId: ids.admin,
+      characterId: null,
+      participationType: "LOOTBUDDY",
+      isBackup: false,
+      status: "PENDING",
+      publishedRole: null,
+      lootbuddyMode: "LOOT_ONLY",
+      lootbuddyClass: null,
+      lootbuddyVerification: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.saveDraftSelection(lead, { runId, version: view.roster.version, selections: [{ signupId, selectedRole: null }] });
+    expect(await codeOf(lateFillHelpService.request(lead, runId))).toBe("LATE_FILL_HELP_NOTHING_MISSING");
+  });
+
+  it("every role and class cooling down: nothing goes out", async () => {
     configurePingRoles({ tank: "1", healer: "2", dps: "3" });
     const runId = await lateFillRun();
     const first = new Date();
@@ -529,16 +636,56 @@ describe("Ping roles — custom request", () => {
     expect(cooled.automatic.notes[0]).toContain("asked for recently");
   });
 
-  it("the dialog needs the same manage rights; a roster without gaps offers Custom and says why Automatic is empty", async () => {
+  it("the dialog needs the same manage rights; nothing missing offers Custom and says why Automatic is empty", async () => {
     configurePingRoles({ tank: "900", healer: "901", dps: "902" });
     stubDiscordRoles();
     const runId = await lateFillRun();
     expect(await codeOf(lateFillHelpService.dialogData(otherLead, runId))).toBe("RUN_NOT_MANAGEABLE");
-    await orm.Run.where({ id: runId }).update({ desiredTankCount: 0, desiredHealerCount: 0, desiredDpsCount: 0 });
+    await fillRosterAndCoverBuffs(runId);
     const data = await lateFillHelpService.dialogData(lead, runId);
     expect(data.automatic.lines).toEqual([]);
-    expect(data.automatic.emptyReason).toContain("no open");
+    expect(data.automatic.emptyReason).toContain("no role and no class buff");
     expect(data.roles).not.toBeNull();
+  });
+
+  it("the preview of a full roster missing only buffs is the class line alone; a Lootbuddy request still works there", async () => {
+    configurePingRoles({ tank: "900", healer: "901", dps: "902" });
+    stubDiscordRoles();
+    const runId = await lateFillRun();
+    await fillRosterAndCoverBuffs(runId, ["WARLOCK"]);
+    const data = await lateFillHelpService.dialogData(lead, runId);
+    expect(data.automatic.lines).toEqual([{ text: "Missing class buffs: Warlock", mentions: ["Warlock"] }]);
+    await lateFillHelpService.requestCustom(lead, { runId, text: "Need 1 LB for Coiled Altar", roles: ["LOOTBUDDY"] });
+    expect(await helpRows(runId)).toHaveLength(1);
+  });
+
+  it("delivery status: queued until the bot reports; only SENT reads as delivered, failures never do", async () => {
+    configurePingRoles({ tank: "900", healer: "901", dps: "902" });
+    stubDiscordRoles();
+    const runId = await lateFillRun();
+    expect((await lateFillHelpService.dialogData(lead, runId)).lastPingStatus).toBeNull();
+
+    await lateFillHelpService.requestCustom(lead, { runId, text: "Need 1 LB", roles: ["LOOTBUDDY"] });
+    const [row] = await helpRows(runId);
+    expect((await lateFillHelpService.dialogData(lead, runId)).lastPingStatus).toBe("PENDING");
+
+    await discordSyncService.recordRunAnnouncementDelivery({ announcementId: row!.id, result: "FAILED_PERMANENT" });
+    expect((await lateFillHelpService.dialogData(lead, runId)).lastPingStatus).toBe("FAILED_PERMANENT");
+    // A stale SENT report cannot turn a failure into a delivery.
+    await discordSyncService.recordRunAnnouncementDelivery({ announcementId: row!.id, result: "SENT" });
+    expect((await lateFillHelpService.dialogData(lead, runId)).lastPingStatus).toBe("FAILED_PERMANENT");
+
+    for (const status of ["PENDING", "SKIPPED", "FAILED_PERMANENT"] as const) {
+      expect(PING_DELIVERY_LABELS[status].text).not.toMatch(/delivered to Discord/);
+    }
+    expect(PING_DELIVERY_LABELS.SENT.text).toMatch(/delivered to Discord/);
+    expect(PING_DELIVERY_LABELS.SKIPPED.failed && PING_DELIVERY_LABELS.FAILED_PERMANENT.failed).toBe(true);
+  });
+
+  it("success feedback says queued, never that Discord got it", () => {
+    const text = lateFillHelpFeedback({ pinged: [{ role: "DPS", missing: 3 }], missingClassBuffs: [], cooling: [], notConfigured: [] });
+    expect(text).toBe("Ping queued: 3 DPS.");
+    expect(text).not.toMatch(/pinged|sent|delivered/i);
   });
 
   it("the Discord role list failing leaves Automatic usable, and Custom knows it has no roles", async () => {
@@ -667,6 +814,16 @@ describe("Late Fill help Discord message", () => {
     expect(
       buildLateFillHelpMessage({ roles: [{ role: "DPS", missing: 1 }], pingRoleIds, classes: ["MAGE"], classRoleIds: {} })!.content,
     ).toBe("**1 more DPS needed here** <@&902>\n**Missing class buffs: Mage**");
+  });
+
+  it("only missing classes: the class line alone, allowedMentions exactly those classes", () => {
+    const message = buildLateFillHelpMessage({ roles: [], pingRoleIds, classes: ["WARLOCK"], classRoleIds: { WARLOCK: "950" } });
+    expect(message).toEqual({
+      content: "**Missing class buffs: Warlock** <@&950>",
+      allowedMentions: { parse: [], roles: ["950"], users: [], repliedUser: false },
+    });
+    expect(buildLateFillHelpMessage({ roles: [], pingRoleIds, classes: ["WARLOCK"], classRoleIds: {} })).toBeNull();
+    expect(buildLateFillHelpMessage({ roles: [], pingRoleIds, classes: [] })).toBeNull();
   });
 
   it("no missing class: only the role line, exactly as before", () => {

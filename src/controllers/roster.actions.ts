@@ -233,7 +233,7 @@ export async function requestCustomPingAction(input: unknown): Promise<ActionRes
     const user = await requireUser();
     const parsed = customPingSchema.parse(input);
     const result = await lateFillHelpService.requestCustom(user, parsed);
-    return { ok: true, message: `Pinged ${result.roles.map((key) => pingRoleLabel(key)).join(", ")} on Discord.` };
+    return { ok: true, message: `Ping queued: ${result.roles.map((key) => pingRoleLabel(key)).join(", ")}.` };
   } catch (error) {
     return mapActionError(error);
   }

@@ -35,14 +35,14 @@ function harness(options: { deliver?: boolean; send?: () => Promise<unknown>; fe
   return { client: { channels: { fetch } } as unknown as Client, api, send, fetch, recordDiscordState };
 }
 
-function item(overrides: { helpCustom?: CustomPing | null; announcementId?: string; helpClasses?: Array<"WARLOCK"> } = {}) {
+function item(overrides: { helpCustom?: CustomPing | null; announcementId?: string; helpClasses?: Array<"WARLOCK">; helpRoles?: Array<{ role: "DPS"; missing: number }> } = {}) {
   return {
     announcementId: overrides.announcementId ?? crypto.randomUUID(),
     runId: "run-1",
     type: "LATE_FILL_HELP" as const,
     runChannelId: "run-channel-1",
     previousScheduledStartAt: null,
-    helpRoles: [{ role: "DPS" as const, missing: 3 }],
+    helpRoles: overrides.helpRoles ?? [{ role: "DPS" as const, missing: 3 }],
     helpClasses: overrides.helpClasses ?? [],
     helpCustom: overrides.helpCustom ?? null,
     scheduledStartAt: "2026-11-01T18:00:00.000Z",
@@ -84,6 +84,20 @@ describe("Ping roles bot delivery", () => {
         allowedMentions: { parse: [], roles: ["902", "950"], users: [], repliedUser: false },
       }),
     );
+  });
+
+  it("automatic with only missing class buffs: one message pinging only that class, reported SENT", async () => {
+    const h = harness();
+    const work = item({ helpRoles: [], helpClasses: ["WARLOCK"] });
+    await syncRunAnnouncement(h.client, h.api, work, new Map(), pingRoleIds);
+    expect(h.send).toHaveBeenCalledTimes(1);
+    expect(h.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: "**Missing class buffs: Warlock** <@&950>",
+        allowedMentions: { parse: [], roles: ["950"], users: [], repliedUser: false },
+      }),
+    );
+    expect(h.recordDiscordState).toHaveBeenCalledWith("run-1", sent(work.announcementId));
   });
 
   it("no chosen role resolves any more (missing or ambiguous): nothing is posted, reported SKIPPED", async () => {

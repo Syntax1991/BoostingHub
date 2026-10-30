@@ -21,7 +21,7 @@ import {
 } from "@/lib/late-fill-help";
 import { CLASS_LABELS } from "@/lib/labels";
 import { projectRunStaffingFromRun, selectedRosterSignups } from "@/lib/run-staffing";
-import type { WowClass } from "@/models/enums";
+import type { DiscordDeliveryStatus, WowClass } from "@/models/enums";
 import { rosterRepository } from "@/repositories/roster.repository";
 import { runDiscordAnnouncementRepository } from "@/repositories/run-discord-announcement.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
@@ -73,6 +73,13 @@ function roleList(roles: readonly LateFillHelpRoleKey[]): string {
   return roles.map((role) => LATE_FILL_HELP_ROLE_LABELS[role].many).join(", ");
 }
 
+const NOTHING_MISSING_MESSAGE = "The saved roster misses no role and no class buff.";
+
+/** "Tanks, DPS, Warlock" */
+function pingNames(roles: readonly LateFillHelpRoleKey[], classes: readonly WowClass[]): string {
+  return [...roles.map((role) => LATE_FILL_HELP_ROLE_LABELS[role].many), ...classes.map((wowClass) => CLASS_LABELS[wowClass])].join(", ");
+}
+
 /** "again in 12 min" for the earliest of the cooling roles. */
 function againIn(availableAts: readonly string[], now: Date): string {
   const next = availableAts.map((at) => Date.parse(at)).sort((a, b) => a - b)[0]!;
@@ -120,6 +127,8 @@ export type PingRolesDialogData = {
   };
   /** Roles a custom request can ping; null when Discord could not be read. */
   roles: Array<{ key: PingRoleKey; label: string }> | null;
+  /** The bot's delivery outcome of this Run's newest ping; null when there is none. */
+  lastPingStatus: DiscordDeliveryStatus | null;
 };
 
 /**
@@ -135,7 +144,8 @@ export type PingRolesDialogData = {
  *   an unsaved draft) and that have a DISCORD_PING_ROLE_* configured.
  * - Also names the classes whose buffs the saved roster misses (their Guild
  *   roles are pinged in the same message, resolved by the bot; see
- *   lib/late-fill-help and discord-bot/messages/late-fill-help-message).
+ *   lib/late-fill-help and discord-bot/messages/late-fill-help-message), on a
+ *   full roster too. Nothing missing at all → no message.
  * - Anti-spam: each role and class at most once per LATE_FILL_HELP_COOLDOWN_MS per Run,
  *   enforced under the roster row lock, so concurrent clicks send one message.
  * - Never changes the roster, signups or the Run.
@@ -153,14 +163,19 @@ export const lateFillHelpService = {
       runDiscordAnnouncementRepository.recentPings(run.id, now.toISOString(), LATE_FILL_HELP_COOLDOWN_MS),
     ]);
     const missing = lateFillMissingRoles(projectRunStaffingFromRun(run).missing);
+    const missingClasses = savedRosterMissingClassBuffs(run);
     const pingRoles = getDiscordPingRoleConfig();
     const sendable = missing.filter((row) => pingRoles[row.role] && !lastAt.has(row.role));
+    const classes = missingClasses.filter((wowClass) => !lastAt.has(wowClass));
     const notes: string[] = [];
-    const cooling = missing.filter((row) => lastAt.has(row.role)).map((row) => row.role);
+    const coolingRoles = missing.filter((row) => lastAt.has(row.role)).map((row) => row.role);
+    const coolingClasses = missingClasses.filter((wowClass) => lastAt.has(wowClass));
     const notConfigured = missing.filter((row) => !pingRoles[row.role]).map((row) => row.role);
-    if (cooling.length > 0) {
-      const availableAts = cooling.map((role) => new Date(lastAt.get(role)! + LATE_FILL_HELP_COOLDOWN_MS).toISOString());
-      notes.push(`${roleList(cooling)} asked for recently — ${againIn(availableAts, now)}.`);
+    if (coolingRoles.length + coolingClasses.length > 0) {
+      const availableAts = [...coolingRoles, ...coolingClasses].map((key) =>
+        new Date(lastAt.get(key)! + LATE_FILL_HELP_COOLDOWN_MS).toISOString(),
+      );
+      notes.push(`${pingNames(coolingRoles, coolingClasses)} asked for recently — ${againIn(availableAts, now)}.`);
     }
     if (notConfigured.length > 0) notes.push(`No ping role for ${roleList(notConfigured)}.`);
 
@@ -170,14 +185,15 @@ export const lateFillHelpService = {
         text: `${missingRolesPhrase(sendable)} needed here`,
         mentions: sendable.map((row) => pingRoleLabel(row.role)),
       });
-      const classes = savedRosterMissingClassBuffs(run).filter((wowClass) => !lastAt.has(wowClass));
-      if (classes.length > 0) {
-        lines.push({
-          text: missingClassBuffsPhrase(classes),
-          // Without a role list the bot still decides; name the classes as it would ping them.
-          mentions: classes.filter((wowClass) => !roles || roles.includes(wowClass)).map((wowClass) => pingRoleLabel(wowClass)),
-        });
-      }
+    }
+    // Missing roles nobody can ping leave the request refused, whatever the buffs (see `request`).
+    const refused = missing.length > 0 && notConfigured.length === missing.length;
+    if (classes.length > 0 && !refused) {
+      lines.push({
+        text: missingClassBuffsPhrase(classes),
+        // Without a role list the bot still decides; name the classes as it would ping them.
+        mentions: classes.filter((wowClass) => !roles || roles.includes(wowClass)).map((wowClass) => pingRoleLabel(wowClass)),
+      });
     }
     return {
       automatic: {
@@ -185,12 +201,13 @@ export const lateFillHelpService = {
         emptyReason:
           lines.length > 0
             ? null
-            : missing.length === 0
-              ? "The saved roster has no open Tank, Healer or DPS slot."
+            : missing.length === 0 && missingClasses.length === 0
+              ? NOTHING_MISSING_MESSAGE
               : "Nothing to ping right now.",
         notes,
       },
       roles: roles?.map((key) => ({ key, label: pingRoleLabel(key) })) ?? null,
+      lastPingStatus: await runDiscordAnnouncementRepository.latestHelpRequestStatus(run.id),
     };
   },
 
@@ -250,22 +267,26 @@ export const lateFillHelpService = {
     const run = await loadPingableRun(user, runId);
 
     const missing = lateFillMissingRoles(projectRunStaffingFromRun(run).missing);
-    if (missing.length === 0) {
-      throw new DomainError(
-        "LATE_FILL_HELP_NOTHING_MISSING",
-        "The saved roster has no open Tank, Healer or DPS slot.",
-        409,
-      );
+    const classes = savedRosterMissingClassBuffs(run);
+    if (missing.length === 0 && classes.length === 0) {
+      throw new DomainError("LATE_FILL_HELP_NOTHING_MISSING", NOTHING_MISSING_MESSAGE, 409);
     }
     const pingRoles = getDiscordPingRoleConfig();
     const configured = missing.filter((row) => pingRoles[row.role]);
     const notConfigured = missing.filter((row) => !pingRoles[row.role]).map((row) => row.role);
-    if (configured.length === 0) {
+    if (missing.length > 0 && configured.length === 0) {
       throw new DomainError(
         "LATE_FILL_HELP_NOT_CONFIGURED",
         `No Discord ping role is configured for ${roleList(notConfigured)}.`,
         409,
       );
+    }
+    if (missing.length === 0) {
+      // Buffs alone: say so now when no class has a Guild role. Unreadable → the bot still decides.
+      const available = await availablePingRoles();
+      if (available && !classes.some((wowClass) => available.includes(wowClass))) {
+        throw new DomainError("LATE_FILL_HELP_NOT_CONFIGURED", `No Discord role for ${pingNames([], classes)}.`, 409);
+      }
     }
 
     const roster = await rosterRepository.ensure(run.id);
@@ -273,7 +294,7 @@ export const lateFillHelpService = {
       runId: run.id,
       rosterId: roster.id,
       roles: configured,
-      classes: savedRosterMissingClassBuffs(run),
+      classes,
       cooldownMs: LATE_FILL_HELP_COOLDOWN_MS,
       now: now.toISOString(),
       scheduledStartAt: run.scheduledStartAt,
@@ -284,7 +305,7 @@ export const lateFillHelpService = {
     if (!result.created) {
       throw new DomainError(
         "LATE_FILL_HELP_COOLDOWN",
-        `${roleList(result.cooling.map((row) => row.role))} were already asked for recently — ${againIn(result.cooling.map((row) => row.availableAt), now)}.`,
+        `${pingNames(result.cooling.map((row) => row.role), result.coolingClasses.map((row) => row.wowClass))} were already asked for recently — ${againIn([...result.cooling, ...result.coolingClasses].map((row) => row.availableAt), now)}.`,
         429,
       );
     }
@@ -292,9 +313,9 @@ export const lateFillHelpService = {
   },
 };
 
-/** One-line feedback for the Raid Lead after a successful request. */
+/** One-line feedback after a successful request: queued for the bot, not yet posted on Discord. */
 export function lateFillHelpFeedback(result: LateFillHelpResult): string {
-  const parts = [`Pinged ${formatLateFillHelpRoles(result.pinged)} on Discord.`];
+  const parts = [result.pinged.length > 0 ? `Ping queued: ${formatLateFillHelpRoles(result.pinged)}.` : "Ping queued."];
   if (result.missingClassBuffs.length > 0) {
     parts.push(`Missing class buffs: ${result.missingClassBuffs.map((wowClass) => CLASS_LABELS[wowClass]).join(", ")}.`);
   }

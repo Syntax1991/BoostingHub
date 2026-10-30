@@ -11,6 +11,7 @@ import {
   CUSTOM_PING_TEXT_MAX,
   customPingTextError,
   normalizeCustomPingText,
+  PING_DELIVERY_LABELS,
   type PingRoleKey,
 } from "@/lib/late-fill-help";
 import type { PingPreviewLine, PingRolesDialogData } from "@/services/late-fill-help.service";
@@ -264,6 +265,11 @@ export function RosterPingRolesDialog({
         {sendError ? (
           <p role="alert" className="text-sm text-danger">
             {sendError}
+          </p>
+        ) : null}
+        {data?.lastPingStatus ? (
+          <p className={`text-xs ${PING_DELIVERY_LABELS[data.lastPingStatus].failed ? "text-danger" : "text-muted"}`}>
+            {PING_DELIVERY_LABELS[data.lastPingStatus].text}
           </p>
         ) : null}
       </div>

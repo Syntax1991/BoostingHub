@@ -147,7 +147,7 @@ export async function insertAnnouncementIgnoreDuplicateTx(
 }
 
 export type LateFillHelpWriteResult = {
-  /** The PENDING announcement the bot will post; null when every role was cooling down. */
+  /** The PENDING announcement the bot will post; null when every role and class was cooling down. */
   created: RunDiscordAnnouncementRecord | null;
   /** Roles this request pings. */
   pinged: LateFillHelpRole[];
@@ -155,6 +155,8 @@ export type LateFillHelpWriteResult = {
   pingedClasses: WowClass[];
   /** Roles asked for too recently on this Run, with when they may be asked again. */
   cooling: Array<{ role: LateFillHelpRoleKey; availableAt: string }>;
+  /** Classes asked for too recently on this Run. */
+  coolingClasses: Array<{ wowClass: WowClass; availableAt: string }>;
 };
 
 type HelpRequestIdentity = {
@@ -207,6 +209,15 @@ export const runDiscordAnnouncementRepository = {
     return lastPingAtByKey(orm, runId, now, cooldownMs);
   },
 
+  /** The bot's delivery outcome of the Run's newest ping (automatic or custom); null when there is none. */
+  async latestHelpRequestStatus(runId: string): Promise<DiscordDeliveryStatus | null> {
+    const rows = (await orm.RunDiscordAnnouncement.where({ runId, type: "LATE_FILL_HELP" })
+      .orderBy((row) => row.createdAt.desc())
+      .limit(1)
+      .all()) as Array<Record<string, unknown>>;
+    return rows[0] ? mapRunDiscordAnnouncementRow(rows[0]).status : null;
+  },
+
   /**
    * A custom request, under the same lock and cooldown as Late Fill help. A
    * role the Raid Lead chose is never silently dropped: with any of them
@@ -233,10 +244,9 @@ export const runDiscordAnnouncementRepository = {
   /**
    * Late Fill help, serialized per Run by the roster row lock (the same lock
    * roster and attendance writes take): roles and classes pinged within
-   * `cooldownMs` are dropped, the rest go into ONE PENDING announcement.
-   * Classes only accompany a role: with every role cooling down nothing goes
-   * out. Concurrent clicks therefore produce one message, never two pings of
-   * the same role or class.
+   * `cooldownMs` are dropped, the rest go into ONE PENDING announcement. With
+   * nothing left nothing goes out. Concurrent clicks therefore produce one
+   * message, never two pings of the same role or class.
    */
   async createLateFillHelp(input: {
     runId: string;
@@ -257,14 +267,20 @@ export const runDiscordAnnouncementRepository = {
       const cooling = input.roles
         .filter((row) => lastAt.has(row.role))
         .map((row) => ({ role: row.role, availableAt: new Date(lastAt.get(row.role)! + input.cooldownMs).toISOString() }));
+      const coolingClasses = input.classes
+        .filter((wowClass) => lastAt.has(wowClass))
+        .map((wowClass) => ({ wowClass, availableAt: new Date(lastAt.get(wowClass)! + input.cooldownMs).toISOString() }));
       const pinged = input.roles.filter((row) => !lastAt.has(row.role));
-      if (pinged.length === 0) return { created: null, pinged, pingedClasses: [], cooling };
       const pingedClasses = input.classes.filter((wowClass) => !lastAt.has(wowClass));
+      if (pinged.length === 0 && pingedClasses.length === 0) {
+        return { created: null, pinged, pingedClasses, cooling, coolingClasses };
+      }
       return {
         created: await insertHelpRequestTx(txOrm, input, serializeLateFillHelp(pinged, pingedClasses), input.now),
         pinged,
         pingedClasses,
         cooling,
+        coolingClasses,
       };
     });
   },

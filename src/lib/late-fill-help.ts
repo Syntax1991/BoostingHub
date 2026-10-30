@@ -1,6 +1,6 @@
 import { CLASS_LABELS } from "@/lib/labels";
 import type { RunStaffingShortage } from "@/lib/run-staffing";
-import { WOW_CLASSES, type RunStatus, type WowClass } from "@/models/enums";
+import { WOW_CLASSES, type DiscordDeliveryStatus, type RunStatus, type WowClass } from "@/models/enums";
 
 /**
  * Late Fill help: the Raid Lead asks the Guild's ping role for each role the
@@ -97,6 +97,17 @@ export function resolvePingRoleIds<K extends PingRoleKey>(
   }
   return { roleIds, unresolved };
 }
+
+/**
+ * What the bot reported for a ping. Only SENT claims a delivery: until the bot
+ * reports, a ping is merely queued, and SKIPPED / FAILED_PERMANENT posted nothing.
+ */
+export const PING_DELIVERY_LABELS: Record<DiscordDeliveryStatus, { text: string; failed: boolean }> = {
+  PENDING: { text: "Last ping: queued, waiting for the bot.", failed: false },
+  SENT: { text: "Last ping: delivered to Discord.", failed: false },
+  SKIPPED: { text: "Last ping: not sent, no Discord role or channel to post to.", failed: true },
+  FAILED_PERMANENT: { text: "Last ping: not delivered, the bot could not post in the Run channel.", failed: true },
+};
 
 export const CUSTOM_PING_TEXT_MAX = 200;
 
