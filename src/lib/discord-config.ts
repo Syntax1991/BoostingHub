@@ -35,6 +35,13 @@ export function getDiscordBoosterRoleSyncConfig(): DiscordRoleAccessSyncConfig |
   return getDiscordRoleAccessSyncConfig();
 }
 
+/** Server-only: what a read of the community guild needs (the Ping roles dialog's role list). */
+export function getDiscordGuildReadConfig(): { botToken: string; guildId: string } | null {
+  const botToken = process.env.DISCORD_BOT_TOKEN?.trim();
+  const guildId = process.env.DISCORD_GUILD_ID?.trim();
+  return botToken && guildId ? { botToken, guildId } : null;
+}
+
 /** The community guild (DISCORD_GUILD_ID) — public id, used for channel deep links. */
 export function getDiscordGuildId(): string | null {
   const value = process.env.DISCORD_GUILD_ID?.trim();

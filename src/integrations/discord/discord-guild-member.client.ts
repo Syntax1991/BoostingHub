@@ -35,6 +35,31 @@ function optionalString(value: unknown): string | null {
  * bot token in errors.
  */
 export const discordGuildMemberClient = {
+  /** The Guild's roles, for matching against the allowed ping roles. Throws on any non-authoritative answer. */
+  async listRoles(
+    config: Pick<DiscordRoleAccessSyncConfig, "botToken" | "guildId">,
+  ): Promise<Array<{ id: string; name: string; managed: boolean }>> {
+    let response: Response;
+    try {
+      response = await fetch(`${DISCORD_API_BASE_URL}/guilds/${encodeURIComponent(config.guildId)}/roles`, {
+        method: "GET",
+        headers: { Authorization: `Bot ${config.botToken}`, Accept: "application/json" },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    } catch {
+      throw new Error("Discord role lookup failed.");
+    }
+    if (!response.ok) throw new Error(`Discord HTTP ${response.status} during role lookup.`);
+    const data = (await response.json().catch(() => null)) as unknown;
+    if (!Array.isArray(data)) throw invalidRoleData();
+    return data.flatMap((row: unknown) => {
+      const role = row as { id?: unknown; name?: unknown; managed?: unknown } | null;
+      return typeof role?.id === "string" && typeof role.name === "string"
+        ? [{ id: role.id, name: role.name, managed: role.managed === true }]
+        : [];
+    });
+  },
+
   /**
    * The guild member, or `null` when the member is not in the guild (HTTP
    * 404). Throws on transport / non-authoritative failures (rate limits
