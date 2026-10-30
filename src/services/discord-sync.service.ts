@@ -36,6 +36,7 @@ import {
 } from "@/repositories/run-discord-announcement.repository";
 import {
   LATE_FILL_HELP_RUN_STATUSES,
+  parseLateFillHelpClasses,
   parseLateFillHelpRoles,
   type LateFillHelpRole,
 } from "@/lib/late-fill-help";
@@ -591,6 +592,8 @@ export type RunAnnouncementWorkItem = {
   scopeChanges: RunScopeChange[];
   /** LATE_FILL_HELP only (empty otherwise): the roles to ping and how many each still missed. */
   helpRoles: LateFillHelpRole[];
+  /** LATE_FILL_HELP only (empty otherwise): classes whose buffs the roster misses. */
+  helpClasses: WowClass[];
   scheduledStartAt: string;
   productLabel: string;
   /** Compact Run identity ("Venom & Tide & Kithix") when the Run is loaded this pass. */
@@ -1691,6 +1694,7 @@ export const discordSyncService = {
       previousScheduledStartAt: row.previousScheduledStartAt,
       scopeChanges: row.type === "RUN_SCOPE_CHANGED" ? parseRunScopeChanges(row.scopeChanges) : [],
       helpRoles: row.type === "LATE_FILL_HELP" ? parseLateFillHelpRoles(row.helpRoles) : [],
+      helpClasses: row.type === "LATE_FILL_HELP" ? parseLateFillHelpClasses(row.helpRoles) : [],
       scheduledStartAt: row.scheduledStartAt,
       productLabel: row.productLabel,
       contentTitle: contentTitles.get(row.runId),

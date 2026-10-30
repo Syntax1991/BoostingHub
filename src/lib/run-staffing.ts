@@ -56,38 +56,41 @@ export type RosterPickSource = {
 };
 
 /**
- * Same pick authority as Discord signup/roster embeds:
- * pre-PUBLISHED → saved draft selections (+ active offers);
- * PUBLISHED / IN_PROGRESS / COMPLETED → live SELECTED + publishedRole.
- * External boosters always count when present on the roster.
+ * The signups the saved roster holds, with their role — same pick authority as
+ * Discord signup/roster embeds: pre-PUBLISHED → saved draft selections (+
+ * active offers); PUBLISHED / IN_PROGRESS / COMPLETED → live SELECTED +
+ * publishedRole. External boosters are not signups (callers add them).
  */
-export function selectedRosterMembersForStaffing(run: RosterPickSource): CompositionMember[] {
+export function selectedRosterSignups<Signup extends RosterPickSource["signups"][number]>(
+  run: Omit<RosterPickSource, "signups"> & { signups: readonly Signup[] },
+): Array<{ signup: Signup; selectedRole: CharacterRole | null }> {
   const usePublishedPicks =
     run.status === "PUBLISHED" || run.status === "IN_PROGRESS" || run.status === "COMPLETED";
-  const byId = new Map(run.signups.map((signup) => [signup.id, signup]));
-  const members: CompositionMember[] = [];
-
   if (usePublishedPicks) {
-    for (const signup of run.signups) {
-      if (signup.status !== "SELECTED") continue;
-      members.push({
-        participationType: signup.participationType,
-        selectedRole:
-          signup.participationType === "LOOTBUDDY" ? null : signup.publishedRole,
-      });
-    }
-  } else {
-    for (const selection of run.roster?.selections ?? []) {
-      if (!selection.selected) continue;
-      const signup = byId.get(selection.signupId);
-      if (!signup || !isActiveSignupOffer(signup.status)) continue;
-      members.push({
-        participationType: signup.participationType,
-        selectedRole:
-          signup.participationType === "LOOTBUDDY" ? null : selection.selectedRole,
-      });
-    }
+    return run.signups
+      .filter((signup) => signup.status === "SELECTED")
+      .map((signup) => ({ signup, selectedRole: signup.publishedRole }));
   }
+  const byId = new Map(run.signups.map((signup) => [signup.id, signup]));
+  const picks: Array<{ signup: Signup; selectedRole: CharacterRole | null }> = [];
+  for (const selection of run.roster?.selections ?? []) {
+    if (!selection.selected) continue;
+    const signup = byId.get(selection.signupId);
+    if (!signup || !isActiveSignupOffer(signup.status)) continue;
+    picks.push({ signup, selectedRole: selection.selectedRole });
+  }
+  return picks;
+}
+
+/**
+ * Same pick authority as {@link selectedRosterSignups}; external boosters
+ * always count when present on the roster.
+ */
+export function selectedRosterMembersForStaffing(run: RosterPickSource): CompositionMember[] {
+  const members: CompositionMember[] = selectedRosterSignups(run).map(({ signup, selectedRole }) => ({
+    participationType: signup.participationType,
+    selectedRole: signup.participationType === "LOOTBUDDY" ? null : selectedRole,
+  }));
 
   for (const booster of run.roster?.externalBoosters ?? []) {
     members.push({

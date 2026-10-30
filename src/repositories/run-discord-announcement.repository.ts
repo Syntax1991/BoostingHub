@@ -1,7 +1,8 @@
 import { db, orm } from "@/lib/prisma";
 import {
+  parseLateFillHelpClasses,
   parseLateFillHelpRoles,
-  serializeLateFillHelpRoles,
+  serializeLateFillHelp,
   type LateFillHelpRole,
   type LateFillHelpRoleKey,
 } from "@/lib/late-fill-help";
@@ -19,6 +20,7 @@ import {
   type RaidDifficulty,
   type RunDiscordAnnouncementType,
   type RunLootType,
+  type WowClass,
 } from "@/models/enums";
 
 export type RunDiscordAnnouncementRecord = {
@@ -147,6 +149,8 @@ export type LateFillHelpWriteResult = {
   created: RunDiscordAnnouncementRecord | null;
   /** Roles this request pings. */
   pinged: LateFillHelpRole[];
+  /** Classes whose missing buffs this request names (not pinged again within the cooldown). */
+  pingedClasses: WowClass[];
   /** Roles asked for too recently on this Run, with when they may be asked again. */
   cooling: Array<{ role: LateFillHelpRoleKey; availableAt: string }>;
 };
@@ -154,14 +158,17 @@ export type LateFillHelpWriteResult = {
 export const runDiscordAnnouncementRepository = {
   /**
    * Late Fill help, serialized per Run by the roster row lock (the same lock
-   * roster and attendance writes take): roles pinged within `cooldownMs` are
-   * dropped, the rest go into ONE PENDING announcement. Concurrent clicks
-   * therefore produce one message, never two pings of the same role.
+   * roster and attendance writes take): roles and classes pinged within
+   * `cooldownMs` are dropped, the rest go into ONE PENDING announcement.
+   * Classes only accompany a role: with every role cooling down nothing goes
+   * out. Concurrent clicks therefore produce one message, never two pings of
+   * the same role or class.
    */
   async createLateFillHelp(input: {
     runId: string;
     rosterId: string;
     roles: readonly LateFillHelpRole[];
+    classes: readonly WowClass[];
     cooldownMs: number;
     now: string;
     scheduledStartAt: string;
@@ -178,17 +185,20 @@ export const runDiscordAnnouncementRepository = {
         .select("createdAt", "helpRoles")
         .all()) as Array<Record<string, unknown>>;
       const lastByRole = new Map<LateFillHelpRoleKey, number>();
+      const recentClasses = new Set<WowClass>();
       for (const row of recent) {
         const at = Date.parse(asString(row.createdAt));
         for (const help of parseLateFillHelpRoles(asStringOrNull(row.helpRoles))) {
           lastByRole.set(help.role, Math.max(lastByRole.get(help.role) ?? 0, at));
         }
+        for (const wowClass of parseLateFillHelpClasses(asStringOrNull(row.helpRoles))) recentClasses.add(wowClass);
       }
       const cooling = input.roles
         .filter((row) => lastByRole.has(row.role))
         .map((row) => ({ role: row.role, availableAt: new Date(lastByRole.get(row.role)! + input.cooldownMs).toISOString() }));
       const pinged = input.roles.filter((row) => !lastByRole.has(row.role));
-      if (pinged.length === 0) return { created: null, pinged, cooling };
+      if (pinged.length === 0) return { created: null, pinged, pingedClasses: [], cooling };
+      const pingedClasses = input.classes.filter((wowClass) => !recentClasses.has(wowClass));
       const id = crypto.randomUUID();
       await insertAnnouncementIgnoreDuplicateTx(txOrm, {
         id,
@@ -200,13 +210,14 @@ export const runDiscordAnnouncementRepository = {
         productLabel: input.productLabel,
         difficulty: input.difficulty,
         lootType: input.lootType,
-        helpRoles: serializeLateFillHelpRoles(pinged),
+        helpRoles: serializeLateFillHelp(pinged, pingedClasses),
         createdAt: input.now,
       });
       const created = await txOrm.RunDiscordAnnouncement.where({ id }).first();
       return {
         created: created ? mapRunDiscordAnnouncementRow(created as Record<string, unknown>) : null,
         pinged,
+        pingedClasses,
         cooling,
       };
     });

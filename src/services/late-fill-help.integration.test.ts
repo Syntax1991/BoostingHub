@@ -1,13 +1,20 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { buildLateFillHelpMessage } from "@/discord-bot/messages/late-fill-help-message";
+import { buildLateFillHelpMessage, resolveClassRoleIds } from "@/discord-bot/messages/late-fill-help-message";
 import { isDomainError } from "@/lib/errors";
-import { LATE_FILL_HELP_COOLDOWN_MS, parseLateFillHelpRoles } from "@/lib/late-fill-help";
+import {
+  LATE_FILL_HELP_COOLDOWN_MS,
+  parseLateFillHelpClasses,
+  parseLateFillHelpRoles,
+  serializeLateFillHelp,
+} from "@/lib/late-fill-help";
+import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
 import { venomousCreateInput } from "@/lib/test-run-input";
 import { raidRepository } from "@/repositories/raid.repository";
 import { discordSyncService } from "@/services/discord-sync.service";
-import { lateFillHelpService } from "@/services/late-fill-help.service";
+import { lateFillHelpFeedback, lateFillHelpService } from "@/services/late-fill-help.service";
+import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 
 /**
@@ -44,7 +51,15 @@ async function cleanupRun(runId: string) {
   await orm.RunDiscordAnnouncement.where({ runId }).delete().catch(() => {});
   await orm.RunDiscordPost.where({ runId }).delete().catch(() => {});
   const roster = (await orm.RunRoster.where({ runId }).first()) as { id: string } | null;
-  if (roster) await orm.RunRoster.where({ id: roster.id }).delete().catch(() => {});
+  if (roster) {
+    await orm.RunRosterEntry.where({ rosterId: roster.id }).delete().catch(() => {});
+    await orm.RunRoster.where({ id: roster.id }).delete().catch(() => {});
+  }
+  const signups = (await orm.RunSignup.where({ runId }).select("id").all()) as Array<{ id: string }>;
+  for (const signup of signups) {
+    await orm.RunSignupRole.where({ signupId: signup.id }).delete().catch(() => {});
+    await orm.RunSignup.where({ id: signup.id }).delete().catch(() => {});
+  }
   await orm.RunDomainEvent?.where({ runId }).delete().catch(() => {});
   await orm.Run.where({ id: runId }).delete().catch(() => {});
 }
@@ -53,8 +68,54 @@ async function cleanupUsers() {
   for (const userId of Object.values(ids)) {
     const runs = (await orm.Run.where({ raidLeadId: userId }).select("id").all()) as Array<{ id: string }>;
     for (const run of runs) await cleanupRun(run.id);
+    await orm.Character.where({ userId }).delete().catch(() => {});
     await orm.User.where({ id: userId }).delete().catch(() => {});
   }
+}
+
+/** A saved draft pick: the admin's Character of `wowClass` on the Run's roster. */
+async function pickCharacter(runId: string, wowClass: "MAGE" | "WARLOCK", name: string) {
+  const now = new Date().toISOString();
+  const characterId = crypto.randomUUID();
+  await orm.User.where({ id: ids.admin }).update({ isBooster: true });
+  await orm.Character.create({
+    id: characterId,
+    userId: ids.admin,
+    name,
+    realm: "Late Fill Lab",
+    normalizedName: normalizeCharacterIdentity(name),
+    normalizedRealm: normalizeCharacterIdentity("Late Fill Lab"),
+    region: "EU",
+    wowClass,
+    specialization: wowClass === "MAGE" ? "Fire" : "Affliction",
+    primaryRole: "RANGED_DPS",
+    itemLevel: 700,
+    isActive: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+  const signupId = crypto.randomUUID();
+  await orm.RunSignup.create({
+    id: signupId,
+    runId,
+    userId: ids.admin,
+    characterId,
+    participationType: "BOOSTER",
+    isBackup: false,
+    status: "PENDING",
+    publishedRole: null,
+    lootbuddyMode: null,
+    lootbuddyVerification: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await orm.RunSignupRole.create({ id: crypto.randomUUID(), signupId, role: "RANGED_DPS", createdAt: now });
+  const view = await rosterService.getRosterManagementView(lead, runId);
+  await rosterService.saveDraftSelection(lead, {
+    runId,
+    version: view.roster.version,
+    selections: [{ signupId, selectedRole: "RANGED_DPS" }],
+  });
 }
 
 /** An OPEN Run of `lead` starting in `hoursAhead` (default 3 h: inside Late Fill), with a Run channel. */
@@ -233,7 +294,131 @@ describe("Late Fill help request", () => {
   });
 });
 
+describe("Late Fill help — missing class buffs", () => {
+  it("names the classes the saved roster misses; a class already on the roster is not listed", async () => {
+    configurePingRoles({ tank: "1", healer: "2", dps: "3" });
+    const runId = await lateFillRun();
+    await pickCharacter(runId, "MAGE", "Lfmage");
+
+    const result = await lateFillHelpService.request(lead, runId);
+    expect(result.missingClassBuffs).toContain("WARLOCK");
+    expect(result.missingClassBuffs).not.toContain("MAGE");
+    // Rogue provides no tracked buff, so it is never asked for.
+    expect(result.missingClassBuffs).not.toContain("ROGUE");
+    expect(new Set(result.missingClassBuffs).size).toBe(result.missingClassBuffs.length);
+    const [row] = await helpRows(runId);
+    expect(parseLateFillHelpClasses(row!.helpRoles)).toEqual(result.missingClassBuffs);
+    expect(lateFillHelpFeedback(result)).toContain("Warlock");
+  });
+
+  it("a Warlock on the roster covers its three tracked utilities at once", async () => {
+    configurePingRoles({ tank: "1", healer: "2", dps: "3" });
+    const runId = await lateFillRun();
+    await pickCharacter(runId, "WARLOCK", "Lflock");
+    expect((await lateFillHelpService.request(lead, runId)).missingClassBuffs).not.toContain("WARLOCK");
+  });
+
+  it("the cooldown covers classes too: a later message for a new role does not ping them again", async () => {
+    configurePingRoles({ healer: "2" });
+    const runId = await lateFillRun();
+    const first = new Date();
+    const firstResult = await lateFillHelpService.request(lead, runId, first);
+    expect(firstResult.missingClassBuffs.length).toBeGreaterThan(0);
+
+    configurePingRoles({ healer: "2", dps: "3" });
+    const second = await lateFillHelpService.request(lead, runId, new Date(first.getTime() + 60_000));
+    expect(second.pinged.map((row) => row.role)).toEqual(["DPS"]);
+    expect(second.missingClassBuffs).toEqual([]);
+
+    const third = await lateFillHelpService.request(lead, runId, new Date(first.getTime() + LATE_FILL_HELP_COOLDOWN_MS + 1_000));
+    expect(third.missingClassBuffs).toEqual(firstResult.missingClassBuffs);
+  });
+
+  it("every role cooling down: nothing goes out, classes alone never trigger a message", async () => {
+    configurePingRoles({ tank: "1", healer: "2", dps: "3" });
+    const runId = await lateFillRun();
+    const first = new Date();
+    await lateFillHelpService.request(lead, runId, first);
+    expect(await codeOf(lateFillHelpService.request(lead, runId, new Date(first.getTime() + 60_000)))).toBe(
+      "LATE_FILL_HELP_COOLDOWN",
+    );
+    expect(await helpRows(runId)).toHaveLength(1);
+  });
+});
+
 describe("Late Fill help Discord message", () => {
+  const pingRoleIds = { TANK: "900", HEALER: "901", DPS: "902" };
+
+  it("a missing Warlock buff: its own bold line with the @Warlock role at the end; allowedMentions exact", () => {
+    const message = buildLateFillHelpMessage({
+      roles: [{ role: "DPS", missing: 3 }],
+      pingRoleIds,
+      classes: ["WARLOCK"],
+      classRoleIds: { WARLOCK: "950" },
+    });
+    expect(message!.content).toBe("**3 more DPS needed here** <@&902>\n**Missing class buffs: Warlock** <@&950>");
+    expect(message!.allowedMentions).toEqual({ parse: [], roles: ["902", "950"], users: [], repliedUser: false });
+  });
+
+  it("several classes are one compact line; duplicates are named and pinged once", () => {
+    const message = buildLateFillHelpMessage({
+      roles: [{ role: "HEALER", missing: 1 }],
+      pingRoleIds,
+      classes: ["MAGE", "WARLOCK", "MAGE"],
+      classRoleIds: { MAGE: "951", WARLOCK: "950" },
+    });
+    expect(message!.content).toBe(
+      "**1 more Healer needed here** <@&901>\n**Missing class buffs: Mage, Warlock** <@&951> <@&950>",
+    );
+    expect(message!.allowedMentions.roles).toEqual(["901", "951", "950"]);
+  });
+
+  it("a class without a role id is still named, but pinged by nothing else", () => {
+    const message = buildLateFillHelpMessage({
+      roles: [{ role: "DPS", missing: 1 }],
+      pingRoleIds,
+      classes: ["MAGE", "WARLOCK"],
+      classRoleIds: { WARLOCK: "950" },
+    });
+    expect(message!.content).toBe("**1 more DPS needed here** <@&902>\n**Missing class buffs: Mage, Warlock** <@&950>");
+    expect(message!.allowedMentions.roles).toEqual(["902", "950"]);
+    // No class role at all: the bold line without a trailing space or mention.
+    expect(
+      buildLateFillHelpMessage({ roles: [{ role: "DPS", missing: 1 }], pingRoleIds, classes: ["MAGE"], classRoleIds: {} })!.content,
+    ).toBe("**1 more DPS needed here** <@&902>\n**Missing class buffs: Mage**");
+  });
+
+  it("no missing class: only the role line, exactly as before", () => {
+    expect(buildLateFillHelpMessage({ roles: [{ role: "DPS", missing: 3 }], pingRoleIds, classes: [] })!.content).toBe(
+      "**3 more DPS needed here** <@&902>",
+    );
+  });
+
+  it("class roles resolve by their exact unique name; missing, ambiguous or bot-managed roles never fall back to another role", () => {
+    const guildRoles = [
+      { id: "1", name: "Warlock", managed: false },
+      { id: "2", name: "death knight", managed: false },
+      { id: "3", name: "Mage", managed: false },
+      { id: "4", name: "Mage", managed: false },
+      { id: "5", name: "Monk", managed: true },
+      { id: "6", name: "Hunter Friends", managed: false },
+    ];
+    expect(resolveClassRoleIds(guildRoles, ["WARLOCK", "DEATH_KNIGHT", "MAGE", "MONK", "HUNTER", "DRUID"])).toEqual({
+      roleIds: { WARLOCK: "1", DEATH_KNIGHT: "2" },
+      unresolved: ["MAGE", "MONK", "HUNTER", "DRUID"],
+    });
+  });
+
+  it("stored requests: both the new shape and older roles-only rows read; unknown classes are dropped", () => {
+    const stored = serializeLateFillHelp([{ role: "DPS", missing: 2 }], ["WARLOCK"]);
+    expect(parseLateFillHelpRoles(stored)).toEqual([{ role: "DPS", missing: 2 }]);
+    expect(parseLateFillHelpClasses(stored)).toEqual(["WARLOCK"]);
+    const older = '[{"role":"HEALER","missing":1}]';
+    expect(parseLateFillHelpRoles(older)).toEqual([{ role: "HEALER", missing: 1 }]);
+    expect(parseLateFillHelpClasses(older)).toEqual([]);
+    expect(parseLateFillHelpClasses('{"roles":[],"classes":["EVERYONE","MAGE","MAGE"]}')).toEqual(["MAGE"]);
+  });
+
   it("pings exactly the requested roles' ids; allowedMentions allows nothing else", () => {
     const message = buildLateFillHelpMessage({
       roles: [
@@ -243,11 +428,27 @@ describe("Late Fill help Discord message", () => {
       pingRoleIds: { TANK: "900", HEALER: "901", DPS: "902" },
     });
     expect(message).not.toBeNull();
-    expect(message!.content.split("\n")[0]).toBe("<@&901> <@&902>");
-    expect(message!.content).toContain("1 Healer · 2 DPS");
-    expect(message!.content).not.toContain("@everyone");
-    expect(message!.content).not.toContain("<@&900>");
+    expect(message!.content).toBe("**1 more Healer and 2 more DPS needed here** <@&901> <@&902>");
     expect(message!.allowedMentions).toEqual({ parse: [], roles: ["901", "902"], users: [], repliedUser: false });
+  });
+
+  it("one short bold line with correct singular / plural, mentions last and outside the bold", () => {
+    const pingRoleIds = { TANK: "900", HEALER: "901", DPS: "902" };
+    const content = (roles: Array<{ role: "TANK" | "HEALER" | "DPS"; missing: number }>) =>
+      buildLateFillHelpMessage({ roles, pingRoleIds })!.content;
+    expect(content([{ role: "DPS", missing: 3 }])).toBe("**3 more DPS needed here** <@&902>");
+    expect(content([{ role: "DPS", missing: 1 }])).toBe("**1 more DPS needed here** <@&902>");
+    expect(content([{ role: "HEALER", missing: 1 }])).toBe("**1 more Healer needed here** <@&901>");
+    expect(content([{ role: "HEALER", missing: 2 }])).toBe("**2 more Healers needed here** <@&901>");
+    expect(content([{ role: "TANK", missing: 1 }])).toBe("**1 more Tank needed here** <@&900>");
+    expect(content([{ role: "TANK", missing: 2 }])).toBe("**2 more Tanks needed here** <@&900>");
+    expect(
+      content([
+        { role: "TANK", missing: 1 },
+        { role: "HEALER", missing: 2 },
+        { role: "DPS", missing: 3 },
+      ]),
+    ).toBe("**1 more Tank, 2 more Healers and 3 more DPS needed here** <@&900> <@&901> <@&902>");
   });
 
   it("drops roles without a bot-side ping role; null when none is left (the bot marks it SKIPPED)", () => {

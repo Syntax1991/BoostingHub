@@ -1,5 +1,5 @@
 import type { RunStaffingShortage } from "@/lib/run-staffing";
-import type { RunStatus } from "@/models/enums";
+import { WOW_CLASSES, type RunStatus, type WowClass } from "@/models/enums";
 
 /**
  * Late Fill help: the Raid Lead asks the Guild's ping role for each role the
@@ -39,23 +39,31 @@ export function formatLateFillHelpRoles(roles: readonly LateFillHelpRole[]): str
     .join(" · ");
 }
 
-export function serializeLateFillHelpRoles(roles: readonly LateFillHelpRole[]): string {
-  return JSON.stringify(roles.map((row) => ({ role: row.role, missing: row.missing })));
+/** The stored request: the roles to ping, and the classes whose buffs the roster misses. */
+export function serializeLateFillHelp(roles: readonly LateFillHelpRole[], classes: readonly WowClass[]): string {
+  return JSON.stringify({ roles: roles.map((row) => ({ role: row.role, missing: row.missing })), classes });
+}
+
+function parseStored(value: string | null | undefined): { roles: unknown; classes: unknown } {
+  if (!value) return { roles: [], classes: [] };
+  try {
+    const parsed: unknown = JSON.parse(value);
+    // Requests stored before class buffs are a plain roles array.
+    if (Array.isArray(parsed)) return { roles: parsed, classes: [] };
+    const stored = parsed as { roles?: unknown; classes?: unknown } | null;
+    return { roles: stored?.roles ?? [], classes: stored?.classes ?? [] };
+  } catch {
+    return { roles: [], classes: [] };
+  }
 }
 
 /** Stored snapshot → roles; anything malformed is dropped (never pings an unknown role). */
 export function parseLateFillHelpRoles(value: string | null | undefined): LateFillHelpRole[] {
-  if (!value) return [];
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(value);
-  } catch {
-    return [];
-  }
-  if (!Array.isArray(parsed)) return [];
+  const { roles: stored } = parseStored(value);
+  if (!Array.isArray(stored)) return [];
   const seen = new Set<string>();
   const roles: LateFillHelpRole[] = [];
-  for (const entry of parsed) {
+  for (const entry of stored) {
     const row = entry as { role?: unknown; missing?: unknown };
     if (typeof row?.role !== "string" || !(LATE_FILL_HELP_ROLES as readonly string[]).includes(row.role)) continue;
     if (typeof row.missing !== "number" || !Number.isInteger(row.missing) || row.missing <= 0) continue;
@@ -64,4 +72,11 @@ export function parseLateFillHelpRoles(value: string | null | undefined): LateFi
     roles.push({ role: row.role as LateFillHelpRoleKey, missing: row.missing });
   }
   return roles;
+}
+
+/** Stored snapshot → classes; unknown values dropped, deduped. */
+export function parseLateFillHelpClasses(value: string | null | undefined): WowClass[] {
+  const { classes } = parseStored(value);
+  if (!Array.isArray(classes)) return [];
+  return [...new Set(classes.filter((row): row is WowClass => (WOW_CLASSES as readonly unknown[]).includes(row)))];
 }
