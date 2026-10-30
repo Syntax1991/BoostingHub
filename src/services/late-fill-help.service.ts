@@ -110,7 +110,7 @@ export const lateFillHelpService = {
 
 /** One-line feedback for the Raid Lead after a successful request. */
 export function lateFillHelpFeedback(result: LateFillHelpResult): string {
-  const parts = [`Asked Discord for ${formatLateFillHelpRoles(result.pinged)}.`];
+  const parts = [`Pinged ${formatLateFillHelpRoles(result.pinged)} on Discord.`];
   if (result.cooling.length > 0) parts.push(`${roleList(result.cooling.map((row) => row.role))} were asked for recently.`);
   if (result.notConfigured.length > 0) parts.push(`No ping role for ${roleList(result.notConfigured)}.`);
   return parts.join(" ");
