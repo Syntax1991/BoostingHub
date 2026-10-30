@@ -194,16 +194,25 @@ describe("Late Fill help request", () => {
     expect(await helpRows(runId)).toHaveLength(0);
   });
 
-  it("invalid Run states: outside Late Fill, no Run channel, cancelled — refused, nothing written", async () => {
+  it("any time before Start: a Run days ahead can ask too (no 24 h window)", async () => {
     configurePingRoles({ tank: "1", healer: "2", dps: "3" });
     const early = await lateFillRun({ hoursAhead: 72 });
-    expect(await codeOf(lateFillHelpService.request(lead, early))).toBe("LATE_FILL_HELP_UNAVAILABLE");
+    const result = await lateFillHelpService.request(lead, early);
+    expect(result.pinged.map((row) => row.role)).toEqual(["TANK", "HEALER", "DPS"]);
+    expect(await helpRows(early)).toHaveLength(1);
+  });
+
+  it("invalid Run states: no Run channel, cancelled, started — refused, nothing written", async () => {
+    configurePingRoles({ tank: "1", healer: "2", dps: "3" });
     const noChannel = await lateFillRun({ channel: false });
     expect(await codeOf(lateFillHelpService.request(lead, noChannel))).toBe("LATE_FILL_HELP_NO_CHANNEL");
     const cancelled = await lateFillRun();
     await runService.cancelRun(lead, cancelled);
     expect(await codeOf(lateFillHelpService.request(lead, cancelled))).toBe("LATE_FILL_HELP_UNAVAILABLE");
-    for (const runId of [early, noChannel, cancelled]) expect(await helpRows(runId)).toHaveLength(0);
+    const started = await lateFillRun();
+    await orm.Run.where({ id: started }).update({ status: "IN_PROGRESS" });
+    expect(await codeOf(lateFillHelpService.request(lead, started))).toBe("LATE_FILL_HELP_UNAVAILABLE");
+    for (const runId of [noChannel, cancelled, started]) expect(await helpRows(runId)).toHaveLength(0);
   });
 
   it("nothing missing: refused (a full saved roster needs no help)", async () => {

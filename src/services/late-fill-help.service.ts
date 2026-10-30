@@ -10,7 +10,6 @@ import {
   type LateFillHelpRole,
   type LateFillHelpRoleKey,
 } from "@/lib/late-fill-help";
-import { isLateFillWindow } from "@/lib/roster-replacement";
 import { projectRunStaffingFromRun } from "@/lib/run-staffing";
 import { rosterRepository } from "@/repositories/roster.repository";
 import { runDiscordAnnouncementRepository } from "@/repositories/run-discord-announcement.repository";
@@ -36,8 +35,8 @@ function roleList(roles: readonly LateFillHelpRoleKey[]): string {
  * channel (RunDiscordAnnouncement LATE_FILL_HELP, posted by the bot lane).
  *
  * - Who: whoever may manage the Run (assertCanManageRun).
- * - When: Late Fill window (≤ 24 h before start, or later while not started),
- *   Run OPEN / ROSTERING / PUBLISHED and not archived; re-checked by the bot
+ * - When: any time before Start — Run OPEN / ROSTERING / PUBLISHED, not
+ *   archived, with a Run channel; re-checked by the bot
  *   right before posting (getRunAnnouncementDeliveryAuthority).
  * - What: only roles the SAVED roster is short of (authoritative staffing, not
  *   an unsaved draft) and that have a DISCORD_PING_ROLE_* configured.
@@ -52,13 +51,6 @@ export const lateFillHelpService = {
     assertCanManageRun(user, run);
     if (run.archivedAt || !LATE_FILL_HELP_RUN_STATUSES.includes(run.status)) {
       throw new DomainError("LATE_FILL_HELP_UNAVAILABLE", "Help can only be requested before the Run starts.", 409);
-    }
-    if (!isLateFillWindow(run.scheduledStartAt, now)) {
-      throw new DomainError(
-        "LATE_FILL_HELP_UNAVAILABLE",
-        "Help can be requested within 24 hours of the Run's start (Late Fill).",
-        409,
-      );
     }
     const post = await runDiscordPostRepository.findByRunId(run.id);
     if (!post?.runChannelId) {

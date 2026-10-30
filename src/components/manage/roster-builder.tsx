@@ -1427,10 +1427,7 @@ function RosterBuilderEditor({
                 {missing.lootbuddies > 0 ? (
                   <span className="text-xs text-muted">Lootbuddy ×{missing.lootbuddies}</span>
                 ) : null}
-                <Button type="button" size="sm" variant="secondary" disabled={pending} onClick={() => setBuilderMode("fill")}>
-                  Fill gaps
-                </Button>
-                {data.run.lateFill && missing.tanks + missing.healers + missing.dps > 0 ? (
+                {missing.tanks + missing.healers + missing.dps > 0 ? (
                   <Button
                     type="button"
                     size="sm"
