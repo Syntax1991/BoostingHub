@@ -1439,7 +1439,7 @@ function RosterBuilderEditor({
                     onClick={requestLateFillHelp}
                     title="Ping the Guild Tank / Healer / DPS role in the Run channel for the saved roster's open slots"
                   >
-                    Ask Discord for help
+                    Ping missing roles
                   </Button>
                 ) : null}
               </div>
