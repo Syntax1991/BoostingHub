@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PING_ROLE_KEYS } from "@/lib/late-fill-help";
 import { CHARACTER_ROLES, PARTICIPATION_TYPES, WOW_CLASSES } from "@/models/enums";
 import { ROSTER_SELECTION_WARNING_TYPES } from "@/services/roster-selection-risk";
 import { entityIdSchema } from "@/validators/ids";
@@ -30,6 +31,13 @@ const confirmedRosterWarningsSchema = z.array(confirmedRosterWarningSchema).max(
 
 export const rosterRunSchema = z.object({
   runId: entityIdSchema,
+});
+
+/** Shape only — the service validates the text (customPingTextError) and that the roles exist on Discord. */
+export const customPingSchema = z.object({
+  runId: entityIdSchema,
+  text: z.string().max(2000),
+  roles: z.array(z.enum(PING_ROLE_KEYS), { message: "Choose an allowed role." }).max(PING_ROLE_KEYS.length),
 });
 
 export const rosterDraftSelectionSchema = z.object({

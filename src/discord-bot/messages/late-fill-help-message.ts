@@ -1,42 +1,57 @@
-import { CLASS_LABELS } from "@/lib/labels";
-import { LATE_FILL_HELP_ROLE_LABELS, type LateFillHelpRole, type LateFillHelpRoleKey } from "@/lib/late-fill-help";
+import {
+  escapeCustomPingText,
+  missingClassBuffsPhrase,
+  missingRolesPhrase,
+  resolvePingRoleIds,
+  type CustomPing,
+  type LateFillHelpRole,
+  type LateFillHelpRoleKey,
+} from "@/lib/late-fill-help";
 import type { WowClass } from "@/models/enums";
 
 export type LateFillPingRoleIds = Record<LateFillHelpRoleKey, string | null>;
-
-/** "1 more Healer", "3 more DPS", joined naturally: "A, B and C". */
-function missingRolesPhrase(roles: readonly LateFillHelpRole[]): string {
-  const parts = roles.map((row) => {
-    const labels = LATE_FILL_HELP_ROLE_LABELS[row.role];
-    return `${row.missing} more ${row.missing === 1 ? labels.one : labels.many}`;
-  });
-  const last = parts.pop()!;
-  return parts.length > 0 ? `${parts.join(", ")} and ${last}` : last;
-}
 
 function mentions(roleIds: readonly string[]): string {
   return roleIds.map((id) => `<@&${id}>`).join(" ");
 }
 
 /**
- * A class's Guild role by its exact name ("Death Knight"), ignoring case: the
- * same by-name convention as the Guild's class emojis, so there is no per-Run
- * or per-Guild mapping to maintain. No role, a bot-managed role or several
- * roles with that name → unresolved, never another role.
+ * A class's Guild role by its exact name ("Death Knight"): the same by-name
+ * convention as the Guild's class emojis, so there is no per-Run or per-Guild
+ * mapping to maintain.
  */
 export function resolveClassRoleIds(
   guildRoles: ReadonlyArray<{ id: string; name: string; managed: boolean }>,
   classes: readonly WowClass[],
 ): { roleIds: Partial<Record<WowClass, string>>; unresolved: WowClass[] } {
-  const roleIds: Partial<Record<WowClass, string>> = {};
-  const unresolved: WowClass[] = [];
-  for (const wowClass of classes) {
-    const name = CLASS_LABELS[wowClass].toLowerCase();
-    const matches = guildRoles.filter((role) => role.name.trim().toLowerCase() === name);
-    if (matches.length === 1 && !matches[0]!.managed) roleIds[wowClass] = matches[0]!.id;
-    else unresolved.push(wowClass);
-  }
-  return { roleIds, unresolved };
+  return resolvePingRoleIds(guildRoles, classes);
+}
+
+/**
+ * A help request's delivery nonce: Discord refuses a second message with the
+ * same nonce, so a retry after a lost SENT report does not ping twice. Max 25
+ * characters; the announcement id's hex digits are unique well before that.
+ */
+export function helpMessageNonce(announcementId: string): string {
+  return announcementId.replace(/-/g, "").slice(0, 25);
+}
+
+/**
+ * The Run-channel message of a custom request: the Raid Lead's text in bold,
+ * then the roles they chose. Text and roles are independent — "Need 1 LB" never
+ * implies a Booster ping. allowedMentions is exactly those ids. Null when no
+ * chosen role resolves (the caller marks the request SKIPPED).
+ */
+export function buildCustomPingMessage(
+  ping: CustomPing,
+  roleIds: Partial<Record<CustomPing["roles"][number], string>>,
+): { content: string; allowedMentions: { parse: []; roles: string[]; users: []; repliedUser: false } } | null {
+  const ids = [...new Set(ping.roles.map((key) => roleIds[key]).filter((id): id is string => Boolean(id)))];
+  if (ids.length === 0) return null;
+  return {
+    content: `**${escapeCustomPingText(ping.text)}** ${mentions(ids)}`,
+    allowedMentions: { parse: [], roles: ids, users: [], repliedUser: false },
+  };
 }
 
 /**
@@ -70,8 +85,7 @@ export function buildLateFillHelpMessage(input: {
   const lines: string[] = [];
   if (pinged.length > 0) lines.push(`**${missingRolesPhrase(pinged)} needed here** ${mentions(roleIds)}`);
   if (classes.length > 0) {
-    const names = classes.map((wowClass) => CLASS_LABELS[wowClass]).join(", ");
-    lines.push(`**Missing class buffs: ${names}** ${mentions(classIds)}`.trimEnd());
+    lines.push(`**${missingClassBuffsPhrase(classes)}** ${mentions(classIds)}`.trimEnd());
   }
   return {
     content: lines.join("\n"),

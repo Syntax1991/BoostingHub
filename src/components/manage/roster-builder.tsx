@@ -7,7 +7,6 @@ import {
   prepareRosterEditAction,
   publishRosterAction,
   repostRosterAction,
-  requestLateFillHelpAction,
   saveRosterDraftAction,
   syncRosterCharactersAction,
   updateRosterAction,
@@ -15,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { AddBoosterEntryDialog, type AddBoosterMode } from "@/components/manage/add-booster-entry-dialog";
 import { RosterBuilderDialog, type RosterBuilderMode } from "@/components/manage/roster-builder-dialog";
+import { RosterPingRolesDialog } from "@/components/manage/roster-ping-roles-dialog";
 import { RosterReplacementDialog, type ReplacementTarget } from "@/components/manage/roster-replacement-dialog";
 import { RosterUpdateDiff } from "@/components/manage/roster-update-diff";
 import {
@@ -316,6 +316,7 @@ function RosterBuilderEditor({
   /** Open Auto Build on top of the current draft (Fill gaps) or from the signups only (Build). */
   const [builderMode, setBuilderMode] = useState<RosterBuilderMode | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [pingRolesOpen, setPingRolesOpen] = useState(false);
   /** Signups "Group by" (presentation only), remembered in this browser; None on the server render. */
   const groupBy = useSyncExternalStore(
     subscribeSignupGroupBy,
@@ -1019,22 +1020,6 @@ function RosterBuilderEditor({
     });
   }
 
-  /** Late Fill: one explicit request — the server pings the missing roles' Guild roles (cooldown per role). */
-  function requestLateFillHelp() {
-    setError(null);
-    setErrorCode(null);
-    setNotice(null);
-    startTransition(async () => {
-      const result = await requestLateFillHelpAction({ runId: data.run.id });
-      if (!result.ok) {
-        setError(result.message);
-        setErrorCode(result.code);
-        return;
-      }
-      setNotice(result.message);
-    });
-  }
-
   function seedPublished() {
     setError(null);
     setErrorCode(null);
@@ -1325,6 +1310,21 @@ function RosterBuilderEditor({
                 Auto Build Roster
               </Button>
             ) : null}
+            {data.roster.canEdit ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={pending}
+                onClick={() => {
+                  setNotice(null);
+                  setPingRolesOpen(true);
+                }}
+                title="Ping Discord roles in the Run channel"
+              >
+                Ping roles
+              </Button>
+            ) : null}
             {bossPlanEditable && editing ? (
               <Button
                 type="button"
@@ -1426,18 +1426,6 @@ function RosterBuilderEditor({
                   ))}
                 {missing.lootbuddies > 0 ? (
                   <span className="text-xs text-muted">Lootbuddy ×{missing.lootbuddies}</span>
-                ) : null}
-                {missing.tanks + missing.healers + missing.dps > 0 ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    disabled={pending}
-                    onClick={requestLateFillHelp}
-                    title="Ping the Guild Tank / Healer / DPS role in the Run channel for the saved roster's open slots"
-                  >
-                    Ping missing roles
-                  </Button>
                 ) : null}
               </div>
             ) : null}
@@ -1820,6 +1808,9 @@ function RosterBuilderEditor({
           onCancel={cancelWarningPrompt}
           onConfirm={confirmWarningPrompt}
         />
+      ) : null}
+      {pingRolesOpen ? (
+        <RosterPingRolesDialog runId={data.run.id} onSent={setNotice} onClose={() => setPingRolesOpen(false)} />
       ) : null}
       {replacement ? (
         <RosterReplacementDialog

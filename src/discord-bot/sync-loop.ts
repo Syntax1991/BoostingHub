@@ -23,10 +23,13 @@ import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
 import { syncGlobalAnnouncements } from "@/discord-bot/global-announcements";
 import {
+  buildCustomPingMessage,
   buildLateFillHelpMessage,
+  helpMessageNonce,
   resolveClassRoleIds,
   type LateFillPingRoleIds,
 } from "@/discord-bot/messages/late-fill-help-message";
+import { resolvePingRoleIds } from "@/lib/late-fill-help";
 import {
   isDiscordPermanentDmError,
   isDiscordPermissionError,
@@ -1488,7 +1491,7 @@ async function syncAccountNotificationDm(
  * Unknown Channel / Missing Access → FAILED_PERMANENT (no infinite retry, no recreate).
  * No channel id → SKIPPED. Transient errors leave PENDING for a later pass.
  */
-async function syncRunAnnouncement(
+export async function syncRunAnnouncement(
   client: Client,
   api: BotApiClient,
   item: RunAnnouncementLaneItem,
@@ -1532,6 +1535,27 @@ async function syncRunAnnouncement(
     return;
   }
 
+  if (item.type === "LATE_FILL_HELP" && item.helpCustom) {
+    const custom = item.helpCustom;
+    await postRunAnnouncement(
+      api,
+      item,
+      runChannelId,
+      async (channel) => {
+        const guildRoles = channel.guild.roles.cache.map((role) => ({ id: role.id, name: role.name, managed: role.managed }));
+        const { roleIds, unresolved } = resolvePingRoleIds(guildRoles, custom.roles, pingRoleIds);
+        if (unresolved.length > 0) {
+          console.warn(`[discord-bot] custom ping ${item.announcementId}: no unique Guild role for ${unresolved.join(", ")}`);
+        }
+        const message = buildCustomPingMessage(custom, roleIds);
+        if (!message) return "SKIPPED";
+        await channel.send({ ...message, nonce: helpMessageNonce(item.announcementId), enforceNonce: true });
+      },
+      client,
+    );
+    return;
+  }
+
   if (item.type === "LATE_FILL_HELP") {
     const classes = item.helpClasses ?? [];
     const { roleIds: classRoleIds, unresolved } = await guildClassRoleIds(client, runChannelId, classes);
@@ -1546,7 +1570,13 @@ async function syncRunAnnouncement(
       await api.recordDiscordState(item.runId, { kind: "run-announcement", announcementId: item.announcementId, result: "SKIPPED" });
       return;
     }
-    await postRunAnnouncement(api, item, runChannelId, (channel) => channel.send(message), client);
+    await postRunAnnouncement(
+      api,
+      item,
+      runChannelId,
+      (channel) => channel.send({ ...message, nonce: helpMessageNonce(item.announcementId), enforceNonce: true }),
+      client,
+    );
     return;
   }
 
@@ -1609,10 +1639,15 @@ async function guildClassRoleIds(client: Client, runChannelId: string, classes: 
   }
 }
 
+/** Posted, but the SENT report has not landed yet: the retry only reports. */
+const postedAnnouncementIds = new Set<string>();
+
 /**
  * Sends one Run-channel announcement and records the outcome: SENT, or
  * FAILED_PERMANENT for a missing / non-text channel or missing access (no
- * retry, no recreate). Transient errors propagate so the row stays PENDING.
+ * retry, no recreate). Transient errors propagate so the row stays PENDING;
+ * a message already posted is not posted again when only its SENT report failed.
+ * `send` returning "SKIPPED" records that instead (nothing was posted).
  */
 async function postRunAnnouncement(
   api: BotApiClient,
@@ -1622,21 +1657,32 @@ async function postRunAnnouncement(
   client: Client,
 ): Promise<void> {
   try {
-    const channel = await client.channels.fetch(runChannelId);
-    if (!channel || !channel.isTextBased() || !("send" in channel)) {
-      await api.recordDiscordState(item.runId, {
-        kind: "run-announcement",
-        announcementId: item.announcementId,
-        result: "FAILED_PERMANENT",
-      });
-      return;
+    if (!postedAnnouncementIds.has(item.announcementId)) {
+      const channel = await client.channels.fetch(runChannelId);
+      if (!channel || !channel.isTextBased() || !("send" in channel)) {
+        await api.recordDiscordState(item.runId, {
+          kind: "run-announcement",
+          announcementId: item.announcementId,
+          result: "FAILED_PERMANENT",
+        });
+        return;
+      }
+      if ((await send(channel as TextChannel)) === "SKIPPED") {
+        await api.recordDiscordState(item.runId, {
+          kind: "run-announcement",
+          announcementId: item.announcementId,
+          result: "SKIPPED",
+        });
+        return;
+      }
+      postedAnnouncementIds.add(item.announcementId);
     }
-    await send(channel as TextChannel);
     await api.recordDiscordState(item.runId, {
       kind: "run-announcement",
       announcementId: item.announcementId,
       result: "SENT",
     });
+    postedAnnouncementIds.delete(item.announcementId);
   } catch (error) {
     if (isDiscordUnknownChannelError(error) || isDiscordPermissionError(error)) {
       console.warn(

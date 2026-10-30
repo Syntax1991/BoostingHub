@@ -1,8 +1,9 @@
 "use server";
 
 import { requireUser } from "@/auth/session";
-import { mapActionError, type ActionResult } from "@/lib/action-result";
-import { lateFillHelpFeedback, lateFillHelpService } from "@/services/late-fill-help.service";
+import { mapActionError, type ActionFailure, type ActionResult } from "@/lib/action-result";
+import { pingRoleLabel } from "@/lib/late-fill-help";
+import { lateFillHelpFeedback, lateFillHelpService, type PingRolesDialogData } from "@/services/late-fill-help.service";
 import { rosterBuilderService } from "@/services/roster-builder.service";
 import { rosterService } from "@/services/roster.service";
 import {
@@ -11,6 +12,7 @@ import {
 } from "@/services/roster-character-sync.service";
 import {
   applyRosterBuilderSchema,
+  customPingSchema,
   proposeRosterBuilderSchema,
   publishRosterSchema,
   repostRosterSchema,
@@ -200,13 +202,38 @@ function rosterCharacterSyncMessage(result: RosterCharacterSyncResult): string {
   return `Characters: ${parts.join(" · ")}.`;
 }
 
-/** Late Fill: ask the Guild ping roles in the Run channel for the missing roles (cooldown per role). */
+/** Automatic: ask the Guild ping roles in the Run channel for the missing roles (cooldown per role). */
 export async function requestLateFillHelpAction(input: unknown): Promise<ActionResult> {
   try {
     const user = await requireUser();
     const parsed = rosterRunSchema.parse(input);
     const result = await lateFillHelpService.request(user, parsed.runId);
     return { ok: true, message: lateFillHelpFeedback(result) };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+/** Ping roles dialog: the Automatic preview and the roles Custom can ping. Read-only, starts no cooldown. */
+export async function getPingRolesDialogDataAction(
+  input: unknown,
+): Promise<{ ok: true; data: PingRolesDialogData } | ActionFailure> {
+  try {
+    const user = await requireUser();
+    const parsed = rosterRunSchema.parse(input);
+    return { ok: true, data: await lateFillHelpService.dialogData(user, parsed.runId) };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+/** Custom request: the Raid Lead's text, pinging the roles they chose, in the Run channel. */
+export async function requestCustomPingAction(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = customPingSchema.parse(input);
+    const result = await lateFillHelpService.requestCustom(user, parsed);
+    return { ok: true, message: `Ping queued: ${result.roles.map((key) => pingRoleLabel(key)).join(", ")}.` };
   } catch (error) {
     return mapActionError(error);
   }

@@ -1,10 +1,12 @@
 import { db, orm } from "@/lib/prisma";
 import {
-  parseLateFillHelpClasses,
-  parseLateFillHelpRoles,
+  serializeCustomPing,
   serializeLateFillHelp,
+  storedPingKeys,
+  type CustomPing,
   type LateFillHelpRole,
   type LateFillHelpRoleKey,
+  type PingRoleKey,
 } from "@/lib/late-fill-help";
 import { lockRosterInTx } from "@/repositories/roster.repository";
 import {
@@ -145,7 +147,7 @@ export async function insertAnnouncementIgnoreDuplicateTx(
 }
 
 export type LateFillHelpWriteResult = {
-  /** The PENDING announcement the bot will post; null when every role was cooling down. */
+  /** The PENDING announcement the bot will post; null when every role and class was cooling down. */
   created: RunDiscordAnnouncementRecord | null;
   /** Roles this request pings. */
   pinged: LateFillHelpRole[];
@@ -153,16 +155,98 @@ export type LateFillHelpWriteResult = {
   pingedClasses: WowClass[];
   /** Roles asked for too recently on this Run, with when they may be asked again. */
   cooling: Array<{ role: LateFillHelpRoleKey; availableAt: string }>;
+  /** Classes asked for too recently on this Run. */
+  coolingClasses: Array<{ wowClass: WowClass; availableAt: string }>;
 };
 
+type HelpRequestIdentity = {
+  runId: string;
+  scheduledStartAt: string;
+  productLabel: string;
+  difficulty: RaidDifficulty;
+  lootType: RunLootType;
+};
+
+/** Newest ping per role / class within the cooldown, from automatic and custom requests alike. */
+async function lastPingAtByKey(txOrm: TxOrm, runId: string, now: string, cooldownMs: number): Promise<Map<PingRoleKey, number>> {
+  const since = new Date(Date.parse(now) - cooldownMs).toISOString();
+  const recent = (await txOrm.RunDiscordAnnouncement.where({ runId, type: "LATE_FILL_HELP" })
+    .where((row) => row.createdAt.gte(since))
+    .select("createdAt", "helpRoles")
+    .all()) as Array<Record<string, unknown>>;
+  const lastAt = new Map<PingRoleKey, number>();
+  for (const row of recent) {
+    const at = Date.parse(asString(row.createdAt));
+    for (const key of storedPingKeys(asStringOrNull(row.helpRoles))) {
+      lastAt.set(key, Math.max(lastAt.get(key) ?? 0, at));
+    }
+  }
+  return lastAt;
+}
+
+async function insertHelpRequestTx(txOrm: TxOrm, input: HelpRequestIdentity, helpRoles: string, now: string) {
+  const id = crypto.randomUUID();
+  await insertAnnouncementIgnoreDuplicateTx(txOrm, {
+    id,
+    runId: input.runId,
+    type: "LATE_FILL_HELP",
+    sourceKey: `late-fill-help:${input.runId}:${id}`,
+    previousScheduledStartAt: null,
+    scheduledStartAt: input.scheduledStartAt,
+    productLabel: input.productLabel,
+    difficulty: input.difficulty,
+    lootType: input.lootType,
+    helpRoles,
+    createdAt: now,
+  });
+  const created = await txOrm.RunDiscordAnnouncement.where({ id }).first();
+  return created ? mapRunDiscordAnnouncementRow(created as Record<string, unknown>) : null;
+}
+
 export const runDiscordAnnouncementRepository = {
+  /** Read-only: what the shared cooldown holds back right now (the dialog's preview; no lock, no write). */
+  async recentPings(runId: string, now: string, cooldownMs: number): Promise<Map<PingRoleKey, number>> {
+    return lastPingAtByKey(orm, runId, now, cooldownMs);
+  },
+
+  /** The bot's delivery outcome of the Run's newest ping (automatic or custom); null when there is none. */
+  async latestHelpRequestStatus(runId: string): Promise<DiscordDeliveryStatus | null> {
+    const rows = (await orm.RunDiscordAnnouncement.where({ runId, type: "LATE_FILL_HELP" })
+      .orderBy((row) => row.createdAt.desc())
+      .limit(1)
+      .all()) as Array<Record<string, unknown>>;
+    return rows[0] ? mapRunDiscordAnnouncementRow(rows[0]).status : null;
+  },
+
+  /**
+   * A custom request, under the same lock and cooldown as Late Fill help. A
+   * role the Raid Lead chose is never silently dropped: with any of them
+   * cooling down nothing goes out and `cooling` names them.
+   */
+  async createCustomPing(input: HelpRequestIdentity & {
+    rosterId: string;
+    ping: CustomPing;
+    cooldownMs: number;
+    now: string;
+  }): Promise<{ created: RunDiscordAnnouncementRecord | null; cooling: Array<{ key: PingRoleKey; availableAt: string }> }> {
+    return db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      await lockRosterInTx(txOrm, input.rosterId);
+      const lastAt = await lastPingAtByKey(txOrm, input.runId, input.now, input.cooldownMs);
+      const cooling = input.ping.roles
+        .filter((key) => lastAt.has(key))
+        .map((key) => ({ key, availableAt: new Date(lastAt.get(key)! + input.cooldownMs).toISOString() }));
+      if (cooling.length > 0) return { created: null, cooling };
+      return { created: await insertHelpRequestTx(txOrm, input, serializeCustomPing(input.ping), input.now), cooling };
+    });
+  },
+
   /**
    * Late Fill help, serialized per Run by the roster row lock (the same lock
    * roster and attendance writes take): roles and classes pinged within
-   * `cooldownMs` are dropped, the rest go into ONE PENDING announcement.
-   * Classes only accompany a role: with every role cooling down nothing goes
-   * out. Concurrent clicks therefore produce one message, never two pings of
-   * the same role or class.
+   * `cooldownMs` are dropped, the rest go into ONE PENDING announcement. With
+   * nothing left nothing goes out. Concurrent clicks therefore produce one
+   * message, never two pings of the same role or class.
    */
   async createLateFillHelp(input: {
     runId: string;
@@ -179,46 +263,24 @@ export const runDiscordAnnouncementRepository = {
     return db.transaction(async (tx) => {
       const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
       await lockRosterInTx(txOrm, input.rosterId);
-      const since = new Date(Date.parse(input.now) - input.cooldownMs).toISOString();
-      const recent = (await txOrm.RunDiscordAnnouncement.where({ runId: input.runId, type: "LATE_FILL_HELP" })
-        .where((row) => row.createdAt.gte(since))
-        .select("createdAt", "helpRoles")
-        .all()) as Array<Record<string, unknown>>;
-      const lastByRole = new Map<LateFillHelpRoleKey, number>();
-      const recentClasses = new Set<WowClass>();
-      for (const row of recent) {
-        const at = Date.parse(asString(row.createdAt));
-        for (const help of parseLateFillHelpRoles(asStringOrNull(row.helpRoles))) {
-          lastByRole.set(help.role, Math.max(lastByRole.get(help.role) ?? 0, at));
-        }
-        for (const wowClass of parseLateFillHelpClasses(asStringOrNull(row.helpRoles))) recentClasses.add(wowClass);
-      }
+      const lastAt = await lastPingAtByKey(txOrm, input.runId, input.now, input.cooldownMs);
       const cooling = input.roles
-        .filter((row) => lastByRole.has(row.role))
-        .map((row) => ({ role: row.role, availableAt: new Date(lastByRole.get(row.role)! + input.cooldownMs).toISOString() }));
-      const pinged = input.roles.filter((row) => !lastByRole.has(row.role));
-      if (pinged.length === 0) return { created: null, pinged, pingedClasses: [], cooling };
-      const pingedClasses = input.classes.filter((wowClass) => !recentClasses.has(wowClass));
-      const id = crypto.randomUUID();
-      await insertAnnouncementIgnoreDuplicateTx(txOrm, {
-        id,
-        runId: input.runId,
-        type: "LATE_FILL_HELP",
-        sourceKey: `late-fill-help:${input.runId}:${id}`,
-        previousScheduledStartAt: null,
-        scheduledStartAt: input.scheduledStartAt,
-        productLabel: input.productLabel,
-        difficulty: input.difficulty,
-        lootType: input.lootType,
-        helpRoles: serializeLateFillHelp(pinged, pingedClasses),
-        createdAt: input.now,
-      });
-      const created = await txOrm.RunDiscordAnnouncement.where({ id }).first();
+        .filter((row) => lastAt.has(row.role))
+        .map((row) => ({ role: row.role, availableAt: new Date(lastAt.get(row.role)! + input.cooldownMs).toISOString() }));
+      const coolingClasses = input.classes
+        .filter((wowClass) => lastAt.has(wowClass))
+        .map((wowClass) => ({ wowClass, availableAt: new Date(lastAt.get(wowClass)! + input.cooldownMs).toISOString() }));
+      const pinged = input.roles.filter((row) => !lastAt.has(row.role));
+      const pingedClasses = input.classes.filter((wowClass) => !lastAt.has(wowClass));
+      if (pinged.length === 0 && pingedClasses.length === 0) {
+        return { created: null, pinged, pingedClasses, cooling, coolingClasses };
+      }
       return {
-        created: created ? mapRunDiscordAnnouncementRow(created as Record<string, unknown>) : null,
+        created: await insertHelpRequestTx(txOrm, input, serializeLateFillHelp(pinged, pingedClasses), input.now),
         pinged,
         pingedClasses,
         cooling,
+        coolingClasses,
       };
     });
   },

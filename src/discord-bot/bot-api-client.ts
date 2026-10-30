@@ -1,4 +1,4 @@
-import type { LateFillHelpRole } from "@/lib/late-fill-help";
+import type { CustomPing, LateFillHelpRole } from "@/lib/late-fill-help";
 import type { RunScopeChange } from "@/lib/run-scope-change";
 import type { BotEnv } from "@/discord-bot/env";
 import type { RaidDifficulty, RunLootType, WowClass } from "@/models/enums";
@@ -252,6 +252,8 @@ export class BotApiClient {
         helpRoles?: LateFillHelpRole[];
         /** LATE_FILL_HELP only: classes whose buffs the roster misses; optional for an older API. */
         helpClasses?: WowClass[];
+        /** LATE_FILL_HELP only: a custom request's text and chosen roles; optional for an older API. */
+        helpCustom?: CustomPing | null;
         scheduledStartAt: string;
         productLabel: string;
         /** Compact Run identity; optional for an older API. */
