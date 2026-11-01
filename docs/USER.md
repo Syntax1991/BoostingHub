@@ -154,7 +154,7 @@ You manage Runs where you are the Raid Lead. Admins can manage every Run. Your *
 
 **Build the roster** on the Roster tab:
 
-1. Review the offers and pick Characters with a **role**. Picks stay local until you choose **Save Roster**.
+1. Review the offers and pick Characters with a **role**. Picks stay local until you choose **Save**.
 2. Add people if needed: **Add Booster** with **Registered player** for someone with an account, or **External** for someone without one.
 3. Use **Auto Build Roster** if you like: **Fill gaps** keeps your picks, **Build from signups** proposes a full draft. Saved Characters are never auto-picked.
 4. Watch composition and class buffs. A composition mismatch is a warning you can accept; a schedule conflict blocks the pick.
@@ -162,7 +162,7 @@ You manage Runs where you are the Raid Lead. Admins can manage every Run. Your *
 
 ![Roster](./guides/screenshots/rl-05-roster.png)
 
-**After publishing** the roster stays editable until Start. Changes are published with **Update Roster**, and players are told only about what changed. Other useful tools:
+**After publishing** the roster stays editable until Start. Changes are published with **Update**, and players are told only about what changed. Other useful tools:
 
 - **Find replacement** suggests people from the current signups for a problem slot.
 - **Ping roles** asks Discord for missing roles or sends your own short request, at most once per 30 minutes per role.

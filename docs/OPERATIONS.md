@@ -365,6 +365,30 @@ Safety rules:
 - **Capture only from a freshly seeded local database** (`npm run test:db:reset` on a dedicated database, then run the app against it), never from a database that has seen a real Discord login: a real name would end up in the repository and in Discord. Look at every image before committing or publishing. The seed's Run dates lie in the past, so views of `/runs` and `/my-runs` need `?id=all` to show Runs.
 - Publishing changes Discord for everyone, so it is a deliberate step after a release, not part of a deploy.
 
+#### Replacing a guide with new messages
+
+Discord limits edits to messages older than one hour (seen as HTTP 429 "Maximum number of edits to messages older than 1 hour"). A full text refresh should therefore replace the messages instead of editing them. Replace runs in separate steps, one guide at a time:
+
+```bash
+npm run guide:booster:replace:plan      # read-only: shows what would happen
+npm run guide:booster:replace:publish   # snapshot, create and verify new messages, delete nothing
+# check the new messages in Discord
+npm run guide:booster:replace:retire    # verify again, delete only the saved old ids, verify the end
+```
+
+The same three commands exist as `guide:raidlead:replace:*`. On the server, run them as the app user from the app directory.
+
+- **Refuses to start** when the channel holds anything except this bot's guide messages with known markers: other authors, unmarked messages, unknown markers or duplicates.
+- **Saves first:** all old messages, their image bytes and the old ids go to `replace-<channelId>/` in the snapshot directory before the first create.
+- **New messages** are created one at a time with a pause, without pings or push notifications, and with a nonce, so a repeated create within a few minutes returns the first message.
+- **Verification** compares text, footer, button, image bytes, mentions and order, and accepts only the saved old and new ids in the channel.
+- **Deletes** only old ids saved in the state file, and only after a fresh verification. Other authors' messages are never deleted.
+- **429:** waits once when Discord asks for 60 seconds or less. A second 429, a longer wait or a global limit stops the run and records the earliest next try. There are no retry loops.
+- **After any stop**, read the output and `state.json`. Running the same command again continues from the saved ids and creates nothing twice. A publish failure keeps the old guide in place.
+- **Changed text or screenshots** during a replacement make the run refuse. Remove the unfinished new messages deliberately, and move `state.json` away only after that.
+- **Normal `--publish`** refuses while a replacement is unfinished. A leftover `lock` file means another run or a crash; remove it only when no such process is running.
+- To start another replacement after a finished one, move the old `replace-<channelId>/` folder away.
+
 ## Backups
 
 | Concern | Value |

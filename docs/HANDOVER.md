@@ -45,7 +45,7 @@ This repository is public, so concrete server details, access data and secret va
 
 - A full test run on a database without reset failed four tests once, while another session was active (cause unproven). Those files passed alone, and the suite passed after a reset. Use `npm run test:full`.
 - The production web log showed a burst of "Server Reference ID did not match" lines on 2026-11-01. The origin was not traced; it looks like invalid Server Action probing, not an app failure.
-- The guide channels in Discord still show the old text and screenshots until someone runs `npm run guide:booster:publish` and `npm run guide:raidlead:publish` after the next release. Source and `USER.md` already agree.
+- The guide channels in Discord still show older text and screenshots. On 2026-11-01 an in-place publish stopped at Discord's limit for editing older messages: three Booster cards were updated, the other Booster cards and the whole Raid Lead guide were not. Use the replace flow in [OPERATIONS.md](./OPERATIONS.md#replacing-a-guide-with-new-messages) instead of editing again.
 - **Add strike on the Run page looks unreachable.** `AddStrikeButton` only renders in the manager signup list, and `run-detail-tabs.tsx` shows that list only to viewers who are not managers. So in practice Strikes are added on `/manage/users/[userId]`, which means by Admins. Found by reading the code, not reproduced in a browser, and not fixed because the freeze excludes logic changes.
 - External boosters have no Warcraft Logs identity and are shown as "Log data unavailable".
 - The voice-presence hint assumes one web process.

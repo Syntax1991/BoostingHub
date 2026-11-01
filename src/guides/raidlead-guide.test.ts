@@ -126,12 +126,12 @@ describe("raid lead guide v2 content", () => {
     ]);
   });
 
-  it("documents Community, Publish Roster, and a completion step without any financial workflow", () => {
+  it("documents Community, the Publish button, and a completion step without any financial workflow", () => {
     const create = RAIDLEAD_GUIDE_CARDS.find((c) => c.key === "create-run")!;
     const roster = RAIDLEAD_GUIDE_CARDS.find((c) => c.key === "build-roster")!;
     const complete = RAIDLEAD_GUIDE_CARDS.find((c) => c.key === "complete-run")!;
     expect(create.description).toMatch(/Community/);
-    expect(roster.description).toMatch(/Publish Roster/);
+    expect(roster.description).toMatch(/\*\*Publish\*\*/);
     expect(complete.description).toMatch(/Correct Attendance/);
     for (const card of RAIDLEAD_GUIDE_CARDS) {
       expect(JSON.stringify(card)).not.toMatch(/payout|settlement|mark paid|gold pot/i);

@@ -77,6 +77,8 @@ export type GuideDiscordClient = {
     embed: ReturnType<typeof buildBoosterGuideEmbed>;
     components?: unknown[];
     files: Array<{ name: string; data: Buffer }>;
+    /** Replace mode only: makes a repeated create return the first message. */
+    nonce?: string;
   }): Promise<{ id: string }>;
   editMessage(input: {
     channelId: string;
@@ -273,8 +275,8 @@ export function validateBoosterGuideCards(cards: readonly BoosterGuideCard[] = B
   }
 
   const discordCard = cards.find((c) => c.key === "discord-signups");
-  if (discordCard && !/Quick Signup/i.test(JSON.stringify(discordCard))) {
-    errors.push("discord-signups card must mention Quick Signup");
+  if (discordCard && !/Quick Sign/.test(JSON.stringify(discordCard))) {
+    errors.push("discord-signups card must mention Quick Sign");
   }
   const webCard = cards.find((c) => c.key === "signing-up");
   if (webCard && /Web Quick Signup|website Quick Signup button/i.test(JSON.stringify(webCard))) {

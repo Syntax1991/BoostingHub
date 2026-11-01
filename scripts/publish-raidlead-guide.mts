@@ -12,19 +12,38 @@
  *   --publish          apply creates/edits (and optional legacy retirement)
  *   --retire-legacy    after upsert + re-read verification, delete the complete
  *                      known six-message legacy Raid Lead Guide set
+ *   --replace          replace the guide with new messages instead of editing it:
+ *                      alone: read-only plan · with --publish: create and verify new
+ *                      messages, delete nothing · with --retire-old: delete the old
+ *                      ids saved by the publish run
  *   --snapshot-dir=…   override local rollback snapshot directory
  *                      (default: tmp-raidlead-guide-snapshots/)
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { GUIDE_CHANNEL_IDS } from "@/discord-bot/guide-channels";
-import { RAIDLEAD_GUIDE_CARDS, buildRaidleadGuideEmbed } from "@/guides/raidlead-guide";
+import {
+  RAIDLEAD_GUIDE_CARDS,
+  buildRaidleadGuideComponents,
+  buildRaidleadGuideEmbed,
+  parseRaidleadGuideCardKey,
+} from "@/guides/raidlead-guide";
+import {
+  discordHttpErrorFrom,
+  fetchDiscordAsset,
+  hasActiveGuideReplacement,
+  runGuideReplaceCli,
+  type GuideReplaceMessage,
+} from "@/guides/guide-replace";
 import {
   DISCORD_API,
   defaultGuideSnapshotDir,
   defaultScreenshotsDir,
   executeRaidleadGuidePublish,
+  guideMessageNeedsUpdate,
+  loadGuideScreenshot,
   planRaidleadGuidePublish,
+  resolveRaidleadGuideCardKey,
   resolveGuideAssetRevisions,
   validateRaidleadGuideCards,
   type DiscordMessageLike,
@@ -35,6 +54,8 @@ function arg(name: string): string | undefined {
   const prefix = `--${name}=`;
   return process.argv.find((a) => a.startsWith(prefix))?.slice(prefix.length);
 }
+
+const SUPPRESS_NOTIFICATIONS_FLAG = 1 << 12;
 
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -58,8 +79,7 @@ async function discordJson<T>(
     body,
   });
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Discord ${res.status} ${method} ${path}: ${text.slice(0, 500)}`);
+    throw discordHttpErrorFrom(res.status, method, path, await res.text(), res.headers);
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
@@ -107,12 +127,14 @@ function createRestClient(token: string): GuideDiscordClient {
     async listMessages(channelId) {
       return listAllMessages(token, channelId);
     },
-    async createMessage({ channelId, embed, components, files }) {
+    async createMessage({ channelId, embed, components, files, nonce }) {
       const payload: Record<string, unknown> = {
         content: "",
         embeds: [embed],
       };
       if (components) payload.components = components;
+      // Replace mode: Discord returns the first message for a repeated nonce, and no push goes out.
+      if (nonce) Object.assign(payload, { nonce, enforce_nonce: true, flags: SUPPRESS_NOTIFICATIONS_FLAG });
       const form = buildMultipart(payload, files);
       return discordJson<{ id: string }>(token, "POST", `/channels/${channelId}/messages`, form);
     },
@@ -166,6 +188,7 @@ async function main() {
   const channelId = arg("channel") ?? GUIDE_CHANNEL_IDS.raidlead;
   const publish = process.argv.includes("--publish");
   const retireLegacy = process.argv.includes("--retire-legacy");
+  const replace = process.argv.includes("--replace");
   const snapshotDir = arg("snapshot-dir") ?? defaultGuideSnapshotDir();
   const screenshotsDir = defaultScreenshotsDir();
 
@@ -184,11 +207,67 @@ async function main() {
     );
   }
 
+  if (replace) {
+    const retireOld = process.argv.includes("--retire-old");
+    if (retireLegacy || (retireOld && publish)) {
+      throw new Error("--replace takes either --publish or --retire-old, and never --retire-legacy.");
+    }
+    const token = requireEnv("DISCORD_BOT_TOKEN");
+    const rest = createRestClient(token);
+    const me = await discordJson<{ id: string }>(token, "GET", "/users/@me");
+    const ok = await runGuideReplaceCli(
+      {
+        channelId,
+        botUserId: me.id,
+        snapshotDir,
+        adapter: {
+          kind: "raidlead",
+          cards: RAIDLEAD_GUIDE_CARDS,
+          assetRevisions,
+          cardErrors,
+          cardKeyFromFooter: (footer) => {
+            const raw = parseRaidleadGuideCardKey(footer);
+            return raw ? resolveRaidleadGuideCardKey(raw) : null;
+          },
+          needsUpdate: (message, card, revision) => guideMessageNeedsUpdate(message, card, revision),
+          render: (card, revision) => [
+            buildRaidleadGuideEmbed(card, { assetRevision: revision }),
+            buildRaidleadGuideComponents(card),
+          ],
+        },
+        client: {
+          listMessages: (id) => rest.listMessages(id) as Promise<GuideReplaceMessage[]>,
+          deleteMessage: (id, messageId) => rest.deleteMessage(id, messageId),
+          fetchAsset: fetchDiscordAsset,
+          async createCardMessage({ channelId: id, card, assetRevision, nonce }) {
+            const files = card.imageFile
+              ? [{ name: card.imageFile, data: await loadGuideScreenshot(screenshotsDir, card.imageFile) }]
+              : [];
+            return rest.createMessage({
+              channelId: id,
+              embed: buildRaidleadGuideEmbed(card, { assetRevision }),
+              components: buildRaidleadGuideComponents(card),
+              files,
+              nonce,
+            });
+          },
+        },
+      },
+      retireOld ? "retire" : publish ? "publish" : "plan",
+    );
+    if (!ok) process.exit(1);
+    return;
+  }
+
   if (!publish) {
     console.log("\nDry-run / preview only (no Discord reads or writes).");
     console.log("Re-run with --publish to upsert the live guide.");
     if (retireLegacy) console.log("Note: --retire-legacy is ignored without --publish.");
     return;
+  }
+
+  if (await hasActiveGuideReplacement(snapshotDir, channelId)) {
+    throw new Error("An unfinished --replace run owns this channel. Finish it before a normal publish.");
   }
 
   const token = requireEnv("DISCORD_BOT_TOKEN");
