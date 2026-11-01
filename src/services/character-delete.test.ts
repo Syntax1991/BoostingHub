@@ -343,7 +343,7 @@ describe("delete after completed-run history (signup / attendance preservation)"
     await rosterService.publishRoster(lead, { runId: created.id, version: ready.roster.version, acknowledgeWarnings: true });
     await runService.startRun(lead, { runId: created.id });
     const [attendance] = await attendanceRepository.listByRunId(created.id);
-    await attendanceService.setStatus(lead, { attendanceId: attendance!.id, status: "PRESENT" });
+    await attendanceService.setStatus(lead, { attendanceId: attendance!.id, expectedStatus: "UNMARKED", status: "PRESENT" });
     await runService.completeRun(lead, created.id);
     return { runId: created.id, signupId, attendanceId: attendance!.id };
   }

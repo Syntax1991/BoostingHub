@@ -1,6 +1,7 @@
 import type { ExternalBooster } from "@/lib/external-booster";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { canManageRun } from "@/auth/authorization";
+import { runEditVersion } from "@/lib/run-edit-version";
 import { DomainError } from "@/lib/errors";
 import {
   matchProductForContents,
@@ -223,6 +224,8 @@ export const runDetailService = {
     }
 
     let editor: {
+      /** Sent back on save: the stale-form guard. */
+      editVersion: string;
       canAssignRaidLead: boolean;
       /**
        * Product selector: active + selectable Products, plus the Run's own
@@ -260,6 +263,7 @@ export const runDetailService = {
         ? await userRepository.listEligibleRaidLeads()
         : [{ id: run.raidLeadId, name: run.raidLeadName, displayName: run.raidLeadDisplayName }];
       editor = {
+        editVersion: runEditVersion(run),
         canAssignRaidLead: capabilities.canReassignRaidLead,
         products,
         currentSelection,
