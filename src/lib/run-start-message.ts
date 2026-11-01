@@ -26,7 +26,7 @@ const DISCORD_MARKDOWN_CHARS = /[\\*_~`|<>[\]#]/g;
 
 /**
  * Makes user-controlled text safe to embed inline in Discord markdown while
- * keeping ordinary names unchanged (Syntax, Kiri, Simon):
+ * keeping ordinary names unchanged (Gamma, Delta, Epsilon):
  * - line breaks collapse to one space → stays one logical line
  * - markdown / mention syntax characters are backslash-escaped → cannot close
  *   the surrounding bold or form <@id>, <#id>, links, code, spoilers

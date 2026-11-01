@@ -51,7 +51,7 @@ describe("import-rules", () => {
 
   it("throws BLIZZARD_LEVEL_TOO_LOW below the minimum", () => {
     try {
-      assertImportCharacterLevel(70, "Synbank");
+      assertImportCharacterLevel(70, "Testbank");
       throw new Error("expected domain error");
     } catch (error) {
       expect(isDomainError(error) && error.code).toBe("BLIZZARD_LEVEL_TOO_LOW");
@@ -69,7 +69,7 @@ describe("import-selection helpers", () => {
       realm: "Blackrock",
       level: 91,
     }),
-    candidate({ name: "Synbank", status: "level_too_low", wowClass: "WARRIOR", level: 10 }),
+    candidate({ name: "Testbank", status: "level_too_low", wowClass: "WARRIOR", level: 10 }),
     candidate({ name: "LinkedOne", status: "already_linked", wowClass: "MAGE", level: 90 }),
     candidate({
       name: "ConflictOne",
@@ -94,7 +94,7 @@ describe("import-selection helpers", () => {
   });
 
   it("filters by name, realm, and class", () => {
-    expect(filterImportCandidates(rows, "syn")).toHaveLength(3);
+    expect(filterImportCandidates(rows, "test")).toHaveLength(3);
     expect(filterImportCandidates(rows, "blackrock").map((row) => row.name)).toEqual(["Testblast"]);
     expect(filterImportCandidates(rows, "paladin").map((row) => row.name)).toEqual(["Testlight"]);
   });
@@ -141,8 +141,8 @@ describe("item level presentation sorting", () => {
 
   it("composes with search filters without changing eligibility ids", () => {
     const rows = [
-      candidate({ name: "SynA", status: "import", realm: "Antonidas", suggestedItemLevel: 310 }),
-      candidate({ name: "SynB", status: "import", realm: "Blackrock", suggestedItemLevel: 320 }),
+      candidate({ name: "TestA", status: "import", realm: "Antonidas", suggestedItemLevel: 310 }),
+      candidate({ name: "TestB", status: "import", realm: "Blackrock", suggestedItemLevel: 320 }),
       candidate({ name: "Low", status: "level_too_low", realm: "Antonidas", level: 10 }),
     ];
     const filtered = filterImportCandidates(rows, "Antonidas").map((row) => ({
@@ -150,7 +150,7 @@ describe("item level presentation sorting", () => {
       sortItemLevel: row.suggestedItemLevel,
     }));
     const sorted = sortImportCandidatesByItemLevel(filtered, "desc");
-    expect(sorted.map((row) => row.name)).toEqual(["SynA", "Low"]);
-    expect(eligibleCandidateIds(sorted)).toEqual(["SynA"]);
+    expect(sorted.map((row) => row.name)).toEqual(["TestA", "Low"]);
+    expect(eligibleCandidateIds(sorted)).toEqual(["TestA"]);
   });
 });

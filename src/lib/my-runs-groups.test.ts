@@ -15,7 +15,7 @@ function row(overrides: Partial<Row> & Pick<Row, "id">): Row {
     displayRole: null,
     offeredRoles: ["HEALER"],
     participationType: "BOOSTER",
-    characterName: "Synbeast",
+    characterName: "Testbeast",
     characterRealm: "Antonidas",
     lootbuddyClass: null,
     canWithdraw: true,
@@ -33,7 +33,7 @@ const testblastDraft = row({
   canWithdrawWithReason: true,
 });
 const pendingSat = [
-  row({ id: "s-beast", characterName: "Synbeast", offeredRoles: ["RANGED_DPS"] }),
+  row({ id: "s-beast", characterName: "Testbeast", offeredRoles: ["RANGED_DPS"] }),
   row({ id: "s-void", characterName: "Testvoid" }),
   row({ id: "s-mist", characterName: "Testmist" }),
   row({ id: "s-light", characterName: "Testlight" }),

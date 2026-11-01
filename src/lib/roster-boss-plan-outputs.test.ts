@@ -139,7 +139,7 @@ describe("Discord Roster message", () => {
     }).toJSON();
     const field = embed.fields!.find((candidate) => candidate.name === "📋 Boss plan")!;
     expect(field.value).toBe(
-      "<@111> — Venom 5–6: Testpriest-Antonidas · Healer; Tide 1: Ranged DPS\nBexmage-Antonidas — Venom 3: Tank",
+      "<@111> — Venom 5–6: Testpriest-Antonidas · Healer; Tide 1: Ranged DPS\nDemomage-Antonidas — Venom 3: Tank",
     );
     expect(formatRosterBossPlanLine(embedData.groups.rangedDps[0]!, "Venom 3: Tank")).toBe("Demomage-Antonidas — Venom 3: Tank");
   });

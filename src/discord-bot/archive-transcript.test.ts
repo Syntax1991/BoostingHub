@@ -10,8 +10,8 @@ import {
 const BASE_MSG = {
   id: "m1",
   createdAt: "2026-09-12T20:00:00.000Z",
-  authorDisplayName: "Alpha",
-  authorUsername: "alpha",
+  authorDisplayName: "Xeno",
+  authorUsername: "xeno",
   authorDiscriminator: "0",
   authorId: "u1",
   content: "Hello <world>",
@@ -21,8 +21,8 @@ const BASE_MSG = {
 describe("buildArchiveTranscriptFilename", () => {
   it("prefixes transcript- and sanitizes the channel name", () => {
     expect(buildArchiveTranscriptFilename("closed-0337")).toBe("transcript-closed-0337.html");
-    expect(buildArchiveTranscriptFilename("closed-sat-2200-hc-vip-7of9-alpha")).toBe(
-      "transcript-closed-sat-2200-hc-vip-7of9-alpha.html",
+    expect(buildArchiveTranscriptFilename("closed-sat-2200-hc-vip-7of9-xeno")).toBe(
+      "transcript-closed-sat-2200-hc-vip-7of9-xeno.html",
     );
   });
 });
@@ -58,7 +58,7 @@ describe("summarizeTranscriptUsers", () => {
       { ...BASE_MSG, id: "m2", authorId: "u2", authorUsername: "other", authorDisplayName: "Other" },
       { ...BASE_MSG, id: "m3" },
     ]);
-    expect(stats[0]).toMatchObject({ authorId: "u1", messageCount: 2, tag: "alpha#0" });
+    expect(stats[0]).toMatchObject({ authorId: "u1", messageCount: 2, tag: "xeno#0" });
     expect(stats[1]).toMatchObject({ authorId: "u2", messageCount: 1 });
   });
 });
@@ -78,7 +78,7 @@ describe("buildArchiveTranscriptHtml", () => {
     expect(html).toContain("Server: Test Guild (g1)");
     expect(html).toContain("Channel: closed-0337 (c1)");
     expect(html).toContain("<User-Info>");
-    expect(html).toContain("1 - alpha#0 (u1)");
+    expect(html).toContain("1 - xeno#0 (u1)");
     expect(html).toContain("<Base-Transcript>");
     expect(html).toContain("Hello &lt;world&gt;");
     expect(html).toContain("Signup");
@@ -137,7 +137,7 @@ describe("buildArchiveTranscriptHtml — Run archive regression", () => {
           
       <User-Info>
           1 - lead#0 (u2)
-          1 - alpha#0 (u1)
+          1 - xeno#0 (u1)
 
       <Base-Transcript>
       <style>
@@ -158,7 +158,7 @@ describe("buildArchiveTranscriptHtml — Run archive regression", () => {
       <meta name="manawyrm-message-content" content="AVAILABLE">
       <div class="transcript">
       <div class="message" data-id="m1">
-        <div class="meta"><strong>Alpha</strong> <span class="tag">alpha#0</span> <span class="id">(u1)</span> <time>2026-09-12 20:00:00 UTC</time></div>
+        <div class="meta"><strong>Xeno</strong> <span class="tag">xeno#0</span> <span class="id">(u1)</span> <time>2026-09-12 20:00:00 UTC</time></div>
         <div class="content">Hello &lt;world&gt;</div>
         <div class="embed"><div class="embed-title">Signup</div><div class="embed-description">Open now</div></div>
       </div>

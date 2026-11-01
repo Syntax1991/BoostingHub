@@ -300,7 +300,7 @@ describe("discordSyncService.getSignupEmbedData", () => {
     // "Testblast" case: one User, several healer characters — one of them also offers DPS.
     const healAlt1 = await createCharacter(ids.extra, "Testblast", "PRIEST", "Holy", "HEALER");
     const healAlt2 = await createCharacter(ids.extra, "Testlight", "PRIEST", "Discipline", "HEALER");
-    const healAlt3 = await createCharacter(ids.extra, "Synpal", "PALADIN", "Holy", "HEALER");
+    const healAlt3 = await createCharacter(ids.extra, "Testpal", "PALADIN", "Holy", "HEALER");
     for (const characterId of [healAlt1, healAlt2, healAlt3]) {
       await createSignup({ runId: roleRunId, userId: ids.extra, characterId, participationType: "BOOSTER", role: "HEALER" });
     }

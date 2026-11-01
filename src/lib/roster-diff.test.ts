@@ -13,7 +13,7 @@ function lootbuddy(signupId: string, userId: string, label = "Mage"): RosterDiff
 const published = [
   booster("s-mist", "u-mist", "HEALER", "Testmist-Antonidas"),
   booster("s-blast", "u-blast", "HEALER", "Testblast-Antonidas"),
-  booster("s-tank", "u-tank", "TANK", "Syntank-Antonidas"),
+  booster("s-tank", "u-tank", "TANK", "Testtank-Antonidas"),
 ];
 
 describe("diffRoster — Update Roster preview", () => {

@@ -11,11 +11,11 @@ import { defaultDpsAttackTypeForClass } from "@/lib/wow-specializations";
 describe("external booster input", () => {
   it("normalizes a pasted @name and extra whitespace", () => {
     expect(normalizeExternalBoosterName("  @dawn  ")).toBe("dawn");
-    expect(normalizeExternalBoosterName("@@Syn   Tax")).toBe("Gam Ma");
+    expect(normalizeExternalBoosterName("@@Gam   Ma")).toBe("Gam Ma");
   });
 
   it("accepts Discord-style names and Character names", () => {
-    for (const name of ["dawn", "@dawn", "syntax_1991", "Dr.Heal", "Gämma", "big-pump 2"]) {
+    for (const name of ["dawn", "@dawn", "gamma_1991", "Dr.Heal", "Gämma", "big-pump 2"]) {
       expect(externalBoosterInputError({ name, wowClass: "MAGE", role: "RANGED_DPS" })).toBeNull();
     }
   });

@@ -771,9 +771,9 @@ describe("rosterService publishedRole snapshot", () => {
     await orm.Character.create({
       id: paladinId,
       userId: ids.kael,
-      name: "Synpal",
+      name: "Testpal",
       realm: "Antonidas",
-      normalizedName: "synpal",
+      normalizedName: "testpal",
       normalizedRealm: "antonidas",
       region: "EU",
       wowClass: "PALADIN",
@@ -906,9 +906,9 @@ describe("rosterService publishedRole snapshot", () => {
     await orm.Character.create({
       id: mageId,
       userId: ids.kael,
-      name: "Synmage",
+      name: "Testmage",
       realm: "Antonidas",
-      normalizedName: "synmage",
+      normalizedName: "testmage",
       normalizedRealm: "antonidas",
       region: "EU",
       wowClass: "MAGE",

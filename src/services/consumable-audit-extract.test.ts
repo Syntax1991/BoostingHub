@@ -68,7 +68,7 @@ const assignedFights = report().fights.map((fight) => ({
 
 describe("matchParticipantActors", () => {
   it("matches a known actor by name + realm, case/space/accent-insensitive", () => {
-    expect(matchParticipantActors(attended("SYNLIGHT", "blackhand"), report())).toEqual({
+    expect(matchParticipantActors(attended("TESTLIGHT", "blackhand"), report())).toEqual({
       matchStatus: "MATCHED",
       actorIds: [1],
     });

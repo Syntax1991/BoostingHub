@@ -123,7 +123,7 @@ describe("attendance filters", () => {
 
   it("Search matches Character, realm or player name, case-insensitively", () => {
     expect(names(filterAttendanceRows(rows, { ...DEFAULT_ATTENDANCE_FILTERS, search: "ANN" }))).toEqual(["anna"]);
-    expect(names(filterAttendanceRows(rows, { ...DEFAULT_ATTENDANCE_FILTERS, search: "synb" }))).toEqual(["Eli"]);
+    expect(names(filterAttendanceRows(rows, { ...DEFAULT_ATTENDANCE_FILTERS, search: "testb" }))).toEqual(["Eli"]);
     expect(filterAttendanceRows(rows, { ...DEFAULT_ATTENDANCE_FILTERS, search: "antonidas" })).toHaveLength(rows.length);
   });
 
