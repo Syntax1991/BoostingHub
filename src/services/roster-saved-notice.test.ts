@@ -125,7 +125,15 @@ describe("planned bosses — N/M = the first N bosses in authoritative order", (
   const saved = (plannedBossCount: number, killed: number[]) =>
     savedPlannedBosses(
       { difficulty: "HEROIC", contents: [content(plannedBossCount)] },
-      [{ raidId: "venom", difficulty: "HEROIC", killedBossIds: killed.map((n) => `boss-${n}`) }],
+      [
+        {
+          raidId: "venom",
+          difficulty: "HEROIC",
+          bossesDefeated: killed.length,
+          isComplete: killed.length >= 8,
+          killedBossIds: killed.map((n) => `boss-${n}`),
+        },
+      ],
     ).map((boss) => boss.id);
 
   it("6/8 → bosses 1–6, 7/8 → bosses 1–7, 8/8 → all (by sortOrder, not input order)", () => {
@@ -139,6 +147,42 @@ describe("planned bosses — N/M = the first N bosses in authoritative order", (
     expect(saved(6, [6])).toEqual(["boss-6"]);
     expect(saved(6, [6, 7, 8])).toEqual(["boss-6"]);
     expect(saved(8, [7])).toEqual(["boss-7"]);
+  });
+
+  it("Start Run uses the shared selection-risk rule (Mythic binding, unknown / inconsistent evidence, difficulty, Bundles)", () => {
+    const at = (
+      difficulty: "HEROIC" | "MYTHIC",
+      plannedBossCount: number,
+      row: { difficulty?: "HEROIC" | "MYTHIC"; bossesDefeated: number; isComplete?: boolean; killedBossIds: string[] | null },
+    ) =>
+      savedPlannedBosses({ difficulty, contents: [content(plannedBossCount)] }, [
+        { raidId: "venom", difficulty: row.difficulty ?? difficulty, isComplete: row.isComplete ?? false, ...row },
+      ]).map((boss) => boss.id);
+    const planned6 = ["boss-1", "boss-2", "boss-3", "boss-4", "boss-5", "boss-6"];
+
+    // Heroic 6/8: only planned kills count; a full clear names the planned bosses.
+    expect(at("HEROIC", 6, { bossesDefeated: 1, killedBossIds: ["boss-8"] })).toEqual([]);
+    expect(at("HEROIC", 6, { bossesDefeated: 2, killedBossIds: ["boss-1", "boss-8"] })).toEqual(["boss-1"]);
+    expect(at("HEROIC", 6, { bossesDefeated: 8, isComplete: true, killedBossIds: null })).toEqual(planned6);
+    // Mythic binds the instance: a kill on an unplanned boss locks every planned boss.
+    expect(at("MYTHIC", 6, { bossesDefeated: 1, killedBossIds: ["boss-8"] })).toEqual(planned6);
+    expect(at("MYTHIC", 6, { bossesDefeated: 1, killedBossIds: ["boss-2"] })).toEqual(["boss-2"]);
+    // Unknown or inconsistent boss evidence never passes as safe.
+    expect(at("HEROIC", 6, { bossesDefeated: 1, killedBossIds: null })).toEqual(planned6);
+    expect(at("HEROIC", 6, { bossesDefeated: 2, killedBossIds: ["boss-8"] })).toEqual(planned6);
+    expect(at("HEROIC", 6, { bossesDefeated: 1, killedBossIds: ["boss-8", "not-a-boss"] })).toEqual(planned6);
+    // No progress, or another difficulty's lockout: nothing.
+    expect(at("HEROIC", 6, { bossesDefeated: 0, killedBossIds: [] })).toEqual([]);
+    expect(at("HEROIC", 6, { difficulty: "MYTHIC", bossesDefeated: 8, isComplete: true, killedBossIds: null })).toEqual([]);
+
+    // Bundle: each content on its own.
+    const tide = { raidId: "tide", plannedBossCount: 1, bosses: [{ id: "tide-1", name: "Tide 1", sortOrder: 1 }] };
+    expect(
+      savedPlannedBosses({ difficulty: "HEROIC", contents: [content(6), tide] }, [
+        { raidId: "venom", difficulty: "HEROIC", bossesDefeated: 1, isComplete: false, killedBossIds: ["boss-8"] },
+        { raidId: "tide", difficulty: "HEROIC", bossesDefeated: 1, isComplete: true, killedBossIds: ["tide-1"] },
+      ]).map((boss) => boss.id),
+    ).toEqual(["tide-1"]);
   });
 
   it("6/8 before the Run: a new kill on boss 7 alone never notifies", () => {

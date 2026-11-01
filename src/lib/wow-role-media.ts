@@ -19,8 +19,6 @@ import type { CharacterRole } from "@/models/enums";
  * Stored under `/public/media/roles/{tank,healer,dps}.png` (+ `loot.webp` for Lootbuddy).
  * MELEE_DPS / RANGED_DPS share Damage art; labels preserve Melee/Ranged.
  * Zero network at render — no per-row Blizzard fetch.
- *
- * See `public/media/roles/PROVENANCE.md`.
  */
 
 export type WowGroupRole = "TANK" | "HEALER" | "DAMAGE";

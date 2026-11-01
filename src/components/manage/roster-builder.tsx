@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -8,13 +8,33 @@ import {
   publishRosterAction,
   repostRosterAction,
   saveRosterDraftAction,
+  syncRosterCharactersAction,
   updateRosterAction,
 } from "@/controllers/roster.actions";
 import { Button } from "@/components/ui/button";
-import { AddBoosterDialog } from "@/components/manage/add-booster-dialog";
-import { RosterBuilderTrigger } from "@/components/manage/roster-builder-dialog";
+import { AddBoosterEntryDialog, type AddBoosterMode } from "@/components/manage/add-booster-entry-dialog";
+import { RosterBuilderDialog, type RosterBuilderMode } from "@/components/manage/roster-builder-dialog";
+import { RosterPingRolesDialog } from "@/components/manage/roster-ping-roles-dialog";
+import { RosterReplacementDialog, type ReplacementTarget } from "@/components/manage/roster-replacement-dialog";
+import { RosterUpdateDiff } from "@/components/manage/roster-update-diff";
+import {
+  SIGNUP_GROUP_BY_LABELS,
+  SIGNUP_GROUP_BY_MODES,
+  buildSignupGroups,
+  getSignupGroupByServerSnapshot,
+  getSignupGroupBySnapshot,
+  setSignupGroupBy,
+  signupGroupCountLabel,
+  subscribeSignupGroupBy,
+} from "@/components/manage/roster-signup-grouping";
+import { RosterBossPlanPanel } from "@/components/manage/roster-boss-plan-panel";
+import {
+  bossExceptionsPayload,
+  bossPlanIsDirty,
+  evaluateLiveBossPlan,
+} from "@/components/manage/roster-boss-plan-editor";
+import { ROSTER_ATTENTION_ANCHOR } from "@/components/runs/run-preflight-panel";
 import { SIGNUP_TILE_TONE_CLASSES, signupTileTone } from "@/lib/signup-tile-tone";
-import { setRosterHasUnsavedEdits } from "@/components/manage/roster-unsaved-store";
 import { resolveRosterActions } from "@/components/manage/roster-actions";
 import {
   ClassIcon,
@@ -28,6 +48,7 @@ import {
   LockoutIcon,
   LootbuddyIcon,
   QuietOkIcon,
+  ReplaceIcon,
   RoleIcon,
   WarningIcon,
 } from "@/components/ui/ops-icons";
@@ -47,7 +68,14 @@ import {
   formatContentLockoutTooltip,
   formatSignupTileLockoutShort,
 } from "@/lib/run-content-lockouts";
-import { isConcreteCharacterRole } from "@/lib/character-roles";
+import { isConcreteCharacterRole, type ConcreteCharacterRole } from "@/lib/character-roles";
+import { diffBossPlans, diffRoster, type RosterDiffMember } from "@/lib/roster-diff";
+import { describeSlotBossPlan, type RosterBossException } from "@/lib/roster-boss-plan";
+import {
+  rosterReplacementReasons,
+  withdrawnPickOpenRole,
+  type ReplacementCandidate,
+} from "@/lib/roster-replacement";
 import { countRolesByBucket } from "@/lib/roster-role-buckets";
 import {
   resolveDisplaySpecForSelectedRole,
@@ -90,6 +118,10 @@ import {
 } from "@/services/roster-selection-risk";
 
 type RosterView = Awaited<ReturnType<typeof rosterService.getRosterManagementView>>;
+
+/** Dense responsive Signups grid — the same in every Group by mode. */
+const SIGNUP_GRID_CLASS =
+  "grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 [&>li]:h-[54px]";
 type SignupRow = RosterView["groups"]["tanks"][number];
 
 function lootbuddyDisplayClass(signup: SignupRow): WowClass | null {
@@ -124,6 +156,10 @@ type DraftRosterSlot = {
   wowClass: WowClass | null;
   /** Why the slot needs attention, one line per reason; empty = no warning icon. */
   warningReasons: string[];
+  /** An existing warning a replacement fixes (saved / conflict / inactive / revoked) — shows Find replacement. */
+  replaceable?: boolean;
+  /** Compact boss exceptions ("Boss 5–6: Synpriest-Antonidas · Healer"); null = plays every boss as rostered. */
+  bossPlan?: string | null;
   external?: boolean;
 };
 
@@ -240,7 +276,8 @@ function RosterBuilderEditor({
   const [perfFilter, setPerfFilter] = useState<WclPerfFilter>("ALL");
   const [perfSort, setPerfSort] = useState<WclPerfSort>("DEFAULT");
   const [acknowledge, setAcknowledge] = useState(false);
-  const [addBoosterOpen, setAddBoosterOpen] = useState(false);
+  /** Open shared Add Booster entry: a registered player or the External Boosters list. */
+  const [addBoosterMode, setAddBoosterMode] = useState<AddBoosterMode | null>(null);
   /** Which confirmation the roster dialog shows: first Publish, Update, or an explicit repost. */
   const [dialogMode, setDialogMode] = useState<"publish" | "update" | "repost">("publish");
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -265,23 +302,69 @@ function RosterBuilderEditor({
         /** Spec-aware tile pick — applied on confirm instead of groupRole copy. */
         pendingRole?: CharacterRole;
         pendingSpec?: string | null;
+        /** Find replacement: the draft slot this pick replaces (removed on confirm only). */
+        replacesSignupId?: string;
       }
     | { kind: "server"; action: "save" | "update"; pending: PendingRosterSelectionWarning[] }
     | null
   >(null);
 
+  /** Open Find replacement / Fill slot picker. */
+  const [replacement, setReplacement] = useState<{ target: ReplacementTarget; role: ConcreteCharacterRole } | null>(
+    null,
+  );
+  /** Open Auto Build on top of the current draft (Fill gaps) or from the signups only (Build). */
+  const [builderMode, setBuilderMode] = useState<RosterBuilderMode | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [pingRolesOpen, setPingRolesOpen] = useState(false);
+  /** Signups "Group by" (presentation only), remembered in this browser; None on the server render. */
+  const groupBy = useSyncExternalStore(
+    subscribeSignupGroupBy,
+    getSignupGroupBySnapshot,
+    getSignupGroupByServerSnapshot,
+  );
+
   const domainSignups = useMemo(() => domainSignupsFrom(data), [data]);
+
+  // Preflight "Find replacements / Fill gaps / Sync Characters" link here; the
+  // page scrolls inside the app shell, so bring the roster section into view.
+  useEffect(() => {
+    if (window.location.hash === `#${ROSTER_ATTENTION_ANCHOR}`) {
+      document.getElementById(ROSTER_ATTENTION_ANCHOR)?.scrollIntoView({ block: "start" });
+    }
+  }, []);
   const [stagedSelections, setStagedSelections] = useState<StagedSelections>(() => new Map(savedSelections));
   const [stagedSpecs, setStagedSpecs] = useState<StagedSpecs>(() => collectInitialStagedSpecs(data, savedSelections));
-  // Edited in the Run header's External Boosters dialog; counted here as saved.
+  // Edited on the External side of Add Booster (saved on their own); counted here as saved.
   const externalBoosters = data.roster.externalBoosters;
 
-  const isDirty = selectionKey(stagedSelections) !== selectionKey(savedSelections);
-  // Tell the Run header's Add Booster button about unsaved local edits.
-  useEffect(() => {
-    setRosterHasUnsavedEdits(data.run.id, isDirty);
-  }, [data.run.id, isDirty]);
-  useEffect(() => () => setRosterHasUnsavedEdits(data.run.id, false), [data.run.id]);
+  /**
+   * Boss plan (behind ROSTER_BOSS_EXCEPTIONS_ENABLED): staged DRAFT exceptions
+   * on top of the staged roster. The payload drops rows the staged roster made
+   * meaningless; Save / Update send it as the full set.
+   */
+  const bossPlanEditable = data.bossPlan.enabled && data.bossPlan.bosses.length > 0;
+  const [stagedBossExceptions, setStagedBossExceptions] = useState<RosterBossException[]>(() => [
+    ...data.bossPlan.draft,
+  ]);
+  const [bossPlanOpen, setBossPlanOpen] = useState(false);
+  const bossPayload = useMemo(
+    () =>
+      bossExceptionsPayload({
+        exceptions: stagedBossExceptions,
+        staged: stagedSelections,
+        signups: domainSignups,
+        bosses: data.bossPlan.bosses,
+      }),
+    [stagedBossExceptions, stagedSelections, domainSignups, data.bossPlan.bosses],
+  );
+  const bossPlanDirty = bossPlanEditable && bossPlanIsDirty(bossPayload, data.bossPlan.draft);
+  const characterLabelBySignupId = useMemo(
+    () => new Map(domainSignups.map((signup) => [signup.id, signupDisplayName(signup)])),
+    [domainSignups],
+  );
+
+  const isDirty = selectionKey(stagedSelections) !== selectionKey(savedSelections) || bossPlanDirty;
 
   /** Live Class Buff coverage from the staged draft — updates immediately on select/deselect. */
   const liveRaidBuffCoverage = useMemo(() => {
@@ -312,7 +395,7 @@ function RosterBuilderEditor({
   }, [domainSignups, stagedSelections, externalBoosters]);
 
   /** Live composition + publish validation from staged draft selections. */
-  const liveValidation = useMemo(
+  const defaultLiveValidation = useMemo(
     () =>
       validateRosterDraft({
         runStatus: data.run.status,
@@ -355,7 +438,50 @@ function RosterBuilderEditor({
       externalBoosters,
     ],
   );
-  const liveComposition = liveValidation.composition;
+  /** Per-boss warnings and hard issues of the staged boss plan (none without exceptions). */
+  const bossEvaluation = useMemo(
+    () =>
+      evaluateLiveBossPlan({
+        bosses: data.bossPlan.bosses,
+        payload: bossPayload,
+        staged: stagedSelections,
+        signups: domainSignups,
+        externalRoles: externalBoosters
+          .filter((booster) => booster.participationType === "BOOSTER")
+          .map((booster) => booster.role),
+        targets: { tanks: data.run.desiredTankCount, healers: data.run.desiredHealerCount, dps: data.run.desiredDpsCount },
+        lootType: data.run.lootType,
+      }),
+    [
+      data.bossPlan.bosses,
+      bossPayload,
+      stagedSelections,
+      domainSignups,
+      externalBoosters,
+      data.run.desiredTankCount,
+      data.run.desiredHealerCount,
+      data.run.desiredDpsCount,
+      data.run.lootType,
+    ],
+  );
+  // Same merge as the server's roster validation: boss issues block Publish /
+  // Update, boss warnings join the acknowledgeable warnings.
+  const liveValidation =
+    bossEvaluation.issues.length === 0 && bossEvaluation.warnings.length === 0
+      ? defaultLiveValidation
+      : {
+          ...defaultLiveValidation,
+          canPublish: defaultLiveValidation.canPublish && bossEvaluation.issues.length === 0,
+          blockers: [
+            ...defaultLiveValidation.blockers,
+            ...bossEvaluation.issues.map((issue) => ({ code: issue.code, message: issue.message, signupId: issue.slotSignupId })),
+          ],
+          warnings: [
+            ...defaultLiveValidation.warnings,
+            ...bossEvaluation.warnings.map((warning) => ({ code: warning.code, message: warning.message })),
+          ],
+        };
+  const liveComposition = defaultLiveValidation.composition;
 
   const roleBreakdown = useMemo(() => {
     const stagedRoles = domainSignups
@@ -438,7 +564,7 @@ function RosterBuilderEditor({
     if (selectedFilter === "SELECTED" && !staged) return false;
     if (selectedFilter === "UNSELECTED" && staged) return false;
     const scopeRole =
-      roleFilter !== "ALL" && signup.assignableRoles.includes(roleFilter as (typeof signup.assignableRoles)[number])
+      roleFilter !== "ALL" && signupMatchesRoleFilter(signup.assignableRoles, roleFilter as CharacterRole)
         ? (roleFilter as CharacterRole)
         : null;
     if (!matchesWclPerfFilter(signup.wclPerformance, scopeRole, perfFilter)) return false;
@@ -503,6 +629,12 @@ function RosterBuilderEditor({
         name: signupDisplayName(signup),
         wowClass: lootbuddyDisplayClass(signup) ?? signup.character?.wowClass ?? null,
         warningReasons: rosterSlotWarningReasons(signup),
+        replaceable: rosterReplacementReasons(signup).length > 0,
+        bossPlan: describeSlotBossPlan({
+          exceptions: bossPayload.filter((row) => row.slotSignupId === signup.id),
+          bosses: data.bossPlan.bosses,
+          characterLabelBySignupId,
+        }),
       });
     }
     for (const booster of externalBoosters) {
@@ -518,10 +650,16 @@ function RosterBuilderEditor({
     }
     slots.sort((a, b) => (roleOrder[a.role ?? ""] ?? 9) - (roleOrder[b.role ?? ""] ?? 9));
     return slots;
-  }, [domainSignups, stagedSelections, stagedSpecs, externalBoosters]);
+  }, [domainSignups, stagedSelections, stagedSpecs, externalBoosters, bossPayload, data.bossPlan.bosses, characterLabelBySignupId]);
 
   const draftSlotCount = draftSlots.length;
   const draftGroups = useMemo(() => packDraftIntoGroups(draftSlots, 4, Math.max(5, Math.ceil(rosterCapacity / 4) || 5)), [draftSlots, rosterCapacity]);
+
+  /** Both paths save on their own and reload the roster, so unsaved draft edits must be saved first. */
+  function openAddBooster(mode: AddBoosterMode) {
+    if (!data.roster.canEdit || isDirty || pending) return;
+    setAddBoosterMode(mode);
+  }
 
   function deselectSignup(signup: SignupRow) {
     if (!data.roster.canEdit || data.roster.needsPublishSeed || pending) return;
@@ -655,6 +793,7 @@ function RosterBuilderEditor({
     signup: SignupRow,
     role: CharacterRole,
     specialization: string | null = null,
+    replacesSignupId?: string,
   ) {
     if (!isConcreteCharacterRole(role)) return;
     if (!data.roster.canEdit || data.roster.needsPublishSeed || pending) return;
@@ -669,18 +808,20 @@ function RosterBuilderEditor({
           signup,
           pendingRole: role,
           pendingSpec: specialization,
+          replacesSignupId,
           items: [{ key: signup.id, characterLabel: signupDisplayName(signup), warnings: unconfirmed }],
         });
         return;
       }
     }
-    commitSelectWithRole(signup, role, specialization);
+    commitSelectWithRole(signup, role, specialization, replacesSignupId);
   }
 
   function commitSelectWithRole(
     signup: SignupRow,
     role: CharacterRole,
     specialization: string | null = null,
+    replacesSignupId?: string,
   ) {
     setError(null);
     setErrorCode(null);
@@ -700,6 +841,7 @@ function RosterBuilderEditor({
       for (const otherId of replaceBoosterSignupIds) {
         if (otherId !== signup.id) next.delete(otherId);
       }
+      if (replacesSignupId) next.delete(replacesSignupId);
       next.set(signup.id, role);
       return next;
     });
@@ -708,6 +850,7 @@ function RosterBuilderEditor({
       for (const otherId of replaceBoosterSignupIds) {
         if (otherId !== signup.id) next.delete(otherId);
       }
+      if (replacesSignupId) next.delete(replacesSignupId);
       next.set(
         signup.id,
         specialization ?? resolveDisplaySpecForSelectedRole(signupOfferedSpecInput(signup), role),
@@ -721,6 +864,7 @@ function RosterBuilderEditor({
     setErrorCode(null);
     setStagedSelections(new Map(savedSelections));
     setStagedSpecs(collectInitialStagedSpecs(data, savedSelections));
+    setStagedBossExceptions([...data.bossPlan.draft]);
   }
 
   /** Acknowledgements for the currently staged slots only — a deselected pick's confirmation is not sent. */
@@ -752,7 +896,12 @@ function RosterBuilderEditor({
       setWarningPrompt({ kind: "server", action, pending: result.pendingWarnings });
       return;
     }
-    setError(result.message);
+    // Also an alternate Character of the boss plan: say so, Refresh drops it.
+    setError(
+      result.code === "SIGNUP_WITHDRAWN"
+        ? `${result.message} A Character on this roster or in its boss plan withdrew — refresh to load the current signups.`
+        : result.message,
+    );
     setErrorCode(result.code);
   }
 
@@ -766,6 +915,8 @@ function RosterBuilderEditor({
         version: data.roster.version,
         selections: [...stagedSelections].map(([signupId, selectedRole]) => ({ signupId, selectedRole })),
         confirmedWarnings: stagedConfirmedWarnings(confirmed),
+        // Full DRAFT set; omitted while the feature is off (the saved ones stay).
+        ...(bossPlanEditable ? { bossExceptions: bossPayload } : {}),
       });
       if (!result.ok) {
         handleRosterWriteFailure("save", result);
@@ -789,7 +940,7 @@ function RosterBuilderEditor({
         prompt.items.flatMap((item) => confirmedWarningsFor(prompt.signup.id, item.warnings)),
       );
       if (prompt.pendingRole && isConcreteCharacterRole(prompt.pendingRole)) {
-        commitSelectWithRole(prompt.signup, prompt.pendingRole, prompt.pendingSpec ?? null);
+        commitSelectWithRole(prompt.signup, prompt.pendingRole, prompt.pendingSpec ?? null, prompt.replacesSignupId);
       } else {
         stageRoleCopy(prompt.signup, true);
       }
@@ -800,6 +951,73 @@ function RosterBuilderEditor({
     );
     if (prompt.action === "save") saveRoster(confirmed);
     else confirmDialog(confirmed);
+  }
+
+  /** Find replacement for a draft slot: same role by default, Run context comes from this editor. */
+  function openReplacement(signup: SignupRow) {
+    const current = stagedRole(signup.id);
+    const role =
+      current && isConcreteCharacterRole(current) ? current : (signup.assignableRoles[0] as ConcreteCharacterRole | undefined);
+    if (!role) return;
+    setReplacement({
+      target: {
+        signupId: signup.id,
+        userId: signup.userId,
+        label: signupDisplayName(signup),
+        reasons: rosterReplacementReasons(signup).map((reason) => reason.label),
+      },
+      role,
+    });
+  }
+
+  function openFillSlot(role: ConcreteCharacterRole, label: string, reasons: string[] = []) {
+    setReplacement({ target: { signupId: null, userId: null, label, reasons }, role });
+  }
+
+  /** Stages the chosen candidate (replacing the slot) — same confirmation path as a tile click. */
+  function chooseReplacement(candidate: ReplacementCandidate<SignupRow>) {
+    const replaces = replacement?.target.signupId ?? undefined;
+    setReplacement(null);
+    selectWithRole(candidate.signup, candidate.role, null, replaces);
+  }
+
+  /** Fill gaps / Build: the proposal replaces the staged draft; the Raid Lead reviews, then Saves / Updates. */
+  function stageProposal(input: {
+    selections: Array<{ signupId: string; selectedRole: CharacterRole | null }>;
+    confirmed: ConfirmedRosterWarning[];
+  }) {
+    setError(null);
+    setErrorCode(null);
+    if (input.confirmed.length > 0) withConfirmedWarnings(input.confirmed);
+    const next: StagedSelections = new Map(input.selections.map((row) => [row.signupId, row.selectedRole]));
+    // A pick that keeps its role keeps the spec the Raid Lead chose; new picks get the default display spec.
+    const defaults = collectInitialStagedSpecs(data, next);
+    const specs: StagedSpecs = new Map(
+      [...defaults].map(([signupId, spec]) => [
+        signupId,
+        stagedSelections.get(signupId) === next.get(signupId) && stagedSpecs.has(signupId)
+          ? (stagedSpecs.get(signupId) ?? null)
+          : spec,
+      ]),
+    );
+    setStagedSelections(next);
+    setStagedSpecs(specs);
+  }
+
+  function syncSelectedCharacters() {
+    setError(null);
+    setErrorCode(null);
+    setNotice(null);
+    startTransition(async () => {
+      const result = await syncRosterCharactersAction({ runId: data.run.id });
+      if (!result.ok) {
+        setError(result.message);
+        setErrorCode(result.code);
+        return;
+      }
+      setNotice(result.message);
+      router.refresh();
+    });
   }
 
   function seedPublished() {
@@ -840,6 +1058,7 @@ function RosterBuilderEditor({
               selections: [...stagedSelections].map(([signupId, selectedRole]) => ({ signupId, selectedRole })),
               acknowledgeWarnings,
               confirmedWarnings: stagedConfirmedWarnings(confirmed),
+              ...(bossPlanEditable ? { bossExceptions: bossPayload } : {}),
             })
           : dialogMode === "repost"
             ? await repostRosterAction({
@@ -875,17 +1094,133 @@ function RosterBuilderEditor({
 
   const validationIssueCount = liveValidation.blockers.length + liveValidation.warnings.length;
 
+  // —— Needs attention: existing warnings, each with its direct action ——
+  const missing = {
+    tanks: Math.max(0, -liveComposition.tanks.delta),
+    healers: Math.max(0, -liveComposition.healers.delta),
+    dps: Math.max(0, -liveComposition.dps.delta),
+    lootbuddies: Math.max(0, -liveComposition.lootbuddies.delta),
+  };
+  const missingTotal = missing.tanks + missing.healers + missing.dps + missing.lootbuddies;
+  const attentionSlots = editing
+    ? domainSignups
+        .filter((signup) => stagedSelections.has(signup.id))
+        .map((signup) => ({ signup, reasons: rosterReplacementReasons(signup) }))
+        .filter((row) => row.reasons.length > 0)
+    : [];
+  const openWithdrawals = editing
+    ? data.withdrawnPicks
+        .map((pick) => ({ pick, role: withdrawnPickOpenRole(pick.assignableRoles, missing) }))
+        .filter((row): row is { pick: (typeof data.withdrawnPicks)[number]; role: ConcreteCharacterRole } => row.role != null)
+    : [];
+  // Same set the server syncs: saved draft / published picks without a fresh Blizzard sync.
+  const staleSelected = editing
+    ? domainSignups.filter(
+        (signup) =>
+          signup.participationType === "BOOSTER" &&
+          signup.characterActive &&
+          (signup.draftSelected || signup.status === "SELECTED") &&
+          signup.syncHealth != null &&
+          signup.syncHealth !== "HEALTHY",
+      )
+    : [];
+  const dpsFillRole: ConcreteCharacterRole = roleBreakdown.meleeDps <= roleBreakdown.rangedDps ? "MELEE_DPS" : "RANGED_DPS";
+  const showAttention =
+    editing && (missingTotal > 0 || attentionSlots.length > 0 || openWithdrawals.length > 0 || staleSelected.length > 0);
+
+  const rosterDiff = useMemo(() => {
+    if (!data.roster.publishedAt) return [];
+    const member = (signup: SignupRow, role: CharacterRole | null): RosterDiffMember => ({
+      signupId: signup.id,
+      userId: signup.userId,
+      participationType: signup.participationType,
+      role: signup.participationType === "LOOTBUDDY" ? null : role,
+      label: signupDisplayName(signup),
+    });
+    const publishedSignups = domainSignups.filter((signup) => signup.status === "SELECTED");
+    const draftMembers = domainSignups
+      .filter((signup) => stagedSelections.has(signup.id))
+      .map((signup) => member(signup, stagedSelections.get(signup.id) ?? null));
+    const changes = diffRoster(
+      publishedSignups.map((signup) => member(signup, signup.publishedRole)),
+      draftMembers,
+    );
+    if (!bossPlanEditable) return changes;
+    return [
+      ...changes,
+      ...diffBossPlans({
+        published: data.bossPlan.published,
+        draft: bossPayload,
+        members: new Map(draftMembers.map((row) => [row.signupId, row])),
+        publishedSlotIds: new Set(publishedSignups.map((signup) => signup.id)),
+        bosses: data.bossPlan.bosses,
+        characterLabelBySignupId,
+      }),
+    ];
+  }, [
+    data.roster.publishedAt,
+    domainSignups,
+    stagedSelections,
+    bossPlanEditable,
+    data.bossPlan.published,
+    data.bossPlan.bosses,
+    bossPayload,
+    characterLabelBySignupId,
+  ]);
+
+  function renderSignupTile(signup: SignupRow) {
+    return (
+      <li key={signup.id}>
+        <SignupTile
+          signup={signup}
+          difficulty={data.run.difficulty}
+          editing={editing}
+          locked={togglesLocked}
+          selected={isStagedSelected(signup.id)}
+          assignedRole={stagedRole(signup.id)}
+          assignedSpec={stagedSpecs.get(signup.id) ?? null}
+          onToggle={toggleRoleCopy}
+          onSelectWithRole={selectWithRole}
+          onChangeRole={assignRole}
+          onDeselect={() => deselectSignup(signup)}
+        />
+      </li>
+    );
+  }
+
+  function renderExternalTile(booster: (typeof externalBoosters)[number]) {
+    return (
+      <li key={`ext-${booster.id}`}>
+        <div
+          className="flex h-full items-center gap-2 rounded-md border border-accent/30 bg-accent/5 px-2.5 text-sm"
+          title="External · edit via Add Booster"
+        >
+          <ClassIcon wowClass={booster.wowClass} size={24} />
+          <span className="min-w-0 truncate text-sm font-semibold" style={{ color: CLASS_COLORS[booster.wowClass] }}>
+            @{booster.name}
+          </span>
+          <span className="ml-auto shrink-0 text-xs text-accent">EXT</span>
+        </div>
+      </li>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {error ? (
         <div role="alert" className="space-y-2 text-sm text-danger">
           <p>{error}</p>
-          {errorCode === "ROSTER_ALREADY_CHANGED" ? (
+          {errorCode === "ROSTER_ALREADY_CHANGED" || errorCode === "SIGNUP_WITHDRAWN" ? (
             <Button type="button" variant="ghost" disabled={pending} onClick={() => router.refresh()}>
               Refresh roster
             </Button>
           ) : null}
         </div>
+      ) : null}
+      {notice ? (
+        <p role="status" className="text-sm text-muted">
+          {notice}
+        </p>
       ) : null}
       {embedded ? null : (
       <Card>
@@ -922,143 +1257,91 @@ function RosterBuilderEditor({
       </Card>
       )}
 
-      {embedded ? (
-        <div className="flex flex-wrap items-center gap-1.5 text-sm">
-          {validationIssueCount > 0 ? (
-            <Link
-              href={runDetailPath(data.run.id, "operations") + "#operations-validation"}
-              className="inline-flex items-center gap-1 rounded-md border border-warning/35 bg-warning/10 px-2 py-1 text-warning hover:bg-warning/15"
-            >
-              <WarningIcon label="Validation" size={14} />
-              Validation · {validationIssueCount}
-            </Link>
-          ) : (
-            <Link
-              href={runDetailPath(data.run.id, "operations") + "#operations-validation"}
-              className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-muted hover:text-foreground"
-            >
-              <QuietOkIcon label="Validation OK" size={14} />
-              Validation
-            </Link>
-          )}
-          {preflightAttentionCount > 0 ? (
-            <Link
-              href={runDetailPath(data.run.id, "operations") + "#operations-preflight"}
-              className="inline-flex items-center gap-1 rounded-md border border-warning/35 bg-warning/10 px-2 py-1 text-warning hover:bg-warning/15"
-            >
-              <WarningIcon label="Preflight" size={14} />
-              Preflight · {preflightAttentionCount}
-            </Link>
-          ) : (
-            <Link
-              href={runDetailPath(data.run.id, "operations") + "#operations-preflight"}
-              className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-muted hover:text-foreground"
-            >
-              <QuietOkIcon label="Preflight OK" size={14} />
-              Preflight
-            </Link>
-          )}
-        </div>
-      ) : null}
-
       {afterContext}
 
-      {/* —— SIGNUPS: readable tile grid (4–5 / row at 1440) —— */}
-      <section className="space-y-2">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <h3 className="text-base font-semibold text-foreground">
-              Signups{" "}
-              <span className="font-normal tabular-nums text-muted">{gridSignups.length}</span>
-            </h3>
-            <p className="text-sm text-muted">Click a tile to add/remove draft</p>
-          </div>
-          {data.roster.canEdit ? (
-            <Button
-              type="button"
-              size="md"
-              variant="secondary"
-              disabled={pending || isDirty}
-              onClick={() => setAddBoosterOpen(true)}
-            >
-              Add Booster
-            </Button>
-          ) : null}
-        </div>
-
-        <CompactRosterFilters
-          search={search}
-          setSearch={setSearch}
-          roleFilter={roleFilter}
-          setRoleFilter={setRoleFilter}
-          selectedFilter={selectedFilter}
-          setSelectedFilter={setSelectedFilter}
-          participation={participation}
-          setParticipation={setParticipation}
-          backupFilter={backupFilter}
-          setBackupFilter={setBackupFilter}
-          perfFilter={perfFilter}
-          setPerfFilter={setPerfFilter}
-          perfSort={perfSort}
-          setPerfSort={setPerfSort}
-        />
-
-        {gridSignups.length === 0 && externalBoosters.length === 0 ? (
-          <p className="py-3 text-sm text-muted">No signups match these filters.</p>
-        ) : (
-          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 [&>li]:h-[54px]">
-            {externalBoosters.map((booster) => (
-              <li key={`ext-${booster.id}`}>
-                <div
-                  className="flex h-full items-center gap-2 rounded-md border border-accent/30 bg-accent/5 px-2.5 text-sm"
-                  title="External · edit via External Boosters"
-                >
-                  <ClassIcon wowClass={booster.wowClass} size={24} />
-                  <span className="min-w-0 truncate text-sm font-semibold" style={{ color: CLASS_COLORS[booster.wowClass] }}>
-                    @{booster.name}
-                  </span>
-                  <span className="ml-auto shrink-0 text-xs text-accent">EXT</span>
-                </div>
-              </li>
-            ))}
-            {gridSignups.map((signup) => (
-              <li key={signup.id}>
-                <SignupTile
-                  signup={signup}
-                  difficulty={data.run.difficulty}
-                  editing={editing}
-                  locked={togglesLocked}
-                  selected={isStagedSelected(signup.id)}
-                  assignedRole={stagedRole(signup.id)}
-                  assignedSpec={stagedSpecs.get(signup.id) ?? null}
-                  onToggle={toggleRoleCopy}
-                  onSelectWithRole={selectWithRole}
-                  onChangeRole={assignRole}
-                  onDeselect={() => deselectSignup(signup)}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* —— ROSTER: 4-group grid + actions —— */}
-      <section className="space-y-2 border-t border-border pt-3">
+      {/* —— ROSTER: status, checks and every roster action first; then the 4-group grid —— */}
+      <section id={ROSTER_ATTENTION_ANCHOR} className="scroll-mt-20 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-base font-semibold text-foreground">
-            Roster{" "}
-            <span className="font-normal tabular-nums text-muted">
-              {draftSlotCount}/{rosterCapacity}
-            </span>
-            {isDirty ? (
-              <span className="ml-2 text-sm font-normal text-warning">Unsaved</span>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <h3 className="text-base font-semibold text-foreground">
+              Roster{" "}
+              <span className="font-normal tabular-nums text-muted">
+                {draftSlotCount}/{rosterCapacity}
+              </span>
+              {isDirty ? (
+                <span className="ml-2 text-sm font-normal text-warning">Unsaved</span>
+              ) : null}
+              {data.roster.canEdit && data.roster.hasUnpublishedChanges && !isDirty ? (
+                <span className="ml-2 text-sm font-normal text-warning">Unpublished</span>
+              ) : null}
+            </h3>
+            {embedded ? (
+              <RosterContextChips
+                runId={data.run.id}
+                validationIssueCount={validationIssueCount}
+                preflightAttentionCount={preflightAttentionCount}
+              />
             ) : null}
-            {data.roster.canEdit && data.roster.hasUnpublishedChanges && !isDirty ? (
-              <span className="ml-2 text-sm font-normal text-warning">Unpublished</span>
-            ) : null}
-          </h3>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
-            {data.roster.canEdit ? <RosterBuilderTrigger runId={data.run.id} /> : null}
+            {data.roster.canEdit ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={pending || isDirty}
+                title={isDirty ? "Save or discard your roster changes first" : undefined}
+                onClick={() => openAddBooster("registered")}
+              >
+                Add Booster
+                {externalBoosters.length > 0 ? (
+                  <span className="tabular-nums text-muted">· {externalBoosters.length} ext</span>
+                ) : null}
+              </Button>
+            ) : null}
+            {data.roster.canEdit ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={!editing || pending}
+                onClick={() => setBuilderMode(stagedSelections.size > 0 ? "fill" : "build")}
+              >
+                Auto Build Roster
+              </Button>
+            ) : null}
+            {data.roster.canEdit ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={pending}
+                onClick={() => {
+                  setNotice(null);
+                  setPingRolesOpen(true);
+                }}
+                title="Ping Discord roles in the Run channel"
+              >
+                Ping roles
+              </Button>
+            ) : null}
+            {bossPlanEditable && editing ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                aria-expanded={bossPlanOpen}
+                aria-controls="roster-boss-plan"
+                onClick={() => setBossPlanOpen((open) => !open)}
+              >
+                Boss plan
+                {bossPayload.length > 0 ? (
+                  <span className="tabular-nums text-accent">
+                    {new Set(bossPayload.map((row) => row.slotSignupId)).size}
+                  </span>
+                ) : null}
+              </Button>
+            ) : null}
             {actions.seed ? (
               <Button type="button" size="md" disabled={pending} onClick={seedPublished}>
                 {pending ? "Loading…" : "Edit Published"}
@@ -1108,6 +1391,98 @@ function RosterBuilderEditor({
           </div>
         </div>
 
+        {showAttention ? (
+          <div
+            className={`space-y-1.5 rounded-md border px-3 py-2 text-sm ${
+              data.run.lateFill && missingTotal > 0 ? "border-warning/45 bg-warning/5" : "border-border bg-surface-raised/30"
+            }`}
+          >
+            {missingTotal > 0 ? (
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                <span className={`font-medium ${data.run.lateFill ? "text-warning" : "text-foreground"}`}>
+                  {data.run.lateFill
+                    ? `Late fill · Need ${missingTotal} ${missingTotal === 1 ? "replacement" : "replacements"}`
+                    : "Still needed"}
+                </span>
+                {(
+                  [
+                    ["TANK", "Tank", missing.tanks],
+                    ["HEALER", "Healer", missing.healers],
+                    [dpsFillRole, "DPS", missing.dps],
+                  ] as const
+                )
+                  .filter(([, , count]) => count > 0)
+                  .map(([role, label, count]) => (
+                    <button
+                      key={label}
+                      type="button"
+                      disabled={pending}
+                      onClick={() => openFillSlot(role, `${label} slot`)}
+                      className="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 text-xs font-medium hover:border-accent/60 hover:text-foreground disabled:opacity-50"
+                    >
+                      <RoleIcon role={role} size={14} />
+                      {label} ×{count}
+                    </button>
+                  ))}
+                {missing.lootbuddies > 0 ? (
+                  <span className="text-xs text-muted">Lootbuddy ×{missing.lootbuddies}</span>
+                ) : null}
+              </div>
+            ) : null}
+            {attentionSlots.map(({ signup, reasons }) => (
+              <div key={signup.id} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <WarningIcon label={reasons.map((reason) => reason.label).join("\n")} size={14} />
+                <span className="font-medium">{signupDisplayName(signup)}</span>
+                <span className="min-w-0 text-xs text-muted">{reasons.map((reason) => reason.label).join(" · ")}</span>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => openReplacement(signup)}
+                  className="ml-auto inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium text-accent hover:bg-accent/10 disabled:opacity-50"
+                >
+                  <ReplaceIcon size={14} />
+                  Find replacement
+                </button>
+              </div>
+            ))}
+            {openWithdrawals.map(({ pick, role }) => (
+              <div key={pick.signupId} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <WarningIcon label="Withdrew" size={14} />
+                <span className="font-medium">{pick.characterLabel}</span>
+                <span className="min-w-0 text-xs text-muted">withdrew · {pick.reason}</span>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() =>
+                    openFillSlot(role, `${pick.characterLabel}'s slot`, [`${pick.characterLabel} withdrew: ${pick.reason}`])
+                  }
+                  className="ml-auto inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium text-accent hover:bg-accent/10 disabled:opacity-50"
+                >
+                  <ReplaceIcon size={14} />
+                  Find replacement
+                </button>
+              </div>
+            ))}
+            {staleSelected.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <WarningIcon label="Blizzard sync" size={14} />
+                <span className="min-w-0 text-xs text-muted">
+                  {staleSelected.length} selected Character{staleSelected.length === 1 ? "" : "s"} without a fresh
+                  Blizzard sync — lockouts may be outdated
+                </span>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={syncSelectedCharacters}
+                  className="ml-auto inline-flex h-7 items-center rounded-md px-2 text-xs font-medium text-accent hover:bg-accent/10 disabled:opacity-50"
+                >
+                  {pending ? "Syncing…" : "Sync Characters"}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {draftGroups.map((group, groupIndex) => (
             <div key={groupIndex} className="min-w-0">
@@ -1116,34 +1491,66 @@ function RosterBuilderEditor({
               </p>
               <ul className="space-y-1">
                 {group.map((slot, slotIndex) => (
-                  <li key={`${groupIndex}-${slotIndex}`}>
+                  <li key={`${groupIndex}-${slotIndex}`} className="flex gap-1">
                     {slot ? (
+                      <>
                       <button
                         type="button"
-                        disabled={!editing || togglesLocked || !slot.signup}
+                        disabled={!editing || togglesLocked || (!slot.signup && isDirty)}
                         onClick={() => {
                           if (slot.signup) deselectSignup(slot.signup);
+                          else openAddBooster("external");
                         }}
-                        title={slot.external ? "External — edit via External Boosters" : "Remove from draft"}
-                        className="flex min-h-[40px] w-full items-center gap-2 rounded-md border border-border/80 bg-surface-raised/40 px-2.5 py-2 text-left text-sm hover:border-danger/50 disabled:cursor-not-allowed disabled:opacity-60"
+                        title={slot.external ? "External — click to edit External Boosters" : "Remove from draft"}
+                        className="flex min-h-[40px] min-w-0 flex-1 items-center gap-2 rounded-md border border-border/80 bg-surface-raised/40 px-2.5 py-2 text-left text-sm hover:border-danger/50 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {slot.wowClass ? <ClassIcon wowClass={slot.wowClass} size={22} /> : null}
-                        <span
-                          className="min-w-0 flex-1 truncate text-[13px] font-semibold"
-                          style={slot.wowClass ? { color: CLASS_COLORS[slot.wowClass] } : undefined}
-                        >
-                          {slot.name}
-                        </span>
+                        {slot.bossPlan ? (
+                          <span className="flex min-w-0 flex-1 flex-col">
+                            <span
+                              className="truncate text-[13px] font-semibold"
+                              style={slot.wowClass ? { color: CLASS_COLORS[slot.wowClass] } : undefined}
+                            >
+                              {slot.name}
+                            </span>
+                            <span className="truncate text-xs text-accent" title={slot.bossPlan}>
+                              {slot.bossPlan}
+                            </span>
+                          </span>
+                        ) : (
+                          <span
+                            className="min-w-0 flex-1 truncate text-[13px] font-semibold"
+                            style={slot.wowClass ? { color: CLASS_COLORS[slot.wowClass] } : undefined}
+                          >
+                            {slot.name}
+                          </span>
+                        )}
                         {slot.wowClass && slot.specialization ? (
-                          <SpecIcon wowClass={slot.wowClass} specialization={slot.specialization} size={18} />
+                          // A replaceable slot also carries the Replace button: keep the name readable on phones.
+                          <span className={editing && slot.replaceable ? "hidden sm:inline-flex" : "inline-flex"}>
+                            <SpecIcon wowClass={slot.wowClass} specialization={slot.specialization} size={18} />
+                          </span>
                         ) : null}
                         {slot.role && isConcreteScanRole(slot.role) ? <RoleIcon role={slot.role} size={18} /> : null}
                         {slot.warningReasons.length > 0 ? (
                           <WarningIcon label={slot.warningReasons.join("\n")} size={16} />
                         ) : null}
                       </button>
+                      {editing && slot.replaceable && slot.signup ? (
+                        <button
+                          type="button"
+                          disabled={togglesLocked}
+                          onClick={() => openReplacement(slot.signup!)}
+                          title={`Find replacement for ${slot.name}`}
+                          aria-label={`Find replacement for ${slot.name}`}
+                          className="inline-flex min-h-[40px] w-7 shrink-0 items-center justify-center rounded-md border border-border/80 text-accent hover:border-accent/60 hover:bg-accent/10 disabled:opacity-50"
+                        >
+                          <ReplaceIcon size={15} />
+                        </button>
+                      ) : null}
+                      </>
                     ) : (
-                      <div className="flex min-h-[40px] items-center rounded-md border border-dashed border-border/50 px-2.5 py-2 text-sm text-muted/70">
+                      <div className="flex min-h-[40px] w-full items-center rounded-md border border-dashed border-border/50 px-2.5 py-2 text-sm text-muted/70">
                         Empty
                       </div>
                     )}
@@ -1154,15 +1561,52 @@ function RosterBuilderEditor({
           ))}
         </div>
 
+        {bossPlanEditable && editing && bossPlanOpen ? (
+          <div id="roster-boss-plan">
+            <RosterBossPlanPanel
+              bosses={data.bossPlan.bosses}
+              exceptions={bossPayload}
+              slots={draftSlots
+                .filter((slot) => slot.signup?.participationType === "BOOSTER")
+                .map((slot) => ({ signup: slot.signup!, name: slot.name, wowClass: slot.wowClass, role: slot.role }))}
+              signups={data.boosters}
+              stagedSlotIds={new Set(stagedSelections.keys())}
+              evaluation={bossEvaluation}
+              editing={!togglesLocked}
+              onChange={(next) => {
+                setError(null);
+                setErrorCode(null);
+                setStagedBossExceptions(next);
+              }}
+            />
+          </div>
+        ) : bossEvaluation.issues.length > 0 || bossEvaluation.warnings.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+            <WarningIcon label="Boss plan" size={14} />
+            <span className={bossEvaluation.issues.length > 0 ? "text-danger" : "text-warning"}>
+              {(bossEvaluation.issues[0] ?? bossEvaluation.warnings[0])!.message}
+              {bossEvaluation.issues.length + bossEvaluation.warnings.length > 1
+                ? ` (+${bossEvaluation.issues.length + bossEvaluation.warnings.length - 1} more)`
+                : ""}
+            </span>
+            {bossPlanEditable && editing ? (
+              <button
+                type="button"
+                onClick={() => setBossPlanOpen(true)}
+                className="inline-flex h-7 items-center rounded-md px-2 text-xs font-medium text-accent hover:bg-accent/10"
+              >
+                Review boss plan
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
           <CompositionMeter label="T" slot={liveComposition.tanks} compact />
           <CompositionMeter label="H" slot={liveComposition.healers} compact />
           <CompositionMeter label="D" slot={liveComposition.dps} compact />
           <CompositionMeter label="LB" slot={liveComposition.lootbuddies} compact />
-          <span>
-            Melee {roleBreakdown.meleeDps} · Ranged {roleBreakdown.rangedDps}
-            {roleBreakdown.legacyDps > 0 ? ` · Unassigned ${roleBreakdown.legacyDps}` : ""}
-          </span>
+          {roleBreakdown.legacyDps > 0 ? <span>Unassigned DPS {roleBreakdown.legacyDps}</span> : null}
         </div>
 
         {data.roster.canEdit && data.roster.runChangedSinceAck ? (
@@ -1172,7 +1616,80 @@ function RosterBuilderEditor({
         ) : null}
       </section>
 
-      {/* —— BUFFS: compact strip —— */}
+      {/* —— SIGNUPS: readable tile grid (4–5 / row at 1440) —— */}
+      <section className="space-y-2 border-t border-border pt-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <h3 className="text-base font-semibold text-foreground">
+            Signups <span className="font-normal tabular-nums text-muted">{gridSignups.length}</span>
+            {editing ? <span className="ml-2 text-sm font-normal text-muted">Click a tile to add or remove it</span> : null}
+          </h3>
+          <label className="inline-flex items-center gap-1.5 text-xs text-muted">
+            Group by
+            <select
+              value={groupBy}
+              onChange={(event) => {
+                const mode = SIGNUP_GROUP_BY_MODES.find((value) => value === event.target.value);
+                if (mode) setSignupGroupBy(mode);
+              }}
+              className="h-7 rounded-md border border-border bg-surface px-1.5 text-xs text-foreground"
+            >
+              {SIGNUP_GROUP_BY_MODES.map((mode) => (
+                <option key={mode} value={mode}>
+                  {SIGNUP_GROUP_BY_LABELS[mode]}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <CompactRosterFilters
+          search={search}
+          setSearch={setSearch}
+          roleFilter={roleFilter}
+          setRoleFilter={setRoleFilter}
+          selectedFilter={selectedFilter}
+          setSelectedFilter={setSelectedFilter}
+          participation={participation}
+          setParticipation={setParticipation}
+          backupFilter={backupFilter}
+          setBackupFilter={setBackupFilter}
+          perfFilter={perfFilter}
+          setPerfFilter={setPerfFilter}
+          perfSort={perfSort}
+          setPerfSort={setPerfSort}
+        />
+
+        {gridSignups.length === 0 && externalBoosters.length === 0 ? (
+          <p className="py-3 text-sm text-muted">No signups match these filters.</p>
+        ) : groupBy === "NONE" ? (
+          <ul className={SIGNUP_GRID_CLASS}>
+            {externalBoosters.map(renderExternalTile)}
+            {gridSignups.map(renderSignupTile)}
+          </ul>
+        ) : (
+          // Same tiles and actions, laid out per player / role (presentation only).
+          <div className="space-y-2.5">
+            {buildSignupGroups({ mode: groupBy, tiles: gridSignups, externals: externalBoosters, roleFilter }).map(
+              (group) => (
+                <section key={group.key} aria-label={group.label ?? undefined}>
+                  <h4 className="mb-1 flex items-baseline gap-1.5 text-xs font-semibold text-foreground">
+                    <span className="truncate">{group.label}</span>
+                    <span className="shrink-0 font-normal tabular-nums text-muted">
+                      · {signupGroupCountLabel(group.tiles.length + group.externals.length)}
+                    </span>
+                  </h4>
+                  <ul className={SIGNUP_GRID_CLASS}>
+                    {group.externals.map(renderExternalTile)}
+                    {group.tiles.map(renderSignupTile)}
+                  </ul>
+                </section>
+              ),
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* —— BUFFS: compact strip, the Roster tab's last section —— */}
       <ClassBuffChecker coverage={liveRaidBuffCoverage} />
 
       <dialog
@@ -1183,7 +1700,7 @@ function RosterBuilderEditor({
         <div className="border-b border-border px-4 py-3">
           <h2 id="publish-title" className="text-base font-semibold" tabIndex={-1}>
             {dialogMode === "update"
-              ? "Update roster"
+              ? `Update Roster${rosterDiff.length > 0 ? ` · ${rosterDiff.length} change${rosterDiff.length === 1 ? "" : "s"}` : ""}`
               : dialogMode === "repost"
                 ? "Post the roster again"
                 : "Publish roster"}
@@ -1191,11 +1708,13 @@ function RosterBuilderEditor({
         </div>
         <div className="space-y-3 px-4 py-4 text-sm">
           {dialogMode === "update" ? (
-            <p>
-              Updating accepts the current selection as the published roster: selected signups become SELECTED, the
-              rest NOT_SELECTED, and the current Discord roster post is edited in place (no new post). The run stays
-              PUBLISHED and the roster remains editable until the run starts.
-            </p>
+            <>
+              <RosterUpdateDiff changes={rosterDiff} runChanged={data.roster.runChangedSinceAck} />
+              <p className="text-muted">
+                Accepts this selection as the published roster and edits the current Discord roster post in place.
+                Players are notified about their own changes only. The run stays PUBLISHED and editable until Start.
+              </p>
+            </>
           ) : dialogMode === "repost" ? (
             <p>
               Refreshes the current Discord Roster message in place (same message id). No second Roster post is
@@ -1210,9 +1729,9 @@ function RosterBuilderEditor({
           )}
           <p>
             {liveComposition.tanks.selected} Tanks · {liveComposition.healers.selected} Healers ·{" "}
-            {roleBreakdown.meleeDps} Melee · {roleBreakdown.rangedDps} Ranged
-            {roleBreakdown.legacyDps > 0 ? ` · ${roleBreakdown.legacyDps} Unassigned DPS` : ""} ·{" "}
-            {liveComposition.dps.selected} DPS · {liveComposition.lootbuddies.selected} Lootbuddies
+            {liveComposition.dps.selected} DPS
+            {roleBreakdown.legacyDps > 0 ? ` (${roleBreakdown.legacyDps} unassigned)` : ""} ·{" "}
+            {liveComposition.lootbuddies.selected} Lootbuddies
           </p>
           <p>
             {liveComposition.boosterTotal} Boosters · {liveComposition.lootbuddies.selected} Lootbuddies ·{" "}
@@ -1290,11 +1809,36 @@ function RosterBuilderEditor({
           onConfirm={confirmWarningPrompt}
         />
       ) : null}
-      {addBoosterOpen ? (
-        <AddBoosterDialog
+      {pingRolesOpen ? (
+        <RosterPingRolesDialog runId={data.run.id} onSent={setNotice} onClose={() => setPingRolesOpen(false)} />
+      ) : null}
+      {replacement ? (
+        <RosterReplacementDialog
+          target={replacement.target}
+          initialRole={replacement.role}
+          signups={data.boosters}
+          staged={stagedSelections}
+          difficulty={data.run.difficulty}
+          onChoose={chooseReplacement}
+          onClose={() => setReplacement(null)}
+        />
+      ) : null}
+      {builderMode ? (
+        <RosterBuilderDialog
+          runId={data.run.id}
+          initialMode={builderMode}
+          draft={[...stagedSelections].map(([signupId, selectedRole]) => ({ signupId, selectedRole }))}
+          onStage={stageProposal}
+          onClose={() => setBuilderMode(null)}
+        />
+      ) : null}
+      {addBoosterMode ? (
+        <AddBoosterEntryDialog
           runId={data.run.id}
           rosterVersion={data.roster.version}
-          onClose={() => setAddBoosterOpen(false)}
+          externalBoosters={externalBoosters}
+          initialMode={addBoosterMode}
+          onClose={() => setAddBoosterMode(null)}
           onAdded={() => router.refresh()}
         />
       ) : null}
@@ -1354,8 +1898,7 @@ function CompactRosterFilters({
           <option value="ALL">All</option>
           <option value="TANK">Tank</option>
           <option value="HEALER">Healer</option>
-          <option value="MELEE_DPS">Melee</option>
-          <option value="RANGED_DPS">Ranged</option>
+          <option value="DPS">DPS</option>
         </select>
       </label>
       <label className="text-sm">
@@ -1795,6 +2338,44 @@ function FilterSelect({
         ))}
       </select>
     </label>
+  );
+}
+
+/** Validation / Preflight status next to the roster actions they gate (details on Operations). */
+function RosterContextChips({
+  runId,
+  validationIssueCount,
+  preflightAttentionCount,
+}: {
+  runId: string;
+  validationIssueCount: number;
+  preflightAttentionCount: number;
+}) {
+  const chips = [
+    { label: "Validation", count: validationIssueCount, anchor: "#operations-validation" },
+    { label: "Preflight", count: preflightAttentionCount, anchor: "#operations-preflight" },
+  ];
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+      {chips.map((chip) => (
+        <Link
+          key={chip.label}
+          href={runDetailPath(runId, "operations") + chip.anchor}
+          className={
+            chip.count > 0
+              ? "inline-flex h-7 items-center gap-1 rounded-md border border-warning/35 bg-warning/10 px-2 text-warning hover:bg-warning/15"
+              : "inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 text-muted hover:text-foreground"
+          }
+        >
+          {chip.count > 0 ? (
+            <WarningIcon label={chip.label} size={13} />
+          ) : (
+            <QuietOkIcon label={`${chip.label} OK`} size={13} />
+          )}
+          {chip.count > 0 ? `${chip.label} · ${chip.count}` : chip.label}
+        </Link>
+      ))}
+    </div>
   );
 }
 

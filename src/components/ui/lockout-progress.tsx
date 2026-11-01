@@ -32,7 +32,7 @@ const DIFF_MARK_CLASS: Record<RaidDifficulty, string> = {
 /**
  * Raid Hub–style lockout strip: raid name + N/H/M boss dots.
  *
- * Authoritative BoostingHub semantics (see docs/features/character-lockout-dot-semantics.md):
+ * Authoritative BoostingHub semantics (see docs/DEVELOPER.md#lockout-boss-dot-semantics):
  * - gray: not killed (Available) OR unverified difficulty/raid (Unknown) — never invent kills
  * - green: killed and difficulty `isComplete === false` (Saved progress)
  * - red: killed and difficulty `isComplete === true` (full save)

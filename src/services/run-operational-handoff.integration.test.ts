@@ -314,7 +314,7 @@ async function inProgressWithTwoBoosters(title: string) {
 async function markAllPresent(runId: string) {
   const rows = await attendanceRepository.listByRunId(runId);
   for (const attendance of rows) {
-    await attendanceService.setStatus(lead, { attendanceId: attendance.id, status: "PRESENT" });
+    await attendanceService.setStatus(lead, { attendanceId: attendance.id, expectedStatus: "UNMARKED", status: "PRESENT" });
   }
 }
 

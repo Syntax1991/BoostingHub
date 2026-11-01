@@ -33,9 +33,9 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'883e1fd522f355c4012102fadb12368abc4002a6fb13e8b06ea79fc3db85aecc'>;
+  StorageHashBase<'25368e38526cd62cfae17bb29020bd90a0541020d5dcf1193a0562091b451711'>;
 export type ExecutionHash =
-  ExecutionHashBase<'b27b9239312d18e407528e2d06057d2da4f3e67bdff7bffe5f827471950c2fa6'>;
+  ExecutionHashBase<'324c5afa3b4d6d5548548ec3e865b7ab15f3ade264bd46a2057a901773b881e8'>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
 
@@ -654,7 +654,12 @@ export type FieldOutputTypes = {
     readonly RunDiscordAnnouncement: {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly runId: CodecTypes['pg/text@1']['output'];
-      readonly type: 'RUN_RESCHEDULED' | 'RUN_CANCELLED' | 'RUN_REACTIVATED' | 'RUN_SCOPE_CHANGED';
+      readonly type:
+        | 'RUN_RESCHEDULED'
+        | 'RUN_CANCELLED'
+        | 'RUN_REACTIVATED'
+        | 'RUN_SCOPE_CHANGED'
+        | 'LATE_FILL_HELP';
       readonly sourceKey: CodecTypes['pg/text@1']['output'];
       readonly previousScheduledStartAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly scheduledStartAt: CodecTypes['pg/timestamptz-string@1']['output'];
@@ -662,6 +667,7 @@ export type FieldOutputTypes = {
       readonly difficulty: 'NORMAL' | 'HEROIC' | 'MYTHIC';
       readonly lootType: 'SAVED' | 'UNSAVED' | 'VIP' | 'COMMUNITY';
       readonly scopeChanges: CodecTypes['pg/text@1']['output'] | null;
+      readonly helpRoles: CodecTypes['pg/text@1']['output'] | null;
       readonly status: 'PENDING' | 'SENT' | 'SKIPPED' | 'FAILED_PERMANENT';
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly sentAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
@@ -748,6 +754,17 @@ export type FieldOutputTypes = {
       readonly postRevision: CodecTypes['pg/int4@1']['output'];
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
+    };
+    readonly RunRosterBossException: {
+      readonly id: CodecTypes['pg/text@1']['output'];
+      readonly rosterId: CodecTypes['pg/text@1']['output'];
+      readonly stage: 'DRAFT' | 'PUBLISHED';
+      readonly slotSignupId: CodecTypes['pg/text@1']['output'];
+      readonly runRaidContentId: CodecTypes['pg/text@1']['output'];
+      readonly raidBossId: CodecTypes['pg/text@1']['output'];
+      readonly playSignupId: CodecTypes['pg/text@1']['output'] | null;
+      readonly role: 'TANK' | 'HEALER' | 'MELEE_DPS' | 'RANGED_DPS' | 'DPS';
+      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
     };
     readonly RunRosterEntry: {
       readonly id: CodecTypes['pg/text@1']['output'];
@@ -895,6 +912,9 @@ export type FieldOutputTypes = {
       readonly image: CodecTypes['pg/text@1']['output'] | null;
       readonly discordUserId: CodecTypes['pg/text@1']['output'] | null;
       readonly discordUsername: CodecTypes['pg/text@1']['output'] | null;
+      readonly discordGuildNickname: CodecTypes['pg/text@1']['output'] | null;
+      readonly discordGlobalName: CodecTypes['pg/text@1']['output'] | null;
+      readonly discordNameSyncedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly accountStatus: 'ACTIVE' | 'DISABLED';
       readonly accountRole: 'USER' | 'RAID_LEAD' | 'ADMIN' | 'OWNER';
       readonly isBooster: CodecTypes['pg/bool@1']['output'];
@@ -1397,7 +1417,12 @@ export type FieldInputTypes = {
     readonly RunDiscordAnnouncement: {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly runId: CodecTypes['pg/text@1']['input'];
-      readonly type: 'RUN_RESCHEDULED' | 'RUN_CANCELLED' | 'RUN_REACTIVATED' | 'RUN_SCOPE_CHANGED';
+      readonly type:
+        | 'RUN_RESCHEDULED'
+        | 'RUN_CANCELLED'
+        | 'RUN_REACTIVATED'
+        | 'RUN_SCOPE_CHANGED'
+        | 'LATE_FILL_HELP';
       readonly sourceKey: CodecTypes['pg/text@1']['input'];
       readonly previousScheduledStartAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly scheduledStartAt: CodecTypes['pg/timestamptz-string@1']['input'];
@@ -1405,6 +1430,7 @@ export type FieldInputTypes = {
       readonly difficulty: 'NORMAL' | 'HEROIC' | 'MYTHIC';
       readonly lootType: 'SAVED' | 'UNSAVED' | 'VIP' | 'COMMUNITY';
       readonly scopeChanges: CodecTypes['pg/text@1']['input'] | null;
+      readonly helpRoles: CodecTypes['pg/text@1']['input'] | null;
       readonly status: 'PENDING' | 'SENT' | 'SKIPPED' | 'FAILED_PERMANENT';
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly sentAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
@@ -1491,6 +1517,17 @@ export type FieldInputTypes = {
       readonly postRevision: CodecTypes['pg/int4@1']['input'];
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
+    };
+    readonly RunRosterBossException: {
+      readonly id: CodecTypes['pg/text@1']['input'];
+      readonly rosterId: CodecTypes['pg/text@1']['input'];
+      readonly stage: 'DRAFT' | 'PUBLISHED';
+      readonly slotSignupId: CodecTypes['pg/text@1']['input'];
+      readonly runRaidContentId: CodecTypes['pg/text@1']['input'];
+      readonly raidBossId: CodecTypes['pg/text@1']['input'];
+      readonly playSignupId: CodecTypes['pg/text@1']['input'] | null;
+      readonly role: 'TANK' | 'HEALER' | 'MELEE_DPS' | 'RANGED_DPS' | 'DPS';
+      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
     };
     readonly RunRosterEntry: {
       readonly id: CodecTypes['pg/text@1']['input'];
@@ -1638,6 +1675,9 @@ export type FieldInputTypes = {
       readonly image: CodecTypes['pg/text@1']['input'] | null;
       readonly discordUserId: CodecTypes['pg/text@1']['input'] | null;
       readonly discordUsername: CodecTypes['pg/text@1']['input'] | null;
+      readonly discordGuildNickname: CodecTypes['pg/text@1']['input'] | null;
+      readonly discordGlobalName: CodecTypes['pg/text@1']['input'] | null;
+      readonly discordNameSyncedAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly accountStatus: 'ACTIVE' | 'DISABLED';
       readonly accountRole: 'USER' | 'RAID_LEAD' | 'ADMIN' | 'OWNER';
       readonly isBooster: CodecTypes['pg/bool@1']['input'];
@@ -2140,6 +2180,7 @@ export type StorageColumnTypes = {
     readonly run_discord_announcement: {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly difficulty: 'NORMAL' | 'HEROIC' | 'MYTHIC';
+      readonly helpRoles: CodecTypes['pg/text@1']['output'] | null;
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly lootType: 'SAVED' | 'UNSAVED' | 'VIP' | 'COMMUNITY';
       readonly previousScheduledStartAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
@@ -2150,7 +2191,12 @@ export type StorageColumnTypes = {
       readonly sentAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly sourceKey: CodecTypes['pg/text@1']['output'];
       readonly status: 'PENDING' | 'SENT' | 'SKIPPED' | 'FAILED_PERMANENT';
-      readonly type: 'RUN_RESCHEDULED' | 'RUN_CANCELLED' | 'RUN_REACTIVATED' | 'RUN_SCOPE_CHANGED';
+      readonly type:
+        | 'RUN_RESCHEDULED'
+        | 'RUN_CANCELLED'
+        | 'RUN_REACTIVATED'
+        | 'RUN_SCOPE_CHANGED'
+        | 'LATE_FILL_HELP';
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
     };
     readonly run_discord_post: {
@@ -2234,6 +2280,17 @@ export type StorageColumnTypes = {
       readonly state: 'DRAFT' | 'PUBLISHED';
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly version: CodecTypes['pg/int4@1']['output'];
+    };
+    readonly run_roster_boss_exception: {
+      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
+      readonly id: CodecTypes['pg/text@1']['output'];
+      readonly playSignupId: CodecTypes['pg/text@1']['output'] | null;
+      readonly raidBossId: CodecTypes['pg/text@1']['output'];
+      readonly role: 'TANK' | 'HEALER' | 'MELEE_DPS' | 'RANGED_DPS' | 'DPS';
+      readonly rosterId: CodecTypes['pg/text@1']['output'];
+      readonly runRaidContentId: CodecTypes['pg/text@1']['output'];
+      readonly slotSignupId: CodecTypes['pg/text@1']['output'];
+      readonly stage: 'DRAFT' | 'PUBLISHED';
     };
     readonly run_roster_entry: {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
@@ -2382,7 +2439,10 @@ export type StorageColumnTypes = {
       readonly discordDmQuietHoursEnabled: CodecTypes['pg/bool@1']['output'];
       readonly discordDmQuietHoursEnd: CodecTypes['pg/text@1']['output'] | null;
       readonly discordDmQuietHoursStart: CodecTypes['pg/text@1']['output'] | null;
+      readonly discordGlobalName: CodecTypes['pg/text@1']['output'] | null;
+      readonly discordGuildNickname: CodecTypes['pg/text@1']['output'] | null;
       readonly discordLootbuddy: CodecTypes['pg/bool@1']['output'];
+      readonly discordNameSyncedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly discordRaidBooster: CodecTypes['pg/bool@1']['output'];
       readonly discordRunChannelNickname: CodecTypes['pg/text@1']['output'] | null;
       readonly discordUserId: CodecTypes['pg/text@1']['output'] | null;
@@ -2883,6 +2943,7 @@ export type StorageColumnInputTypes = {
     readonly run_discord_announcement: {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly difficulty: 'NORMAL' | 'HEROIC' | 'MYTHIC';
+      readonly helpRoles: CodecTypes['pg/text@1']['input'] | null;
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly lootType: 'SAVED' | 'UNSAVED' | 'VIP' | 'COMMUNITY';
       readonly previousScheduledStartAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
@@ -2893,7 +2954,12 @@ export type StorageColumnInputTypes = {
       readonly sentAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly sourceKey: CodecTypes['pg/text@1']['input'];
       readonly status: 'PENDING' | 'SENT' | 'SKIPPED' | 'FAILED_PERMANENT';
-      readonly type: 'RUN_RESCHEDULED' | 'RUN_CANCELLED' | 'RUN_REACTIVATED' | 'RUN_SCOPE_CHANGED';
+      readonly type:
+        | 'RUN_RESCHEDULED'
+        | 'RUN_CANCELLED'
+        | 'RUN_REACTIVATED'
+        | 'RUN_SCOPE_CHANGED'
+        | 'LATE_FILL_HELP';
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
     };
     readonly run_discord_post: {
@@ -2977,6 +3043,17 @@ export type StorageColumnInputTypes = {
       readonly state: 'DRAFT' | 'PUBLISHED';
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly version: CodecTypes['pg/int4@1']['input'];
+    };
+    readonly run_roster_boss_exception: {
+      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
+      readonly id: CodecTypes['pg/text@1']['input'];
+      readonly playSignupId: CodecTypes['pg/text@1']['input'] | null;
+      readonly raidBossId: CodecTypes['pg/text@1']['input'];
+      readonly role: 'TANK' | 'HEALER' | 'MELEE_DPS' | 'RANGED_DPS' | 'DPS';
+      readonly rosterId: CodecTypes['pg/text@1']['input'];
+      readonly runRaidContentId: CodecTypes['pg/text@1']['input'];
+      readonly slotSignupId: CodecTypes['pg/text@1']['input'];
+      readonly stage: 'DRAFT' | 'PUBLISHED';
     };
     readonly run_roster_entry: {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
@@ -3125,7 +3202,10 @@ export type StorageColumnInputTypes = {
       readonly discordDmQuietHoursEnabled: CodecTypes['pg/bool@1']['input'];
       readonly discordDmQuietHoursEnd: CodecTypes['pg/text@1']['input'] | null;
       readonly discordDmQuietHoursStart: CodecTypes['pg/text@1']['input'] | null;
+      readonly discordGlobalName: CodecTypes['pg/text@1']['input'] | null;
+      readonly discordGuildNickname: CodecTypes['pg/text@1']['input'] | null;
       readonly discordLootbuddy: CodecTypes['pg/bool@1']['input'];
+      readonly discordNameSyncedAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly discordRaidBooster: CodecTypes['pg/bool@1']['input'];
       readonly discordRunChannelNickname: CodecTypes['pg/text@1']['input'] | null;
       readonly discordUserId: CodecTypes['pg/text@1']['input'] | null;
@@ -6036,6 +6116,11 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: true;
                 };
+                readonly helpRoles: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
                 readonly status: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -6612,6 +6697,168 @@ type ContractBase = Omit<
                   readonly target: {
                     readonly namespaceId: 'public' & NamespaceId;
                     readonly tableName: 'user';
+                    readonly columns: readonly ['id'];
+                  };
+                },
+              ];
+            };
+            readonly run_roster_boss_exception: {
+              columns: {
+                readonly id: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly rosterId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly stage: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly slotSignupId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly runRaidContentId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly raidBossId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly playSignupId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly role: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly createdAt: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                  readonly nullable: false;
+                  readonly default: { readonly kind: 'function'; readonly expression: 'now()' };
+                };
+              };
+              primaryKey: { readonly columns: readonly ['id'] };
+              uniques: readonly [
+                {
+                  readonly columns: readonly [
+                    'rosterId',
+                    'stage',
+                    'slotSignupId',
+                    'runRaidContentId',
+                    'raidBossId',
+                  ];
+                },
+              ];
+              indexes: readonly [
+                {
+                  readonly name: 'run_roster_boss_exception_rosterId_stage_idx_5519d655';
+                  readonly prefix: 'run_roster_boss_exception_rosterId_stage_idx';
+                  readonly columns: readonly ['rosterId', 'stage'];
+                  readonly unique: false;
+                },
+                {
+                  readonly name: 'run_roster_boss_exception_playSignupId_idx_d7101728';
+                  readonly prefix: 'run_roster_boss_exception_playSignupId_idx';
+                  readonly columns: readonly ['playSignupId'];
+                  readonly unique: false;
+                },
+                {
+                  readonly name: 'run_roster_boss_exception_rosterId_idx_ca029c6b';
+                  readonly prefix: 'run_roster_boss_exception_rosterId_idx';
+                  readonly columns: readonly ['rosterId'];
+                  readonly unique: false;
+                },
+                {
+                  readonly name: 'run_roster_boss_exception_slotSignupId_idx_0e62234d';
+                  readonly prefix: 'run_roster_boss_exception_slotSignupId_idx';
+                  readonly columns: readonly ['slotSignupId'];
+                  readonly unique: false;
+                },
+                {
+                  readonly name: 'run_roster_boss_exception_runRaidContentId_idx_b5f2a8be';
+                  readonly prefix: 'run_roster_boss_exception_runRaidContentId_idx';
+                  readonly columns: readonly ['runRaidContentId'];
+                  readonly unique: false;
+                },
+                {
+                  readonly name: 'run_roster_boss_exception_raidBossId_idx_869a61e0';
+                  readonly prefix: 'run_roster_boss_exception_raidBossId_idx';
+                  readonly columns: readonly ['raidBossId'];
+                  readonly unique: false;
+                },
+              ];
+              foreignKeys: readonly [
+                {
+                  readonly source: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'run_roster_boss_exception';
+                    readonly columns: readonly ['rosterId'];
+                  };
+                  readonly target: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'run_roster';
+                    readonly columns: readonly ['id'];
+                  };
+                },
+                {
+                  readonly source: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'run_roster_boss_exception';
+                    readonly columns: readonly ['slotSignupId'];
+                  };
+                  readonly target: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'run_signup';
+                    readonly columns: readonly ['id'];
+                  };
+                },
+                {
+                  readonly source: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'run_roster_boss_exception';
+                    readonly columns: readonly ['runRaidContentId'];
+                  };
+                  readonly target: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'run_raid_content';
+                    readonly columns: readonly ['id'];
+                  };
+                },
+                {
+                  readonly source: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'run_roster_boss_exception';
+                    readonly columns: readonly ['raidBossId'];
+                  };
+                  readonly target: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'raid_boss';
+                    readonly columns: readonly ['id'];
+                  };
+                },
+                {
+                  readonly source: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'run_roster_boss_exception';
+                    readonly columns: readonly ['playSignupId'];
+                  };
+                  readonly target: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'run_signup';
                     readonly columns: readonly ['id'];
                   };
                 },
@@ -7783,6 +8030,21 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: true;
                 };
+                readonly discordGuildNickname: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly discordGlobalName: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly discordNameSyncedAt: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                  readonly nullable: true;
+                };
                 readonly accountStatus: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -8494,6 +8756,7 @@ type ContractBase = Omit<
                 'RUN_CANCELLED',
                 'RUN_REACTIVATED',
                 'RUN_SCOPE_CHANGED',
+                'LATE_FILL_HELP',
               ];
             };
             readonly RunDomainEventActorKind: {
@@ -8676,6 +8939,10 @@ type ContractBase = Omit<
     readonly run_roster_entry: {
       readonly namespace: 'public' & NamespaceId;
       readonly model: 'RunRosterEntry';
+    };
+    readonly run_roster_boss_exception: {
+      readonly namespace: 'public' & NamespaceId;
+      readonly model: 'RunRosterBossException';
     };
     readonly activity_event: {
       readonly namespace: 'public' & NamespaceId;
@@ -10592,6 +10859,17 @@ type ContractBase = Omit<
                   readonly targetFields: readonly ['id'];
                 };
               };
+              readonly rosterBossExceptions: {
+                readonly to: {
+                  readonly namespace: 'public' & NamespaceId;
+                  readonly model: 'RunRosterBossException';
+                };
+                readonly cardinality: '1:N';
+                readonly on: {
+                  readonly localFields: readonly ['id'];
+                  readonly targetFields: readonly ['raidBossId'];
+                };
+              };
             };
             readonly storage: {
               readonly table: 'raid_boss';
@@ -11593,6 +11871,10 @@ type ContractBase = Omit<
                 readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
+              readonly helpRoles: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
               readonly status: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
@@ -11643,6 +11925,7 @@ type ContractBase = Omit<
                 readonly difficulty: { readonly column: 'difficulty' };
                 readonly lootType: { readonly column: 'lootType' };
                 readonly scopeChanges: { readonly column: 'scopeChanges' };
+                readonly helpRoles: { readonly column: 'helpRoles' };
                 readonly status: { readonly column: 'status' };
                 readonly createdAt: { readonly column: 'createdAt' };
                 readonly sentAt: { readonly column: 'sentAt' };
@@ -12027,6 +12310,17 @@ type ContractBase = Omit<
                   readonly targetFields: readonly ['id'];
                 };
               };
+              readonly rosterBossExceptions: {
+                readonly to: {
+                  readonly namespace: 'public' & NamespaceId;
+                  readonly model: 'RunRosterBossException';
+                };
+                readonly cardinality: '1:N';
+                readonly on: {
+                  readonly localFields: readonly ['id'];
+                  readonly targetFields: readonly ['runRaidContentId'];
+                };
+              };
               readonly run: {
                 readonly to: { readonly namespace: 'public' & NamespaceId; readonly model: 'Run' };
                 readonly cardinality: 'N:1';
@@ -12113,6 +12407,17 @@ type ContractBase = Omit<
               };
             };
             readonly relations: {
+              readonly bossExceptions: {
+                readonly to: {
+                  readonly namespace: 'public' & NamespaceId;
+                  readonly model: 'RunRosterBossException';
+                };
+                readonly cardinality: '1:N';
+                readonly on: {
+                  readonly localFields: readonly ['id'];
+                  readonly targetFields: readonly ['rosterId'];
+                };
+              };
               readonly entries: {
                 readonly to: {
                   readonly namespace: 'public' & NamespaceId;
@@ -12166,6 +12471,121 @@ type ContractBase = Omit<
                 readonly postRevision: { readonly column: 'postRevision' };
                 readonly createdAt: { readonly column: 'createdAt' };
                 readonly updatedAt: { readonly column: 'updatedAt' };
+              };
+            };
+          };
+          readonly RunRosterBossException: {
+            readonly fields: {
+              readonly id: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly rosterId: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly stage: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly slotSignupId: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly runRaidContentId: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly raidBossId: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly playSignupId: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly role: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly createdAt: {
+                readonly nullable: false;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                };
+              };
+            };
+            readonly relations: {
+              readonly playSignup: {
+                readonly to: {
+                  readonly namespace: 'public' & NamespaceId;
+                  readonly model: 'RunSignup';
+                };
+                readonly cardinality: 'N:1';
+                readonly on: {
+                  readonly localFields: readonly ['playSignupId'];
+                  readonly targetFields: readonly ['id'];
+                };
+              };
+              readonly raidBoss: {
+                readonly to: {
+                  readonly namespace: 'public' & NamespaceId;
+                  readonly model: 'RaidBoss';
+                };
+                readonly cardinality: 'N:1';
+                readonly on: {
+                  readonly localFields: readonly ['raidBossId'];
+                  readonly targetFields: readonly ['id'];
+                };
+              };
+              readonly roster: {
+                readonly to: {
+                  readonly namespace: 'public' & NamespaceId;
+                  readonly model: 'RunRoster';
+                };
+                readonly cardinality: 'N:1';
+                readonly on: {
+                  readonly localFields: readonly ['rosterId'];
+                  readonly targetFields: readonly ['id'];
+                };
+              };
+              readonly runRaidContent: {
+                readonly to: {
+                  readonly namespace: 'public' & NamespaceId;
+                  readonly model: 'RunRaidContent';
+                };
+                readonly cardinality: 'N:1';
+                readonly on: {
+                  readonly localFields: readonly ['runRaidContentId'];
+                  readonly targetFields: readonly ['id'];
+                };
+              };
+              readonly slotSignup: {
+                readonly to: {
+                  readonly namespace: 'public' & NamespaceId;
+                  readonly model: 'RunSignup';
+                };
+                readonly cardinality: 'N:1';
+                readonly on: {
+                  readonly localFields: readonly ['slotSignupId'];
+                  readonly targetFields: readonly ['id'];
+                };
+              };
+            };
+            readonly storage: {
+              readonly table: 'run_roster_boss_exception';
+              readonly namespaceId: 'public';
+              readonly fields: {
+                readonly id: { readonly column: 'id' };
+                readonly rosterId: { readonly column: 'rosterId' };
+                readonly stage: { readonly column: 'stage' };
+                readonly slotSignupId: { readonly column: 'slotSignupId' };
+                readonly runRaidContentId: { readonly column: 'runRaidContentId' };
+                readonly raidBossId: { readonly column: 'raidBossId' };
+                readonly playSignupId: { readonly column: 'playSignupId' };
+                readonly role: { readonly column: 'role' };
+                readonly createdAt: { readonly column: 'createdAt' };
               };
             };
           };
@@ -12325,6 +12745,28 @@ type ContractBase = Omit<
               };
             };
             readonly relations: {
+              readonly bossExceptionSlots: {
+                readonly to: {
+                  readonly namespace: 'public' & NamespaceId;
+                  readonly model: 'RunRosterBossException';
+                };
+                readonly cardinality: '1:N';
+                readonly on: {
+                  readonly localFields: readonly ['id'];
+                  readonly targetFields: readonly ['slotSignupId'];
+                };
+              };
+              readonly bossExceptionsPlayed: {
+                readonly to: {
+                  readonly namespace: 'public' & NamespaceId;
+                  readonly model: 'RunRosterBossException';
+                };
+                readonly cardinality: '1:N';
+                readonly on: {
+                  readonly localFields: readonly ['id'];
+                  readonly targetFields: readonly ['playSignupId'];
+                };
+              };
               readonly character: {
                 readonly to: {
                   readonly namespace: 'public' & NamespaceId;
@@ -13215,6 +13657,21 @@ type ContractBase = Omit<
                 readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
+              readonly discordGuildNickname: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly discordGlobalName: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly discordNameSyncedAt: {
+                readonly nullable: true;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                };
+              };
               readonly accountStatus: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
@@ -13631,6 +14088,9 @@ type ContractBase = Omit<
                 readonly image: { readonly column: 'image' };
                 readonly discordUserId: { readonly column: 'discordUserId' };
                 readonly discordUsername: { readonly column: 'discordUsername' };
+                readonly discordGuildNickname: { readonly column: 'discordGuildNickname' };
+                readonly discordGlobalName: { readonly column: 'discordGlobalName' };
+                readonly discordNameSyncedAt: { readonly column: 'discordNameSyncedAt' };
                 readonly accountStatus: { readonly column: 'accountStatus' };
                 readonly accountRole: { readonly column: 'accountRole' };
                 readonly isBooster: { readonly column: 'isBooster' };
@@ -14228,6 +14688,7 @@ type ContractBase = Omit<
               { readonly name: 'RUN_CANCELLED'; readonly value: 'RUN_CANCELLED' },
               { readonly name: 'RUN_REACTIVATED'; readonly value: 'RUN_REACTIVATED' },
               { readonly name: 'RUN_SCOPE_CHANGED'; readonly value: 'RUN_SCOPE_CHANGED' },
+              { readonly name: 'LATE_FILL_HELP'; readonly value: 'LATE_FILL_HELP' },
             ];
           };
           readonly ProductBossCountMode: {
@@ -14833,6 +15294,14 @@ type ContractBase = Omit<
           };
           readonly onCreate: { readonly kind: 'generator'; readonly id: 'timestampNow' };
           readonly onUpdate: { readonly kind: 'generator'; readonly id: 'timestampNow' };
+        },
+        {
+          readonly ref: {
+            readonly namespace: 'public';
+            readonly table: 'run_roster_boss_exception';
+            readonly column: 'id';
+          };
+          readonly onCreate: { readonly kind: 'generator'; readonly id: 'uuidv4' };
         },
         {
           readonly ref: {

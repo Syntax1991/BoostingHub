@@ -35,10 +35,34 @@ export function getDiscordBoosterRoleSyncConfig(): DiscordRoleAccessSyncConfig |
   return getDiscordRoleAccessSyncConfig();
 }
 
+/** Server-only: what a read of the community guild needs (the Ping roles dialog's role list). */
+export function getDiscordGuildReadConfig(): { botToken: string; guildId: string } | null {
+  const botToken = process.env.DISCORD_BOT_TOKEN?.trim();
+  const guildId = process.env.DISCORD_GUILD_ID?.trim();
+  return botToken && guildId ? { botToken, guildId } : null;
+}
+
 /** The community guild (DISCORD_GUILD_ID) — public id, used for channel deep links. */
 export function getDiscordGuildId(): string | null {
   const value = process.env.DISCORD_GUILD_ID?.trim();
   return value && value.length > 0 ? value : null;
+}
+
+/**
+ * Guild ping role ids per Run role (same DISCORD_PING_ROLE_* the bot uses for
+ * the Raidboost announce). The web only needs to know which are configured —
+ * the bot resolves the ids itself when it posts.
+ */
+export function getDiscordPingRoleConfig(): { TANK: string | null; HEALER: string | null; DPS: string | null } {
+  const read = (key: string) => {
+    const value = process.env[key]?.trim();
+    return value && value.length > 0 ? value : null;
+  };
+  return {
+    TANK: read("DISCORD_PING_ROLE_TANK_ID"),
+    HEALER: read("DISCORD_PING_ROLE_HEALER_ID"),
+    DPS: read("DISCORD_PING_ROLE_DPS_ID"),
+  };
 }
 
 /** Management role ping for Community Schedule Share copy (not auto-posted). */

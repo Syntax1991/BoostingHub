@@ -5,6 +5,7 @@ import {
   ButtonStyle,
   EmbedBuilder,
   ChannelType,
+  Status as WebSocketStatus,
   type CategoryChannel,
   type Client,
   type MessageEditOptions,
@@ -22,12 +23,22 @@ import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
 import { syncGlobalAnnouncements } from "@/discord-bot/global-announcements";
 import {
+  buildCustomPingMessage,
+  buildLateFillHelpMessage,
+  helpMessageNonce,
+  resolveClassRoleIds,
+  type LateFillPingRoleIds,
+} from "@/discord-bot/messages/late-fill-help-message";
+import { resolvePingRoleIds } from "@/lib/late-fill-help";
+import {
   isDiscordPermanentDmError,
   isDiscordPermissionError,
   isDiscordUnknownChannelError,
   isDiscordUnknownMessageError,
 } from "@/discord-bot/discord-api-errors";
 import { fetchChannelTranscript } from "@/discord-bot/transcript-fetch";
+import type { WowClass } from "@/models/enums";
+import { buildVoicePresenceReports, isVoiceCacheTrusted, shouldReportVoicePresence } from "@/discord-bot/voice-presence-report";
 import {
   createReportScanState,
   scanReportChannels,
@@ -171,6 +182,54 @@ export function startSyncLoop(client: Client, env: BotEnv, api: BotApiClient): N
   return setInterval(() => {
     void triggerSync();
   }, env.syncIntervalMs);
+}
+
+let lastVoicePresenceReportAt: number | null = null;
+
+/**
+ * Attendance voice hint: at most once a minute, report who is connected to
+ * each running Run's voice channel (gateway cache, bots excluded). Best
+ * effort — a failure only means the web shows UNKNOWN after the TTL.
+ */
+async function reportRunVoicePresence(
+  client: Client,
+  api: BotApiClient,
+  items: ReadonlyArray<{ runId: string; action: string }>,
+  resolved: ReadonlyMap<string, string | null>,
+): Promise<void> {
+  const now = Date.now();
+  if (!shouldReportVoicePresence(lastVoicePresenceReportAt, now)) return;
+  const gatewayReady = (() => {
+    try {
+      return client.isReady() && client.ws.status === WebSocketStatus.Ready;
+    } catch {
+      return false;
+    }
+  })();
+  // Not READY (reconnecting / resuming): try again next pass, report nothing now.
+  if (!gatewayReady) return;
+  const reports = buildVoicePresenceReports({
+    items,
+    resolved,
+    readMemberIds: (channelId) => {
+      try {
+        const channel = client.channels.cache.get(channelId);
+        if (!channel || channel.type !== ChannelType.GuildVoice) return null;
+        const voice = channel as VoiceChannel;
+        if (!isVoiceCacheTrusted({ clientReady: true, gatewayReady, guildAvailable: voice.guild.available })) return null;
+        return [...voice.members.values()].filter((member) => !member.user.bot).map((member) => member.id);
+      } catch {
+        return null;
+      }
+    },
+  });
+  lastVoicePresenceReportAt = now;
+  if (reports.length === 0) return;
+  try {
+    await api.reportVoicePresence(reports);
+  } catch (error) {
+    console.warn("[discord-bot] voice presence report failed (Attendance shows Voice unknown until the next one)", error);
+  }
 }
 
 /**
@@ -348,6 +407,7 @@ async function syncOnceInner(
   // their ordering — so Raid Invite DMs later in this same pass can link a
   // voice channel created now.
   const resolvedVoiceChannels = await syncRunVoiceChannels(client, env, api, work.voiceChannels ?? [], pass);
+  await reportRunVoicePresence(client, api, work.voiceChannels ?? [], resolvedVoiceChannels);
 
   // Trusted log-bot Warcraft Logs links in running / just-completed Run
   // channels: every message after the durable per-channel cursor, oldest →
@@ -406,6 +466,11 @@ async function syncOnceInner(
   // (cancel / reschedule) post first. RUN_REACTIVATED waits until after
   // signup provisioning so a replacement channel from continuity recovery
   // can be used in the same pass.
+  const latePingRoleIds: LateFillPingRoleIds = {
+    TANK: env.discordPingRoleTankId,
+    HEALER: env.discordPingRoleHealerId,
+    DPS: env.discordPingRoleDpsId,
+  };
   const earlyAnnouncements = (work.runAnnouncements ?? []).filter(
     (item) => item.type !== "RUN_REACTIVATED",
   );
@@ -415,7 +480,7 @@ async function syncOnceInner(
   if (earlyAnnouncements.length > 0) {
     for (const item of earlyAnnouncements) {
       try {
-        await syncRunAnnouncement(client, api, item, resolvedChannels);
+        await syncRunAnnouncement(client, api, item, resolvedChannels, latePingRoleIds);
       } catch (error) {
         console.error(
           `[discord-bot] run announcement ${item.announcementId} failed for run ${item.runId}`,
@@ -531,7 +596,7 @@ async function syncOnceInner(
     // After continuity recovery may have provisioned a replacement channel.
     for (const item of reactivatedAnnouncements) {
       try {
-        await syncRunAnnouncement(client, api, item, resolvedChannels);
+        await syncRunAnnouncement(client, api, item, resolvedChannels, latePingRoleIds);
       } catch (error) {
         console.error(
           `[discord-bot] run announcement ${item.announcementId} failed for run ${item.runId}`,
@@ -1276,6 +1341,8 @@ async function syncNotificationDm(
         },
         runChannelId: item.runChannelId,
         update: item.rosterUpdate === true,
+        bossPlan: item.bossPlan ?? null,
+        bossPlanUpdate: item.bossPlanUpdate === true,
       });
       break;
     case "RAID_INVITE":
@@ -1416,16 +1483,20 @@ async function syncAccountNotificationDm(
 }
 
 /**
- * Posts a durable Run-channel lifecycle announcement (reschedule / cancel).
- * Never creates a channel; never pings roles/members.
+ * Posts a durable Run-channel lifecycle announcement (reschedule / cancel), or
+ * a Late Fill help request. Never creates a channel. Lifecycle posts never
+ * ping; a Late Fill help request pings only the requested roles' Guild ping
+ * roles (allowedMentions restricted to those ids) — SKIPPED when none is
+ * configured on the bot.
  * Unknown Channel / Missing Access → FAILED_PERMANENT (no infinite retry, no recreate).
  * No channel id → SKIPPED. Transient errors leave PENDING for a later pass.
  */
-async function syncRunAnnouncement(
+export async function syncRunAnnouncement(
   client: Client,
   api: BotApiClient,
   item: RunAnnouncementLaneItem,
   resolvedChannels: Map<string, string>,
+  pingRoleIds: LateFillPingRoleIds,
 ): Promise<void> {
   const runChannelId = resolvedChannels.get(item.runId) ?? item.runChannelId;
   if (!runChannelId) {
@@ -1460,6 +1531,51 @@ async function syncRunAnnouncement(
   if (!authority.deliver) {
     console.warn(
       `[discord-bot] skipping announcement ${item.announcementId}: delivery no longer authorized`,
+    );
+    return;
+  }
+
+  if (item.type === "LATE_FILL_HELP" && item.helpCustom) {
+    const custom = item.helpCustom;
+    await postRunAnnouncement(
+      api,
+      item,
+      runChannelId,
+      async (channel) => {
+        const guildRoles = channel.guild.roles.cache.map((role) => ({ id: role.id, name: role.name, managed: role.managed }));
+        const { roleIds, unresolved } = resolvePingRoleIds(guildRoles, custom.roles, pingRoleIds);
+        if (unresolved.length > 0) {
+          console.warn(`[discord-bot] custom ping ${item.announcementId}: no unique Guild role for ${unresolved.join(", ")}`);
+        }
+        const message = buildCustomPingMessage(custom, roleIds);
+        if (!message) return "SKIPPED";
+        await channel.send({ ...message, nonce: helpMessageNonce(item.announcementId), enforceNonce: true });
+      },
+      client,
+    );
+    return;
+  }
+
+  if (item.type === "LATE_FILL_HELP") {
+    const classes = item.helpClasses ?? [];
+    const { roleIds: classRoleIds, unresolved } = await guildClassRoleIds(client, runChannelId, classes);
+    if (unresolved.length > 0) {
+      console.warn(
+        `[discord-bot] Late Fill help ${item.announcementId}: no unique Guild role for ${unresolved.join(", ")} — named without a ping`,
+      );
+    }
+    const message = buildLateFillHelpMessage({ roles: item.helpRoles ?? [], pingRoleIds, classes, classRoleIds });
+    if (!message) {
+      console.warn(`[discord-bot] Late Fill help ${item.announcementId}: no ping role configured for its roles — skipped`);
+      await api.recordDiscordState(item.runId, { kind: "run-announcement", announcementId: item.announcementId, result: "SKIPPED" });
+      return;
+    }
+    await postRunAnnouncement(
+      api,
+      item,
+      runChannelId,
+      (channel) => channel.send({ ...message, nonce: helpMessageNonce(item.announcementId), enforceNonce: true }),
+      client,
     );
     return;
   }
@@ -1503,22 +1619,70 @@ async function syncRunAnnouncement(
             lootType: item.lootType,
           });
 
+  await postRunAnnouncement(api, item, runChannelId, (channel) => channel.send({ embeds: [embed] }), client);
+}
+
+/** Class → Guild role id from the Guild of the Run channel (gateway role cache, no extra Discord request). */
+async function guildClassRoleIds(client: Client, runChannelId: string, classes: readonly WowClass[]) {
+  if (classes.length === 0) return resolveClassRoleIds([], []);
   try {
     const channel = await client.channels.fetch(runChannelId);
-    if (!channel || !channel.isTextBased() || !("send" in channel)) {
-      await api.recordDiscordState(item.runId, {
-        kind: "run-announcement",
-        announcementId: item.announcementId,
-        result: "FAILED_PERMANENT",
-      });
-      return;
+    const roles = (channel as TextChannel).guild.roles.cache.map((role) => ({
+      id: role.id,
+      name: role.name,
+      managed: role.managed,
+    }));
+    return resolveClassRoleIds(roles, classes);
+  } catch {
+    // Unknown channel / missing access: the post below reports that properly.
+    return resolveClassRoleIds([], classes);
+  }
+}
+
+/** Posted, but the SENT report has not landed yet: the retry only reports. */
+const postedAnnouncementIds = new Set<string>();
+
+/**
+ * Sends one Run-channel announcement and records the outcome: SENT, or
+ * FAILED_PERMANENT for a missing / non-text channel or missing access (no
+ * retry, no recreate). Transient errors propagate so the row stays PENDING;
+ * a message already posted is not posted again when only its SENT report failed.
+ * `send` returning "SKIPPED" records that instead (nothing was posted).
+ */
+async function postRunAnnouncement(
+  api: BotApiClient,
+  item: RunAnnouncementLaneItem,
+  runChannelId: string,
+  send: (channel: TextChannel) => Promise<unknown>,
+  client: Client,
+): Promise<void> {
+  try {
+    if (!postedAnnouncementIds.has(item.announcementId)) {
+      const channel = await client.channels.fetch(runChannelId);
+      if (!channel || !channel.isTextBased() || !("send" in channel)) {
+        await api.recordDiscordState(item.runId, {
+          kind: "run-announcement",
+          announcementId: item.announcementId,
+          result: "FAILED_PERMANENT",
+        });
+        return;
+      }
+      if ((await send(channel as TextChannel)) === "SKIPPED") {
+        await api.recordDiscordState(item.runId, {
+          kind: "run-announcement",
+          announcementId: item.announcementId,
+          result: "SKIPPED",
+        });
+        return;
+      }
+      postedAnnouncementIds.add(item.announcementId);
     }
-    await (channel as TextChannel).send({ embeds: [embed] });
     await api.recordDiscordState(item.runId, {
       kind: "run-announcement",
       announcementId: item.announcementId,
       result: "SENT",
     });
+    postedAnnouncementIds.delete(item.announcementId);
   } catch (error) {
     if (isDiscordUnknownChannelError(error) || isDiscordPermissionError(error)) {
       console.warn(

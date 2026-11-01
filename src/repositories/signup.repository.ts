@@ -192,6 +192,16 @@ export type ReservationConflictQueryInput = {
   excludeRunId?: string;
 };
 
+/**
+ * Reserving besides published SELECTED: draft-selected into a roster, or the
+ * alternate Character of a boss exception (it plays some bosses of that Run).
+ */
+function reservesAsDraftOrBossException(raw: Record<string, unknown>): boolean {
+  const rosterEntries = Array.isArray(raw.rosterEntries) ? (raw.rosterEntries as Record<string, unknown>[]) : [];
+  if (rosterEntries.some((entry) => asBoolean(entry.selected, true))) return true;
+  return Array.isArray(raw.bossExceptionsPlayed) && raw.bossExceptionsPlayed.length > 0;
+}
+
 export async function queryReservationConflicts(
   ormLike: TxOrm,
   input: ReservationConflictQueryInput,
@@ -205,6 +215,7 @@ export async function queryReservationConflicts(
     .where((f) => f.characterId.in(input.characterIds))
     .include("run")
     .include("rosterEntries")
+    .include("bossExceptionsPlayed")
     .all();
 
   const conflicts = new Map<string, ReservationConflictRow>();
@@ -221,9 +232,7 @@ export async function queryReservationConflicts(
     const status = mapSignupStatus(raw.status);
     if (status === "WITHDRAWN") continue;
 
-    const rosterEntries = Array.isArray(raw.rosterEntries) ? (raw.rosterEntries as Record<string, unknown>[]) : [];
-    const draftSelected = rosterEntries.some((entry) => asBoolean(entry.selected, true));
-    if (status !== "SELECTED" && !draftSelected) continue;
+    if (status !== "SELECTED" && !reservesAsDraftOrBossException(raw)) continue;
 
     conflicts.set(characterId, {
       characterId,
@@ -254,6 +263,7 @@ export async function queryAllReservationConflicts(
     .where((f) => f.characterId.in(input.characterIds))
     .include("run")
     .include("rosterEntries")
+    .include("bossExceptionsPlayed")
     .all();
 
   const conflicts: ReservationConflictRow[] = [];
@@ -271,9 +281,7 @@ export async function queryAllReservationConflicts(
     const status = mapSignupStatus(raw.status);
     if (status === "WITHDRAWN") continue;
 
-    const rosterEntries = Array.isArray(raw.rosterEntries) ? (raw.rosterEntries as Record<string, unknown>[]) : [];
-    const draftSelected = rosterEntries.some((entry) => asBoolean(entry.selected, true));
-    if (status !== "SELECTED" && !draftSelected) continue;
+    if (status !== "SELECTED" && !reservesAsDraftOrBossException(raw)) continue;
 
     const key = `${characterId}:${runId}`;
     if (seen.has(key)) continue;
@@ -427,6 +435,7 @@ export const signupRepository = {
         run.include("contents", (content) => content.include("raid", (raid) => raid.include("bosses"))),
       )
       .include("rosterEntries")
+      .include("bossExceptionsPlayed")
       .all();
 
     const commitments: CharacterReservationCommitmentRow[] = [];
@@ -447,7 +456,7 @@ export const signupRepository = {
         : [];
       const selectedEntry = rosterEntries.find((entry) => asBoolean(entry.selected, true));
       const draftSelected = Boolean(selectedEntry);
-      if (mapped.status !== "SELECTED" && !draftSelected) continue;
+      if (mapped.status !== "SELECTED" && !reservesAsDraftOrBossException(raw)) continue;
 
       const key = `${characterId}:${mapped.run.id}`;
       if (seen.has(key)) continue;

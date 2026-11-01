@@ -173,7 +173,7 @@ describe("Discord Signup vs Roster embeds", () => {
     ).toJSON();
 
     expect(JSON.stringify(signup)).not.toContain("@dawn");
-    expect(roster.fields?.find((f) => f.name?.includes("Melee DPS"))?.value).toContain("@dawn");
+    expect(roster.fields?.find((f) => f.name?.includes("DPS"))?.value).toContain("@dawn");
   });
 
   it("D: lootbuddy stays separate from Tank/Heal/DPS on both embeds", () => {

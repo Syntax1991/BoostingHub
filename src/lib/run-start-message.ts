@@ -103,6 +103,12 @@ export type FinalSetupInput = {
     dps: FinalSetupParticipant[];
     lootbuddies: FinalSetupParticipant[];
   };
+  /**
+   * Boss-specific deviations of the lineup, one line per affected slot
+   * ("Boss 5–6: Synpriest-Antonidas · Healer"). Absent / empty: no section,
+   * the message is exactly as before.
+   */
+  bossPlan?: Array<{ discordUserId: string | null; userName: string; plan: string }>;
 };
 
 export type FinalSetupMessage = {
@@ -165,6 +171,13 @@ export function formatFinalSetup(data: FinalSetupInput, options?: FinalSetupRend
     roleSection("✚", "Healers", data.groups.healers.length, data.targets.healers, data.groups.healers.map((m) => boosterLine(m, options))),
     roleSection("⚔", "DPS", data.groups.dps.length, data.targets.dps, data.groups.dps.map((m) => boosterLine(m, options))),
     lootbuddySection(data.groups.lootbuddies.length, data.targets.lootbuddies, data.groups.lootbuddies.map(lootbuddyLine)),
+    ...(data.bossPlan && data.bossPlan.length > 0
+      ? [
+          `📋 **Boss plan**\n${data.bossPlan
+            .map((line) => `${mentionDisplay(line.discordUserId, line.userName)} · ${line.plan}`)
+            .join("\n")}`,
+        ]
+      : []),
   ].join("\n\n");
 
   return {

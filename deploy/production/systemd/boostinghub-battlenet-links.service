@@ -1,6 +1,6 @@
 # One-shot "Link Battle.net matches" pass, started by boostinghub-battlenet-links.timer.
 #
-# Reference copy (docs/deployment-production.md). Install manually on the host as root:
+# Reference copy (docs/DEPLOYMENT.md). Install manually on the host as root:
 #   install -o root -g root -m 0644 deploy/production/systemd/boostinghub-battlenet-links.service deploy/production/systemd/boostinghub-battlenet-links.timer /etc/systemd/system/
 #   systemctl daemon-reload
 #   systemctl enable --now boostinghub-battlenet-links.timer

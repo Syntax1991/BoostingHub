@@ -11,11 +11,7 @@ import { RunCancelDialog } from "@/components/runs/run-cancel-dialog";
 import { RunReactivateDialog } from "@/components/runs/run-reactivate-dialog";
 import { RunCompleteDialog } from "@/components/runs/run-complete-dialog";
 import { RunEditDialog } from "@/components/runs/run-edit-dialog";
-import { ExternalBoostersDialog } from "@/components/runs/external-boosters-dialog";
-import { AddBoosterDialog } from "@/components/manage/add-booster-dialog";
 import { RosterBuilderTrigger } from "@/components/manage/roster-builder-dialog";
-import { useRosterHasUnsavedEdits } from "@/components/manage/roster-unsaved-store";
-import type { ExternalBooster } from "@/lib/external-booster";
 import { RunStartDialog } from "@/components/runs/run-start-dialog";
 import type { RunDetailView } from "@/services/run-detail.service";
 import type { FinalSetupInput } from "@/lib/run-start-message";
@@ -28,9 +24,7 @@ export function RunManagerActions({
   finalSetupPreview,
   rosterHasUnpublishedChanges = false,
   preflight = null,
-  externalBoosters = null,
-  addBooster = null,
-  /** `admin` = Run administration block (no Auto Build / Add Booster — those stay in the roster builder). */
+  /** `admin` = Run administration block (no Auto Build; Add Booster — registered and External — lives in the roster builder). */
   surface = "all",
 }: {
   run: RunDetailView["run"];
@@ -42,19 +36,14 @@ export function RunManagerActions({
   rosterHasUnpublishedChanges?: boolean;
   /** Advisory Start checklist shown in the Start dialog. */
   preflight?: RunDetailView["preflight"];
-  /** Set while registered Boosters can be added (OPEN / ROSTERING / PUBLISHED) — opens Add Booster. */
-  addBooster?: { rosterVersion: number } | null;
-  /** Set while the roster is editable — opens the External Boosters dialog. */
-  externalBoosters?: { boosters: ExternalBooster[]; rosterVersion: number } | null;
   surface?: "all" | "admin";
 }) {
   const showRosterTools = surface !== "admin";
+  // The Roster tab admin bar is a compact secondary row above the roster.
+  const buttonSize = surface === "admin" ? "sm" : "md";
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
-  const [externalOpen, setExternalOpen] = useState(false);
-  const [addBoosterOpen, setAddBoosterOpen] = useState(false);
-  const rosterHasUnsavedEdits = useRosterHasUnsavedEdits(run.id);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [reactivateOpen, setReactivateOpen] = useState(false);
   const [startOpen, setStartOpen] = useState(false);
@@ -75,7 +64,6 @@ export function RunManagerActions({
 
   const hasActions =
     showRosterTools ||
-    Boolean(externalBoosters) ||
     capabilities.canEdit ||
     capabilities.canOpen ||
     capabilities.canCloseSignups ||
@@ -90,28 +78,18 @@ export function RunManagerActions({
   }
 
   return (
-    <div className="flex flex-col items-stretch gap-2 sm:items-start">
+    <div className="flex flex-col items-stretch gap-2 sm:items-end">
       <div className="flex flex-wrap items-center gap-2">
-        {showRosterTools && addBooster ? (
-          <Button type="button" size="md" variant="secondary" disabled={rosterHasUnsavedEdits} onClick={() => setAddBoosterOpen(true)}>
-            Add Booster
-          </Button>
-        ) : null}
         {showRosterTools ? <RosterBuilderTrigger runId={runId} /> : null}
-        {externalBoosters ? (
-          <Button type="button" size="md" variant="secondary" onClick={() => setExternalOpen(true)}>
-            External Boosters{externalBoosters.boosters.length > 0 ? ` (${externalBoosters.boosters.length})` : ""}
-          </Button>
-        ) : null}
         {capabilities.canEdit ? (
-          <Button type="button" size="md" variant="secondary" onClick={() => setEditOpen(true)}>
+          <Button type="button" size={buttonSize} variant="secondary" onClick={() => setEditOpen(true)}>
             Edit Run
           </Button>
         ) : null}
         {capabilities.canOpen ? (
           <Button
             type="button"
-            size="md"
+            size={buttonSize}
             disabled={pending}
             onClick={() => runAction(() => openRunAction({ runId }))}
           >
@@ -121,7 +99,7 @@ export function RunManagerActions({
         {capabilities.canCloseSignups ? (
           <Button
             type="button"
-            size="md"
+            size={buttonSize}
             variant="secondary"
             disabled={pending}
             onClick={() => runAction(() => closeRunSignupsAction({ runId }))}
@@ -132,7 +110,7 @@ export function RunManagerActions({
         {capabilities.canReopenSignups ? (
           <Button
             type="button"
-            size="md"
+            size={buttonSize}
             variant="secondary"
             disabled={pending}
             onClick={() => runAction(() => reopenRunSignupsAction({ runId }))}
@@ -141,29 +119,26 @@ export function RunManagerActions({
           </Button>
         ) : null}
         {capabilities.canCancel ? (
-          <Button type="button" size="md" variant="danger" onClick={() => setCancelOpen(true)}>
+          <Button type="button" size={buttonSize} variant="danger" onClick={() => setCancelOpen(true)}>
             Cancel Run
           </Button>
         ) : null}
         {capabilities.canReactivate ? (
-          <Button type="button" size="md" onClick={() => setReactivateOpen(true)}>
+          <Button type="button" size={buttonSize} onClick={() => setReactivateOpen(true)}>
             Reactivate Run
           </Button>
         ) : null}
         {capabilities.canStart ? (
-          <Button type="button" size="md" onClick={() => setStartOpen(true)}>
+          <Button type="button" size={buttonSize} onClick={() => setStartOpen(true)}>
             Start Run
           </Button>
         ) : null}
         {capabilities.canComplete ? (
-          <Button type="button" size="md" onClick={() => setCompleteOpen(true)}>
+          <Button type="button" size={buttonSize} onClick={() => setCompleteOpen(true)}>
             Complete Run{unmarkedCount > 0 ? ` (${unmarkedCount} unmarked)` : ""}
           </Button>
         ) : null}
       </div>
-      {addBooster && rosterHasUnsavedEdits ? (
-        <p className="max-w-sm text-right text-xs text-muted">Save your current roster changes before adding a booster.</p>
-      ) : null}
       {error ? (
         <p role="alert" className="max-w-sm text-right text-xs text-danger">
           {error}
@@ -171,22 +146,6 @@ export function RunManagerActions({
       ) : null}
       {editOpen && editor ? (
         <RunEditDialog run={run} capabilities={capabilities} editor={editor} onClose={() => setEditOpen(false)} />
-      ) : null}
-      {addBoosterOpen && addBooster ? (
-        <AddBoosterDialog
-          runId={runId}
-          rosterVersion={addBooster.rosterVersion}
-          onClose={() => setAddBoosterOpen(false)}
-          onAdded={() => window.location.reload()}
-        />
-      ) : null}
-      {externalOpen && externalBoosters ? (
-        <ExternalBoostersDialog
-          runId={runId}
-          rosterVersion={externalBoosters.rosterVersion}
-          boosters={externalBoosters.boosters}
-          onClose={() => setExternalOpen(false)}
-        />
       ) : null}
       {cancelOpen ? <RunCancelDialog runId={runId} onClose={() => setCancelOpen(false)} /> : null}
       {reactivateOpen ? (

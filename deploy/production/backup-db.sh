@@ -3,7 +3,7 @@
 #
 # Production runs this as root from a ROOT-OWNED installed copy
 # (/usr/local/libexec/boostinghub/backup-db.sh, see
-# docs/deployment-production.md), never from the application checkout: a root
+# docs/DEPLOYMENT.md), never from the application checkout: a root
 # service must not execute a file the `boostinghub` app user can write.
 #
 # DATABASE_URL is read from the app .env and never printed. The password is

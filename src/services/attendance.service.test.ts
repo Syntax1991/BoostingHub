@@ -1,9 +1,16 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { NextRequest } from "next/server";
+import { POST as voicePresencePost } from "@/app/api/bot/discord/voice-presence/route";
+import { VOICE_PRESENCE_TTL_MS } from "@/lib/voice-presence";
+import { voicePresenceService } from "@/services/voice-presence.service";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
-import { orm } from "@/lib/prisma";
+import { mapActionError } from "@/lib/action-result";
+import { isAttendanceConflict } from "@/lib/attendance-view";
+import { db, orm } from "@/lib/prisma";
 import { raidRepository } from "@/repositories/raid.repository";
+import { lockRosterInTx } from "@/repositories/roster.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { attendanceService } from "@/services/attendance.service";
 import { rosterService } from "@/services/roster.service";
@@ -11,7 +18,7 @@ import { runDetailService } from "@/services/run-detail.service";
 import { runService } from "@/services/run.service";
 import { venomousCreateInput } from "@/lib/test-run-input";
 import type { AttendanceStatus, CharacterRole, ParticipationType } from "@/models/enums";
-import { correctAttendanceSchema } from "@/validators/attendance";
+import { correctAttendanceSchema, setAttendanceSchema } from "@/validators/attendance";
 import { operationalAnalyticsRepository } from "@/repositories/operational-analytics.repository";
 
 const ids = {
@@ -430,24 +437,24 @@ describe("attendance mutation and bulk present", () => {
     const target = rows[0];
 
     await expectDomainCode(
-      attendanceService.setStatus(user, { attendanceId: target.id, status: "PRESENT" }),
+      attendanceService.setStatus(user, { attendanceId: target.id, expectedStatus: "UNMARKED", status: "PRESENT" }),
       "ATTENDANCE_NOT_MANAGEABLE",
     );
     await expectDomainCode(
-      attendanceService.setStatus(otherLead, { attendanceId: target.id, status: "PRESENT" }),
+      attendanceService.setStatus(otherLead, { attendanceId: target.id, expectedStatus: "UNMARKED", status: "PRESENT" }),
       "ATTENDANCE_NOT_MANAGEABLE",
     );
 
-    await attendanceService.setStatus(lead, { attendanceId: target.id, status: "LATE", note: "joined after boss 1" });
+    await attendanceService.setStatus(lead, { attendanceId: target.id, expectedStatus: "UNMARKED", status: "LATE", note: "joined after boss 1" });
     let after = await attendanceService.getManagerAttendance(lead, runId);
     expect(after.rows.find((row) => row.id === target.id)?.status).toBe("LATE");
     expect(after.rows.find((row) => row.id === target.id)?.note).toBe("joined after boss 1");
 
-    await attendanceService.setStatus(admin, { attendanceId: target.id, status: "LEFT_EARLY" });
+    await attendanceService.setStatus(admin, { attendanceId: target.id, expectedStatus: "LATE", status: "LEFT_EARLY" });
     after = await attendanceService.getManagerAttendance(admin, runId);
     expect(after.rows.find((row) => row.id === target.id)?.status).toBe("LEFT_EARLY");
 
-    await attendanceService.setStatus(lead, { attendanceId: target.id, status: "UNMARKED" });
+    await attendanceService.setStatus(lead, { attendanceId: target.id, expectedStatus: "LEFT_EARLY", status: "UNMARKED" });
     after = await attendanceService.getManagerAttendance(lead, runId);
     const unmarked = after.rows.find((row) => row.id === target.id);
     expect(unmarked?.status).toBe("UNMARKED");
@@ -459,9 +466,9 @@ describe("attendance mutation and bulk present", () => {
     await runService.startRun(lead, { runId: runId });
     const rows = (await attendanceService.getManagerAttendance(lead, runId)).rows;
     const statuses: AttendanceStatus[] = ["PRESENT", "LATE", "LEFT_EARLY", "NO_SHOW", "EXCUSED", "STANDBY"];
-    await attendanceService.setStatus(lead, { attendanceId: rows[0].id, status: statuses[0] });
-    await attendanceService.setStatus(lead, { attendanceId: rows[1].id, status: statuses[1] });
-    await attendanceService.setStatus(lead, { attendanceId: rows[2].id, status: statuses[5] });
+    await attendanceService.setStatus(lead, { attendanceId: rows[0].id, expectedStatus: "UNMARKED", status: statuses[0] });
+    await attendanceService.setStatus(lead, { attendanceId: rows[1].id, expectedStatus: "UNMARKED", status: statuses[1] });
+    await attendanceService.setStatus(lead, { attendanceId: rows[2].id, expectedStatus: "UNMARKED", status: statuses[5] });
     const after = await attendanceService.getManagerAttendance(lead, runId);
     expect(after.rows.find((row) => row.id === rows[0].id)?.status).toBe("PRESENT");
     expect(after.rows.find((row) => row.id === rows[1].id)?.status).toBe("LATE");
@@ -513,9 +520,9 @@ describe("attendance mutation and bulk present", () => {
     await runService.startRun(lead, { runId: runId });
     const rows = (await attendanceService.getManagerAttendance(lead, runId)).rows;
     const byName = Object.fromEntries(rows.map((row) => [row.characterName, row]));
-    await attendanceService.setStatus(lead, { attendanceId: byName.Atbrann.id, status: "NO_SHOW" });
-    await attendanceService.setStatus(lead, { attendanceId: byName.Ataelira.id, status: "LATE" });
-    await attendanceService.setStatus(lead, { attendanceId: byName.Atsylva.id, status: "STANDBY" });
+    await attendanceService.setStatus(lead, { attendanceId: byName.Atbrann.id, expectedStatus: "UNMARKED", status: "NO_SHOW" });
+    await attendanceService.setStatus(lead, { attendanceId: byName.Ataelira.id, expectedStatus: "UNMARKED", status: "LATE" });
+    await attendanceService.setStatus(lead, { attendanceId: byName.Atsylva.id, expectedStatus: "UNMARKED", status: "STANDBY" });
     await attendanceService.markAllUnmarkedPresent(lead, runId);
     const after = await attendanceService.getManagerAttendance(lead, runId);
     const next = Object.fromEntries(after.rows.map((row) => [row.characterName, row.status]));
@@ -533,13 +540,157 @@ describe("attendance mutation and bulk present", () => {
     await runService.startRun(lead, { runId: runId });
     const rows = (await attendanceService.getManagerAttendance(lead, runId)).rows;
     for (const row of rows) {
-      await attendanceService.setStatus(lead, { attendanceId: row.id, status: "PRESENT" });
+      await attendanceService.setStatus(lead, { attendanceId: row.id, expectedStatus: "UNMARKED", status: "PRESENT" });
     }
     await runService.completeRun(lead, runId);
     await expectDomainCode(
-      attendanceService.setStatus(lead, { attendanceId: rows[0].id, status: "LATE" }),
+      attendanceService.setStatus(lead, { attendanceId: rows[0].id, expectedStatus: "PRESENT", status: "LATE" }),
       "ATTENDANCE_NOT_MANAGEABLE",
     );
+  });
+});
+
+describe("attendance concurrency", () => {
+  async function runningRun() {
+    const { runId } = await publishedRunWithRoster();
+    await runService.startRun(lead, { runId });
+    const rows = (await attendanceService.getManagerAttendance(lead, runId)).rows;
+    return { runId, rows, target: rows[0]! };
+  }
+
+  async function currentRow(runId: string, attendanceId: string) {
+    return (await attendanceService.getManagerAttendance(admin, runId)).rows.find((row) => row.id === attendanceId)!;
+  }
+
+  /** Holds the Run's roster lock until released, so the writes queued behind it really overlap. */
+  async function holdRosterLock(runId: string) {
+    const roster = (await orm.RunRoster.where({ runId }).select("id").first()) as { id: string };
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    let held!: () => void;
+    const lockHeld = new Promise<void>((resolve) => (held = resolve));
+    const holder = db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: typeof orm }).public ?? (tx.orm as unknown as typeof orm)) as typeof orm;
+      await lockRosterInTx(txOrm, roster.id);
+      held();
+      await released;
+    });
+    await lockHeld;
+    return async () => {
+      release();
+      await holder;
+    };
+  }
+
+  it("two simultaneous changes of one row: one wins, the other is a conflict and overwrites nothing", async () => {
+    const { runId, target } = await runningRun();
+    const results = await Promise.allSettled([
+      attendanceService.setStatus(lead, { attendanceId: target.id, expectedStatus: "UNMARKED", status: "NO_SHOW" }),
+      attendanceService.setStatus(admin, { attendanceId: target.id, expectedStatus: "UNMARKED", status: "PRESENT" }),
+    ]);
+    const rejected = results.filter((result) => result.status === "rejected") as PromiseRejectedResult[];
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]!.reason).toMatchObject({ code: "ATTENDANCE_STATUS_STALE", status: 409 });
+
+    const winner = results[0].status === "fulfilled" ? "NO_SHOW" : "PRESENT";
+    const row = await currentRow(runId, target.id);
+    expect(row.status).toBe(winner);
+    expect(row.markedByName).toBe(winner === "NO_SHOW" ? "Attendance Lead" : "Attendance Admin");
+    const events = await orm.RunDomainEvent.where({ runId, type: "ATTENDANCE_CORRECTED" }).all();
+    expect(events).toHaveLength(1);
+  });
+
+  it("a stale change names the current status; after reloading, the same change goes through", async () => {
+    const { runId, target } = await runningRun();
+    await attendanceService.setStatus(admin, { attendanceId: target.id, expectedStatus: "UNMARKED", status: "LATE" });
+
+    const stale = attendanceService.setStatus(lead, { attendanceId: target.id, expectedStatus: "UNMARKED", status: "NO_SHOW" });
+    await expect(stale).rejects.toMatchObject({ code: "ATTENDANCE_STATUS_STALE" });
+    await stale.catch((error: Error) => {
+      expect(error.message).toContain(target.characterName!);
+      expect(error.message).toContain("Late");
+    });
+    expect(mapActionError(await stale.catch((error: unknown) => error))).toMatchObject({
+      ok: false,
+      code: "ATTENDANCE_STATUS_STALE",
+    });
+    expect(isAttendanceConflict("ATTENDANCE_STATUS_STALE")).toBe(true);
+    expect(isAttendanceConflict("ATTENDANCE_NOT_MANAGEABLE")).toBe(false);
+    expect((await currentRow(runId, target.id)).status).toBe("LATE");
+
+    const reloaded = await currentRow(runId, target.id);
+    await attendanceService.setStatus(lead, { attendanceId: target.id, expectedStatus: reloaded.status, status: "NO_SHOW" });
+    expect((await currentRow(runId, target.id)).status).toBe("NO_SHOW");
+  });
+
+  it("a status change keeps a note added meanwhile; only an explicit note changes it", async () => {
+    const { runId, target } = await runningRun();
+    await attendanceService.setStatus(admin, {
+      attendanceId: target.id,
+      expectedStatus: "UNMARKED",
+      status: "UNMARKED",
+      note: "added by the other lead",
+    });
+    await attendanceService.setStatus(lead, { attendanceId: target.id, expectedStatus: "UNMARKED", status: "LATE" });
+    expect((await currentRow(runId, target.id)).note).toBe("added by the other lead");
+
+    await attendanceService.setStatus(lead, { attendanceId: target.id, expectedStatus: "LATE", status: "LATE", note: "" });
+    expect((await currentRow(runId, target.id)).note).toBeNull();
+  });
+
+  it("Mark All never overwrites a row changed first and counts only the rows it changed", async () => {
+    const { runId, rows, target } = await runningRun();
+    const release = await holdRosterLock(runId);
+    const individual = attendanceService.setStatus(admin, { attendanceId: target.id, expectedStatus: "UNMARKED", status: "NO_SHOW" });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const markAll = attendanceService.markAllUnmarkedPresent(lead, runId);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await release();
+    await individual;
+
+    expect(await markAll).toBe(rows.length - 1);
+    const after = (await attendanceService.getManagerAttendance(lead, runId)).rows;
+    expect(after.find((row) => row.id === target.id)?.status).toBe("NO_SHOW");
+    expect(after.filter((row) => row.status === "PRESENT")).toHaveLength(rows.length - 1);
+    expect(await attendanceService.markAllUnmarkedPresent(lead, runId)).toBe(0);
+  });
+
+  it("a change queued behind Mark All is a conflict, not an overwrite", async () => {
+    const { runId, rows, target } = await runningRun();
+    const release = await holdRosterLock(runId);
+    const markAll = attendanceService.markAllUnmarkedPresent(lead, runId);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const individual = attendanceService.setStatus(admin, { attendanceId: target.id, expectedStatus: "UNMARKED", status: "NO_SHOW" });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await release();
+
+    expect(await markAll).toBe(rows.length);
+    await expect(individual).rejects.toMatchObject({ code: "ATTENDANCE_STATUS_STALE" });
+    expect((await currentRow(runId, target.id)).status).toBe("PRESENT");
+  });
+
+  it("a Run never completes with a row back on Unmarked", async () => {
+    const { runId, target } = await runningRun();
+    await attendanceService.markAllUnmarkedPresent(lead, runId);
+    const results = await Promise.allSettled([
+      runService.completeRun(lead, runId),
+      attendanceService.setStatus(admin, { attendanceId: target.id, expectedStatus: "PRESENT", status: "UNMARKED" }),
+    ]);
+    const run = await runRepository.findById(runId);
+    const unmarked = await orm.RunAttendance.where({ runId, status: "UNMARKED" }).all();
+    if (run?.status === "COMPLETED") {
+      expect(unmarked).toHaveLength(0);
+      expect(results[1]).toMatchObject({ status: "rejected", reason: { code: "ATTENDANCE_NOT_MANAGEABLE" } });
+    } else {
+      expect(unmarked).toHaveLength(1);
+      expect(results[0]).toMatchObject({ status: "rejected", reason: { code: "ATTENDANCE_INCOMPLETE" } });
+    }
+  });
+
+  it("the action input requires the status the manager saw", () => {
+    const attendanceId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    expect(setAttendanceSchema.safeParse({ attendanceId, status: "PRESENT" }).success).toBe(false);
+    expect(setAttendanceSchema.safeParse({ attendanceId, expectedStatus: "UNMARKED", status: "PRESENT" }).success).toBe(true);
   });
 });
 
@@ -600,7 +751,7 @@ describe("roster freeze after start", () => {
 
     const rows = (await attendanceService.getManagerAttendance(lead, runId)).rows;
     for (const row of rows) {
-      await attendanceService.setStatus(lead, { attendanceId: row.id, status: "PRESENT" });
+      await attendanceService.setStatus(lead, { attendanceId: row.id, expectedStatus: "UNMARKED", status: "PRESENT" });
     }
     await runService.completeRun(lead, runId);
     const completed = await rosterService.getRosterManagementView(lead, runId);
@@ -688,6 +839,7 @@ describe("user attendance data protection", () => {
     expect(ownRow).toBeTruthy();
     await attendanceService.setStatus(lead, {
       attendanceId: ownRow!.id,
+      expectedStatus: "UNMARKED",
       status: "PRESENT",
       note: "manager only note",
     });
@@ -919,8 +1071,111 @@ describe("post-completion attendance correction", () => {
     const userView = await runDetailService.getRunDetail(user, runId);
     expect(userView.attendance.manager).toBeNull();
     await expectDomainCode(
-      attendanceService.setStatus(lead, { attendanceId: leadView.attendance.manager!.rows[0]!.id, status: "NO_SHOW" }),
+      attendanceService.setStatus(lead, { attendanceId: leadView.attendance.manager!.rows[0]!.id, expectedStatus: "PRESENT", status: "NO_SHOW" }),
       "ATTENDANCE_NOT_MANAGEABLE",
     );
+  });
+});
+
+describe("Discord voice hint in Attendance (information only, never a status)", () => {
+  const TOKEN = "voice-presence-test-token-0123456789";
+  const VOICE = "1500000000000000001";
+  const OTHER_VOICE = "1500000000000000002";
+  const DISCORD = { user: "1400000000000000001", playerB: "1400000000000000002" };
+
+  function post(body: unknown, token: string | null = TOKEN) {
+    return voicePresencePost(
+      new NextRequest(new URL("/api/bot/discord/voice-presence", "http://bot-api.test"), {
+        method: "POST",
+        headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    );
+  }
+
+  /** A started Run (attendance rows for user + playerB + playerD), its voice channel assigned, two players linked to Discord. */
+  async function runningRunWithVoice() {
+    const { runId } = await publishedRunWithRoster();
+    await runService.startRun(lead, { runId });
+    const now = new Date().toISOString();
+    await orm.RunDiscordPost.create({ id: crypto.randomUUID(), runId, voiceChannelId: VOICE, createdAt: now, updatedAt: now });
+    await orm.User.where({ id: ids.user }).update({ discordUserId: DISCORD.user });
+    await orm.User.where({ id: ids.playerB }).update({ discordUserId: DISCORD.playerB });
+    await orm.User.where({ id: ids.playerD }).update({ discordUserId: null });
+    return runId;
+  }
+
+  async function voiceByUser(runId: string) {
+    const view = await attendanceService.getManagerAttendance(lead, runId);
+    return Object.fromEntries(view.rows.map((row) => [row.userName, row.voicePresence]));
+  }
+
+  beforeAll(() => {
+    process.env.BOOSTINGHUB_BOT_API_TOKEN = TOKEN;
+  });
+  afterAll(async () => {
+    voicePresenceService.resetForTests();
+    for (const id of [ids.user, ids.playerB, ids.playerD]) await orm.User.where({ id }).update({ discordUserId: null });
+    await orm.RunDiscordPost.where({ voiceChannelId: VOICE }).delete().catch(() => {});
+  });
+
+  it("connected → In voice, disconnected → Not in voice, unlinked Discord → Unknown; statuses stay manual", async () => {
+    voicePresenceService.resetForTests();
+    const runId = await runningRunWithVoice();
+    const before = (await attendanceService.getManagerAttendance(lead, runId)).rows.map((row) => row.status);
+
+    const res = await post({ runs: [{ runId, channelId: VOICE, discordUserIds: [DISCORD.user, "1999999999999999999"] }] });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({ accepted: 1, ignored: 0 });
+
+    const voice = await voiceByUser(runId);
+    expect(voice["Attendance User"]).toBe("IN_VOICE");
+    expect(voice["Attendance Player B"]).toBe("NOT_IN_VOICE");
+    expect(voice["Attendance Player D"]).toBe("UNKNOWN");
+    // Never marks attendance.
+    expect((await attendanceService.getManagerAttendance(lead, runId)).rows.map((row) => row.status)).toEqual(before);
+  });
+
+  it("a later report without the player (left the channel) → Not in voice", async () => {
+    voicePresenceService.resetForTests();
+    const runId = await runningRunWithVoice();
+    await post({ runs: [{ runId, channelId: VOICE, discordUserIds: [DISCORD.user] }] });
+    await post({ runs: [{ runId, channelId: VOICE, discordUserIds: [] }] });
+    expect((await voiceByUser(runId))["Attendance User"]).toBe("NOT_IN_VOICE");
+  });
+
+  it("a report for another voice channel than the Run's is ignored → Unknown", async () => {
+    voicePresenceService.resetForTests();
+    const runId = await runningRunWithVoice();
+    const res = await post({ runs: [{ runId, channelId: OTHER_VOICE, discordUserIds: [DISCORD.user] }] });
+    expect((await res.json()).data).toEqual({ accepted: 0, ignored: 1 });
+    expect((await voiceByUser(runId))["Attendance User"]).toBe("UNKNOWN");
+  });
+
+  it("bot unavailable (no report) and stale reports → Unknown", async () => {
+    voicePresenceService.resetForTests();
+    const runId = await runningRunWithVoice();
+    expect((await voiceByUser(runId))["Attendance User"]).toBe("UNKNOWN");
+    await voicePresenceService.record([{ runId, channelId: VOICE, discordUserIds: [DISCORD.user] }], Date.now() - VOICE_PRESENCE_TTL_MS - 1_000);
+    expect((await voiceByUser(runId))["Attendance User"]).toBe("UNKNOWN");
+  });
+
+  it("a Run that is no longer running: reports are ignored and no hint is shown", async () => {
+    voicePresenceService.resetForTests();
+    const runId = await runningRunWithVoice();
+    await orm.Run.where({ id: runId }).update({ status: "COMPLETED" });
+    const res = await post({ runs: [{ runId, channelId: VOICE, discordUserIds: [DISCORD.user] }] });
+    expect((await res.json()).data).toEqual({ accepted: 0, ignored: 1 });
+    const view = await attendanceService.getManagerAttendance(lead, runId);
+    expect(view.rows.every((row) => row.voicePresence === null)).toBe(true);
+  });
+
+  it("unauthorized or malformed bot requests are refused", async () => {
+    expect((await post({ runs: [] }, null)).status).toBe(401);
+    expect((await post({ runs: [] }, "wrong-token")).status).toBe(401);
+    expect((await post({ runs: [{ runId: "not-a-uuid", channelId: VOICE, discordUserIds: [] }] })).status).toBe(400);
+    expect((await post({ runs: [{ runId: crypto.randomUUID(), channelId: VOICE, discordUserIds: ["<@everyone>"] }] })).status).toBe(400);
+    const tooMany = Array.from({ length: 101 }, (_, index) => `13000000000000${String(index).padStart(5, "0")}`);
+    expect((await post({ runs: [{ runId: crypto.randomUUID(), channelId: VOICE, discordUserIds: tooMany }] })).status).toBe(400);
   });
 });

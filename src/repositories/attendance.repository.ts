@@ -61,6 +61,21 @@ export type AttendanceRecord = {
 
 type TxOrm = typeof orm;
 
+/** The Run's per-Run write lock; a Run without a roster row has no attendance to protect. */
+async function lockRunRosterInTx(txOrm: TxOrm, runId: string): Promise<void> {
+  const roster = (await txOrm.RunRoster.where({ runId }).select("id").first()) as Record<string, unknown> | null;
+  if (roster) {
+    await lockRosterInTx(txOrm, asString(roster.id));
+  }
+}
+
+async function assertRunInProgressInTx(txOrm: TxOrm, runId: string): Promise<void> {
+  const run = (await txOrm.Run.where({ id: runId }).select("status").first()) as Record<string, unknown> | null;
+  if (!run || asString(run.status) !== "IN_PROGRESS") {
+    throw new DomainError("ATTENDANCE_NOT_MANAGEABLE", "Attendance can only be updated while the run is in progress.");
+  }
+}
+
 const CORRECTION_STATUS_LABELS: Record<AttendanceStatus, string> = {
   UNMARKED: "Unmarked",
   PRESENT: "Present",
@@ -240,36 +255,68 @@ export const attendanceRepository = {
     return summary;
   },
 
-  async updateStatus(
-    id: string,
-    fields: {
-      status: AttendanceStatus;
-      note: string | null;
-      markedAt: string | null;
-      markedById: string | null;
-    },
-  ) {
-    await orm.RunAttendance.where({ id }).update({
-      status: fields.status,
-      note: fields.note,
-      markedAt: fields.markedAt,
-      markedById: fields.markedById,
-      updatedAt: new Date().toISOString(),
+  /**
+   * One attendance change on a running Run, under the Run's roster lock (the
+   * same serialization as Start, roster writes and Complete): the status the
+   * manager saw must still be the current one, so a change made meanwhile by
+   * another manager is never overwritten. An omitted note keeps the stored one.
+   */
+  async setStatusAtomic(input: {
+    runId: string;
+    attendanceId: string;
+    expectedStatus: AttendanceStatus;
+    status: AttendanceStatus;
+    note?: string | null;
+    markedById: string;
+  }): Promise<{ previousStatus: AttendanceStatus }> {
+    return db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      await lockRunRosterInTx(txOrm, input.runId);
+      await assertRunInProgressInTx(txOrm, input.runId);
+      const row = (await txOrm.RunAttendance.where({ id: input.attendanceId })
+        .include("rosterEntry", (entry) => entry.include("signup", (signup) => signup.include("user").include("character")))
+        .first()) as Record<string, unknown> | null;
+      if (!row || asString(row.runId) !== input.runId) {
+        throw new DomainError("ATTENDANCE_NOT_FOUND", "Attendance was not found.", 404);
+      }
+      const record = mapAttendance(row);
+      if (record.status !== input.expectedStatus) {
+        throw new DomainError(
+          "ATTENDANCE_STATUS_STALE",
+          `${record.characterName} was just changed to ${CORRECTION_STATUS_LABELS[record.status]} by someone else. The list is up to date now — check it and try again if needed.`,
+          409,
+        );
+      }
+      const now = new Date().toISOString();
+      await txOrm.RunAttendance.where({ id: input.attendanceId }).update({
+        status: input.status,
+        note: input.note === undefined ? record.note : input.note,
+        markedAt: input.status === "UNMARKED" ? null : now,
+        markedById: input.status === "UNMARKED" ? null : input.markedById,
+        updatedAt: now,
+      });
+      return { previousStatus: record.status };
     });
   },
 
+  /**
+   * One statement filtered on UNMARKED, under the Run's roster lock: a row
+   * marked meanwhile is never overwritten, and the result is the number of
+   * rows this call actually changed.
+   */
   async markAllUnmarkedPresent(runId: string, markedById: string): Promise<number> {
-    const now = new Date().toISOString();
-    const unmarked = await orm.RunAttendance.where({ runId, status: "UNMARKED" }).select("id").all();
-    for (const row of unmarked) {
-      await orm.RunAttendance.where({ id: asString((row as Record<string, unknown>).id) }).update({
+    return db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      await lockRunRosterInTx(txOrm, runId);
+      await assertRunInProgressInTx(txOrm, runId);
+      const now = new Date().toISOString();
+      return txOrm.RunAttendance.where({ runId, status: "UNMARKED" }).updateAndCount({
         status: "PRESENT",
         markedAt: now,
         markedById,
         updatedAt: now,
       });
-    }
-    return unmarked.length;
+    });
   },
 
   async startRunWithAttendance(
@@ -312,6 +359,7 @@ export const attendanceRepository = {
           version: lockedRoster.version,
           runChangedSinceAck: lockedRoster.runChangedSinceAck,
           draft: lockedRoster.selections,
+          bossExceptions: lockedRoster.bossExceptions,
           signups: runSignups.map((row) => ({
             id: asString(row.id),
             status: mapSignupStatus(row.status),
@@ -427,6 +475,8 @@ export const attendanceRepository = {
    *   gets its own PRESENT attendance row (full cut) plus a Raid Invite
    * - an external replacement is added to the roster as an external booster
    *   (Final Setup only — no account, so no attendance)
+   * - the replaced slot drops its boss exceptions (both stages); a
+   *   replacement that was an alternate Character stops being one
    * - the roster version is bumped so the Discord roster and Final Setup
    *   posts are edited
    */
@@ -589,6 +639,19 @@ export const attendanceRepository = {
         });
       }
 
+      // Boss exceptions follow the live roster: the replaced slot is gone, so
+      // its per-boss plan (both stages) goes with it — the replacement plays
+      // every boss in the slot's role. A replacement that was some slot's
+      // alternate Character now holds its own slot and stops being one.
+      // Otherwise Discord and the consumables audit would keep a stale
+      // PUBLISHED plan.
+      if (originalRecord.signupId) {
+        await txOrm.RunRosterBossException.where({ rosterId, slotSignupId: originalRecord.signupId }).deleteAndCount();
+      }
+      if (input.replacement.kind === "signup") {
+        await txOrm.RunRosterBossException.where({ rosterId, playSignupId: input.replacement.signupId }).deleteAndCount();
+      }
+
       const previousVersion = asNumber(roster.version, 1);
       await txOrm.RunRoster.where({ id: rosterId }).update({ version: previousVersion + 1, updatedAt: now });
       // A Final Setup posted before this column existed has no baseline yet;
@@ -700,6 +763,8 @@ export const attendanceRepository = {
   async completeRunIfAttendanceComplete(runId: string) {
     await db.transaction(async (tx) => {
       const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      // Same lock as attendance changes: no status can return to UNMARKED after the check below.
+      await lockRunRosterInTx(txOrm, runId);
       const run = await txOrm.Run.where({ id: runId }).first();
       if (!run || asString((run as Record<string, unknown>).status) !== "IN_PROGRESS") {
         throw new DomainError("RUN_CANNOT_COMPLETE", "Only an in-progress run can be completed.");

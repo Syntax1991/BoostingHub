@@ -1,6 +1,7 @@
+import type { CustomPing, LateFillHelpRole } from "@/lib/late-fill-help";
 import type { RunScopeChange } from "@/lib/run-scope-change";
 import type { BotEnv } from "@/discord-bot/env";
-import type { RaidDifficulty, RunLootType } from "@/models/enums";
+import type { RaidDifficulty, RunLootType, WowClass } from "@/models/enums";
 
 export class BotApiError extends Error {
   readonly status: number;
@@ -174,6 +175,10 @@ export class BotApiClient {
         discordUserId: string;
         /** ROSTER_SELECTED for a character swap ("Roster Update"); optional for an older API. */
         rosterUpdate?: boolean;
+        /** ROSTER_SELECTED: only the boss plan changed ("Boss Plan Update"); optional for an older API. */
+        bossPlanUpdate?: boolean;
+        /** ROSTER_SELECTED: the slot's current boss plan; optional for an older API. */
+        bossPlan?: string | null;
         /** ROSTER_WITHDRAWN only; optional for an older API. */
         withdrawal?: {
           playerName: string;
@@ -238,11 +243,17 @@ export class BotApiClient {
       runAnnouncements: Array<{
         announcementId: string;
         runId: string;
-        type: "RUN_RESCHEDULED" | "RUN_CANCELLED" | "RUN_REACTIVATED" | "RUN_SCOPE_CHANGED";
+        type: "RUN_RESCHEDULED" | "RUN_CANCELLED" | "RUN_REACTIVATED" | "RUN_SCOPE_CHANGED" | "LATE_FILL_HELP";
         runChannelId: string | null;
         previousScheduledStartAt: string | null;
         /** RUN_SCOPE_CHANGED only; optional for an older API. */
         scopeChanges?: RunScopeChange[];
+        /** LATE_FILL_HELP only: roles to ping with their missing counts; optional for an older API. */
+        helpRoles?: LateFillHelpRole[];
+        /** LATE_FILL_HELP only: classes whose buffs the roster misses; optional for an older API. */
+        helpClasses?: WowClass[];
+        /** LATE_FILL_HELP only: a custom request's text and chosen roles; optional for an older API. */
+        helpCustom?: CustomPing | null;
         scheduledStartAt: string;
         productLabel: string;
         /** Compact Run identity; optional for an older API. */
@@ -506,5 +517,15 @@ export class BotApiClient {
   /** One bounded pass of the automatic post-completion Consumables Audit. */
   runWarcraftLogsAutoAudit() {
     return this.request<unknown>("/api/bot/warcraft-logs/auto-audit", { method: "POST" });
+  }
+
+  /** Who is in each running Run's voice channel (Attendance hint; ignored server-side unless it matches). */
+  reportVoicePresence(runs: Array<{ runId: string; channelId: string; discordUserIds: string[] }>) {
+    return this.request<unknown>("/api/bot/discord/voice-presence", { method: "POST", body: JSON.stringify({ runs }) });
+  }
+
+  /** One bounded pass of the Discord player name refresh (people of upcoming Runs). */
+  refreshDiscordMemberNames() {
+    return this.request<unknown>("/api/bot/discord/member-names", { method: "POST" });
   }
 }

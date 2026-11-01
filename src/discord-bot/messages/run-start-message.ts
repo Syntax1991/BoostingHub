@@ -14,6 +14,7 @@ export function toFinalSetupInput(data: RunStartEmbedData): FinalSetupInput {
     lootType: data.lootType,
     targets: data.targets,
     groups: data.groups,
+    bossPlan: data.bossPlan,
   };
 }
 

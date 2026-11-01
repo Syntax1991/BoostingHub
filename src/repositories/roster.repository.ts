@@ -34,12 +34,15 @@ import {
   mapWowClass,
 } from "@/lib/persistence";
 import { DomainError } from "@/lib/errors";
+import type { RosterBossException } from "@/lib/roster-boss-plan";
 import { mapExternalBoosters, type ExternalBooster, type ExternalBoosterInput } from "@/lib/external-booster";
 import { userRepository } from "@/repositories/user.repository";
 import { mapOfferedRoles, queryReservationConflicts, syncOfferedRolesInTx } from "@/repositories/signup.repository";
 import {
   rosterRemovedSourceKey,
   rosterSelectedSourceKey,
+  rosterBossPlanSourceKey,
+  ROSTER_BOSS_PLAN_SOURCE_KEY_PREFIX,
   rosterSwappedSourceKey,
   rosterWithdrawnSourceKey,
   userNotificationRepository,
@@ -48,6 +51,7 @@ import {
   resolveDiscordDelivery,
   rosterRemovedWebNotification,
   rosterSelectedWebNotification,
+  rosterBossPlanWebNotification,
   rosterSwappedWebNotification,
   rosterWithdrawnWebNotification,
   type NotificationAssignmentInput,
@@ -136,7 +140,26 @@ export type RosterRecord = {
   runChangedSinceAck: boolean;
   /** Latest explicit Publish Roster intent — the bot syncs the persistent Roster message for each. */
   postRevision: number;
+  /** Boss-specific exceptions (lib/roster-boss-plan): Save writes DRAFT, Publish / Update copies to PUBLISHED. */
+  bossExceptions: { draft: RosterBossException[]; published: RosterBossException[] };
 };
+
+export function mapBossExceptionRows(value: unknown): RosterRecord["bossExceptions"] {
+  const rows = Array.isArray(value) ? (value as Record<string, unknown>[]) : [];
+  const draft: RosterBossException[] = [];
+  const published: RosterBossException[] = [];
+  for (const row of rows) {
+    const exception: RosterBossException = {
+      slotSignupId: asString(row.slotSignupId),
+      runRaidContentId: asString(row.runRaidContentId),
+      raidBossId: asString(row.raidBossId),
+      playSignupId: asStringOrNull(row.playSignupId),
+      role: mapCharacterRole(row.role),
+    };
+    (mapRosterState(row.stage) === "PUBLISHED" ? published : draft).push(exception);
+  }
+  return { draft, published };
+}
 
 function mapPlayableSpecs(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -263,6 +286,7 @@ function mapRoster(row: Record<string, unknown>): RosterRecord {
     externalBoosters: mapExternalBoosters(row.externalBoosters),
     runChangedSinceAck: row.runChangedSinceAck === true,
     postRevision: asNumber(row.postRevision, 0),
+    bossExceptions: mapBossExceptionRows(row.bossExceptions),
   };
 }
 
@@ -282,7 +306,11 @@ const ROSTER_ALREADY_CHANGED_MESSAGE = "This roster changed since you loaded it.
  */
 export async function lockRosterInTx(txOrm: TxOrm, rosterId: string): Promise<RosterRecord> {
   await txOrm.RunRoster.where({ id: rosterId }).update({ updatedAt: new Date().toISOString() });
-  const row = await txOrm.RunRoster.where({ id: rosterId }).include("entries").include("publishedBy").first();
+  const row = await txOrm.RunRoster.where({ id: rosterId })
+    .include("entries")
+    .include("publishedBy")
+    .include("bossExceptions")
+    .first();
   if (!row) {
     throw new DomainError("NOT_FOUND", "Roster was not found.");
   }
@@ -367,7 +395,145 @@ type DraftWriteOptions = {
   notify?: { runId: string; runTitle: string };
   /** Save Roster: the full set of external boosters, replacing the saved ones. Undefined leaves them untouched. */
   externalBoosters?: ExternalBoosterInput[];
+  /**
+   * Boss exceptions: the full DRAFT set (validated by the caller), replacing
+   * the saved one. Undefined keeps the saved draft exceptions — minus those of
+   * slots that leave the draft.
+   */
+  bossExceptions?: RosterBossException[];
+  /** Edit Published seed: copy the PUBLISHED boss exceptions into the draft. */
+  seedBossExceptionsFromPublished?: boolean;
 };
+
+/**
+ * DRAFT boss exceptions after a draft write: replaced by the given set (or the
+ * published one when seeding), otherwise only exceptions of slots that left
+ * the draft are dropped. An exception always belongs to a selected slot.
+ */
+async function writeDraftBossExceptionsInTx(
+  txOrm: TxOrm,
+  roster: RosterRecord,
+  selectedSignupIds: ReadonlySet<string>,
+  options: DraftWriteOptions | undefined,
+  now: string,
+): Promise<void> {
+  const replacement =
+    options?.bossExceptions ?? (options?.seedBossExceptionsFromPublished ? roster.bossExceptions.published : null);
+  if (options?.bossExceptions) {
+    // Same in-tx re-check as for slots: an alternate withdrawn after the
+    // caller's validation must not land in the draft (its withdrawal cleanup
+    // found no row to remove yet).
+    const playSignupIds = [
+      ...new Set(
+        options.bossExceptions
+          .filter((row) => selectedSignupIds.has(row.slotSignupId))
+          .map((row) => row.playSignupId)
+          .filter((id): id is string => id != null),
+      ),
+    ];
+    if (playSignupIds.length > 0) {
+      const playRows = (await txOrm.RunSignup.where((signup) => signup.id.in(playSignupIds)).all()) as Array<
+        Record<string, unknown>
+      >;
+      if (playRows.length !== playSignupIds.length) {
+        throw new DomainError("NOT_FOUND", "Signup was not found.", 404);
+      }
+      if (playRows.some((row) => mapSignupStatus(row.status) === "WITHDRAWN")) {
+        throw new DomainError("SIGNUP_WITHDRAWN", "Withdrawn signups cannot be selected.");
+      }
+    }
+  }
+  if (replacement) {
+    await txOrm.RunRosterBossException.where({ rosterId: roster.id, stage: "DRAFT" }).deleteAndCount();
+    for (const row of replacement) {
+      if (!selectedSignupIds.has(row.slotSignupId)) continue;
+      await txOrm.RunRosterBossException.create({
+        id: crypto.randomUUID(),
+        rosterId: roster.id,
+        stage: "DRAFT",
+        slotSignupId: row.slotSignupId,
+        runRaidContentId: row.runRaidContentId,
+        raidBossId: row.raidBossId,
+        playSignupId: row.playSignupId,
+        role: row.role,
+        createdAt: now,
+      });
+    }
+    return;
+  }
+  const leftSlots = [
+    ...new Set(
+      roster.bossExceptions.draft
+        .map((row) => row.slotSignupId)
+        .filter((slotSignupId) => !selectedSignupIds.has(slotSignupId)),
+    ),
+  ];
+  if (leftSlots.length > 0) {
+    await txOrm.RunRosterBossException.where((row) => row.slotSignupId.in(leftSlots))
+      .where({ rosterId: roster.id, stage: "DRAFT" })
+      .deleteAndCount();
+  }
+}
+
+/** Publish / Update: the PUBLISHED boss exceptions become the (just written) DRAFT ones of the accepted slots. */
+async function publishBossExceptionsInTx(
+  txOrm: TxOrm,
+  rosterId: string,
+  selectedSignupIds: ReadonlySet<string>,
+  now: string,
+): Promise<void> {
+  const draftRows = (await txOrm.RunRosterBossException.where({ rosterId, stage: "DRAFT" }).all()) as Array<
+    Record<string, unknown>
+  >;
+  await txOrm.RunRosterBossException.where({ rosterId, stage: "PUBLISHED" }).deleteAndCount();
+  for (const row of draftRows) {
+    if (!selectedSignupIds.has(asString(row.slotSignupId))) continue;
+    await txOrm.RunRosterBossException.create({
+      id: crypto.randomUUID(),
+      rosterId,
+      stage: "PUBLISHED",
+      slotSignupId: asString(row.slotSignupId),
+      runRaidContentId: asString(row.runRaidContentId),
+      raidBossId: asString(row.raidBossId),
+      playSignupId: asStringOrNull(row.playSignupId),
+      role: mapCharacterRole(row.role),
+      createdAt: now,
+    });
+  }
+}
+
+/** Rosters holding boss exceptions of these signups, as slot or as alternate Character. */
+async function rosterIdsWithBossExceptionsForSignupsInTx(txOrm: TxOrm, signupIds: readonly string[]): Promise<string[]> {
+  if (signupIds.length === 0) return [];
+  const rows = (await txOrm.RunRosterBossException.where((row) =>
+    row.slotSignupId.in([...signupIds]),
+  ).all()) as Array<Record<string, unknown>>;
+  const played = (await txOrm.RunRosterBossException.where((row) =>
+    row.playSignupId.in([...signupIds]),
+  ).all()) as Array<Record<string, unknown>>;
+  return [...new Set([...rows, ...played].map((row) => asString(row.rosterId)))];
+}
+
+/**
+ * A signup leaves the Run (withdrawal) — call with the roster already locked.
+ * As a slot it takes every exception it holds along (the slot itself leaves
+ * both stages). As an alternate Character only the DRAFT rows go: the
+ * PUBLISHED plan keeps differing from the draft, so the Raid Lead sees
+ * "Update needed" instead of a silently changed published roster.
+ */
+async function deleteBossExceptionsForSignupsInTx(
+  txOrm: TxOrm,
+  rosterId: string,
+  signupIds: readonly string[],
+): Promise<void> {
+  if (signupIds.length === 0) return;
+  await txOrm.RunRosterBossException.where((row) => row.slotSignupId.in([...signupIds]))
+    .where({ rosterId })
+    .deleteAndCount();
+  await txOrm.RunRosterBossException.where((row) => row.playSignupId.in([...signupIds]))
+    .where({ rosterId, stage: "DRAFT" })
+    .deleteAndCount();
+}
 
 /**
  * Writes a complete draft selection into an already locked, version-checked
@@ -443,6 +609,8 @@ async function writeDraftSelectionsInTx(
     }
   }
 
+  await writeDraftBossExceptionsInTx(txOrm, roster, next, options, now);
+
   await txOrm.RunRoster.where({ id: rosterId }).update({
     version: roster.version + 1,
     updatedAt: now,
@@ -473,6 +641,12 @@ type PublishSelectionsInput = {
   publisherId: string;
   /** Display title for ROSTER_SELECTED web/DM copy. */
   runTitle: string;
+  /**
+   * Slots whose PUBLISHED boss plan this publish changes, with the new plan
+   * text (null = every boss as rostered). Computed by the caller; each such
+   * player who stays in the roster hears "Boss Plan Update" once.
+   */
+  bossPlanNotices?: Array<{ signupId: string; plan: string | null }>;
 };
 
 /** RunSignup row → the shape hasUnpublishedRosterChanges compares. */
@@ -523,6 +697,7 @@ async function publishSelectionsInTx(
     selections: input.selectedSelections,
     now,
   });
+  await notifyBossPlanChangesInTx(txOrm, { ...input, version: nextVersion, now });
   const draftRole = new Map(mapped.selections.map((selection) => [selection.signupId, selection.selectedRole]));
   for (const selection of input.selectedSelections) {
     await txOrm.RunSignup.where({ id: selection.signupId }).update({
@@ -542,6 +717,12 @@ async function publishSelectionsInTx(
       publishedRole: null,
     });
   }
+  await publishBossExceptionsInTx(
+    txOrm,
+    mapped.id,
+    new Set(input.selectedSelections.map((selection) => selection.signupId)),
+    now,
+  );
   if (input.fromStatus === "OPEN") {
     await txOrm.Run.where({ id: input.runId }).update({ status: "ROSTERING" });
   }
@@ -573,6 +754,7 @@ export const rosterRepository = {
       .include("entries")
       .include("externalBoosters")
       .include("publishedBy")
+      .include("bossExceptions")
       .first();
     return row ? mapRoster(row as Record<string, unknown>) : null;
   },
@@ -926,7 +1108,11 @@ export const rosterRepository = {
   },
 
   async findByRunIdFromId(rosterId: string): Promise<RosterRecord> {
-    const row = await orm.RunRoster.where({ id: rosterId }).include("entries").include("publishedBy").first();
+    const row = await orm.RunRoster.where({ id: rosterId })
+      .include("entries")
+      .include("publishedBy")
+      .include("bossExceptions")
+      .first();
     if (!row) {
       throw new DomainError("NOT_FOUND", "Roster was not found.");
     }
@@ -950,12 +1136,20 @@ export const rosterRepository = {
       >;
       // Lock the affected rosters first (sorted, one consistent order) — the
       // same lock-before-write order as every roster write and Start Run.
-      const rosterIds = [...new Set(entries.map((row) => asString(row.rosterId)))].sort();
+      // Includes rosters where the signup is only an alternate Character of a
+      // boss exception (no own entry).
+      const rosterIds = [
+        ...new Set([
+          ...entries.map((row) => asString(row.rosterId)),
+          ...(await rosterIdsWithBossExceptionsForSignupsInTx(txOrm, uniqueIds)),
+        ]),
+      ].sort();
       for (const rosterId of rosterIds) {
         const roster = await lockRosterInTx(txOrm, rosterId);
         await txOrm.RunRosterEntry.where((entry) => entry.signupId.in(uniqueIds))
           .where({ rosterId })
-          .delete();
+          .deleteAndCount();
+        await deleteBossExceptionsForSignupsInTx(txOrm, rosterId, uniqueIds);
         await txOrm.RunRoster.where({ id: rosterId }).update({ version: roster.version + 1, updatedAt: now });
       }
     });
@@ -1040,6 +1234,7 @@ export const rosterRepository = {
         for (const entry of entries as Array<Record<string, unknown>>) {
           await txOrm.RunRosterEntry.where({ id: asString(entry.id) }).delete();
         }
+        await deleteBossExceptionsForSignupsInTx(txOrm, rosterId, [input.signupId]);
         version = asNumber(roster.version, 1) + 1;
         await txOrm.RunRoster.where({ id: rosterId }).update({ version, updatedAt: now });
       }
@@ -1118,6 +1313,8 @@ export const rosterRepository = {
       rosterId: string;
       expectedVersion: number;
       draftSelections: RosterSelection[];
+      /** The manager's boss exceptions for the accepted selection; undefined keeps the saved draft ones. */
+      bossExceptions?: RosterBossException[];
     },
   ) {
     await db.transaction(async (tx) => {
@@ -1139,6 +1336,7 @@ export const rosterRepository = {
         targetRunId: input.runId,
         scheduledStartAt: input.scheduledStartAt,
         selectedCharacterIds: input.selectedCharacterIds,
+        bossExceptions: input.bossExceptions,
       });
       await publishSelectionsInTx(tx, txOrm, mapped, input);
     });
@@ -1180,6 +1378,7 @@ export const rosterRepository = {
           runChangedSinceAck: mapped.runChangedSinceAck,
           draft: mapped.selections,
           signups: signups.map(publishStateSignup),
+          bossExceptions: mapped.bossExceptions,
         })
       ) {
         throw new DomainError(
@@ -1313,6 +1512,55 @@ async function notifyRosterSelectionChangesInTx(
   }
 }
 
+/**
+ * Publish / Update: a player who stays in the roster and was not just told
+ * "selected" / "Roster Update" in this same write hears once that their
+ * published boss plan changed; unchanged players hear nothing (the caller
+ * only lists slots whose plan differs). DMs stay one per change: a waiting
+ * (undelivered) "Roster Selected" / "Roster Update" of that slot renders the
+ * current published plan when it goes out, so no notice is added; a waiting
+ * older Boss Plan Update is superseded (its DM skipped, compare-and-set on
+ * PENDING) by the new one.
+ */
+async function notifyBossPlanChangesInTx(
+  txOrm: TxOrm,
+  input: {
+    runId: string;
+    runTitle: string;
+    version: number;
+    now: string;
+    selectedSelections: RosterNotificationSelection[];
+    bossPlanNotices?: Array<{ signupId: string; plan: string | null }>;
+  },
+): Promise<void> {
+  if (!input.bossPlanNotices?.length) return;
+  const selectedRows = (await txOrm.UserNotification.where({ runId: input.runId, type: "ROSTER_SELECTED" }).all()) as Array<
+    Record<string, unknown>
+  >;
+  const toldNow = new Set(
+    selectedRows
+      .filter((row) => Number(asString(row.sourceKey).split(":")[2]) === input.version)
+      .map((row) => asStringOrNull(row.signupId)),
+  );
+  const pending = selectedRows.filter((row) => asString(row.discordDeliveryStatus) === "PENDING");
+  const isBossPlanNotice = (row: Record<string, unknown>) =>
+    asString(row.sourceKey).startsWith(ROSTER_BOSS_PLAN_SOURCE_KEY_PREFIX);
+  const selectionById = new Map(input.selectedSelections.map((selection) => [selection.signupId, selection]));
+  for (const notice of input.bossPlanNotices) {
+    const selection = selectionById.get(notice.signupId);
+    if (!selection || toldNow.has(notice.signupId)) continue;
+    const waiting = pending.filter((row) => asStringOrNull(row.signupId) === notice.signupId);
+    if (waiting.some((row) => !isBossPlanNotice(row))) continue;
+    for (const row of waiting) {
+      await txOrm.UserNotification.where({ id: asString(row.id), discordDeliveryStatus: "PENDING" }).update({
+        discordDeliveryStatus: "SKIPPED",
+        updatedAt: input.now,
+      });
+    }
+    await createRosterSelectedNotificationInTx(txOrm, { ...input, selection, bossPlanNotice: { plan: notice.plan } });
+  }
+}
+
 async function createRosterSelectedNotificationInTx(
   txOrm: TxOrm,
   input: {
@@ -1323,6 +1571,8 @@ async function createRosterSelectedNotificationInTx(
     selection: RosterNotificationSelection;
     /** Character swap of a player already in the roster — rendered as "Roster Update". */
     swap?: boolean;
+    /** Only the published boss plan changed for a player who stays — rendered as "Boss Plan Update". */
+    bossPlanNotice?: { plan: string | null };
   },
 ): Promise<void> {
   const signup = (await txOrm.RunSignup.where({ id: input.selection.signupId })
@@ -1358,11 +1608,13 @@ async function createRosterSelectedNotificationInTx(
           ? mapWowClass(character.wowClass)
           : null,
   };
-  const copy = (input.swap ? rosterSwappedWebNotification : rosterSelectedWebNotification)({
-    runId: input.runId,
-    runTitle: input.runTitle,
-    assignment,
-  });
+  const copy = input.bossPlanNotice
+    ? rosterBossPlanWebNotification({ runId: input.runId, runTitle: input.runTitle, plan: input.bossPlanNotice.plan })
+    : (input.swap ? rosterSwappedWebNotification : rosterSelectedWebNotification)({
+        runId: input.runId,
+        runTitle: input.runTitle,
+        assignment,
+      });
   const { quietHours, timeZone } = quietHoursDeliveryContextFromUserRow(userRow);
   const discordDmDelivery = resolveDiscordDelivery({
     discordDmEnabled,
@@ -1376,7 +1628,7 @@ async function createRosterSelectedNotificationInTx(
     type: "ROSTER_SELECTED",
     runId: input.runId,
     signupId: input.selection.signupId,
-    sourceKey: (input.swap ? rosterSwappedSourceKey : rosterSelectedSourceKey)(
+    sourceKey: (input.bossPlanNotice ? rosterBossPlanSourceKey : input.swap ? rosterSwappedSourceKey : rosterSelectedSourceKey)(
       input.runId,
       input.version,
       input.selection.signupId,

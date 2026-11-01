@@ -29,6 +29,7 @@ export function RunEditDialog({
   const errorId = useId();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [stale, setStale] = useState(false);
 
   // Runs whose contents match no active Product keep them unless a product is chosen.
   const [selection, setSelection] = useState<ProductSelection>(
@@ -102,6 +103,7 @@ export function RunEditDialog({
 
       const base = {
         runId: run.id,
+        expectedEditVersion: editor.editVersion,
         difficulty,
         lootType,
         scheduledStartAt,
@@ -122,6 +124,7 @@ export function RunEditDialog({
       );
       if (!result.ok) {
         setError(result.message);
+        setStale(result.code === "RUN_EDIT_STALE");
         return;
       }
       close();
@@ -147,6 +150,11 @@ export function RunEditDialog({
         {error ? (
           <p id={errorId} role="alert" className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm">
             {error}
+            {stale ? (
+              <Button type="button" variant="secondary" className="mt-2 block" onClick={() => window.location.reload()}>
+                Reload
+              </Button>
+            ) : null}
           </p>
         ) : null}
 

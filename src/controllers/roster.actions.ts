@@ -1,11 +1,19 @@
 "use server";
 
 import { requireUser } from "@/auth/session";
-import { mapActionError, type ActionResult } from "@/lib/action-result";
+import { mapActionError, type ActionFailure, type ActionResult } from "@/lib/action-result";
+import { pingRoleLabel } from "@/lib/late-fill-help";
+import { lateFillHelpFeedback, lateFillHelpService, type PingRolesDialogData } from "@/services/late-fill-help.service";
 import { rosterBuilderService } from "@/services/roster-builder.service";
 import { rosterService } from "@/services/roster.service";
 import {
+  rosterCharacterSyncService,
+  type RosterCharacterSyncResult,
+} from "@/services/roster-character-sync.service";
+import {
   applyRosterBuilderSchema,
+  customPingSchema,
+  proposeRosterBuilderSchema,
   publishRosterSchema,
   repostRosterSchema,
   updateRosterSchema,
@@ -149,8 +157,10 @@ export async function proposeRosterBuilderAction(
 ): Promise<ActionResult & { data: RosterBuilderData | null }> {
   try {
     const user = await requireUser();
-    const parsed = rosterRunSchema.parse(input);
-    const data = await rosterBuilderService.proposeRoster(user, parsed.runId);
+    const parsed = proposeRosterBuilderSchema.parse(input);
+    const data = await rosterBuilderService.proposeRoster(user, parsed.runId, {
+      baseSelections: parsed.baseSelections,
+    });
     return { ok: true, message: "Roster proposal ready.", data };
   } catch (error) {
     return { ...mapActionError(error), data: null };
@@ -168,5 +178,63 @@ export async function applyRosterBuilderAction(
     return { ok: true, message: "Roster proposal applied.", data };
   } catch (error) {
     return { ...mapActionError(error), data: null };
+  }
+}
+
+/** Raid Lead "Sync Characters": fresh Blizzard sync of the selected roster Characters without a fresh sync. */
+export async function syncRosterCharactersAction(
+  input: unknown,
+): Promise<ActionResult & { data: RosterCharacterSyncResult | null }> {
+  try {
+    const user = await requireUser();
+    const parsed = rosterRunSchema.parse(input);
+    const data = await rosterCharacterSyncService.syncStaleSelected(user, parsed.runId);
+    return { ok: true, message: rosterCharacterSyncMessage(data), data };
+  } catch (error) {
+    return { ...mapActionError(error), data: null };
+  }
+}
+
+function rosterCharacterSyncMessage(result: RosterCharacterSyncResult): string {
+  const parts = [`${result.synced} synced`];
+  if (result.failed > 0) parts.push(`${result.failed} failed`);
+  if (result.skipped > 0) parts.push(`${result.skipped} skipped (recently synced or in progress)`);
+  return `Characters: ${parts.join(" · ")}.`;
+}
+
+/** Automatic: ask the Guild ping roles in the Run channel for the missing roles (cooldown per role). */
+export async function requestLateFillHelpAction(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = rosterRunSchema.parse(input);
+    const result = await lateFillHelpService.request(user, parsed.runId);
+    return { ok: true, message: lateFillHelpFeedback(result) };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+/** Ping roles dialog: the Automatic preview and the roles Custom can ping. Read-only, starts no cooldown. */
+export async function getPingRolesDialogDataAction(
+  input: unknown,
+): Promise<{ ok: true; data: PingRolesDialogData } | ActionFailure> {
+  try {
+    const user = await requireUser();
+    const parsed = rosterRunSchema.parse(input);
+    return { ok: true, data: await lateFillHelpService.dialogData(user, parsed.runId) };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+/** Custom request: the Raid Lead's text, pinging the roles they chose, in the Run channel. */
+export async function requestCustomPingAction(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = customPingSchema.parse(input);
+    const result = await lateFillHelpService.requestCustom(user, parsed);
+    return { ok: true, message: `Ping queued: ${result.roles.map((key) => pingRoleLabel(key)).join(", ")}.` };
+  } catch (error) {
+    return mapActionError(error);
   }
 }

@@ -9,7 +9,7 @@ const cancelBodySchema = z.object({ reason: z.string().max(2000).nullish() }).nu
 /**
  * POST /api/bot/runs/:runId/signup/cancel  body: `{ reason? }`
  *
- * The Discord "Cancel Signup" button: withdraws the acting User's entire
+ * The Discord "Unsign" button: withdraws the acting User's entire
  * active BOOSTER and LOOTBUDDY participation for this Run. A picked User
  * (on the roster or its saved draft) must give a reason — without one this
  * fails with WITHDRAW_REASON_REQUIRED and the bot shows a modal for it.

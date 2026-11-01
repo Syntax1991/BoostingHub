@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition, type ReactNode } from "react";
 import {
   addRosterPlayerAction,
   getRosterManualAddOptionsAction,
@@ -38,11 +38,14 @@ export function AddBoosterDialog({
   rosterVersion,
   onClose,
   onAdded,
+  modeSwitch = null,
 }: {
   runId: string;
   rosterVersion: number;
   onClose: () => void;
   onAdded: () => void;
+  /** Registered / External switch of the shared Add Booster entry. */
+  modeSwitch?: ReactNode;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -203,14 +206,15 @@ export function AddBoosterDialog({
       className="w-[min(34rem,calc(100vw-2rem))] rounded-md border border-border bg-surface p-0 text-foreground shadow-lg backdrop:bg-black/60"
     >
       <div className="border-b border-border px-4 py-3">
+        {modeSwitch}
         <h2 id={titleId} className="text-sm font-semibold">
           Add Booster
         </h2>
         <p className="mt-1 text-xs text-muted">
           Add a registered Manawyrm Hub player who did not sign up, e.g. a last-minute replacement: choose the
           player, one of their eligible characters and the role. They join the roster draft as a normal Booster —
-          same access, availability and schedule rules as any signup. Players without an account go under External
-          Boosters.
+          same access, availability and schedule rules as any signup. Players without an account are added as
+          External Boosters.
         </p>
       </div>
       <div className="space-y-3 px-4 py-4 text-sm">

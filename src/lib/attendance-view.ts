@@ -12,6 +12,11 @@ import {
  * rows (pure, client-safe; never mutates its input, no domain writes).
  */
 
+/** Another manager changed the row: the list must reload so the message shows over current data. */
+export function isAttendanceConflict(code: string | undefined): boolean {
+  return code === "ATTENDANCE_STATUS_STALE";
+}
+
 export type AttendanceViewRow = {
   id: string;
   characterName: string | null;

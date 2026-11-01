@@ -28,6 +28,7 @@ import { handleMySignupsCommand } from "@/discord-bot/commands/mysignups";
 import { probeMessageContentCapability } from "@/discord-bot/message-content";
 import { startSyncLoop } from "@/discord-bot/sync-loop";
 import { startWarcraftLogsAutoAuditLoop } from "@/discord-bot/warcraft-logs-links";
+import { startMemberNameRefreshLoop } from "@/discord-bot/member-name-refresh";
 import { recordDiscordBotReady } from "@/lib/discord/discord-integration-events";
 
 /**
@@ -46,6 +47,7 @@ export function createBotClient(env: BotEnv): Client {
     void probeMessageContentCapability(async () => (await readyClient.application.fetch()).flags?.bitfield ?? null);
     startSyncLoop(client, env, api);
     startWarcraftLogsAutoAuditLoop(api);
+    startMemberNameRefreshLoop(api);
   });
 
   client.on(Events.InteractionCreate, async (interaction) => {

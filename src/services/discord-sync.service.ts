@@ -1,3 +1,10 @@
+import { createHash } from "node:crypto";
+import {
+  bossExceptionFingerprint,
+  bossPlanSummaryLines,
+  type BossExceptionStages,
+} from "@/lib/roster-boss-plan";
+import { bossPlanForDisplay, finalSetupBossPlan } from "@/services/roster-boss-exceptions";
 import { contentShortTitle } from "@/lib/raid-catalog";
 import type { CharacterRole, NotificationType, RaidDifficulty, RunLootType, RunStatus, WowClass } from "@/models/enums";
 import { trustedWarcraftLogsReportAuthorIds, warcraftLogsReportChannelIds } from "@/lib/warcraft-logs/config";
@@ -9,7 +16,6 @@ export const WCL_SCAN_START_MARGIN_MINUTES = 10;
 import {
   buildClosedDiscordRunChannelName,
   buildDiscordRunChannelName,
-  effectiveRaidLeadChannelName,
   formatRunVoiceChannelName,
 } from "@/lib/discord-channel-name";
 import { isDpsRole } from "@/lib/character-roles";
@@ -28,6 +34,14 @@ import {
   runDiscordAnnouncementRepository,
   runScopeChangedChannelSourceKey,
 } from "@/repositories/run-discord-announcement.repository";
+import {
+  LATE_FILL_HELP_RUN_STATUSES,
+  parseLateFillHelpClasses,
+  parseLateFillHelpCustom,
+  parseLateFillHelpRoles,
+  type CustomPing,
+  type LateFillHelpRole,
+} from "@/lib/late-fill-help";
 import { parseRunScopeChanges, type RunScopeChange } from "@/lib/run-scope-change";
 import { runDiscordPostRepository, type RunDiscordPostRecord } from "@/repositories/run-discord-post.repository";
 import { discordSchedulePostRepository } from "@/repositories/discord-schedule-post.repository";
@@ -45,6 +59,7 @@ import {
 import {
   parseCancelRevisionFromNotificationSourceKey,
   parseContentRevisionFromNotificationSourceKey,
+  ROSTER_BOSS_PLAN_SOURCE_KEY_PREFIX,
   ROSTER_SWAPPED_SOURCE_KEY_PREFIX,
   userNotificationRepository,
 } from "@/repositories/user-notification.repository";
@@ -76,7 +91,7 @@ import {
  * FUTURE both resolve to ARCHIVE — a holding placement that keeps the
  * CURRENT/NEXT sections strictly limited to Runs actually in those weeks
  * while never deleting/recreating the same already-provisioned channel (see
- * docs/features/discord-bot.md § weekly raid-ID sections).
+ * docs/DEVELOPER.md § Weekly raid-ID sections).
  */
 export type DiscordRunChannelTarget = "CURRENT" | "NEXT" | "ARCHIVE";
 
@@ -230,6 +245,12 @@ export type RosterEmbedData = {
     lootbuddies: RosterEmbedMember[];
   };
   totalSelected: number;
+  /**
+   * Boss-specific deviations of the shown slots, one compact line each in
+   * roster order ("Boss 5–6: Synpriest-Antonidas · Healer"). Empty for a Run
+   * without exceptions; optional so older payloads stay valid.
+   */
+  bossPlan?: Array<{ member: RosterEmbedMember; plan: string }>;
 };
 
 /**
@@ -395,11 +416,38 @@ export const SIGNUP_MESSAGE_FORMAT_VERSION = "v14-header-grid";
  * the Guild emoji fingerprint into `RunDiscordPost.lastRosterEmojiFingerprint`
  * so existing messages refresh once after deploy — no schema migration.
  */
-export const ROSTER_EMBED_FORMAT_VERSION = "v4-run-title-link";
+export const ROSTER_EMBED_FORMAT_VERSION = "v5-one-dps-group";
 
-/** Render fingerprint stored/compared for Roster message refresh detection. */
-export function rosterEmbedRenderFingerprint(classEmojiFingerprint: string): string {
-  return `${ROSTER_EMBED_FORMAT_VERSION}|${classEmojiFingerprint}`;
+/**
+ * Render fingerprint stored/compared for Roster message refresh detection.
+ * A roster with an active boss plan appends a short key of it: switching the
+ * feature off (or on again) changes what the message shows without a roster
+ * version bump, so exactly those messages refresh once. Rosters without boss
+ * exceptions keep their fingerprint unchanged.
+ */
+export function rosterEmbedRenderFingerprint(classEmojiFingerprint: string, bossPlanKey: string = ""): string {
+  const base = `${ROSTER_EMBED_FORMAT_VERSION}|${classEmojiFingerprint}`;
+  return bossPlanKey ? `${base}|bp:${bossPlanKey}` : base;
+}
+
+/** Published picks (and their published boss plan) once the roster is published and the Run is past rostering. */
+function rosterShowsPublishedPicks(run: { status: RunStatus; roster: { publishedAt: string | null } | null }): boolean {
+  return (
+    Boolean(run.roster?.publishedAt) &&
+    (run.status === "PUBLISHED" || run.status === "IN_PROGRESS" || run.status === "COMPLETED")
+  );
+}
+
+/** Short key of the boss plan stage the Roster message shows ("" without an active plan). */
+export function rosterBossPlanRenderKey(run: {
+  status: RunStatus;
+  roster: { publishedAt: string | null; bossExceptions: BossExceptionStages } | null;
+}): string {
+  if (!run.roster) return "";
+  const stages = run.roster.bossExceptions;
+  const rows = rosterShowsPublishedPicks(run) ? stages.published : stages.draft;
+  if (rows.length === 0) return "";
+  return createHash("sha256").update(bossExceptionFingerprint(rows)).digest("hex").slice(0, 12);
 }
 
 export type RosterSyncWorkItem = {
@@ -486,6 +534,13 @@ export type NotificationDmWorkItem = {
   wowClass: WowClass | null;
   /** ROSTER_SELECTED for a character swap — rendered as "Roster Update". */
   rosterUpdate: boolean;
+  /** ROSTER_SELECTED telling a player who stays that their published boss plan changed — "Boss Plan Update". */
+  bossPlanUpdate?: boolean;
+  /**
+   * ROSTER_SELECTED only: the slot's PUBLISHED boss plan at delivery time
+   * (null = every boss as rostered, or the roster is not published yet).
+   */
+  bossPlan?: string | null;
   /** Set for ROSTER_WITHDRAWN (to the Raid Lead): who left, why, and where to replace them. */
   withdrawal: {
     playerName: string;
@@ -531,12 +586,18 @@ export type AccountNotificationDmWorkItem = {
 export type RunAnnouncementWorkItem = {
   announcementId: string;
   runId: string;
-  type: "RUN_RESCHEDULED" | "RUN_CANCELLED" | "RUN_REACTIVATED" | "RUN_SCOPE_CHANGED";
+  type: "RUN_RESCHEDULED" | "RUN_CANCELLED" | "RUN_REACTIVATED" | "RUN_SCOPE_CHANGED" | "LATE_FILL_HELP";
   /** Dedicated Run channel when present — null means bot should mark SKIPPED. */
   runChannelId: string | null;
   previousScheduledStartAt: string | null;
   /** RUN_SCOPE_CHANGED only (empty otherwise): changed contents snapshot. */
   scopeChanges: RunScopeChange[];
+  /** LATE_FILL_HELP only (empty otherwise): the roles to ping and how many each still missed. */
+  helpRoles: LateFillHelpRole[];
+  /** LATE_FILL_HELP only (empty otherwise): classes whose buffs the roster misses. */
+  helpClasses: WowClass[];
+  /** LATE_FILL_HELP only (null otherwise): a custom request's text and chosen roles. */
+  helpCustom: CustomPing | null;
   scheduledStartAt: string;
   productLabel: string;
   /** Compact Run identity ("Venom & Tide & Kithix") when the Run is loaded this pass. */
@@ -586,6 +647,8 @@ export type RunStartEmbedData = {
     lootbuddies: RunStartEmbedMember[];
   };
   totalSelected: number;
+  /** Published boss plan of the live lineup (see FinalSetupInput.bossPlan); optional so older payloads stay valid. */
+  bossPlan?: Array<{ discordUserId: string | null; userName: string; plan: string }>;
 };
 
 function desiredChannelNameFor(run: {
@@ -593,7 +656,6 @@ function desiredChannelNameFor(run: {
   difficulty: RaidDifficulty;
   lootType: RunLootType;
   raidLeadName: string;
-  raidLeadDiscordRunChannelNickname?: string | null;
   contentDisplay: { channelCoverage: string };
   status?: RunStatus;
   archivedAt?: string | null;
@@ -603,10 +665,7 @@ function desiredChannelNameFor(run: {
     difficulty: run.difficulty,
     lootType: run.lootType,
     coverage: run.contentDisplay.channelCoverage,
-    raidLeadChannelName: effectiveRaidLeadChannelName({
-      raidLeadName: run.raidLeadName,
-      discordRunChannelNickname: run.raidLeadDiscordRunChannelNickname,
-    }),
+    raidLeadChannelName: run.raidLeadName,
   };
   if (shouldUseClosedDiscordRunChannelName(run)) return buildClosedDiscordRunChannelName(input);
   return buildDiscordRunChannelName(input);
@@ -1157,6 +1216,7 @@ async function buildPendingNotificationDms(): Promise<{
       signupId: notification.signupId,
       withdrawal: null as NotificationDmWorkItem["withdrawal"],
       rosterUpdate: notification.sourceKey.startsWith(ROSTER_SWAPPED_SOURCE_KEY_PREFIX),
+      bossPlanUpdate: notification.sourceKey.startsWith(ROSTER_BOSS_PLAN_SOURCE_KEY_PREFIX),
     };
 
     if (notification.type === "RUN_CANCELLED" || notification.type === "RUN_REACTIVATED") {
@@ -1275,6 +1335,23 @@ async function buildPendingNotificationDms(): Promise<{
         : (signupRow.lootbuddyClass ?? signupRow.character?.wowClass ?? null)
       : null;
 
+    // The slot's PUBLISHED plan at delivery time. A draft plan is never DMed:
+    // Publish / Update announces it (Boss Plan Update), so a Save-time
+    // "Roster Selected" and the later notice never repeat the same plan.
+    const bossPlan =
+      notification.type === "ROSTER_SELECTED" && signupRow && run.roster && rosterShowsPublishedPicks(run)
+        ? (bossPlanSummaryLines({
+            ...bossPlanForDisplay({
+              run,
+              stages: run.roster.bossExceptions,
+              stage: "PUBLISHED",
+              slotSignupIds: new Set([signupRow.id]),
+              signups: signupRows,
+            }),
+            slots: [{ signupId: signupRow.id }],
+          })[0]?.plan ?? null)
+        : null;
+
     notificationDmWorkItems.push({
       ...base,
       signupId: notification.signupId,
@@ -1282,6 +1359,7 @@ async function buildPendingNotificationDms(): Promise<{
       selectedRole: signupRow?.publishedRole ?? null,
       characterName: signupRow?.character?.name ?? null,
       wowClass,
+      bossPlan,
     });
   }
 
@@ -1461,12 +1539,7 @@ export const discordSyncService = {
         voiceChannels.push({
           runId: run.id,
           existingVoiceChannelId: voiceChannelId,
-          desiredVoiceChannelName: formatRunVoiceChannelName(
-            effectiveRaidLeadChannelName({
-              raidLeadName: run.raidLeadName,
-              discordRunChannelNickname: run.raidLeadDiscordRunChannelNickname,
-            }),
-          ),
+          desiredVoiceChannelName: formatRunVoiceChannelName(run.raidLeadName),
           action: voiceAction,
         });
       }
@@ -1562,7 +1635,7 @@ export const discordSyncService = {
         );
       if (maintainRosterMessage) {
         const postPending = (run.roster?.postRevision ?? 0) > (post?.lastRosterPostRevision ?? 0);
-        const rosterRenderFingerprint = rosterEmbedRenderFingerprint(classEmojiFingerprint);
+        const rosterRenderFingerprint = rosterEmbedRenderFingerprint(classEmojiFingerprint, rosterBossPlanRenderKey(run));
         const base = {
           runId: run.id,
           existingChannelId: post?.rosterChannelId ?? null,
@@ -1624,6 +1697,9 @@ export const discordSyncService = {
       runChannelId: postsByRunId.get(row.runId)?.runChannelId ?? null,
       previousScheduledStartAt: row.previousScheduledStartAt,
       scopeChanges: row.type === "RUN_SCOPE_CHANGED" ? parseRunScopeChanges(row.scopeChanges) : [],
+      helpRoles: row.type === "LATE_FILL_HELP" ? parseLateFillHelpRoles(row.helpRoles) : [],
+      helpClasses: row.type === "LATE_FILL_HELP" ? parseLateFillHelpClasses(row.helpRoles) : [],
+      helpCustom: row.type === "LATE_FILL_HELP" ? parseLateFillHelpCustom(row.helpRoles) : null,
       scheduledStartAt: row.scheduledStartAt,
       productLabel: row.productLabel,
       contentTitle: contentTitles.get(row.runId),
@@ -1640,10 +1716,7 @@ export const discordSyncService = {
         difficulty: run.difficulty,
         lootType: run.lootType,
         titleCoverage: run.contentDisplay.titleCoverage,
-        raidLeadDisplay: effectiveRaidLeadChannelName({
-          raidLeadName: run.raidLeadName,
-          discordRunChannelNickname: run.raidLeadDiscordRunChannelNickname,
-        }),
+        raidLeadDisplay: run.raidLeadName,
         runChannelId: postsByRunId.get(run.id)?.runChannelId ?? null,
       }));
     const schedulePostsByBucket = new Map(schedulePosts.map((row) => [row.bucket, row]));
@@ -1696,9 +1769,7 @@ export const discordSyncService = {
     if (!run?.roster) return null;
 
     const rows = await rosterRepository.listSignups(runId);
-    const usePublishedPicks =
-      Boolean(run.roster.publishedAt) &&
-      (run.status === "PUBLISHED" || run.status === "IN_PROGRESS" || run.status === "COMPLETED");
+    const usePublishedPicks = rosterShowsPublishedPicks(run);
 
     let selected: RosterSignupRow[];
     if (usePublishedPicks) {
@@ -1737,6 +1808,28 @@ export const discordSyncService = {
       else if (attack === "MELEE") legacyMelee.push(row);
       else legacyUnspecified.push(row);
     }
+
+    // Same stage as the lineup: the published plan for published picks, else the draft.
+    const boosterRows = [
+      ...boosterByRole(selected, "TANK"),
+      ...boosterByRole(selected, "HEALER"),
+      ...meleeAssigned,
+      ...legacyMelee,
+      ...rangedAssigned,
+      ...legacyRanged,
+      ...legacyUnspecified,
+    ];
+    const bossPlanDisplay = bossPlanForDisplay({
+      run,
+      stages: run.roster.bossExceptions,
+      stage: usePublishedPicks ? "PUBLISHED" : "DRAFT",
+      slotSignupIds: new Set(boosterRows.map((row) => row.id)),
+      signups: rows,
+    });
+    const bossPlan = bossPlanSummaryLines({
+      ...bossPlanDisplay,
+      slots: boosterRows.map((row) => ({ signupId: row.id, row })),
+    }).map((line) => ({ member: toMember(line.slot.row), plan: line.plan }));
 
     const externals = run.roster.externalBoosters;
     const externalMembers = (predicate: (booster: ExternalBooster) => boolean) =>
@@ -1783,6 +1876,7 @@ export const discordSyncService = {
         ],
       },
       totalSelected: selected.length + externals.length,
+      bossPlan,
     };
   },
 
@@ -1846,7 +1940,7 @@ export const discordSyncService = {
       lastRosterVersion: run.roster.version,
       ...(input.postRevision !== undefined ? { lastRosterPostRevision: input.postRevision } : {}),
       ...(input.classEmojiFingerprint !== undefined
-        ? { lastRosterEmojiFingerprint: rosterEmbedRenderFingerprint(input.classEmojiFingerprint) }
+        ? { lastRosterEmojiFingerprint: rosterEmbedRenderFingerprint(input.classEmojiFingerprint, rosterBossPlanRenderKey(run)) }
         : {}),
     });
   },
@@ -1870,12 +1964,14 @@ export const discordSyncService = {
     const signupRows = await rosterRepository.listSignups(runId);
     const bySignupId = new Map(signupRows.map((row) => [row.id, row]));
     const members: RunStartEmbedMember[] = [];
+    const liveSignups: RosterSignupRow[] = [];
     for (const row of attendance) {
       // A no-show (e.g. replaced after Start) is not in the raid.
       if (row.status === "NO_SHOW" || row.status === "EXCUSED") continue;
       const signup = bySignupId.get(row.signupId);
       if (!signup) continue;
       members.push(toStartMember(signup, run));
+      liveSignups.push(signup);
     }
     // Hand-added external boosters have no attendance row; they join from the roster.
     for (const booster of run.roster?.externalBoosters ?? []) {
@@ -1906,6 +2002,9 @@ export const discordSyncService = {
       },
       groups: { tanks, healers, dps, lootbuddies },
       totalSelected: members.length,
+      bossPlan: run.roster
+        ? finalSetupBossPlan({ run, stages: run.roster.bossExceptions, slots: liveSignups, signups: signupRows })
+        : [],
     };
   },
 
@@ -2065,6 +2164,13 @@ export const discordSyncService = {
       // A cancelled Run's scope update is moot — the cancel announcement covers it.
       const run = await runRepository.findById(announcement.runId);
       return { deliver: Boolean(run && run.status !== "CANCELLED") };
+    }
+
+    if (announcement.type === "LATE_FILL_HELP") {
+      // A help request goes out only while the Run can still take players:
+      // never once it started, completed, was cancelled or archived.
+      const run = await runRepository.findById(announcement.runId);
+      return { deliver: Boolean(run && !run.archivedAt && LATE_FILL_HELP_RUN_STATUSES.includes(run.status)) };
     }
 
     // RUN_RESCHEDULED (and any future types): PENDING is sufficient.

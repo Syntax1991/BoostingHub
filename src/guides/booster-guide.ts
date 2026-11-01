@@ -89,13 +89,13 @@ export const BOOSTER_GUIDE_CARDS: readonly BoosterGuideCard[] = [
     key: "characters",
     title: "🧙 Characters",
     description: [
-      `Connect **Battle.net** or use **Add Character**.`,
+      `Use **Add Character** with a Raider.IO profile link, or connect **Battle.net** (optional).`,
       ``,
-      `• Your **specialization** sets the default role used by Quick Signup.`,
-      `• Set **Availability** so others know when you can play.`,
+      `• Your **specialization** sets the default role used by **Quick Sign**.`,
+      `• **Availability**: mark a Character unavailable for a difficulty this reset; it cannot be offered there.`,
       `• The Booster role is **account-wide**.`,
       `• Lockouts are **informational** — they do not block signup by themselves.`,
-      `• Inactive or unavailable Characters are **skipped** by Quick Signup.`,
+      `• Inactive, unavailable or conflicting Characters are **skipped** by Quick Sign.`,
     ].join("\n"),
     imageFile: "bo-02-characters.png",
   },
@@ -120,17 +120,17 @@ export const BOOSTER_GUIDE_CARDS: readonly BoosterGuideCard[] = [
     key: "discord-signups",
     title: "⚡ Discord Signups",
     description: [
-      `Every open Run channel has a persistent **Signups** message with four buttons:`,
+      `Every open Run channel has a persistent **Signups** message with these buttons:`,
     ].join("\n"),
     fields: [
       {
         name: "Signup",
-        value: "Choose Characters and offered roles manually.",
+        value: "Choose Characters, press **Next**, choose the roles you offer, then **Confirm**.",
       },
       {
-        name: "Quick Signup",
+        name: "Quick Sign",
         value: [
-          "One click adds Booster **offers** for every currently eligible Character using its specialization default role.",
+          "Quick Signup: one click adds Booster **offers** for every currently eligible Character using its specialization default role.",
           "",
           "• Additive — existing offers stay unchanged",
           "• Unavailable / reserved Characters are skipped",
@@ -140,12 +140,16 @@ export const BOOSTER_GUIDE_CARDS: readonly BoosterGuideCard[] = [
         ].join("\n"),
       },
       {
-        name: "Sign as Lootbuddy",
-        value: "Discord creates **Loot-only** entries (Play along and finer setups are website-only).",
+        name: "LB",
+        value: "Lootbuddy signup: pick one or more classes. Discord creates **Loot-only** entries (Play along is website-only).",
       },
       {
-        name: "Cancel Signup",
-        value: "Withdraws your current Booster **and** Lootbuddy participation for this Run (protected roster rows may block).",
+        name: "Unsign",
+        value: "Withdraws your Booster **and** Lootbuddy participation for this Run. If you are already picked you must give a reason. Not possible after the Run has started.",
+      },
+      {
+        name: "Add / Edit Note",
+        value: "One short note for the Raid Lead (up to 100 characters). Needs an active signup.",
       },
     ],
     imageFile: null,
@@ -155,7 +159,7 @@ export const BOOSTER_GUIDE_CARDS: readonly BoosterGuideCard[] = [
     title: "✅ After signing up",
     description: [
       `**Pending** — you offered yourself`,
-      `**Selected** — you are in the published Roster`,
+      `**Selected** — you are picked for the Roster`,
       `**Not Selected / Withdrawn** — history / current outcome`,
       ``,
       `**Lifecycle**`,
@@ -165,7 +169,7 @@ export const BOOSTER_GUIDE_CARDS: readonly BoosterGuideCard[] = [
       ``,
       `**Checklist**`,
       `1. Sign in with Discord`,
-      `2. Add Character(s) + Booster role`,
+      `2. Add Character(s); staff grant the account-wide Booster role`,
       `3. Sign up (website or Discord)`,
       `4. Track status in **My Runs** / \`/mysignups\``,
     ].join("\n"),

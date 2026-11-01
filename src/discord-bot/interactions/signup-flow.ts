@@ -643,7 +643,7 @@ export async function handleDiscardSignupButton(interaction: ButtonInteraction, 
 }
 
 /**
- * Quick Signup button: one-click additive Booster signup for every currently
+ * Quick Sign button: one-click additive Booster signup for every currently
  * eligible Character with a known specialization defaultRole. No staging
  * session and no Character selector — the server decides eligibility.
  */
@@ -683,12 +683,12 @@ function classSelectMenu(customId: string, placeholder: string): ActionRowBuilde
 }
 
 const STALE_LOOTBUDDY_WIZARD_MESSAGE =
-  "Lootbuddy signup is now just: pick class(es). Click **Sign as Lootbuddy** again. To leave, use **Cancel Signup**.";
+  "Lootbuddy signup is now just: pick class(es). Click **LB** again. To leave, use **Unsign**.";
 
 /**
- * Sign as Lootbuddy: shows a multi class select immediately. Choosing
+ * LB (Lootbuddy) button: shows a multi class select immediately. Choosing
  * class(es) persists one LOOT_ONLY entry per class (replacing any previous
- * Discord lootbuddy set). Withdrawal is via Cancel Signup — not this button.
+ * Discord lootbuddy set). Withdrawal is via Unsign — not this button.
  */
 export async function handleLootbuddyButton(interaction: ButtonInteraction, api: BotApiClient, runId: string): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
@@ -710,7 +710,7 @@ export async function handleLootbuddyButton(interaction: ButtonInteraction, api:
     await interaction.editReply({
       content: [
         `You are already signed as lootbuddy for **${options.run.title}**.`,
-        "Signups are closed, so classes cannot be changed. Use **Cancel Signup** to leave.",
+        "Signups are closed, so classes cannot be changed. Use **Unsign** to leave.",
       ].join("\n"),
     });
     return;
@@ -727,7 +727,7 @@ export async function handleLootbuddyButton(interaction: ButtonInteraction, api:
     content: [
       `Choose one or more classes to sign as lootbuddy for **${options.run.title}**.`,
       current ? `Currently signed: ${current}. Your selection replaces it.` : null,
-      "To leave later, use **Cancel Signup**.",
+      "To leave later, use **Unsign**.",
     ]
       .filter(Boolean)
       .join("\n"),
@@ -753,7 +753,7 @@ export async function handleLootbuddyClassSelect(
       lootbuddies: wowClasses.map((wowClass) => ({ wowClass, mode: DISCORD_LOOTBUDDY_MODE })),
     });
     await interaction.editReply({
-      content: `Signed up as lootbuddy (**${labels}**). Use **Cancel Signup** to leave.`,
+      content: `Signed up as lootbuddy (**${labels}**). Use **Unsign** to leave.`,
       components: [],
     });
     requestImmediateSync();

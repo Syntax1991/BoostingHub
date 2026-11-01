@@ -1,6 +1,7 @@
 import { discordGuildMemberClient } from "@/integrations/discord/discord-guild-member.client";
 import { getDiscordRoleAccessSyncConfig } from "@/lib/discord-config";
 import { userRepository } from "@/repositories/user.repository";
+import { applyDiscordMemberName } from "@/services/discord-member-name-sync.service";
 
 export type DiscordRoleAccessSyncInput = { userId: string };
 
@@ -17,6 +18,9 @@ export type DiscordRoleAccessSyncInput = { userId: string };
  * - same for Lootbuddy, independently
  * - HTTP 404 (not in guild) → both Discord grants false
  * - transport / non-404 errors → throw (caller preserves prior state)
+ *
+ * The same member read also refreshes the displayed player name
+ * (discord-member-name-sync) — no extra Discord request.
  */
 export async function syncDiscordRoleAccessOrThrow(
   input: DiscordRoleAccessSyncInput,
@@ -31,10 +35,19 @@ export async function syncDiscordRoleAccessOrThrow(
     return;
   }
 
-  const roleIds = await discordGuildMemberClient.listRoleIds(user.discordUserId, config);
+  const member = await discordGuildMemberClient.getMember(user.discordUserId, config);
+  await syncRoleAccessFromMember(input.userId, member?.roleIds ?? null, config);
+  await applyDiscordMemberName(input.userId, member);
+}
+
+async function syncRoleAccessFromMember(
+  userId: string,
+  roleIds: string[] | null,
+  config: NonNullable<ReturnType<typeof getDiscordRoleAccessSyncConfig>>,
+): Promise<void> {
   if (roleIds === null) {
     // Authoritative absence from guild — clear Discord-derived grants only.
-    await userRepository.setDiscordRoleAccess(input.userId, {
+    await userRepository.setDiscordRoleAccess(userId, {
       discordRaidBooster: false,
       discordLootbuddy: false,
     });
@@ -44,7 +57,7 @@ export async function syncDiscordRoleAccessOrThrow(
   const discordRaidBooster = roleIds.includes(config.raidBoosterRoleId);
   const discordLootbuddy = roleIds.includes(config.lootbuddyRoleId);
 
-  const current = await userRepository.findBoostingRoles(input.userId);
+  const current = await userRepository.findBoostingRoles(userId);
   if (!current) {
     return;
   }
@@ -55,7 +68,7 @@ export async function syncDiscordRoleAccessOrThrow(
     return;
   }
 
-  await userRepository.setDiscordRoleAccess(input.userId, {
+  await userRepository.setDiscordRoleAccess(userId, {
     discordRaidBooster,
     discordLootbuddy,
   });

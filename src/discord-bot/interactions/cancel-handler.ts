@@ -39,7 +39,7 @@ function withdrawnReply(withdrawn: number): string {
 }
 
 /**
- * The Cancel Signup button: withdraws the User's entire active BOOSTER and
+ * The Unsign button: withdraws the User's entire active BOOSTER and
  * LOOTBUDDY participation for this Run. A picked User must give a reason:
  * the API answers WITHDRAW_REASON_REQUIRED (writing nothing) and the button
  * opens the reason modal instead. A modal has to be the first response to

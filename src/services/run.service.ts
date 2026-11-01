@@ -80,6 +80,7 @@ import type { ManageRunFilterInput } from "@/validators/manage-run-filters";
 import type { CreateManyRunsInput, MassCreateDefaults, MassCreateRunRow } from "@/validators/mass-create-runs";
 import type { RaidRecord } from "@/repositories/raid.repository";
 import { isDomainError } from "@/lib/errors";
+import { runEditStaleError, runEditVersion } from "@/lib/run-edit-version";
 import { projectManagedRunHandoffs } from "@/services/managed-run-operational.service";
 
 const DISCOVERY_HIDDEN_STATUSES: readonly RunStatus[] = ["DRAFT", "CANCELLED"];
@@ -991,6 +992,13 @@ export const runService = {
     if (!capabilities.canEdit) {
       throw new DomainError("RUN_EDIT_LOCKED", "This run can no longer be edited — it has already started.");
     }
+    // The version the form opened with, else (in-process caller) the one just
+    // read: every derived value below is based on it. The repository re-checks
+    // it under the lock.
+    const expectedEditVersion = input.expectedEditVersion ?? runEditVersion(run);
+    if (expectedEditVersion !== runEditVersion(run)) {
+      throw runEditStaleError();
+    }
 
     const scheduledStartAt = parseSchedule(input.scheduledStartAt);
     assertComposition(input.desiredTankCount, "Desired tanks");
@@ -1222,6 +1230,7 @@ export const runService = {
         announcement: rescheduleAnnouncement,
         scopeAnnouncement,
         rosterEffect,
+        expectedEditVersion,
         // DM notification intent commits with the change itself — no window in
         // which the Run changed and its announcement exists but DMs do not.
         writeInTx: async (txOrm) => {

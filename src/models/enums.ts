@@ -177,6 +177,7 @@ export const RUN_DISCORD_ANNOUNCEMENT_TYPES = [
   "RUN_CANCELLED",
   "RUN_REACTIVATED",
   "RUN_SCOPE_CHANGED",
+  "LATE_FILL_HELP",
 ] as const;
 
 /** System Health / integration telemetry providers (IntegrationEvent.provider). */

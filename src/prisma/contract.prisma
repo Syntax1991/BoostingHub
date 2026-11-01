@@ -193,6 +193,8 @@ enum RunDiscordAnnouncementType {
   RUN_CANCELLED   = "RUN_CANCELLED"
   RUN_REACTIVATED = "RUN_REACTIVATED"
   RUN_SCOPE_CHANGED = "RUN_SCOPE_CHANGED"
+  /// Raid Lead asked the Guild ping roles for the Run's missing roles (Late Fill help).
+  LATE_FILL_HELP  = "LATE_FILL_HELP"
 }
 
 /// Application account. Also serves as the Better Auth `user` table.
@@ -205,6 +207,13 @@ model User {
   image           String?
   discordUserId   String?       @unique
   discordUsername String?
+  /// Discord server (guild) nickname from the last authoritative member read; null = none set
+  /// or not in the guild. Raw input of the resolved display name in `name` — never an identity.
+  discordGuildNickname String?
+  /// Discord global display name from the last member read (raw, like discordGuildNickname).
+  discordGlobalName    String?
+  /// Last authoritative Discord member read that refreshed the name fields (login or bot refresh).
+  discordNameSyncedAt  TimestamptzString?
   accountStatus   AccountStatus @default(ACTIVE)
   accountRole     AccountRole   @default(USER)
   /// Manual Boosting Role: approved to sign up and be rostered as a Booster.
@@ -238,8 +247,8 @@ model User {
   /// Preferred Character for signup UX only — never bypasses eligibility.
   defaultCharacterId          String?
   defaultCharacter            Character? @relation("UserDefaultCharacter", fields: [defaultCharacterId], references: [id], onDelete: SetNull)
-  /// Optional short name for Discord Run channel Raid Lead segment only.
-  /// Null falls back to User.name. Does not affect Run.title or web identity.
+  /// DEPRECATED — no longer read or written (Discord is the name source, see `name`).
+  /// Kept until the follow-up migration drops it, so a rollback deploy stays possible.
   discordRunChannelNickname   String?
   /// When true, optional personal Discord DMs are deferred during Quiet Hours.
   /// Does not affect in-app notifications or shared Run-channel messages.
@@ -633,6 +642,8 @@ model RaidBoss {
   /// JSON number array: Warcraft Logs encounter ids (`ReportFight.encounterID`).
   wclEncounterIds String @default("[]")
 
+  rosterBossExceptions RunRosterBossException[]
+
   @@index([raidId])
   @@map("raid_boss")
 }
@@ -788,6 +799,7 @@ model RunRaidContent {
 
   consumableAuditFights RunConsumableAuditFight[]
   warcraftLogsFights    RunWarcraftLogsFight[]
+  rosterBossExceptions  RunRosterBossException[]
 
   @@unique([runId, raidId])
   @@unique([runId, sortOrder])
@@ -1031,6 +1043,10 @@ model RunSignup {
 
   offeredRoles  RunSignupRole[]
   rosterEntries RunRosterEntry[]
+  /// Boss exceptions of the roster slot this signup holds.
+  bossExceptionSlots   RunRosterBossException[] @relation("RosterBossExceptionSlot")
+  /// Boss exceptions that play this signup's Character instead of the slot's own.
+  bossExceptionsPlayed RunRosterBossException[] @relation("RosterBossExceptionPlay")
   notifications UserNotification[]
 
   /// NULL is distinct per row under Postgres unique-index semantics, so this does
@@ -1084,6 +1100,7 @@ model RunRoster {
   updatedAt     temporal.updatedAtString()
 
   entries          RunRosterEntry[]
+  bossExceptions   RunRosterBossException[]
   externalBoosters RunExternalBooster[]
 
   @@map("run_roster")
@@ -1154,6 +1171,42 @@ model RunRosterEntry {
   @@unique([rosterId, signupId])
   @@index([rosterId])
   @@map("run_roster_entry")
+}
+
+/// Boss-specific exception to one roster slot: for this planned boss the slot's
+/// player plays another of their own signed-up Characters and/or another role.
+/// No row = the slot plays every planned boss with its default Character and
+/// role, so Runs without exceptions behave exactly as before. Only deviations
+/// are stored — never a roster per boss.
+///
+/// `stage` mirrors draft vs published (RunRosterEntry.selectedRole vs
+/// RunSignup.publishedRole): Save Roster writes DRAFT rows, Publish / Update
+/// Roster copies DRAFT → PUBLISHED in the same transaction.
+model RunRosterBossException {
+  id               String         @id @default(uuid())
+  rosterId         String
+  roster           RunRoster      @relation(fields: [rosterId], references: [id], onDelete: Cascade)
+  stage            RosterState
+  /// The roster slot (its default Character's signup).
+  slotSignupId     String
+  slotSignup       RunSignup      @relation("RosterBossExceptionSlot", fields: [slotSignupId], references: [id], onDelete: Cascade)
+  /// The Run content the boss belongs to (Bundles: one Run can hold several raids).
+  runRaidContentId String
+  runRaidContent   RunRaidContent @relation(fields: [runRaidContentId], references: [id], onDelete: Cascade)
+  /// A planned boss of that content (within the first plannedBossCount by sortOrder).
+  raidBossId       String
+  raidBoss         RaidBoss       @relation(fields: [raidBossId], references: [id], onDelete: Cascade)
+  /// Null = the slot's own Character; else another BOOSTER signup of the SAME User on this Run.
+  playSignupId     String?
+  playSignup       RunSignup?     @relation("RosterBossExceptionPlay", fields: [playSignupId], references: [id], onDelete: Cascade)
+  /// Concrete role for this boss (TANK / HEALER / MELEE_DPS / RANGED_DPS).
+  role             CharacterRole
+  createdAt        TimestamptzString @default(now())
+
+  @@unique([rosterId, stage, slotSignupId, runRaidContentId, raidBossId])
+  @@index([rosterId, stage])
+  @@index([playSignupId])
+  @@map("run_roster_boss_exception")
 }
 
 model ActivityEvent {
@@ -1315,6 +1368,9 @@ model RunDiscordAnnouncement {
   /// RUN_SCOPE_CHANGED only: JSON RunScopeChange[] snapshot (before → after per raid content).
   /// Also the render source for that revision's RUN_SCOPE_CHANGED DMs.
   scopeChanges             String?
+  /// LATE_FILL_HELP only: JSON LateFillHelpRole[] snapshot (role bucket + missing count)
+  /// of the roles that request pings; nothing else is ever mentioned.
+  helpRoles                String?
   status                   DiscordDeliveryStatus
   createdAt                TimestamptzString          @default(now())
   sentAt                   TimestamptzString?
@@ -1361,7 +1417,7 @@ enum ConsumableObservationKind {
 }
 
 /// Post-run Consumables Audit snapshot for one Run (ADMIN / assigned RAID_LEAD
-/// only — see docs/features/run-consumables-audit.md). Built ONLY from the
+/// only — see docs/DEVELOPER.md#run-consumables-audit). Built ONLY from the
 /// fights ASSIGNED to this Run (RunWarcraftLogsFight), never a whole report.
 /// Stores normalized WCL facts; PASS/WARNING/N/A policy is evaluated at read
 /// time so rule changes never require re-fetching Warcraft Logs. Children are

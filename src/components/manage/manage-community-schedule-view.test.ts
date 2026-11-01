@@ -336,7 +336,9 @@ describe("ManageCommunityScheduleView", () => {
     expect(html).toContain("Target");
     expect(html).toContain("Staffed");
     expect(html).toContain("Missing");
-    expect(html).toContain("5 Melee · 8 Ranged");
+    expect(html).toContain("2T · 3H · 13D · 2LB");
+    // One DPS group: no Melee / Ranged split in the staffing overlay.
+    expect(html).not.toMatch(/\d Melee|\d Ranged/);
     expect(html).toContain("Auto Build Roster");
     expect(html).toContain("Not created yet");
     expect(html).not.toContain("Missing Ranged");

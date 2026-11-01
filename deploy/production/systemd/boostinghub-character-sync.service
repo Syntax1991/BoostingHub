@@ -1,7 +1,7 @@
 # One-shot Blizzard Character sync, started by boostinghub-character-sync.timer.
 # The application owns no timer — external systemd cadence only.
 #
-# Reference copy of the live production unit (docs/deployment-production.md).
+# Reference copy of the live production unit (docs/DEPLOYMENT.md).
 # deploy/update-server.sh NEVER installs, enables or reloads units: installing
 # or changing this file on the host is a deliberate operator action (as root):
 #   install -o root -g root -m 0644 deploy/production/systemd/boostinghub-character-sync.service deploy/production/systemd/boostinghub-character-sync.timer /etc/systemd/system/

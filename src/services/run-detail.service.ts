@@ -1,6 +1,7 @@
 import type { ExternalBooster } from "@/lib/external-booster";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { canManageRun } from "@/auth/authorization";
+import { runEditVersion } from "@/lib/run-edit-version";
 import { DomainError } from "@/lib/errors";
 import {
   matchProductForContents,
@@ -20,6 +21,7 @@ import {
   type FinalSetupInput,
   type FinalSetupParticipant,
 } from "@/lib/run-start-message";
+import { finalSetupBossPlan } from "@/services/roster-boss-exceptions";
 import { rosterRepository } from "@/repositories/roster.repository";
 import { rosterService, type RosterManagementView } from "@/services/roster.service";
 import { signupService } from "@/services/signup.service";
@@ -193,9 +195,8 @@ export const runDetailService = {
 
     let finalSetupPreview: FinalSetupInput | null = null;
     if (manage && publishedRoster && run.status === "PUBLISHED") {
-      const selectedSignups = (await rosterRepository.listSignups(runId)).filter(
-        (signup) => signup.status === "SELECTED",
-      );
+      const runSignups = await rosterRepository.listSignups(runId);
+      const selectedSignups = runSignups.filter((signup) => signup.status === "SELECTED");
       const externalBoosters = run.roster?.externalBoosters ?? [];
       if (selectedSignups.length > 0 || externalBoosters.length > 0) {
         finalSetupPreview = {
@@ -214,11 +215,17 @@ export const runDetailService = {
             ...selectedSignups.map(toFinalSetupParticipant),
             ...externalBoosters.map(externalFinalSetupParticipant),
           ]),
+          // Same boss plan section the Discord start post will carry.
+          bossPlan: run.roster
+            ? finalSetupBossPlan({ run, stages: run.roster.bossExceptions, slots: selectedSignups, signups: runSignups })
+            : [],
         };
       }
     }
 
     let editor: {
+      /** Sent back on save: the stale-form guard. */
+      editVersion: string;
       canAssignRaidLead: boolean;
       /**
        * Product selector: active + selectable Products, plus the Run's own
@@ -256,6 +263,7 @@ export const runDetailService = {
         ? await userRepository.listEligibleRaidLeads()
         : [{ id: run.raidLeadId, name: run.raidLeadName, displayName: run.raidLeadDisplayName }];
       editor = {
+        editVersion: runEditVersion(run),
         canAssignRaidLead: capabilities.canReassignRaidLead,
         products,
         currentSelection,

@@ -1,0 +1,128 @@
+[
+  {
+    "id": "column.public.user.discordGlobalName",
+    "label": "Add column \"discordGlobalName\" to \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "discordGlobalName",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"discordGlobalName\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "discordGlobalName"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"discordGlobalName\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD COLUMN \"discordGlobalName\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"discordGlobalName\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "discordGlobalName"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.user.discordGuildNickname",
+    "label": "Add column \"discordGuildNickname\" to \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "discordGuildNickname",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"discordGuildNickname\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "discordGuildNickname"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"discordGuildNickname\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD COLUMN \"discordGuildNickname\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"discordGuildNickname\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "discordGuildNickname"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.user.discordNameSyncedAt",
+    "label": "Add column \"discordNameSyncedAt\" to \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "discordNameSyncedAt",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"discordNameSyncedAt\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "discordNameSyncedAt"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"discordNameSyncedAt\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD COLUMN \"discordNameSyncedAt\" timestamptz"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"discordNameSyncedAt\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "discordNameSyncedAt"
+        ]
+      }
+    ]
+  }
+]

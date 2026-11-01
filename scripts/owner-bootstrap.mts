@@ -3,7 +3,7 @@ import { isDomainError } from "@/lib/errors";
 import { ownerBootstrapService } from "@/services/owner-bootstrap.service";
 
 /**
- * One-time Platform Owner bootstrap (see docs/features/user-management.md
+ * One-time Platform Owner bootstrap (see docs/DEVELOPER.md
  * § Platform Owner):
  *
  *   npm run owner:bootstrap -- --user-id <uuid>

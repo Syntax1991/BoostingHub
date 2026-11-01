@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { LootbuddyMode, ParticipationType, WowClass } from "@/models/enums";
 import {
   evaluateRaidBuffCoverage,
+  missingBuffProviderClasses,
   RAID_BUFF_DEFINITIONS,
   resolveBuffContributorClass,
   summarizeRaidBuffCoverageByClass,
@@ -331,5 +332,46 @@ describe("evaluateRaidBuffCoverage", () => {
     expect(byId.SKYFURY?.covered).toBe(true);
     expect(byId.ARCANE_INTELLECT?.covered).toBe(true);
     expect(byId.POWER_WORD_FORTITUDE?.covered).toBe(true);
+  });
+});
+
+describe("missingBuffProviderClasses", () => {
+  it("only classes with no coverage, deduped, in definition order; Warlock once despite its three utilities", () => {
+    const missing = missingBuffProviderClasses([participant({ signupId: "a", wowClass: "MAGE" })]);
+    expect(missing).not.toContain("MAGE");
+    expect(missing.filter((wowClass) => wowClass === "WARLOCK")).toHaveLength(1);
+    expect(new Set(missing).size).toBe(missing.length);
+    expect(missing).toHaveLength(11);
+  });
+
+  it("a buff covered by another Character or a Lootbuddy is not missing; two providers change nothing", () => {
+    const missing = missingBuffProviderClasses([
+      participant({ signupId: "a", wowClass: "WARLOCK" }),
+      participant({ signupId: "b", wowClass: "WARLOCK" }),
+      participant({ signupId: "c", wowClass: "MAGE", participationType: "LOOTBUDDY", lootbuddyMode: "LOOT_ONLY" }),
+    ]);
+    expect(missing).not.toContain("WARLOCK");
+    expect(missing).not.toContain("MAGE");
+  });
+
+  it("Rogue has no tracked buff: never missing, and a Rogue covers nothing", () => {
+    expect(missingBuffProviderClasses([])).not.toContain("ROGUE");
+    expect(missingBuffProviderClasses([participant({ signupId: "a", wowClass: "ROGUE" })])).toHaveLength(12);
+  });
+
+  it("an unknown class proves nothing: no class is reported as missing", () => {
+    expect(
+      missingBuffProviderClasses([
+        participant({ signupId: "a", wowClass: "MAGE" }),
+        participant({ signupId: "b", wowClass: null }),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("a full set reports nothing", () => {
+    const classes = [...new Set(RAID_BUFF_DEFINITIONS.flatMap((definition) => definition.providerClasses))];
+    expect(
+      missingBuffProviderClasses(classes.map((wowClass) => participant({ signupId: wowClass, wowClass }))),
+    ).toEqual([]);
   });
 });

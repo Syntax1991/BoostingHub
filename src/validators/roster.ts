@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PING_ROLE_KEYS } from "@/lib/late-fill-help";
 import { CHARACTER_ROLES, PARTICIPATION_TYPES, WOW_CLASSES } from "@/models/enums";
 import { ROSTER_SELECTION_WARNING_TYPES } from "@/services/roster-selection-risk";
 import { entityIdSchema } from "@/validators/ids";
@@ -32,6 +33,13 @@ export const rosterRunSchema = z.object({
   runId: entityIdSchema,
 });
 
+/** Shape only — the service validates the text (customPingTextError) and that the roles exist on Discord. */
+export const customPingSchema = z.object({
+  runId: entityIdSchema,
+  text: z.string().max(2000),
+  roles: z.array(z.enum(PING_ROLE_KEYS), { message: "Choose an allowed role." }).max(PING_ROLE_KEYS.length),
+});
+
 export const rosterDraftSelectionSchema = z.object({
   runId: entityIdSchema,
   signupId: entityIdSchema,
@@ -47,6 +55,22 @@ const rosterSelectionSchema = z.object({
   selectedRole: z.enum(CHARACTER_ROLES).nullable(),
 });
 
+/**
+ * One boss exception: for this planned boss (content + boss) the slot plays
+ * another of the player's signed-up Characters (playSignupId) and/or another
+ * role. The server validates ownership, eligibility and the boss itself.
+ */
+const rosterBossExceptionSchema = z.object({
+  slotSignupId: entityIdSchema,
+  runRaidContentId: entityIdSchema,
+  raidBossId: entityIdSchema,
+  playSignupId: entityIdSchema.nullable(),
+  role: z.enum(CHARACTER_ROLES),
+});
+
+/** Full set; a roster never needs more (≈ 30 slots × 10 bosses). */
+const rosterBossExceptionsSchema = z.array(rosterBossExceptionSchema).max(400).optional();
+
 export const saveRosterDraftSchema = z.object({
   runId: entityIdSchema,
   version: z.number().int().positive(),
@@ -60,6 +84,8 @@ export const saveRosterDraftSchema = z.object({
     .optional(),
   /** Acknowledged warnings for NEWLY selected signups. */
   confirmedWarnings: confirmedRosterWarningsSchema,
+  /** Boss-specific exceptions (feature-gated); omitted keeps the saved ones. */
+  bossExceptions: rosterBossExceptionsSchema,
 });
 
 export const saveExternalBoostersSchema = z.object({
@@ -75,6 +101,16 @@ export const saveExternalBoostersSchema = z.object({
 export const rosterVersionSchema = z.object({
   runId: entityIdSchema,
   version: z.number().int().positive(),
+});
+
+/**
+ * Auto Build proposal. `baseSelections` = the Roster Builder's current draft
+ * (Fill Gaps) or [] (Build from signups); omitted = the saved / published
+ * roster (Run header, Schedule). Read-only.
+ */
+export const proposeRosterBuilderSchema = z.object({
+  runId: entityIdSchema,
+  baseSelections: z.array(rosterSelectionSchema).max(120).optional(),
 });
 
 /** Apply Auto Build Roster proposal — new picks only; server revalidates. */
@@ -124,6 +160,8 @@ export const updateRosterSchema = z.object({
   acknowledgeWarnings: z.boolean(),
   /** Acknowledged selection warnings for picks NEW to the roster. */
   confirmedWarnings: confirmedRosterWarningsSchema,
+  /** Boss-specific exceptions (feature-gated); omitted keeps the saved draft ones. */
+  bossExceptions: rosterBossExceptionsSchema,
 });
 
 /** Publish Roster on a published roster: explicit repost, compare-and-set on version AND postRevision. */

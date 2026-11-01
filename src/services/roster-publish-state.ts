@@ -1,3 +1,4 @@
+import { bossExceptionFingerprint, type RosterBossException } from "@/lib/roster-boss-plan";
 import type { CharacterRole, ParticipationType, SignupStatus } from "@/models/enums";
 
 export type PublishStateSignup = {
@@ -28,6 +29,9 @@ export type PublishStateDraftSelection = {
  * - LOOTBUDDY slots carry no role on either side.
  * - A published BOOSTER slot without publishedRole (predates assigned roles)
  *   matches any draft role for that signup — there is nothing to compare.
+ * - Boss exceptions (when given): the DRAFT set of the draft slots must equal
+ *   the PUBLISHED set of the SELECTED slots. No exceptions on either side
+ *   changes nothing.
  */
 export function hasUnpublishedRosterChanges(input: {
   publishedAt: string | null;
@@ -36,6 +40,7 @@ export function hasUnpublishedRosterChanges(input: {
   runChangedSinceAck: boolean;
   draft: readonly PublishStateDraftSelection[];
   signups: readonly PublishStateSignup[];
+  bossExceptions?: { draft: readonly RosterBossException[]; published: readonly RosterBossException[] };
 }): boolean {
   if (!input.publishedAt) return false;
   if (input.runChangedSinceAck) return true;
@@ -55,6 +60,11 @@ export function hasUnpublishedRosterChanges(input: {
 
   if (draft.size === 0 && published.size > 0 && input.version === 1) return false;
   if (draft.size !== published.size) return true;
+  if (input.bossExceptions) {
+    const draftPlan = input.bossExceptions.draft.filter((row) => draft.has(row.slotSignupId));
+    const publishedPlan = input.bossExceptions.published.filter((row) => published.has(row.slotSignupId));
+    if (bossExceptionFingerprint(draftPlan) !== bossExceptionFingerprint(publishedPlan)) return true;
+  }
   for (const [signupId, publishedRole] of published) {
     if (!draft.has(signupId)) return true;
     const signup = signupsById.get(signupId);

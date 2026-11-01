@@ -28,8 +28,10 @@ export const replaceParticipantSchema = z.object({
   ]),
 });
 
+/** expectedStatus is the status the manager saw: the stale-write guard. An omitted note keeps the stored one. */
 export const setAttendanceSchema = z.object({
   attendanceId: entityIdSchema,
+  expectedStatus: z.enum(ATTENDANCE_STATUSES),
   status: z.enum(ATTENDANCE_STATUSES),
   note: z
     .string()

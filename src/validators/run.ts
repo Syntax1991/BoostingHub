@@ -78,10 +78,12 @@ export const createRunSchema = z.union([
  * Edit Run. Content is one of: a product re-selection (`productId` +
  * counts), the legacy single-raid shape (`raidId` + `plannedBossCount`),
  * or neither — the Run keeps its current contents unchanged.
+ * expectedEditVersion is the version the form opened with: the stale-form guard.
  */
 export const updateRunSchema = z
   .object({
     runId: entityIdSchema,
+    expectedEditVersion: z.string().min(1).max(64),
     difficulty: z.enum(RAID_DIFFICULTIES),
     lootType: z.enum(RUN_LOOT_TYPES),
     scheduledStartAt: scheduledStartAtSchema,
@@ -119,5 +121,8 @@ export const startRunSchema = z.object({
 });
 
 export type CreateRunInput = z.infer<typeof createRunSchema>;
-export type UpdateRunInput = z.infer<typeof updateRunSchema>;
+/** The action always sends expectedEditVersion; in-process callers may rely on the version the service reads. */
+export type UpdateRunInput = Omit<z.infer<typeof updateRunSchema>, "expectedEditVersion"> & {
+  expectedEditVersion?: string;
+};
 export type StartRunInput = z.infer<typeof startRunSchema>;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition, type ReactNode } from "react";
 import { saveExternalBoostersAction } from "@/controllers/roster.actions";
 import { Button } from "@/components/ui/button";
 import { ClassIcon } from "@/components/ui/badges";
@@ -43,11 +43,14 @@ export function ExternalBoostersDialog({
   rosterVersion,
   boosters,
   onClose,
+  modeSwitch = null,
 }: {
   runId: string;
   rosterVersion: number;
   boosters: ExternalBooster[];
   onClose: () => void;
+  /** Registered / External switch of the shared Add Booster entry. */
+  modeSwitch?: ReactNode;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -200,6 +203,7 @@ export function ExternalBoostersDialog({
       className="w-[min(34rem,calc(100vw-2rem))] rounded-md border border-border bg-surface p-0 text-foreground shadow-lg backdrop:bg-black/60"
     >
       <div className="border-b border-border px-4 py-3">
+        {modeSwitch}
         <h2 id={titleId} className="text-sm font-semibold">
           External boosters
         </h2>

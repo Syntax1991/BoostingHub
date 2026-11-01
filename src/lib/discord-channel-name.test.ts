@@ -3,7 +3,6 @@ import {
   buildClosedDiscordRunChannelName,
   buildDiscordRunChannelName,
   DISCORD_CHANNEL_NAME_MAX,
-  effectiveRaidLeadChannelName,
   formatRunVoiceChannelName,
   raidWeekMinuteFromChannelName,
   raidWeekMinuteFromSchedule,
@@ -167,44 +166,14 @@ describe("buildDiscordRunChannelName", () => {
     ).not.toContain("s2b");
   });
 
-  it("uses nickname slug for Syntax1991 → Syntax", () => {
-    expect(
-      buildDiscordRunChannelName({
-        ...BASE,
-        coverage: "9of9",
-        raidLeadChannelName: effectiveRaidLeadChannelName({
-          raidLeadName: "Syntax1991",
-          discordRunChannelNickname: "Syntax",
-        }),
-      }),
-    ).toBe("sat-2200-hc-vip-9of9-syntax");
+  it("the Raid Lead segment is the Raid Lead's (Discord-resolved) User.name, slugged", () => {
+    expect(buildDiscordRunChannelName({ ...BASE, coverage: "9of9", raidLeadChannelName: "Syntax" })).toBe(
+      "sat-2200-hc-vip-9of9-syntax",
+    );
   });
 
-  it("falls back to User.name when nickname is null", () => {
-    expect(
-      buildDiscordRunChannelName({
-        ...BASE,
-        coverage: "9of9",
-        raidLeadChannelName: effectiveRaidLeadChannelName({
-          raidLeadName: "Syntax1991",
-          discordRunChannelNickname: null,
-        }),
-      }),
-    ).toBe("sat-2200-hc-vip-9of9-syntax1991");
-  });
-
-  it("effective Raid Lead name: nickname wins, else raw name (also used by the Final Setup footer)", () => {
-    expect(effectiveRaidLeadChannelName({ raidLeadName: "Simon", discordRunChannelNickname: "Syntax" })).toBe("Syntax");
-    expect(effectiveRaidLeadChannelName({ raidLeadName: "Kiri", discordRunChannelNickname: null })).toBe("Kiri");
-    expect(effectiveRaidLeadChannelName({ raidLeadName: "Kiri", discordRunChannelNickname: "   " })).toBe("Kiri");
-    // Human-readable, not slugged: the Final Setup message shows it as-is.
-    expect(effectiveRaidLeadChannelName({ raidLeadName: "Simon", discordRunChannelNickname: "Syn Tax" })).toBe("Syn Tax");
-  });
-
-  it("temporary Run voice channel: `Raid with <effective Raid Lead>`, human-readable, not slugged", () => {
-    expect(formatRunVoiceChannelName(effectiveRaidLeadChannelName({ raidLeadName: "Simon", discordRunChannelNickname: "Syntax" }))).toBe("Raid with Syntax");
-    expect(formatRunVoiceChannelName(effectiveRaidLeadChannelName({ raidLeadName: "Kiri", discordRunChannelNickname: null }))).toBe("Raid with Kiri");
-    expect(formatRunVoiceChannelName(effectiveRaidLeadChannelName({ raidLeadName: "Kiri", discordRunChannelNickname: "  " }))).toBe("Raid with Kiri");
+  it("temporary Run voice channel: `Raid with <Raid Lead name>`, human-readable, not slugged", () => {
+    expect(formatRunVoiceChannelName("Kiri")).toBe("Raid with Kiri");
     expect(formatRunVoiceChannelName("Syn Tax")).toBe("Raid with Syn Tax");
     expect(formatRunVoiceChannelName("Syntax")).not.toContain("raid-with");
   });

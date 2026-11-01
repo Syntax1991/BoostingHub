@@ -1,0 +1,527 @@
+[
+  {
+    "id": "table.run_roster_boss_exception",
+    "label": "Create table \"run_roster_boss_exception\"",
+    "summary": "Creates table \"run_roster_boss_exception\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run_roster_boss_exception"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run_roster_boss_exception\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_roster_boss_exception\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"run_roster_boss_exception\"",
+        "sql": "CREATE TABLE \"public\".\"run_roster_boss_exception\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"playSignupId\" text,\n  \"raidBossId\" text NOT NULL,\n  \"role\" text NOT NULL,\n  \"rosterId\" text NOT NULL,\n  \"runRaidContentId\" text NOT NULL,\n  \"slotSignupId\" text NOT NULL,\n  \"stage\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"run_roster_boss_exception_role_check_e8a47be4\" CHECK (\"role\" IN ('TANK', 'HEALER', 'MELEE_DPS', 'RANGED_DPS', 'DPS')),\n  CONSTRAINT \"run_roster_boss_exception_stage_check_1b5054bc\" CHECK (\"stage\" IN ('DRAFT', 'PUBLISHED'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run_roster_boss_exception\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_roster_boss_exception\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.run_roster_boss_exception.run_roster_boss_exception_rosterId_stage_slotSignupId_runRaidContentId_raidBossId_key",
+    "label": "Add unique constraint on \"run_roster_boss_exception\" (rosterId, stage, slotSignupId, runRaidContentId, raidBossId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "run_roster_boss_exception_rosterId_stage_slotSignupId_runRaidContentId_raidBossId_key",
+        "table": "run_roster_boss_exception"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_roster_boss_exception_rosterId_stage_slotSignupId_runRaidContentId_raidBossId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_boss_exception_rosterId_stage_slotSignupId_runRaidContentId_raidBossId_key",
+          "public",
+          "\"public\".\"run_roster_boss_exception\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"run_roster_boss_exception_rosterId_stage_slotSignupId_runRaidContentId_raidBossId_key\"",
+        "sql": "ALTER TABLE \"public\".\"run_roster_boss_exception\" ADD CONSTRAINT \"run_roster_boss_exception_rosterId_stage_slotSignupId_runRaidContentId_raidBossId_key\" UNIQUE (\"rosterId\", \"stage\", \"slotSignupId\", \"runRaidContentId\", \"raidBossId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_roster_boss_exception_rosterId_stage_slotSignupId_runRaidContentId_raidBossId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_boss_exception_rosterId_stage_slotSignupId_runRaidContentId_raidBossId_key",
+          "public",
+          "\"public\".\"run_roster_boss_exception\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_roster_boss_exception.run_roster_boss_exception_playSignupId_idx_d7101728",
+    "label": "Create index \"run_roster_boss_exception_playSignupId_idx_d7101728\" on \"run_roster_boss_exception\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_roster_boss_exception_playSignupId_idx_d7101728",
+        "table": "run_roster_boss_exception"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_roster_boss_exception_playSignupId_idx_d7101728\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_roster_boss_exception_playSignupId_idx_d7101728\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_roster_boss_exception_playSignupId_idx_d7101728\"",
+        "sql": "CREATE INDEX \"run_roster_boss_exception_playSignupId_idx_d7101728\" ON \"public\".\"run_roster_boss_exception\" (\"playSignupId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_roster_boss_exception_playSignupId_idx_d7101728\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_roster_boss_exception_playSignupId_idx_d7101728\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_roster_boss_exception.run_roster_boss_exception_raidBossId_idx_869a61e0",
+    "label": "Create index \"run_roster_boss_exception_raidBossId_idx_869a61e0\" on \"run_roster_boss_exception\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_roster_boss_exception_raidBossId_idx_869a61e0",
+        "table": "run_roster_boss_exception"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_roster_boss_exception_raidBossId_idx_869a61e0\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_roster_boss_exception_raidBossId_idx_869a61e0\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_roster_boss_exception_raidBossId_idx_869a61e0\"",
+        "sql": "CREATE INDEX \"run_roster_boss_exception_raidBossId_idx_869a61e0\" ON \"public\".\"run_roster_boss_exception\" (\"raidBossId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_roster_boss_exception_raidBossId_idx_869a61e0\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_roster_boss_exception_raidBossId_idx_869a61e0\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_roster_boss_exception.run_roster_boss_exception_rosterId_idx_ca029c6b",
+    "label": "Create index \"run_roster_boss_exception_rosterId_idx_ca029c6b\" on \"run_roster_boss_exception\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_roster_boss_exception_rosterId_idx_ca029c6b",
+        "table": "run_roster_boss_exception"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_roster_boss_exception_rosterId_idx_ca029c6b\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_roster_boss_exception_rosterId_idx_ca029c6b\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_roster_boss_exception_rosterId_idx_ca029c6b\"",
+        "sql": "CREATE INDEX \"run_roster_boss_exception_rosterId_idx_ca029c6b\" ON \"public\".\"run_roster_boss_exception\" (\"rosterId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_roster_boss_exception_rosterId_idx_ca029c6b\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_roster_boss_exception_rosterId_idx_ca029c6b\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_roster_boss_exception.run_roster_boss_exception_rosterId_stage_idx_5519d655",
+    "label": "Create index \"run_roster_boss_exception_rosterId_stage_idx_5519d655\" on \"run_roster_boss_exception\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_roster_boss_exception_rosterId_stage_idx_5519d655",
+        "table": "run_roster_boss_exception"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_roster_boss_exception_rosterId_stage_idx_5519d655\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_roster_boss_exception_rosterId_stage_idx_5519d655\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_roster_boss_exception_rosterId_stage_idx_5519d655\"",
+        "sql": "CREATE INDEX \"run_roster_boss_exception_rosterId_stage_idx_5519d655\" ON \"public\".\"run_roster_boss_exception\" (\"rosterId\", \"stage\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_roster_boss_exception_rosterId_stage_idx_5519d655\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_roster_boss_exception_rosterId_stage_idx_5519d655\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_roster_boss_exception.run_roster_boss_exception_runRaidContentId_idx_b5f2a8be",
+    "label": "Create index \"run_roster_boss_exception_runRaidContentId_idx_b5f2a8be\" on \"run_roster_boss_exception\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_roster_boss_exception_runRaidContentId_idx_b5f2a8be",
+        "table": "run_roster_boss_exception"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_roster_boss_exception_runRaidContentId_idx_b5f2a8be\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_roster_boss_exception_runRaidContentId_idx_b5f2a8be\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_roster_boss_exception_runRaidContentId_idx_b5f2a8be\"",
+        "sql": "CREATE INDEX \"run_roster_boss_exception_runRaidContentId_idx_b5f2a8be\" ON \"public\".\"run_roster_boss_exception\" (\"runRaidContentId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_roster_boss_exception_runRaidContentId_idx_b5f2a8be\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_roster_boss_exception_runRaidContentId_idx_b5f2a8be\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_roster_boss_exception.run_roster_boss_exception_slotSignupId_idx_0e62234d",
+    "label": "Create index \"run_roster_boss_exception_slotSignupId_idx_0e62234d\" on \"run_roster_boss_exception\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_roster_boss_exception_slotSignupId_idx_0e62234d",
+        "table": "run_roster_boss_exception"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_roster_boss_exception_slotSignupId_idx_0e62234d\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_roster_boss_exception_slotSignupId_idx_0e62234d\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_roster_boss_exception_slotSignupId_idx_0e62234d\"",
+        "sql": "CREATE INDEX \"run_roster_boss_exception_slotSignupId_idx_0e62234d\" ON \"public\".\"run_roster_boss_exception\" (\"slotSignupId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_roster_boss_exception_slotSignupId_idx_0e62234d\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_roster_boss_exception_slotSignupId_idx_0e62234d\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_roster_boss_exception.run_roster_boss_exception_rosterId_fkey",
+    "label": "Add foreign key \"run_roster_boss_exception_rosterId_fkey\" on \"run_roster_boss_exception\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_roster_boss_exception_rosterId_fkey",
+        "table": "run_roster_boss_exception"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_roster_boss_exception_rosterId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_boss_exception_rosterId_fkey",
+          "public",
+          "\"public\".\"run_roster_boss_exception\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_roster_boss_exception_rosterId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_roster_boss_exception\"\nADD CONSTRAINT \"run_roster_boss_exception_rosterId_fkey\"\nFOREIGN KEY (\"rosterId\")\nREFERENCES \"public\".\"run_roster\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_roster_boss_exception_rosterId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_boss_exception_rosterId_fkey",
+          "public",
+          "\"public\".\"run_roster_boss_exception\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_roster_boss_exception.run_roster_boss_exception_slotSignupId_fkey",
+    "label": "Add foreign key \"run_roster_boss_exception_slotSignupId_fkey\" on \"run_roster_boss_exception\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_roster_boss_exception_slotSignupId_fkey",
+        "table": "run_roster_boss_exception"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_roster_boss_exception_slotSignupId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_boss_exception_slotSignupId_fkey",
+          "public",
+          "\"public\".\"run_roster_boss_exception\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_roster_boss_exception_slotSignupId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_roster_boss_exception\"\nADD CONSTRAINT \"run_roster_boss_exception_slotSignupId_fkey\"\nFOREIGN KEY (\"slotSignupId\")\nREFERENCES \"public\".\"run_signup\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_roster_boss_exception_slotSignupId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_boss_exception_slotSignupId_fkey",
+          "public",
+          "\"public\".\"run_roster_boss_exception\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_roster_boss_exception.run_roster_boss_exception_runRaidContentId_fkey",
+    "label": "Add foreign key \"run_roster_boss_exception_runRaidContentId_fkey\" on \"run_roster_boss_exception\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_roster_boss_exception_runRaidContentId_fkey",
+        "table": "run_roster_boss_exception"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_roster_boss_exception_runRaidContentId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_boss_exception_runRaidContentId_fkey",
+          "public",
+          "\"public\".\"run_roster_boss_exception\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_roster_boss_exception_runRaidContentId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_roster_boss_exception\"\nADD CONSTRAINT \"run_roster_boss_exception_runRaidContentId_fkey\"\nFOREIGN KEY (\"runRaidContentId\")\nREFERENCES \"public\".\"run_raid_content\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_roster_boss_exception_runRaidContentId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_boss_exception_runRaidContentId_fkey",
+          "public",
+          "\"public\".\"run_roster_boss_exception\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_roster_boss_exception.run_roster_boss_exception_raidBossId_fkey",
+    "label": "Add foreign key \"run_roster_boss_exception_raidBossId_fkey\" on \"run_roster_boss_exception\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_roster_boss_exception_raidBossId_fkey",
+        "table": "run_roster_boss_exception"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_roster_boss_exception_raidBossId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_boss_exception_raidBossId_fkey",
+          "public",
+          "\"public\".\"run_roster_boss_exception\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_roster_boss_exception_raidBossId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_roster_boss_exception\"\nADD CONSTRAINT \"run_roster_boss_exception_raidBossId_fkey\"\nFOREIGN KEY (\"raidBossId\")\nREFERENCES \"public\".\"raid_boss\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_roster_boss_exception_raidBossId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_boss_exception_raidBossId_fkey",
+          "public",
+          "\"public\".\"run_roster_boss_exception\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_roster_boss_exception.run_roster_boss_exception_playSignupId_fkey",
+    "label": "Add foreign key \"run_roster_boss_exception_playSignupId_fkey\" on \"run_roster_boss_exception\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_roster_boss_exception_playSignupId_fkey",
+        "table": "run_roster_boss_exception"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_roster_boss_exception_playSignupId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_boss_exception_playSignupId_fkey",
+          "public",
+          "\"public\".\"run_roster_boss_exception\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_roster_boss_exception_playSignupId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_roster_boss_exception\"\nADD CONSTRAINT \"run_roster_boss_exception_playSignupId_fkey\"\nFOREIGN KEY (\"playSignupId\")\nREFERENCES \"public\".\"run_signup\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_roster_boss_exception_playSignupId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_boss_exception_playSignupId_fkey",
+          "public",
+          "\"public\".\"run_roster_boss_exception\""
+        ]
+      }
+    ]
+  }
+]

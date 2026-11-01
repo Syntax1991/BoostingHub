@@ -4,6 +4,7 @@ import { db, orm } from "@/lib/prisma";
 import { mapRaidBossRefs, type RaidBossRef } from "@/lib/lockout-bosses";
 import { and, or } from "@prisma/orm-postgres/orm-client";
 import { DomainError } from "@/lib/errors";
+import { runEditStaleError, runEditVersion } from "@/lib/run-edit-version";
 import {
   projectRunContentDisplay,
   type RunContentDisplay,
@@ -27,6 +28,7 @@ import {
   mapDifficulty,
   mapLootType,
   mapParticipation,
+  mapRosterState,
   mapRunStatus,
   mapSignupStatus,
   mapWowClass,
@@ -38,8 +40,8 @@ import {
   type CreateRunDiscordAnnouncementInput,
 } from "@/repositories/run-discord-announcement.repository";
 import { isUniqueViolation } from "@/repositories/community-schedule-run.repository";
-import { lockRosterInTx } from "@/repositories/roster.repository";
-import { getRaidLeadDisplayName } from "@/lib/raid-lead-display";
+import { lockRosterInTx, mapBossExceptionRows } from "@/repositories/roster.repository";
+import type { BossExceptionStages } from "@/lib/roster-boss-plan";
 import { normalizeOfferedRoles } from "@/lib/offered-roles";
 import type { InitialBoosterSignup } from "@/services/run-raid-lead-bootstrap.service";
 import type { RunDomainEventActorKind } from "@/models/enums";
@@ -131,13 +133,8 @@ export type RunListRecord = {
   raidLeadId: string;
   /** Account name of the Raid Lead (audit / account surfaces). */
   raidLeadName: string;
-  /** Run display identity: Raid Lead nickname, else raidLeadName (see getRaidLeadDisplayName). */
+  /** Run display identity of the Raid Lead: their User.name (resolved from Discord). */
   raidLeadDisplayName: string;
-  /**
-   * Raid Lead's current nickname (Settings), live. Used by Discord channel
-   * naming; Run.title snapshots the display name when it is (re)generated.
-   */
-  raidLeadDiscordRunChannelNickname: string | null;
   /** Discord snowflake for the Raid Lead User, when linked. */
   raidLeadDiscordUserId: string | null;
   notes: string | null;
@@ -177,6 +174,8 @@ export type RunListRecord = {
     selections: RosterSelectionOnRun[];
     /** Unregistered boosters added by hand; saved with the draft, count toward targets. */
     externalBoosters: ExternalBooster[];
+    /** Stored boss exceptions, both stages. */
+    bossExceptions: BossExceptionStages;
   } | null;
 };
 
@@ -310,18 +309,69 @@ async function insertRaidContents(
   }
 }
 
-/** Replace the full content set inside an open transaction (delete + recreate). */
+/**
+ * Replace the full content set inside an open transaction (delete + recreate).
+ *
+ * Boss exceptions reference the content row, so the delete would cascade all
+ * of them away. Exceptions whose raid stays in the Run and whose boss is still
+ * PLANNED (first plannedBossCount bosses by sortOrder) are re-bound to the new
+ * content row; the rest — removed raid or a boss no longer planned — are
+ * dropped. Both stages are kept as they were, so the existing "Run changed
+ * since publish" flag still drives Update Roster.
+ *
+ * Returns true when exception rows existed (re-bound to new content ids or
+ * dropped): an open Roster Builder holds the old ids, so the caller bumps the
+ * roster version and its next Save / Update gets ROSTER_ALREADY_CHANGED.
+ */
 async function replaceRaidContentsTx(
   ormLike: TxOrm,
   runId: string,
   contents: RunContentWriteSpec[],
   now: string,
-) {
+): Promise<boolean> {
   const existing = (await ormLike.RunRaidContent.where({ runId }).all()) as Record<string, unknown>[];
+  const raidIdByContentId = new Map(existing.map((row) => [asString(row.id), asString(row.raidId)]));
+  const keptExceptions =
+    existing.length === 0
+      ? []
+      : ((await ormLike.RunRosterBossException.where((row) =>
+          row.runRaidContentId.in(existing.map((content) => asString(content.id))),
+        ).all()) as Record<string, unknown>[]);
   for (const row of existing) {
     await ormLike.RunRaidContent.where({ id: asString(row.id) }).delete();
   }
   await insertRaidContents(ormLike, runId, contents, now);
+  if (keptExceptions.length === 0) return false;
+
+  const inserted = (await ormLike.RunRaidContent.where({ runId }).all()) as Record<string, unknown>[];
+  const contentByRaidId = new Map(inserted.map((row) => [asString(row.raidId), row]));
+  const bossRows = (await ormLike.RaidBoss.where((boss) =>
+    boss.raidId.in([...contentByRaidId.keys()]),
+  ).all()) as Record<string, unknown>[];
+  const plannedBossIds = new Set<string>();
+  for (const [raidId, content] of contentByRaidId) {
+    bossRows
+      .filter((boss) => asString(boss.raidId) === raidId)
+      .sort((left, right) => asNumber(left.sortOrder, 0) - asNumber(right.sortOrder, 0))
+      .slice(0, asNumber(content.plannedBossCount, 0))
+      .forEach((boss) => plannedBossIds.add(asString(boss.id)));
+  }
+  for (const row of keptExceptions) {
+    const content = contentByRaidId.get(raidIdByContentId.get(asString(row.runRaidContentId)) ?? "");
+    if (!content || !plannedBossIds.has(asString(row.raidBossId))) continue;
+    await ormLike.RunRosterBossException.create({
+      id: crypto.randomUUID(),
+      rosterId: asString(row.rosterId),
+      stage: mapRosterState(row.stage),
+      slotSignupId: asString(row.slotSignupId),
+      runRaidContentId: asString(content.id),
+      raidBossId: asString(row.raidBossId),
+      playSignupId: asStringOrNull(row.playSignupId),
+      role: mapCharacterRole(row.role),
+      createdAt: asString(row.createdAt) || now,
+    });
+  }
+  return true;
 }
 
 /**
@@ -368,12 +418,7 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
     status: mapRunStatus(run.status),
     raidLeadId: asString(run.raidLeadId ?? raidLead.id),
     raidLeadName: asString(raidLead.name, "Unknown lead"),
-    raidLeadDisplayName: getRaidLeadDisplayName({
-      name: asString(raidLead.name, "Unknown lead"),
-      discordRunChannelNickname: asStringOrNull(raidLead.discordRunChannelNickname),
-    }),
-    /** Live Raid Lead nickname (Run display identity) — never snapshotted onto the Run. */
-    raidLeadDiscordRunChannelNickname: asStringOrNull(raidLead.discordRunChannelNickname),
+    raidLeadDisplayName: asString(raidLead.name, "Unknown lead"),
     raidLeadDiscordUserId: asStringOrNull(raidLead.discordUserId),
     notes: asStringOrNull(run.notes),
     desiredTankCount: asNumber(run.desiredTankCount),
@@ -440,6 +485,7 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
             };
           }),
           externalBoosters: mapExternalBoosters(roster.externalBoosters),
+          bossExceptions: mapBossExceptionRows(roster.bossExceptions),
         }
       : null,
   };
@@ -470,7 +516,7 @@ export const runRepository = {
       .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
       .include("raidLead")
       .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
-      .include("roster", (roster) => roster.include("entries").include("externalBoosters"))
+      .include("roster", (roster) => roster.include("entries").include("externalBoosters").include("bossExceptions"))
       .orderBy((run) => run.scheduledStartAt.asc());
 
     if (filters.difficulty) {
@@ -497,7 +543,7 @@ export const runRepository = {
       .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
       .include("raidLead")
       .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
-      .include("roster", (roster) => roster.include("entries").include("externalBoosters"))
+      .include("roster", (roster) => roster.include("entries").include("externalBoosters").include("bossExceptions"))
       .first();
 
     return run ? mapRun(run as Record<string, unknown>) : null;
@@ -518,7 +564,7 @@ export const runRepository = {
       .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
       .include("raidLead")
       .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
-      .include("roster", (roster) => roster.include("entries").include("externalBoosters"))
+      .include("roster", (roster) => roster.include("entries").include("externalBoosters").include("bossExceptions"))
       .orderBy((run) => run.scheduledStartAt.asc())
       .all();
 
@@ -530,7 +576,7 @@ export const runRepository = {
       .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
       .include("raidLead")
       .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
-      .include("roster", (roster) => roster.include("entries").include("externalBoosters"))
+      .include("roster", (roster) => roster.include("entries").include("externalBoosters").include("bossExceptions"))
       .orderBy((run) => run.scheduledStartAt.asc())
       .all();
 
@@ -645,7 +691,7 @@ export const runRepository = {
       .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
       .include("raidLead")
       .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
-      .include("roster", (roster) => roster.include("entries").include("externalBoosters"))
+      .include("roster", (roster) => roster.include("entries").include("externalBoosters").include("bossExceptions"))
       .orderBy((run) => run.scheduledStartAt.asc())
       .all();
 
@@ -1108,6 +1154,8 @@ export const runRepository = {
    *   derived title after a Raid Lead change) — bump the roster version so the
    *   current Discord roster message is edited in place;
    * - "NONE": nothing roster-related changed.
+   * Independently, a content replacement that re-binds or drops boss
+   * exceptions bumps the roster version (draft or published).
    * An edit that commits first makes a concurrent Start refuse (unpublished
    * changes); an edit queued behind a committed Start fails here.
    */
@@ -1126,6 +1174,8 @@ export const runRepository = {
        */
       writeInTx?: (txOrm: TxOrm) => Promise<void>;
       rosterEffect?: "NONE" | "MARK_CHANGED" | "REFRESH_EMBED";
+      /** runEditVersion the edit was based on; a different current version is RUN_EDIT_STALE. */
+      expectedEditVersion?: string;
     } = {},
     hooks: LifecycleAnnouncementTxHooks = {},
   ): Promise<void> {
@@ -1136,6 +1186,9 @@ export const runRepository = {
         unknown
       > | null;
       const roster = rosterLookup ? await lockRosterInTx(txOrm, asString(rosterLookup.id)) : null;
+      const now = new Date().toISOString();
+      // Row lock: a concurrent edit of a Run without a roster row waits here too.
+      await txOrm.Run.where({ id }).update({ updatedAt: now });
       const current = (await txOrm.Run.where({ id }).first()) as Record<string, unknown> | null;
       if (!current) {
         throw new DomainError("NOT_FOUND", "Run was not found.", 404);
@@ -1143,11 +1196,38 @@ export const runRepository = {
       if (!canEditRunBeforeStart(mapRunStatus(current.status))) {
         throw new DomainError("RUN_EDIT_LOCKED", "This run can no longer be edited — it has already started.");
       }
-      const now = new Date().toISOString();
-      await txOrm.Run.where({ id }).update({ ...fields, updatedAt: now });
-      if (options.contents) {
-        await replaceRaidContentsTx(txOrm, id, options.contents, now);
+      if (options.expectedEditVersion) {
+        const contentRows = (await txOrm.RunRaidContent.where({ runId: id })
+          .select("raidId", "sortOrder", "plannedBossCount")
+          .all()) as Array<Record<string, unknown>>;
+        const currentVersion = runEditVersion({
+          scheduledStartAt: asString(current.scheduledStartAt),
+          difficulty: asString(current.difficulty),
+          lootType: asString(current.lootType),
+          raidLeadId: asString(current.raidLeadId),
+          notes: asStringOrNull(current.notes),
+          desiredTankCount: asNumber(current.desiredTankCount),
+          desiredHealerCount: asNumber(current.desiredHealerCount),
+          desiredDpsCount: asNumber(current.desiredDpsCount),
+          desiredLootbuddyCount: asNumber(current.desiredLootbuddyCount),
+          discordRolePing: asBoolean(current.discordRolePing, true),
+          contents: contentRows.map((row) => ({
+            raidId: asString(row.raidId),
+            sortOrder: asNumber(row.sortOrder),
+            plannedBossCount: asNumber(row.plannedBossCount),
+          })),
+        });
+        if (currentVersion !== options.expectedEditVersion) {
+          throw runEditStaleError();
+        }
       }
+      await txOrm.Run.where({ id }).update({ ...fields, updatedAt: now });
+      // Boss exceptions re-bound / dropped by a content replacement: the roster
+      // version moves so an open Roster Builder refreshes instead of sending
+      // exceptions for content ids that no longer exist.
+      const bossExceptionsMoved = options.contents
+        ? await replaceRaidContentsTx(txOrm, id, options.contents, now)
+        : false;
       if (hooks.failAfterRunUpdate) {
         throw new Error("TEST_HOOK_FAIL_AFTER_RUN_UPDATE");
       }
@@ -1162,10 +1242,16 @@ export const runRepository = {
       if (options.scopeAnnouncement) {
         await insertAnnouncementIgnoreDuplicateTx(txOrm, options.scopeAnnouncement);
       }
-      if (roster?.publishedAt && options.rosterEffect === "MARK_CHANGED") {
-        await txOrm.RunRoster.where({ id: roster.id }).update({ runChangedSinceAck: true, updatedAt: now });
-      } else if (roster?.publishedAt && options.rosterEffect === "REFRESH_EMBED") {
-        await txOrm.RunRoster.where({ id: roster.id }).update({ version: roster.version + 1, updatedAt: now });
+      const bumpVersion = Boolean(
+        roster && (bossExceptionsMoved || (roster.publishedAt && options.rosterEffect === "REFRESH_EMBED")),
+      );
+      const markChanged = Boolean(roster?.publishedAt && options.rosterEffect === "MARK_CHANGED");
+      if (roster && (bumpVersion || markChanged)) {
+        await txOrm.RunRoster.where({ id: roster.id }).update({
+          ...(markChanged ? { runChangedSinceAck: true } : {}),
+          ...(bumpVersion ? { version: roster.version + 1 } : {}),
+          updatedAt: now,
+        });
       }
       if (options.writeInTx) {
         await options.writeInTx(txOrm);

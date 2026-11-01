@@ -12,6 +12,9 @@ export function Button({
   size = "md",
   onClick,
   "aria-label": ariaLabel,
+  "aria-expanded": ariaExpanded,
+  "aria-controls": ariaControls,
+  title,
 }: {
   children: ReactNode;
   className?: string;
@@ -21,6 +24,9 @@ export function Button({
   size?: "sm" | "md" | "icon";
   onClick?: () => void;
   "aria-label"?: string;
+  "aria-expanded"?: boolean;
+  "aria-controls"?: string;
+  title?: string;
 }) {
   return (
     <button
@@ -28,6 +34,9 @@ export function Button({
       disabled={disabled}
       onClick={onClick}
       aria-label={ariaLabel}
+      aria-expanded={ariaExpanded}
+      aria-controls={ariaControls}
+      title={title}
       className={cn(
         "inline-flex items-center justify-center rounded-md font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
         size === "sm" && "h-8 gap-1 px-2.5 text-sm",
