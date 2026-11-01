@@ -296,7 +296,7 @@ Other tools outside `scripts/`:
 
 | Tool | Purpose | How it runs |
 | --- | --- | --- |
-| `src/prisma/seed.ts` | **Wipes every seeded table**, then inserts fixtures. `seed-guard.ts` refuses production, remote databases and any target not named in `SEED_CONFIRM_DATABASE` | `db:seed` |
+| `src/prisma/seed.ts` | **Wipes every seeded table**, then inserts fixtures. `seed-guard.ts` reads the target through the `pg` driver, then refuses production, non-local hosts, connection parameters other than `sslmode` and `application_name`, and any target not named in `SEED_CONFIRM_DATABASE` | `db:seed` |
 | `src/discord-bot/register-commands.ts` | Registers the Discord slash commands | `bot:register-commands`, by hand |
 | `deploy/update-server.sh` | The only release path | By hand on the server |
 | `deploy/production/backup-db.sh`, `env-status.py` | Backup and read-only `.env` check | Timer, by hand |
@@ -331,7 +331,7 @@ Optional `DISCORD_BOOSTER_TICKET_URL` is an external Discord link for Booster ap
 
 ### Seed
 
-`npm run db:seed` wipes domain and auth rows, then upserts reference raid content and inserts deterministic users, characters, access, lockouts, fixture runs, signups, attendance, and activity.
+**This deletes existing data.** It runs only against a local database named exactly in `SEED_CONFIRM_DATABASE` (an existing `.env` needs this key added). `npm run db:seed` wipes domain and auth rows, then upserts reference raid content and inserts deterministic users, characters, access, lockouts, fixture runs, signups, attendance, and activity.
 
 It is safe to re-run. It is not random. Seed is a fixture, not required production state; see **Seed policy** below.
 
