@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { orm } from "@/lib/prisma";
 import { pgConnectionConfig } from "@/lib/pg-pool";
+import { databaseNameOf } from "@/prisma/seed-guard";
 import { venomousCreateInput } from "@/lib/test-run-input";
 import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { communityScheduleRepository } from "@/repositories/community-schedule.repository";
@@ -48,6 +49,7 @@ function runSeed() {
     Object.entries(process.env).filter(([key, value]) => key !== "VITEST" && !(key === "NODE_ENV" && value === "test")),
   ) as NodeJS.ProcessEnv;
   env.DATABASE_URL = pgConnectionConfig.connectionString;
+  env.SEED_CONFIRM_DATABASE = databaseNameOf(pgConnectionConfig.connectionString) ?? "";
   return spawnSync("npm run db:seed", {
     env,
     shell: true,

@@ -290,6 +290,18 @@ Scripts:
 | `generate-wow-item-sockets.mjs` | Regenerates the socket table after a content patch | none |
 | `build-spec-icon-map.mts` | Regenerates the specialization icon map | none |
 
+Production timers run `sync:characters`, `materialize:community-schedule` and `reconcile:battlenet-links`. The backup timer runs the root-owned copy of `deploy/production/backup-db.sh`, which calls `record-backup-telemetry.mts`.
+
+Other tools outside `scripts/`:
+
+| Tool | Purpose | How it runs |
+| --- | --- | --- |
+| `src/prisma/seed.ts` | **Wipes every seeded table**, then inserts fixtures. `seed-guard.ts` refuses production, remote databases and any target not named in `SEED_CONFIRM_DATABASE` | `db:seed` |
+| `src/discord-bot/register-commands.ts` | Registers the Discord slash commands | `bot:register-commands`, by hand |
+| `deploy/update-server.sh` | The only release path | By hand on the server |
+| `deploy/production/backup-db.sh`, `env-status.py` | Backup and read-only `.env` check | Timer, by hand |
+| `deploy/update-server.test.sh`, `deploy/production/*.test.sh` | Stub tests of the deployment scripts; they need bash and `python3` | By hand, no npm script and no CI |
+
 ## Local development
 
 ### Prerequisites

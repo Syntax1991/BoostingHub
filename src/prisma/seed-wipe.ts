@@ -1,4 +1,5 @@
 import { orm } from "@/lib/prisma";
+import { assertSeedTargetAllowed } from "@/prisma/seed-guard";
 
 /**
  * Empties every table the seed fills, child rows before the rows they
@@ -8,6 +9,7 @@ import { orm } from "@/lib/prisma";
  * and `npm run test:db:reset` against TEST_DATABASE_URL) — never from the app.
  */
 export async function wipeSeedDatabase(): Promise<void> {
+  assertSeedTargetAllowed();
   // Strike.userId/createdById are Restrict against User; must go before Users.
   for (const row of await orm.Strike.select("id").all()) {
     await orm.Strike.where({ id: row.id }).delete();

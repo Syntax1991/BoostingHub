@@ -61,6 +61,8 @@ This repository is public, so concrete server details, access data and secret va
 - **Naming:** BoostingHub, Manawyrm Hub, `boostting-bot` and a Discord emoji named `PhoenixStarDiscord` all still exist.
 - **Screenshots:** recaptured on 2026-11-01 from a fresh seed database, without real names or the removed Payout tab. The seed's Run dates are fixed and lie in the past, so the capture scripts' default views of `/runs` and `/my-runs` come out empty; `bo-03`, `bo-04`, `bo-05` and `rl-02` were taken with `?id=all`, and there is no capture script for `common-01-login.png`. The old images remain in Git history.
 - **Large files:** `src/discord-bot/sync-loop.ts` and `run.service.ts` have grown large.
+- **Duplicate scripts:** the Booster and Raid Lead publish scripts, and the two screenshot capture scripts, are near copies. `capture-raidlead-guide-screenshots.mts` still looks for the old **Save Roster** label, then falls back. Neither capture script limits `--base-url` to local hosts.
+- **Deployment script tests** run only by hand, because there is no CI.
 
 ## Open pull requests
 
