@@ -171,25 +171,25 @@ describe("character roster metadata (offspec display)", () => {
   });
 
   it("character page spec line uses the same offspec order and wording as roster cards", () => {
-    const syndraco = {
+    const testdraco = {
       itemLevel: 321,
       specialization: "Preservation",
       primaryRole: "HEALER" as const,
       wowClass: "EVOKER" as const,
       playableSpecs: ["Augmentation", "Devastation"],
     };
-    expect(formatCharacterPageSpecLine(syndraco)).toBe("Preservation · Offspecs: Devastation, Augmentation");
-    expect(formatCharacterRosterMetadata(syndraco)).toBe(
+    expect(formatCharacterPageSpecLine(testdraco)).toBe("Preservation · Offspecs: Devastation, Augmentation");
+    expect(formatCharacterRosterMetadata(testdraco)).toBe(
       "321 ilvl · Preservation · Offspecs: Devastation, Augmentation",
     );
 
-    const synvoid = {
+    const testvoid = {
       specialization: "Holy",
       wowClass: "PRIEST" as const,
       playableSpecs: ["Shadow", "Discipline"],
     };
-    expect(formatCharacterPageSpecLine(synvoid)).toBe("Holy · Offspecs: Discipline, Shadow");
-    expect(additionalPlayableSpecLabels(synvoid)).toEqual(["Discipline", "Shadow"]);
+    expect(formatCharacterPageSpecLine(testvoid)).toBe("Holy · Offspecs: Discipline, Shadow");
+    expect(additionalPlayableSpecLabels(testvoid)).toEqual(["Discipline", "Shadow"]);
 
     expect(
       formatCharacterPageSpecLine({

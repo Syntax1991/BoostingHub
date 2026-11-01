@@ -33,9 +33,9 @@ import { snowflakeAtTime } from "@/lib/discord-snowflake";
 const RUN = "r9999996-9996-4996-8996-999999999996";
 const IN_PROGRESS_RUN = "r9999991-9991-4991-8991-999999999991";
 const OPEN_RUN = "r1111111-1111-4111-8111-111111111111";
-const REPORT = "FtwhWRvqjTbAx4NQ";
+const REPORT = "TestReportCode01";
 /** A second report of the same Run (e.g. the log bot started a new one mid-run). */
-const REPORT_2 = "Kp3xZm9QwLr7Vt2N";
+const REPORT_2 = "TestReportCode04";
 const TOKEN = "bot-api-test-token-wcl-0123456789";
 const LOG_BOT = "111111111111111111";
 const STRANGER = "222222222222222222";

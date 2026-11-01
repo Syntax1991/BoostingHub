@@ -105,7 +105,7 @@ export type FinalSetupInput = {
   };
   /**
    * Boss-specific deviations of the lineup, one line per affected slot
-   * ("Boss 5–6: Synpriest-Antonidas · Healer"). Absent / empty: no section,
+   * ("Boss 5–6: Testpriest-Antonidas · Healer"). Absent / empty: no section,
    * the message is exactly as before.
    */
   bossPlan?: Array<{ discordUserId: string | null; userName: string; plan: string }>;

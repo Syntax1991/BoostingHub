@@ -176,7 +176,7 @@ describe("syncOnce — Final Setup explicit allowedMentions", () => {
     // The LFG footer is fixed Manawyrm branding — no Raid Lead name / HM.
     const footer = payload.content.slice(payload.content.lastIndexOf("\n") + 1);
     expect(footer).toBe(formatFinalSetupLfgLine());
-    expect(footer).not.toContain("Syntax");
+    expect(footer).not.toContain("Gamma");
     expect(footer).not.toContain("pwned");
     expect(payload.content.match(/LFG Manawyrm/g)).toHaveLength(1);
     expect(payload.content).not.toContain("LFG HM");
@@ -212,7 +212,7 @@ describe("syncOnce — Final Setup links the Run's temporary Voice channel", () 
   const voiceItem = (action: StartVoiceItem["action"], existingVoiceChannelId: string | null): StartVoiceItem => ({
     runId: RUN_ID,
     existingVoiceChannelId,
-    desiredVoiceChannelName: "Raid with Syntax",
+    desiredVoiceChannelName: "Raid with Gamma",
     action,
   });
   const contentOf = (mock: ReturnType<typeof vi.fn>) => (mock.mock.calls[0]![0] as { content: string }).content;
@@ -411,7 +411,7 @@ describe("Signup / Roster embeds unchanged by Final Setup LFG", () => {
       productLabel: "The Venomous Abyss",
       contentSummary: "The Venomous Abyss 8/8",
       titleCoverage: "8/8",
-      raidLeadName: "Titan",
+      raidLeadName: "Alpha",
       raidLeadDiscordUserId: null,
       difficulty: "HEROIC",
       lootType: "UNSAVED",
@@ -530,7 +530,7 @@ function makeStartClient(options: {
   const voiceChannels = new Map<string, unknown>();
   const voiceChannel = (id: string, members: number) => ({
     id,
-    name: "Raid with Syntax",
+    name: "Raid with Gamma",
     type: ChannelType.GuildVoice,
     members: { size: members },
     setName: vi.fn().mockResolvedValue(undefined),

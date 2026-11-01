@@ -10,8 +10,8 @@ const fetchMock = vi.fn();
 const config: DiscordRoleAccessSyncConfig = {
   botToken: "test-bot-token",
   guildId: "123456789012345678",
-  raidBoosterRoleId: "1527022823103791104",
-  lootbuddyRoleId: "1527024325306220704",
+  raidBoosterRoleId: "1527022800000000104",
+  lootbuddyRoleId: "1527024300000000704",
 };
 
 function memberResponse(roles: string[]): Response {
@@ -50,8 +50,8 @@ beforeEach(() => {
   fetchMock.mockReset();
   vi.stubEnv("DISCORD_BOT_TOKEN", " test-bot-token ");
   vi.stubEnv("DISCORD_GUILD_ID", " 123456789012345678 ");
-  vi.stubEnv("DISCORD_BOOSTER_ROLE_ID", " 1527022823103791104 ");
-  vi.stubEnv("DISCORD_LOOTBUDDY_ROLE_ID", " 1527024325306220704 ");
+  vi.stubEnv("DISCORD_BOOSTER_ROLE_ID", " 1527022800000000104 ");
+  vi.stubEnv("DISCORD_LOOTBUDDY_ROLE_ID", " 1527024300000000704 ");
 });
 
 afterEach(() => {

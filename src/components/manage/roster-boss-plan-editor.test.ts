@@ -56,9 +56,9 @@ function signup(id: string, userId: string, name: string, roles: CharacterRole[]
   };
 }
 
-const sham = signup("sham", "userA", "Bexsham", ["HEALER", "RANGED_DPS"]);
-const priest = signup("priest", "userA", "Bexpriest", ["HEALER"]);
-const mage = signup("mage", "userB", "Bexmage", ["RANGED_DPS"]);
+const sham = signup("sham", "userA", "Demosham", ["HEALER", "RANGED_DPS"]);
+const priest = signup("priest", "userA", "Demopriest", ["HEALER"]);
+const mage = signup("mage", "userB", "Demomage", ["RANGED_DPS"]);
 const signups = [sham, priest, mage];
 const staged = new Map<string, CharacterRole | null>([
   ["sham", "HEALER"],
@@ -91,8 +91,8 @@ describe("slot Character choices", () => {
   it("own Character first, then eligible alternates of the same player only", () => {
     const choices = slotCharacterChoices(sham, signups, new Set(staged.keys()));
     expect(choices).toEqual([
-      { playSignupId: null, label: "Bexsham-Antonidas", roles: ["HEALER", "RANGED_DPS"] },
-      { playSignupId: "priest", label: "Bexpriest-Antonidas", roles: ["HEALER"] },
+      { playSignupId: null, label: "Demosham-Antonidas", roles: ["HEALER", "RANGED_DPS"] },
+      { playSignupId: "priest", label: "Demopriest-Antonidas", roles: ["HEALER"] },
     ]);
     expect(slotHasBossChoices(choices)).toBe(true);
   });
@@ -132,7 +132,7 @@ describe("saved pick that is no longer offered (regression)", () => {
     const current = rangeAssignment({ exceptions: savedAlt, slotSignupId: "sham", slotRole: "HEALER", range: [venom(5), venom(6)] });
     expect(choicesWithCurrent(offered, current, [sham, inactivePriest, mage])).toEqual([
       ...offered,
-      { playSignupId: "priest", label: "Bexpriest-Antonidas (not available)", roles: ["HEALER"], unavailable: true },
+      { playSignupId: "priest", label: "Demopriest-Antonidas (not available)", roles: ["HEALER"], unavailable: true },
     ]);
   });
 
@@ -248,9 +248,9 @@ describe("Save / Update payload", () => {
       describeSlotBossPlan({
         exceptions: rows,
         bosses,
-        characterLabelBySignupId: new Map([["priest", "Bexpriest-Antonidas"]]),
+        characterLabelBySignupId: new Map([["priest", "Demopriest-Antonidas"]]),
       }),
-    ).toBe("Venom 5–6: Bexpriest-Antonidas · Healer; Tide 1: Ranged DPS");
+    ).toBe("Venom 5–6: Demopriest-Antonidas · Healer; Tide 1: Ranged DPS");
   });
 });
 
@@ -309,7 +309,7 @@ describe("live per-boss warnings", () => {
     });
     const input = { ...base, signups: [sham, savedPriest, mage], payload };
     expect(evaluateLiveBossPlan(input).warnings.map((warning) => warning.message)).toEqual([
-      "Venom 6: Bexpriest-Antonidas is already saved.",
+      "Venom 6: Demopriest-Antonidas is already saved.",
     ]);
     expect(evaluateLiveBossPlan({ ...input, lootType: "SAVED" }).warnings).toEqual([]);
   });

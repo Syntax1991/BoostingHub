@@ -10,7 +10,7 @@ import { findSpecialization, roleForSpecialization } from "@/lib/wow-specializat
 
 describe("character identity normalization", () => {
   it("treats case and surrounding whitespace as the same identity", () => {
-    expect(normalizeCharacterIdentity("  Synblast ")).toBe("synblast");
+    expect(normalizeCharacterIdentity("  Testblast ")).toBe("testblast");
     expect(normalizeCharacterIdentity("Tarren Mill")).toBe(normalizeCharacterIdentity("tarren mill"));
   });
 

@@ -27,7 +27,7 @@ const mistweaver: {
   defaultRole: "HEALER" | null;
 } = {
   characterId: "c-mist",
-  characterName: "Synmist",
+  characterName: "Testmist",
   realm: "Antonidas",
   roles: ["TANK", "HEALER", "MELEE_DPS"],
   defaultRole: "HEALER",
@@ -42,7 +42,7 @@ describe("buildCharacterSelectOptions", () => {
 
     expect(options).toHaveLength(1);
     expect(options[0]?.value).toBe("c-mist");
-    expect(options[0]?.label).toBe("Synmist-Antonidas");
+    expect(options[0]?.label).toBe("Testmist-Antonidas");
     expect(options[0]?.description).toBe("Healer (default) · Tank/Melee DPS offspec");
   });
 
@@ -51,7 +51,7 @@ describe("buildCharacterSelectOptions", () => {
       characterIds: ["c-mist"],
       offeredRolesByCharacterId: { "c-mist": ["TANK"] },
     }).map((option) => option.toJSON());
-    expect(options[0]?.label).toBe("Synmist-Antonidas");
+    expect(options[0]?.label).toBe("Testmist-Antonidas");
     expect(options[0]?.description).toBe("Tank · Healer/Melee DPS offspec");
   });
 
@@ -106,7 +106,7 @@ const FROSTBOLT = "c2222222-2222-4222-8222-222222222222"; // single-role Mage
 function signupOptionsPayload(overrides: {
   offeredRolesByCharacterId?: Record<string, ("TANK" | "HEALER" | "MELEE_DPS" | "RANGED_DPS" | "DPS")[]>;
   activeCharacterIds?: string[];
-  synmistDefaultRole?: "TANK" | "HEALER" | "MELEE_DPS" | "RANGED_DPS" | "DPS" | null;
+  testmistDefaultRole?: "TANK" | "HEALER" | "MELEE_DPS" | "RANGED_DPS" | "DPS" | null;
 } = {}) {
   return {
     run: {
@@ -120,10 +120,10 @@ function signupOptionsPayload(overrides: {
       eligible: [
         {
           characterId: SYNMIST,
-          characterName: "Synmist",
+          characterName: "Testmist",
           realm: "Antonidas",
           roles: ["TANK", "HEALER", "MELEE_DPS", "RANGED_DPS"],
-          defaultRole: overrides.synmistDefaultRole === undefined ? "HEALER" : overrides.synmistDefaultRole,
+          defaultRole: overrides.testmistDefaultRole === undefined ? "HEALER" : overrides.testmistDefaultRole,
         },
         {
           characterId: FROSTBOLT,
@@ -249,7 +249,7 @@ describe("BOOSTER staging flow (character select -> next -> role select -> confi
     await characterSelect(interaction, api, RUN_ID);
 
     const session = getSession("user-a", RUN_ID)!;
-    // Synmist's class-order first role is TANK (Brewmaster listed first); the
+    // Testmist's class-order first role is TANK (Brewmaster listed first); the
     // seeded role must be its specialization default (HEALER), never that.
     expect(session.offers.get(SYNMIST)).toEqual(["HEALER"]);
   });
@@ -279,7 +279,7 @@ describe("BOOSTER staging flow (character select -> next -> role select -> confi
   });
 
   it("a hybrid Character with no specialization default stays unresolved — never guessed from class order", async () => {
-    const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload({ synmistDefaultRole: null })) });
+    const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload({ testmistDefaultRole: null })) });
     const interaction = fakeInteraction("user-a", [SYNMIST]);
 
     await characterSelect(interaction, api, RUN_ID);
@@ -402,7 +402,7 @@ describe("BOOSTER staging flow (character select -> next -> role select -> confi
   it("Confirm blocks and re-renders when a Character's role is still unresolved, without calling the API", async () => {
     const setCharacterOffers = vi.fn();
     const api = fakeApi({
-      getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload({ synmistDefaultRole: null })),
+      getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload({ testmistDefaultRole: null })),
       setCharacterOffers,
     });
     await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID);
@@ -427,11 +427,11 @@ const signupButton = handleSignupButton as unknown as (
 describe("cross-Run reservation conflicts in the Discord signup flow", () => {
   it("excludes a reservation-blocked character from the select menu but lists it as unavailable", async () => {
     const payload = signupOptionsPayload();
-    payload.booster.eligible = [payload.booster.eligible[1]!]; // Frostbolt only — Synmist is reserved elsewhere
+    payload.booster.eligible = [payload.booster.eligible[1]!]; // Frostbolt only — Testmist is reserved elsewhere
     payload.booster.ineligible = [
       {
         characterId: SYNMIST,
-        characterName: "Synmist",
+        characterName: "Testmist",
         realm: "Antonidas",
         reason: "ALREADY_SELECTED_OTHER_RUN",
         message: "Already selected for Sat 20:00 HC VIP 8/8 Aelira Nightwatch.",
@@ -445,7 +445,7 @@ describe("cross-Run reservation conflicts in the Discord signup flow", () => {
 
     const call = interaction.editReply.mock.calls[0]?.[0];
     expect(call.content).toContain("Unavailable characters");
-    expect(call.content).toContain("Synmist-Antonidas");
+    expect(call.content).toContain("Testmist-Antonidas");
     expect(call.content).toContain("Sat 20:00 HC VIP 8/8 Aelira Nightwatch");
     const menu = call.components[0].components[0].toJSON();
     expect(menu.options.map((option: { value: string }) => option.value)).toEqual([FROSTBOLT]);
@@ -457,7 +457,7 @@ describe("cross-Run reservation conflicts in the Discord signup flow", () => {
     payload.booster.ineligible = [
       {
         characterId: SYNMIST,
-        characterName: "Synmist",
+        characterName: "Testmist",
         realm: "Antonidas",
         reason: "ALREADY_SELECTED_OTHER_RUN",
         message: "Already selected for another run.",
@@ -519,9 +519,9 @@ describe("raid save (lockout) is informational in the Discord signup flow", () =
     const menu = call.components[0].components[0].toJSON();
     // Still selectable — present in the menu, same as any other eligible character.
     expect(menu.options.map((option: { value: string }) => option.value)).toEqual(expect.arrayContaining([SYNMIST, FROSTBOLT]));
-    const synmistOption = menu.options.find((option: { value: string }) => option.value === SYNMIST);
-    expect(synmistOption.description).toContain("8/8");
-    expect(synmistOption.description).toContain("Fully saved");
+    const testmistOption = menu.options.find((option: { value: string }) => option.value === SYNMIST);
+    expect(testmistOption.description).toContain("8/8");
+    expect(testmistOption.description).toContain("Fully saved");
   });
 
   it("puts every Bundle content lockout on the dropdown option, never only HC 0/1", async () => {
@@ -570,12 +570,12 @@ describe("raid save (lockout) is informational in the Discord signup flow", () =
     expect(call.content).not.toContain("Lockouts this reset");
     expect(call.content).not.toContain("Tide: HC 0/1");
     const menu = call.components[0].components[0].toJSON();
-    const synmistOption = menu.options.find((option: { value: string }) => option.value === SYNMIST);
-    expect(synmistOption.description).toContain("Tide");
-    expect(synmistOption.description).toContain("0/1");
-    expect(synmistOption.description).toContain("Venomous Abyss");
-    expect(synmistOption.description).toContain("3/8");
-    expect(synmistOption.description).not.toMatch(/^HC 0\/1/);
+    const testmistOption = menu.options.find((option: { value: string }) => option.value === SYNMIST);
+    expect(testmistOption.description).toContain("Tide");
+    expect(testmistOption.description).toContain("0/1");
+    expect(testmistOption.description).toContain("Venomous Abyss");
+    expect(testmistOption.description).toContain("3/8");
+    expect(testmistOption.description).not.toMatch(/^HC 0\/1/);
   });
 
   it("selecting a saved character still stages only — no DB call until Confirm", async () => {

@@ -2,7 +2,7 @@
 
 How to use the app and the Discord integration as a Booster, Lootbuddy, Raid Lead or Admin. The app is available at <https://manawyrm-boosting.com>.
 
-Screenshots show a test system with sample data, so Battle.net appears as not configured there. The sign-in screenshot still shows an older look.
+Screenshots show a test system with sample data, so Battle.net appears as not configured there.
 
 ## Contents
 

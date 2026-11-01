@@ -247,7 +247,7 @@ export type RosterEmbedData = {
   totalSelected: number;
   /**
    * Boss-specific deviations of the shown slots, one compact line each in
-   * roster order ("Boss 5–6: Synpriest-Antonidas · Healer"). Empty for a Run
+   * roster order ("Boss 5–6: Testpriest-Antonidas · Healer"). Empty for a Run
    * without exceptions; optional so older payloads stay valid.
    */
   bossPlan?: Array<{ member: RosterEmbedMember; plan: string }>;

@@ -137,7 +137,7 @@ function find(result: ReturnType<typeof buildRunPreflight>, id: string) {
 
 describe("buildRunPreflight selected Character checks", () => {
   it("is READY when selected Characters are clean and freshly synced", () => {
-    const result = buildRunPreflight(context([booster({ id: "s1", name: "Synmist" })]));
+    const result = buildRunPreflight(context([booster({ id: "s1", name: "Testmist" })]));
     expect(result.overall).toBe("READY");
     expect(find(result, "selected_schedule_conflicts")?.status).toBe("PASS");
     expect(find(result, "selected_lockouts")?.status).toBe("PASS");
@@ -145,18 +145,18 @@ describe("buildRunPreflight selected Character checks", () => {
   });
 
   it("warns about schedule conflicts without blocking", () => {
-    const result = buildRunPreflight(context([booster({ id: "s1", name: "Synmist", conflicted: true })]));
+    const result = buildRunPreflight(context([booster({ id: "s1", name: "Testmist", conflicted: true })]));
     const item = find(result, "selected_schedule_conflicts");
     expect(item?.status).toBe("WARNING");
-    expect(item?.summary).toContain("Synmist-Antonidas");
+    expect(item?.summary).toContain("Testmist-Antonidas");
     expect(result.overall).toBe("ATTENTION");
   });
 
   it("warns about saved lockouts with the canonical label", () => {
-    const result = buildRunPreflight(context([booster({ id: "s1", name: "Synmist", savedLabel: "HC 6/8 · Saved" })]));
+    const result = buildRunPreflight(context([booster({ id: "s1", name: "Testmist", savedLabel: "HC 6/8 · Saved" })]));
     const item = find(result, "selected_lockouts");
     expect(item?.status).toBe("WARNING");
-    expect(item?.summary).toContain("Synmist-Antonidas (HC 6/8 · Saved)");
+    expect(item?.summary).toContain("Testmist-Antonidas (HC 6/8 · Saved)");
   });
 
   it("warns about stale, never-synced and failed Blizzard syncs", () => {
@@ -196,7 +196,7 @@ describe("buildRunPreflight selected Character checks", () => {
 });
 
 describe("buildRunPreflight ERROR mirrors server Start rules only", () => {
-  const clean = () => [booster({ id: "s1", name: "Synmist" })];
+  const clean = () => [booster({ id: "s1", name: "Testmist" })];
   const errorIds = (result: ReturnType<typeof buildRunPreflight>) =>
     result.checks.filter((item) => item.status === "ERROR").map((item) => item.id);
 
@@ -223,7 +223,7 @@ describe("buildRunPreflight ERROR mirrors server Start rules only", () => {
       context(clean(), {
         raidLeadId: null,
         needsPublishSeed: true,
-        blockers: [{ code: "CHARACTER_INACTIVE", message: "Synmist is inactive.", signupId: "s1" }],
+        blockers: [{ code: "CHARACTER_INACTIVE", message: "Testmist is inactive.", signupId: "s1" }],
       }),
     );
     expect(errorIds(result)).toEqual([]);

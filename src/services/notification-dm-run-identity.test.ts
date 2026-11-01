@@ -42,7 +42,7 @@ const FORMAL = /Season 2 Bundle|The Venomous Abyss|The Tidebound Grotto|The Unbi
 const assignment = {
   participationType: "BOOSTER" as const,
   publishedRole: "HEALER" as const,
-  characterName: "Synmist",
+  characterName: "Testmist",
   characterRealm: null,
   wowClass: "MONK" as const,
 };
@@ -52,13 +52,13 @@ const DMS: Array<{ name: string; text: string; event: string[]; link: string | n
   {
     name: "roster selected",
     text: buildRosterSelectedDmMessage({ run, assignment, runChannelId: null }),
-    event: ["Assignment: Healer · Synmist (Monk)", "You are in the roster."],
+    event: ["Assignment: Healer · Testmist (Monk)", "You are in the roster."],
     link: masked("Open Run", RUN_URL),
   },
   {
     name: "roster update (Character swap)",
     text: buildRosterSelectedDmMessage({ run, assignment, runChannelId: "555", update: true }),
-    event: ["Assignment: Healer · Synmist (Monk)", "Channel: <#555>", "Your character changed — you are still in the roster."],
+    event: ["Assignment: Healer · Testmist (Monk)", "Channel: <#555>", "Your character changed — you are still in the roster."],
     link: masked("Open Run", RUN_URL),
   },
   {
@@ -71,12 +71,12 @@ const DMS: Array<{ name: string; text: string; event: string[]; link: string | n
     name: "roster withdrawn (to the Raid Lead)",
     text: buildRosterWithdrawnDmMessage({
       run,
-      playerName: "Kiri",
-      characterLabel: "Synmist-Antonidas",
+      playerName: "Delta",
+      characterLabel: "Testmist-Antonidas",
       reason: "Sick",
       rosterUrl: EXAMPLE_URL,
     }),
-    event: ["**Kiri** (Synmist-Antonidas) withdrew from the roster.", "Reason: Sick"],
+    event: ["**Delta** (Testmist-Antonidas) withdrew from the roster.", "Reason: Sick"],
     link: masked("Pick a replacement", EXAMPLE_URL),
   },
   {
@@ -85,12 +85,12 @@ const DMS: Array<{ name: string; text: string; event: string[]; link: string | n
       run,
       participationType: "BOOSTER",
       selectedRole: "HEALER",
-      characterName: "Synmist",
+      characterName: "Testmist",
       wowClass: "MONK",
       runChannelId: "555",
       voiceChannelId: "666",
     }),
-    event: ["Assignment: Healer · Synmist (Monk)", "Channel: <#555>", "Voice: <#666>", "Please be online 10 minutes before start."],
+    event: ["Assignment: Healer · Testmist (Monk)", "Channel: <#555>", "Voice: <#666>", "Please be online 10 minutes before start."],
     link: masked("Open Run", RUN_URL),
   },
   {
@@ -119,12 +119,12 @@ const DMS: Array<{ name: string; text: string; event: string[]; link: string | n
     text: buildRosterCharacterSavedDmMessage({
       run,
       audience: "player",
-      characterLabel: "Synmist-Antonidas",
-      playerName: "Kiri",
+      characterLabel: "Testmist-Antonidas",
+      playerName: "Delta",
       bossNames: ["Boss A"],
       url: EXAMPLE_URL,
     }),
-    event: ["**Synmist-Antonidas** is picked for this Run but already killed **Boss A** this raid ID — no loot there."],
+    event: ["**Testmist-Antonidas** is picked for this Run but already killed **Boss A** this raid ID — no loot there."],
     link: masked("Open Run", EXAMPLE_URL),
   },
   {
@@ -132,12 +132,12 @@ const DMS: Array<{ name: string; text: string; event: string[]; link: string | n
     text: buildRosterCharacterSavedDmMessage({
       run,
       audience: "lead",
-      characterLabel: "Synmist-Antonidas",
-      playerName: "Kiri",
+      characterLabel: "Testmist-Antonidas",
+      playerName: "Delta",
       bossNames: ["Boss A"],
       url: EXAMPLE_URL,
     }),
-    event: ["**Synmist-Antonidas** (Kiri) is picked and is now saved on **Boss A**."],
+    event: ["**Testmist-Antonidas** (Delta) is picked and is now saved on **Boss A**."],
     link: masked("Open Roster", EXAMPLE_URL),
   },
   {
@@ -145,12 +145,12 @@ const DMS: Array<{ name: string; text: string; event: string[]; link: string | n
     text: buildRosterCharacterSavedDmMessage({
       run,
       audience: "start",
-      characterLabel: "Synmist-Antonidas",
-      playerName: "Kiri",
+      characterLabel: "Testmist-Antonidas",
+      playerName: "Delta",
       bossNames: ["Boss A"],
       url: EXAMPLE_URL,
     }),
-    event: ["**Synmist-Antonidas** is saved on **Boss A** — no loot from those bosses for you this Run."],
+    event: ["**Testmist-Antonidas** is saved on **Boss A** — no loot from those bosses for you this Run."],
     link: masked("Open Run", EXAMPLE_URL),
   },
   {
@@ -161,13 +161,13 @@ const DMS: Array<{ name: string; text: string; event: string[]; link: string | n
       message: rosterSelectedSavedSummaryWebNotification({
         runId: run.runId,
         entries: [
-          { characterLabel: "Synblast-Antonidas", bossNames: ["Boss B", "Boss C"] },
-          { characterLabel: "Synmist-Antonidas", bossNames: ["Boss A"] },
+          { characterLabel: "Testblast-Antonidas", bossNames: ["Boss B", "Boss C"] },
+          { characterLabel: "Testmist-Antonidas", bossNames: ["Boss A"] },
         ],
       }).message,
       rosterUrl: EXAMPLE_URL,
     }),
-    event: ["2 selected Characters are saved:", "Synblast-Antonidas — Boss B, Boss C", "Synmist-Antonidas — Boss A"],
+    event: ["2 selected Characters are saved:", "Testblast-Antonidas — Boss B, Boss C", "Testmist-Antonidas — Boss A"],
     link: masked("Open Roster", EXAMPLE_URL),
   },
 ];
@@ -229,8 +229,8 @@ describe("Start Run Raid Lead summary DM ending", () => {
   it("entries, blank, [Open Roster](<url>) — no 'Check the roster.' before the link", () => {
     const text = DMS.find((dm) => dm.name === "Start Run saved summary — Raid Lead")!.text;
     expect(text.split("\n").slice(-4)).toEqual([
-      "Synblast-Antonidas — Boss B, Boss C",
-      "Synmist-Antonidas — Boss A",
+      "Testblast-Antonidas — Boss B, Boss C",
+      "Testmist-Antonidas — Boss A",
       "",
       masked("Open Roster", EXAMPLE_URL),
     ]);
@@ -266,7 +266,7 @@ describe("Roster Update acceptance case", () => {
       TITLE,
       META,
       "",
-      "Assignment: Healer · Synmist (Monk)",
+      "Assignment: Healer · Testmist (Monk)",
       "",
       "Your character changed — you are still in the roster.",
     ]);

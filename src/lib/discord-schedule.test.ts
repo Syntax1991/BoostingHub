@@ -28,7 +28,7 @@ function run(partial: Partial<ScheduleRunRenderInput> & Pick<ScheduleRunRenderIn
     difficulty: "HEROIC",
     lootType: "VIP",
     titleCoverage: "8/8",
-    raidLeadDisplay: "UwE",
+    raidLeadDisplay: "IvO",
     runChannelId: null,
     ...partial,
   };
@@ -102,7 +102,7 @@ describe("discord-schedule — channel mention (M–N)", () => {
     expect(line).toContain("🟢 Open");
     expect(line).toContain("<t:");
     expect(line).toContain("Heroic VIP 8/8");
-    expect(line).toContain("UwE");
+    expect(line).toContain("IvO");
     expect(line).not.toContain("<#");
   });
 

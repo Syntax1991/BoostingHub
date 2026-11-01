@@ -45,7 +45,7 @@ type CharacterRow = Page["characters"][number];
 function baseCharacter(overrides: Partial<CharacterRow> = {}): CharacterRow {
   return {
     id: "char-1",
-    name: "Synlight",
+    name: "Testlight",
     realm: "Twisting Nether",
     region: "EU",
     wowClass: "SHAMAN",
@@ -119,7 +119,7 @@ describe("CharactersView weekly availability", () => {
             baseCharacter(),
             baseCharacter({
               id: "char-2",
-              name: "Synmist",
+              name: "Testmist",
               weeklyAvailability: {
                 characterId: "char-2",
                 status: "UNAVAILABLE",
@@ -131,7 +131,7 @@ describe("CharactersView weekly availability", () => {
             }),
             baseCharacter({
               id: "char-3",
-              name: "Synblast",
+              name: "Testblast",
               weeklyAvailability: {
                 characterId: "char-3",
                 status: "UNAVAILABLE",

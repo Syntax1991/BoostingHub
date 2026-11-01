@@ -81,11 +81,11 @@ describe("community timezone authority regression", () => {
       difficulty: "HEROIC",
       lootType: "VIP",
       titleCoverage: "8/8",
-      raidLeadName: "Syntax_1991",
+      raidLeadName: "Gamma_1991",
     });
     expect(title).toContain("HC");
     expect(title).toContain("VIP");
-    expect(title).toContain("Syntax_1991");
+    expect(title).toContain("Gamma_1991");
   });
 
   it("Discord channel name stays community-derived", () => {
@@ -94,10 +94,10 @@ describe("community timezone authority regression", () => {
       difficulty: "HEROIC",
       lootType: "VIP",
       coverage: "8of8",
-      raidLeadChannelName: "Syntax_1991",
+      raidLeadChannelName: "Gamma_1991",
     });
     expect(name.length).toBeGreaterThan(0);
-    expect(name).toMatch(/hc|vip|syntax/i);
+    expect(name).toMatch(/hc|vip|gamma/i);
   });
 
   it("raid-ID week classification ignores viewer timezone", () => {

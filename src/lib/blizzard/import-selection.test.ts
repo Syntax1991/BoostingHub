@@ -61,9 +61,9 @@ describe("import-rules", () => {
 
 describe("import-selection helpers", () => {
   const rows = [
-    candidate({ name: "Synlight", status: "import", wowClass: "PALADIN", level: 90 }),
+    candidate({ name: "Testlight", status: "import", wowClass: "PALADIN", level: 90 }),
     candidate({
-      name: "Synblast",
+      name: "Testblast",
       status: "link",
       wowClass: "SHAMAN",
       realm: "Blackrock",
@@ -89,14 +89,14 @@ describe("import-selection helpers", () => {
   });
 
   it("Select all eligible excludes level <90 and blocked states", () => {
-    expect(eligibleCandidateIds(rows)).toEqual(["Synlight", "Synblast"]);
+    expect(eligibleCandidateIds(rows)).toEqual(["Testlight", "Testblast"]);
     expect(isSelectableImportCandidate(rows[2]!)).toBe(false);
   });
 
   it("filters by name, realm, and class", () => {
     expect(filterImportCandidates(rows, "syn")).toHaveLength(3);
-    expect(filterImportCandidates(rows, "blackrock").map((row) => row.name)).toEqual(["Synblast"]);
-    expect(filterImportCandidates(rows, "paladin").map((row) => row.name)).toEqual(["Synlight"]);
+    expect(filterImportCandidates(rows, "blackrock").map((row) => row.name)).toEqual(["Testblast"]);
+    expect(filterImportCandidates(rows, "paladin").map((row) => row.name)).toEqual(["Testlight"]);
   });
 
   it("prefers user specialization over suggestion", () => {

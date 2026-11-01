@@ -24,9 +24,9 @@ describe("formatScheduleShareRunDescription", () => {
 
 describe("formatCommunityScheduleShare", () => {
   it("matches the golden Management Discord fixture", () => {
-    const leadA = "162111367837515777";
-    const leadB = "797170803069550633";
-    const role = "1502639997688221927";
+    const leadA = "162111360000000777";
+    const leadB = "797170800000000633";
+    const role = "1502639900000000927";
     const result = formatCommunityScheduleShare({
       managementRoleId: role,
       slots: [

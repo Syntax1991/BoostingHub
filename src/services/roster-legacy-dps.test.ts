@@ -278,7 +278,7 @@ describe("historic generic DPS roster assignment", () => {
   it("requires an explicit concrete role for ambiguous historic DPS and blocks publish until chosen", async () => {
     const runId = await createOpenRun(1);
     const signupId = await createHistoricSignup(runId, {
-      name: "Synblast",
+      name: "Testblast",
       wowClass: "SHAMAN",
       specialization: "Restoration",
       primaryRole: "HEALER",
@@ -299,7 +299,7 @@ describe("historic generic DPS roster assignment", () => {
       }),
     ).rejects.toMatchObject({
       code: "INVALID_ROSTER_SELECTION",
-      message: "Choose Melee or Ranged DPS for Synblast-Antonidas.",
+      message: "Choose Melee or Ranged DPS for Testblast-Antonidas.",
     });
 
     await rosterService.saveDraftSelection(thorne, {
@@ -320,7 +320,7 @@ describe("historic generic DPS roster assignment", () => {
       }),
     ).rejects.toMatchObject({
       code: "ROSTER_VALIDATION_FAILED",
-      message: "Choose Melee or Ranged DPS for Synblast-Antonidas.",
+      message: "Choose Melee or Ranged DPS for Testblast-Antonidas.",
     });
 
     view = await rosterService.getRosterManagementView(thorne, runId);

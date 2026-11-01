@@ -148,7 +148,7 @@ function renderUserList(character: CharacterRow): string {
 function details(overrides: Partial<Details>): Details {
   return {
     id: "char-1",
-    name: "Syndraco",
+    name: "Testdraco",
     realm: "Antonidas",
     region: "EU",
     wowClass: "EVOKER",
@@ -286,7 +286,7 @@ describe("character offspec display", () => {
   it("2. user list shows one offspec", () => {
     const html = renderUserList(
       userCharacter({
-        name: "Synblast",
+        name: "Testblast",
         wowClass: "SHAMAN",
         specialization: "Restoration",
         primaryRole: "HEALER",
@@ -301,7 +301,7 @@ describe("character offspec display", () => {
   it("3. user list uses Offspecs and catalog order", () => {
     const html = renderUserList(
       userCharacter({
-        name: "Synvoid",
+        name: "Testvoid",
         wowClass: "PRIEST",
         specialization: "Holy",
         primaryRole: "HEALER",
@@ -333,13 +333,13 @@ describe("character offspec display", () => {
   it("5. admin list shows playable specs without an edit control", () => {
     const html = renderAdminList(
       adminRow({
-        name: "Synblast",
+        name: "Testblast",
         wowClass: "SHAMAN",
         specialization: "Restoration",
         playableSpecs: ["Elemental"],
       }),
     );
-    expect(html).toContain("Synblast");
+    expect(html).toContain("Testblast");
     expect(html).toContain("Restoration · Offspec: Elemental");
     expect(html).not.toContain("Edit");
   });
@@ -347,7 +347,7 @@ describe("character offspec display", () => {
   it("6. admin detail shows the same configured offspecs", () => {
     const html = renderAdminDetail(
       adminRow({
-        name: "Synvoid",
+        name: "Testvoid",
         wowClass: "PRIEST",
         specialization: "Holy",
         playableSpecs: ["Shadow", "Discipline"],
@@ -360,7 +360,7 @@ describe("character offspec display", () => {
 
   it("7. a playable row that repeats the primary spec is omitted", () => {
     const character = userCharacter({
-      name: "Synblast",
+      name: "Testblast",
       wowClass: "SHAMAN",
       specialization: "Restoration",
       primaryRole: "HEALER",
@@ -400,7 +400,7 @@ describe("character offspec display", () => {
     const before = resolveSignupAssignableRoles(signup);
     const html = renderUserList(
       userCharacter({
-        name: "Synblast",
+        name: "Testblast",
         wowClass: "SHAMAN",
         specialization: "Restoration",
         primaryRole: "HEALER",

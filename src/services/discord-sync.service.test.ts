@@ -297,9 +297,9 @@ describe("discordSyncService.getSignupEmbedData", () => {
     createdRunIds.push(roleRunId);
     await runService.openRun(lead, roleRunId);
 
-    // "Synblast" case: one User, several healer characters — one of them also offers DPS.
-    const healAlt1 = await createCharacter(ids.extra, "Synblast", "PRIEST", "Holy", "HEALER");
-    const healAlt2 = await createCharacter(ids.extra, "Synlight", "PRIEST", "Discipline", "HEALER");
+    // "Testblast" case: one User, several healer characters — one of them also offers DPS.
+    const healAlt1 = await createCharacter(ids.extra, "Testblast", "PRIEST", "Holy", "HEALER");
+    const healAlt2 = await createCharacter(ids.extra, "Testlight", "PRIEST", "Discipline", "HEALER");
     const healAlt3 = await createCharacter(ids.extra, "Synpal", "PALADIN", "Holy", "HEALER");
     for (const characterId of [healAlt1, healAlt2, healAlt3]) {
       await createSignup({ runId: roleRunId, userId: ids.extra, characterId, participationType: "BOOSTER", role: "HEALER" });
@@ -459,7 +459,7 @@ describe("discordSyncService.getSignupEmbedData", () => {
     createdRunIds.push(freezeRunId);
     await runService.openRun(lead, freezeRunId);
 
-    const shamanId = await createCharacter(ids.healer, "SynblastEmbed", "PRIEST", "Holy", "HEALER");
+    const shamanId = await createCharacter(ids.healer, "TestblastEmbed", "PRIEST", "Holy", "HEALER");
     await createSignup({
       runId: freezeRunId,
       userId: ids.healer,
@@ -2775,7 +2775,7 @@ describe("listSyncWork — voiceChannels lane", () => {
 
   it("PUBLISHED → none; started by an ADMIN → PROVISION `Raid with <assigned Raid Lead>`; recorded → RECONCILE; terminal → RETIRE_IF_EMPTY", async () => {
     try {
-      await setLeadName("Syntax");
+      await setLeadName("Gamma");
       const id = await publishedRun();
       expect(await voiceItem(id)).toBeUndefined();
 
@@ -2783,7 +2783,7 @@ describe("listSyncWork — voiceChannels lane", () => {
       expect(await voiceItem(id)).toEqual({
         runId: id,
         existingVoiceChannelId: null,
-        desiredVoiceChannelName: "Raid with Syntax",
+        desiredVoiceChannelName: "Raid with Gamma",
         action: "PROVISION",
       });
 

@@ -101,8 +101,8 @@ function player(role: CharacterRole | null, observations: AuditObservationFact[]
   const playedSpec = role ? PLAYED_SPEC[role] : undefined;
   return {
     id: "p1",
-    displayName: "Synlight",
-    characterName: "Synlight",
+    displayName: "Testlight",
+    characterName: "Testlight",
     characterRealm: "Blackhand",
     wowClass: role === "TANK" || role === "MELEE_DPS" ? "WARRIOR" : "PRIEST",
     rosterRole: role,
@@ -538,7 +538,7 @@ describe("food, runes, weapon enhancement and gear readiness", () => {
   });
 });
 
-describe("played role — the role in the log, not the roster (Synlight: roster Healer, played DPS)", () => {
+describe("played role — the role in the log, not the roster (Testlight: roster Healer, played DPS)", () => {
   const F2 = fight({ id: "f2", startMs: 700_000, endMs: 1_300_000 });
   const priest = (rosterRole: CharacterRole | null, observations: AuditObservationFact[]): AuditPlayerFact => ({
     ...player(null, observations),
@@ -628,21 +628,21 @@ describe("played role — the role in the log, not the roster (Synlight: roster 
   });
 });
 
-describe("Light's Potential from a Potion Cauldron (production: Synlight, Retribution)", () => {
+describe("Light's Potential from a Potion Cauldron (production: Testlight, Retribution)", () => {
   // WCL abilityGameID of Light's Potential — the cauldron's "Fleeting Light's Potential" casts the same spell.
   const LIGHTS_POTENTIAL = 1236616;
   const RETRIBUTION = 70;
   const HOLY_PALADIN = 65;
   const lightsPotential = (fightId: string, ms: number) =>
     cast(fightId, ms, LIGHTS_POTENTIAL, findConsumableBySpellId(LIGHTS_POTENTIAL)!.category);
-  const synlight = (observations: AuditObservationFact[]): AuditPlayerFact => ({
+  const testlight = (observations: AuditObservationFact[]): AuditPlayerFact => ({
     ...player(null, observations),
     wowClass: "PALADIN",
     rosterRole: "HEALER",
   });
 
   it("played Retribution + Light's Potential in the kill → DPS, combat potion PASS, shown by name", () => {
-    const view = evaluatePlayerConsumables(synlight([withSpec(combatant("f1"), RETRIBUTION), lightsPotential("f1", 1_100)]), [F1]);
+    const view = evaluatePlayerConsumables(testlight([withSpec(combatant("f1"), RETRIBUTION), lightsPotential("f1", 1_100)]), [F1]);
     expect(view.playedRole).toBe("MELEE_DPS");
     expect(view.combatPotion).toMatchObject({ status: "PASS", missing: [], killFightsChecked: 1 });
     expect(view.combatPotion.uses.map((use) => [use.category, use.spellName, use.atFightMs])).toEqual([
@@ -651,7 +651,7 @@ describe("Light's Potential from a Potion Cauldron (production: Synlight, Retrib
   });
 
   it("a Mana Potion still does not satisfy a Retribution kill", () => {
-    const view = evaluatePlayerConsumables(synlight([withSpec(combatant("f1"), RETRIBUTION), manaPot("f1", 81_000)]), [F1]);
+    const view = evaluatePlayerConsumables(testlight([withSpec(combatant("f1"), RETRIBUTION), manaPot("f1", 81_000)]), [F1]);
     expect(view.combatPotion.status).toBe("WARNING");
     expect(view.combatPotion.missing.map((ref) => ref.fightId)).toEqual(["f1"]);
   });
@@ -659,7 +659,7 @@ describe("Light's Potential from a Potion Cauldron (production: Synlight, Retrib
   it("Holy kill with a Mana Potion + Retribution kill with Light's Potential → both judged per fight, PASS", () => {
     const F2 = fight({ id: "f2", startMs: 700_000, endMs: 1_300_000 });
     const view = evaluatePlayerConsumables(
-      synlight([
+      testlight([
         withSpec(combatant("f1"), HOLY_PALADIN),
         manaPot("f1", 81_000),
         withSpec(combatant("f2", 700_000), RETRIBUTION),
@@ -784,7 +784,7 @@ describe("raid wipe (boosting-team collapse): deaths are shown, nothing missing 
   const evaluate = (observations: AuditObservationFact[], collapse: ReadonlyMap<string, number> | undefined = onsets) =>
     evaluatePlayerConsumables(player("DPS", observations), [WIPE], undefined, undefined, { defensivesRecorded: true, wipeCollapseOnsets: collapse });
 
-  it("A. Synlight-like: death +115.2 s during the collapse, no Healing Potion / Healthstone → not judged, zero warnings", () => {
+  it("A. Testlight-like: death +115.2 s during the collapse, no Healing Potion / Healthstone → not judged, zero warnings", () => {
     const view = evaluate([combatant("w1"), death("w1", 115_200)]);
     expect(view.deaths[0]).toMatchObject({
       fightResult: "WIPE",

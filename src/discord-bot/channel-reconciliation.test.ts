@@ -80,12 +80,12 @@ describe("reconcileExistingRunChannel — category movement", () => {
       envConfigured,
       item({
         targetBucket: "ARCHIVE",
-        desiredChannelName: "closed-sat-2200-hc-vip-7of9-titan",
+        desiredChannelName: "closed-sat-2200-hc-vip-7of9-alpha",
         retireChannel: true,
       }),
     );
 
-    expect(channel.setName).toHaveBeenCalledWith("closed-sat-2200-hc-vip-7of9-titan");
+    expect(channel.setName).toHaveBeenCalledWith("closed-sat-2200-hc-vip-7of9-alpha");
     expect(channel.setParent).not.toHaveBeenCalled();
     expect(result).toEqual({ status: "ok", channelId: "chan-1" });
   });
@@ -105,37 +105,37 @@ describe("reconcileExistingRunChannel — name drift", () => {
     const result = await reconcileExistingRunChannel(
       fetcherFor(channel),
       envConfigured,
-      item({ desiredChannelName: "sat-2200-hc-syntax" }),
+      item({ desiredChannelName: "sat-2200-hc-gamma" }),
     );
 
-    expect(channel.setName).toHaveBeenCalledWith("sat-2200-hc-syntax");
+    expect(channel.setName).toHaveBeenCalledWith("sat-2200-hc-gamma");
     expect(channel.setName).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ status: "ok", channelId: "chan-1" });
   });
 
   it("Mythic abbreviation drift: renames -my- to -mythic- in place on the same channel id", async () => {
-    const channel = fakeChannel({ name: "fri-2015-my-vip-8of8-uwe", parentId: ACTIVE_CATEGORY });
+    const channel = fakeChannel({ name: "fri-2015-my-vip-8of8-ivo", parentId: ACTIVE_CATEGORY });
     const result = await reconcileExistingRunChannel(
       fetcherFor(channel),
       envConfigured,
-      item({ desiredChannelName: "fri-2015-mythic-vip-8of8-uwe" }),
+      item({ desiredChannelName: "fri-2015-mythic-vip-8of8-ivo" }),
     );
 
-    expect(channel.setName).toHaveBeenCalledWith("fri-2015-mythic-vip-8of8-uwe");
+    expect(channel.setName).toHaveBeenCalledWith("fri-2015-mythic-vip-8of8-ivo");
     expect(channel.setName).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ status: "ok", channelId: "chan-1" });
   });
 
   it("name already correct: setName is not called", async () => {
-    const channel = fakeChannel({ name: "sat-2200-hc-syntax", parentId: ACTIVE_CATEGORY });
-    await reconcileExistingRunChannel(fetcherFor(channel), envConfigured, item({ desiredChannelName: "sat-2200-hc-syntax" }));
+    const channel = fakeChannel({ name: "sat-2200-hc-gamma", parentId: ACTIVE_CATEGORY });
+    await reconcileExistingRunChannel(fetcherFor(channel), envConfigured, item({ desiredChannelName: "sat-2200-hc-gamma" }));
 
     expect(channel.setName).not.toHaveBeenCalled();
   });
 
   it("already fully correct: neither setName nor setParent is called (full idempotency)", async () => {
-    const channel = fakeChannel({ name: "sat-2200-hc-syntax", parentId: ACTIVE_CATEGORY });
-    await reconcileExistingRunChannel(fetcherFor(channel), envConfigured, item({ desiredChannelName: "sat-2200-hc-syntax" }));
+    const channel = fakeChannel({ name: "sat-2200-hc-gamma", parentId: ACTIVE_CATEGORY });
+    await reconcileExistingRunChannel(fetcherFor(channel), envConfigured, item({ desiredChannelName: "sat-2200-hc-gamma" }));
 
     expect(channel.setName).not.toHaveBeenCalled();
     expect(channel.setParent).not.toHaveBeenCalled();
@@ -968,14 +968,14 @@ describe("planWeekSectionOrder — BoostingHub and manual Run channels sorted to
   // Production snapshot 2026-09-24: BoostingHub's Fri 22:15 channel sat above the manual Fri 13:00 one.
   const productionChildren = [
     named(CURRENT_MARKER, 0, "💰-current-id"),
-    named("bh-fri-2215", 1, "fri-2215-hc-vip-7of9-uwe"),
+    named("bh-fri-2215", 1, "fri-2215-hc-vip-7of9-ivo"),
     named("m-fri-1300", 2, "fri-1300-nm-vip-9of9-locheia"),
     named("m-fri-1530", 3, "fri-1530-nm-vip-9of9-locheia"),
     named("m-fri-2000", 4, "fri-2000-nm-vip-9of9-alantra"),
     named("m-sat-1300", 5, "sat-1300-nm-vip-9of9-locheia"),
-    named("m-sun-2330", 6, "sun-2330-nm-vip-9of9-uwe"),
+    named("m-sun-2330", 6, "sun-2330-nm-vip-9of9-ivo"),
     named("m-mon-1930", 7, "mon-1930-hc-vip-7of9-alantra"),
-    named("m-tue-2330", 8, "tue-2330-hc-vip-7of9-uwe"),
+    named("m-tue-2330", 8, "tue-2330-hc-vip-7of9-ivo"),
     named(NEXT_MARKER, 9, "💫-next-id"),
   ];
   // Fri 2026-09-25 22:15 Europe/Berlin (CEST) = 20:15Z.
@@ -1055,8 +1055,8 @@ describe("planWeekSectionOrder — BoostingHub and manual Run channels sorted to
   it("ties (same time): BoostingHub channel first, then previous order", () => {
     const children = [
       named(CURRENT_MARKER, 0, "current"),
-      named("m-dup", 1, "fri-2215-hc-vip-7of9-uwe"),
-      named("bh-fri-2215", 2, "fri-2215-hc-vip-7of9-uwe"),
+      named("m-dup", 1, "fri-2215-hc-vip-7of9-ivo"),
+      named("bh-fri-2215", 2, "fri-2215-hc-vip-7of9-ivo"),
       named(NEXT_MARKER, 3, "next"),
     ];
     expect(finalIds(children, [bhFri2215])).toEqual([CURRENT_MARKER, "bh-fri-2215", "m-dup", NEXT_MARKER]);

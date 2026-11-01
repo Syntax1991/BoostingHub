@@ -58,7 +58,7 @@ describe("DashboardView", () => {
                 runId: "run-1",
                 runTitle: "Friday Heroic",
                 scheduledStartAt: "2026-10-10T20:00:00.000Z",
-                characterName: "Synlight",
+                characterName: "Testlight",
                 publishedRole: "HEALER",
                 messages: ["Another Manawyrm Hub Run: Other Run at Fri 10/10/2026 21:00"],
               },
@@ -77,7 +77,7 @@ describe("DashboardView", () => {
                   signupId: "s1",
                   participationType: "BOOSTER",
                   characterId: "c1",
-                  characterName: "Synlight",
+                  characterName: "Testlight",
                   characterRealm: "Ravencrest",
                   publishedRole: "HEALER",
                   isBackup: false,
@@ -100,7 +100,7 @@ describe("DashboardView", () => {
         } as never,
       }),
     );
-    expect(html).toContain("Synlight-Ravencrest");
+    expect(html).toContain("Testlight-Ravencrest");
     expect(html).toContain("Healer");
     expect(html).toContain("Schedule conflict");
     expect(html).toContain("Pending");

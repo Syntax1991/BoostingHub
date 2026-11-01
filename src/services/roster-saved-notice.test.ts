@@ -60,7 +60,7 @@ function commitment(overrides: Partial<SavedNoticeCommitment["run"]> = {}): Save
     signupId: "signup-1",
     run: {
       id: "run-1",
-      title: "Sat 21:30 HC VIP 8/8 UwE",
+      title: "Sat 21:30 HC VIP 8/8 IvO",
       status: "PUBLISHED",
       difficulty: "HEROIC",
       scheduledStartAt: START,
@@ -86,7 +86,7 @@ describe("planSavedNotices", () => {
       {
         signupId: "signup-1",
         runId: "run-1",
-        runTitle: "Sat 21:30 HC VIP 8/8 UwE",
+        runTitle: "Sat 21:30 HC VIP 8/8 IvO",
         raidLeadId: "lead-1",
         bosses: BOSSES.slice(0, 3),
       },
@@ -193,8 +193,8 @@ describe("planned bosses — N/M = the first N bosses in authoritative order", (
 
 describe("Start Run Raid Lead summary — copy, DM, idempotency key", () => {
   const entries = [
-    { characterLabel: "Synmist-Antonidas", bossNames: ["Boss A"] },
-    { characterLabel: "Synblast-Antonidas", bossNames: ["Boss B", "Boss C"] },
+    { characterLabel: "Testmist-Antonidas", bossNames: ["Boss A"] },
+    { characterLabel: "Testblast-Antonidas", bossNames: ["Boss B", "Boss C"] },
   ];
 
   it("one grouped web notification linking the Roster tab", () => {
@@ -202,8 +202,8 @@ describe("Start Run Raid Lead summary — copy, DM, idempotency key", () => {
       title: "Selected Characters are saved",
       message: [
         "2 selected Characters are saved:",
-        "Synmist-Antonidas — Boss A",
-        "Synblast-Antonidas — Boss B, Boss C",
+        "Testmist-Antonidas — Boss A",
+        "Testblast-Antonidas — Boss B, Boss C",
       ].join("\n"),
       href: runDetailPath("run-1", "roster"),
     });
@@ -232,7 +232,7 @@ describe("Start Run Raid Lead summary — copy, DM, idempotency key", () => {
     expect(lines.filter((line) => /^https?:\/\//.test(line))).toEqual([]);
 
     // Any copy punctuation is just text: other separators are delivered verbatim, nothing is lost or split.
-    const edited = "2 selected Characters are saved:\nSynmist-Antonidas – Boss A\nSyn: Blast — Boss B, Boss — C\nCheck the roster.";
+    const edited = "2 selected Characters are saved:\nTestmist-Antonidas – Boss A\nSyn: Blast — Boss B, Boss — C\nCheck the roster.";
     const editedDm = buildRosterSelectedSavedSummaryDmMessage({
       run: { runId: "run-1", contentTitle: "Venom", scheduledStartAt: START, difficulty: "HEROIC", lootType: "VIP" },
       message: edited,

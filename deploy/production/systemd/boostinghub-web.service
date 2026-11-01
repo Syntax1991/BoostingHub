@@ -7,7 +7,7 @@
 #   systemctl daemon-reload
 #   systemctl enable --now boostinghub-web.service    # initial setup only
 #
-# Binds to 127.0.0.1 only — Plesk/Apache terminates TLS and proxies :443 → :3000.
+# Binds to 127.0.0.1 only — the reverse proxy terminates TLS and proxies :443 → :3000.
 # Logs: journalctl -u boostinghub-web -f
 
 [Unit]

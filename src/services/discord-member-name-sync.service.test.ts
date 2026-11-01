@@ -130,17 +130,17 @@ async function cleanup() {
 
 beforeAll(async () => {
   await cleanup();
-  await createUser(ids.nick, "Simon");
+  await createUser(ids.nick, "Epsilon");
   await createUser(ids.global, "Old Global");
   await createUser(ids.username, "Old Username");
   await createUser(ids.hyphen, "Old Hyphen");
-  await createUser(ids.departed, "Departed", { discordGuildNickname: "Dep-Antonidas", discordGlobalName: "Depy" });
+  await createUser(ids.departed, "Departed", { discordGuildNickname: "Dep-Antonidas", discordGlobalName: "Zeta" });
   await createUser(ids.outage, "Kept Name", { discordGuildNickname: "Kept", discordGlobalName: "Kept Global" });
   await createUser(ids.lead, "Lead Old", { accountRole: "RAID_LEAD" });
   await createUser(ids.outsider, "Outsider");
   // Known realms come from stored Characters.
-  await createCharacter(ids.charNick, ids.nick, "Syntax", "Antonidas");
-  await createCharacter(ids.charTwisting, ids.global, "Kiri", "Twisting Nether");
+  await createCharacter(ids.charNick, ids.nick, "Gamma", "Antonidas");
+  await createCharacter(ids.charTwisting, ids.global, "Delta", "Twisting Nether");
   const now = new Date().toISOString();
   await orm.Run.create({
     id: ids.run,
@@ -170,9 +170,9 @@ beforeEach(() => {
   fetchMock.mockImplementation(async (url: URL | string) => respond(String(url)));
   vi.stubGlobal("fetch", fetchMock);
   vi.stubEnv("DISCORD_BOT_TOKEN", "test-bot-token");
-  vi.stubEnv("DISCORD_GUILD_ID", "1526980319826280509");
-  vi.stubEnv("DISCORD_BOOSTER_ROLE_ID", "1527022823103791104");
-  vi.stubEnv("DISCORD_LOOTBUDDY_ROLE_ID", "1527024325306220704");
+  vi.stubEnv("DISCORD_GUILD_ID", "1526980300000000509");
+  vi.stubEnv("DISCORD_BOOSTER_ROLE_ID", "1527022800000000104");
+  vi.stubEnv("DISCORD_LOOTBUDDY_ROLE_ID", "1527024300000000704");
   vi.stubEnv("DEV_ACCOUNT_BOOTSTRAP_ENABLED", "false");
 });
 
@@ -187,24 +187,24 @@ afterAll(async () => {
 
 describe("login: one guild member read refreshes roles and the displayed name", () => {
   it("server nickname wins; a known realm suffix is dropped; raw names are stored", async () => {
-    members.set(discordIdOf(ids.nick), { nick: "Syntax-Antonidas", global_name: "Simon", username: "syntax1991" });
+    members.set(discordIdOf(ids.nick), { nick: "Gamma-Antonidas", global_name: "Epsilon", username: "gamma1991" });
     await syncDiscordRoleAccess({ userId: ids.nick });
     expect(await stored(ids.nick)).toMatchObject({
-      name: "Syntax",
-      discordGuildNickname: "Syntax-Antonidas",
-      discordGlobalName: "Simon",
-      discordUsername: "syntax1991",
+      name: "Gamma",
+      discordGuildNickname: "Gamma-Antonidas",
+      discordGlobalName: "Epsilon",
+      discordUsername: "gamma1991",
     });
     expect((await stored(ids.nick)).discordNameSyncedAt).not.toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1); // roles and name from the same request
   });
 
   it("no server nickname → global display name (multi-word realm suffix dropped); none → username", async () => {
-    members.set(discordIdOf(ids.global), { nick: null, global_name: "Kiri-TwistingNether", username: "kiri" });
+    members.set(discordIdOf(ids.global), { nick: null, global_name: "Delta-TwistingNether", username: "delta" });
     members.set(discordIdOf(ids.username), { nick: null, global_name: null, username: "plainuser" });
     await syncDiscordRoleAccess({ userId: ids.global });
     await syncDiscordRoleAccess({ userId: ids.username });
-    expect(await nameOf(ids.global)).toBe("Kiri");
+    expect(await nameOf(ids.global)).toBe("Delta");
     expect(await nameOf(ids.username)).toBe("plainuser");
   });
 
@@ -223,7 +223,7 @@ describe("login: one guild member read refreshes roles and the displayed name", 
   it("left the guild (404): server nickname cleared, last known global name shown", async () => {
     members.set(discordIdOf(ids.departed), null);
     await syncDiscordRoleAccess({ userId: ids.departed });
-    expect(await stored(ids.departed)).toMatchObject({ name: "Depy", discordGuildNickname: null, discordGlobalName: "Depy" });
+    expect(await stored(ids.departed)).toMatchObject({ name: "Zeta", discordGuildNickname: null, discordGlobalName: "Zeta" });
   });
 
   it("Discord unreachable: nothing changes — last known name and raw names stay", async () => {
@@ -244,20 +244,20 @@ describe("bot refresh: people of upcoming Runs, at most once a day, never while 
   it("refreshes the Raid Lead and signed-up players of upcoming Runs only; re-titles the Raid Lead's Run", async () => {
     await orm.User.where({ id: ids.nick }).update({ discordNameSyncedAt: null });
     await orm.User.where({ id: ids.global }).update({ discordNameSyncedAt: null });
-    members.set(discordIdOf(ids.lead), { nick: "Titan-Antonidas", username: "titan" });
-    members.set(discordIdOf(ids.nick), { nick: "Syn", username: "syntax1991" });
-    members.set(discordIdOf(ids.global), { nick: null, global_name: "Kiri", username: "kiri" });
+    members.set(discordIdOf(ids.lead), { nick: "Alpha-Antonidas", username: "alpha" });
+    members.set(discordIdOf(ids.nick), { nick: "Syn", username: "gamma1991" });
+    members.set(discordIdOf(ids.global), { nick: null, global_name: "Delta", username: "delta" });
     members.set(discordIdOf(ids.outsider), { nick: "Never Read", username: "out" });
 
     const result = await discordMemberNameSyncService.runDuePass(REFRESH_NOW);
     expect(result).toMatchObject({ status: "DONE", stoppedOnError: false });
-    expect(await nameOf(ids.lead)).toBe("Titan");
+    expect(await nameOf(ids.lead)).toBe("Alpha");
     expect(await nameOf(ids.nick)).toBe("Syn");
     expect(await nameOf(ids.outsider)).toBe("Outsider");
     const read = fetchMock.mock.calls.map(([url]) => decodeURIComponent(String(url).split("/members/")[1] ?? ""));
     expect(read).not.toContain(discordIdOf(ids.outsider));
     // The Raid Lead's not-yet-started Run follows the new name.
-    expect(((await orm.Run.where({ id: ids.run }).first()) as { title: string }).title.endsWith(" Titan")).toBe(true);
+    expect(((await orm.Run.where({ id: ids.run }).first()) as { title: string }).title.endsWith(" Alpha")).toBe(true);
 
     // Fresh names are not read again within a day.
     fetchMock.mockClear();
@@ -270,7 +270,7 @@ describe("bot refresh: people of upcoming Runs, at most once a day, never while 
     members.set(discordIdOf(ids.lead), "fail");
     const result = await discordMemberNameSyncService.runDuePass(REFRESH_NOW);
     expect(result).toMatchObject({ status: "DONE", refreshed: 0, stoppedOnError: true });
-    expect(await nameOf(ids.lead)).toBe("Titan");
+    expect(await nameOf(ids.lead)).toBe("Alpha");
   });
 
   it("Group by Player shows the resolved names, alphabetically, grouped by user id (never by name)", async () => {
@@ -282,7 +282,7 @@ describe("bot refresh: people of upcoming Runs, at most once a day, never while 
       assignableRoles: [],
     }));
     const groups = groupSignupTilesByPlayer(tiles);
-    expect(groups.map((group) => group.label)).toEqual(["Kiri", "Syn"]);
+    expect(groups.map((group) => group.label)).toEqual(["Delta", "Syn"]);
     expect(groups.map((group) => group.key)).toEqual([`player:${ids.global}`, `player:${ids.nick}`]);
     // Same name for two players never merges them.
     await orm.User.where({ id: ids.global }).update({ name: "Syn" });

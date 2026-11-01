@@ -20,7 +20,7 @@ export type RosterDiffMember = {
   participationType: ParticipationType;
   /** Assigned Booster role; null for Lootbuddies. */
   role: CharacterRole | null;
-  /** e.g. "Synmist-Antonidas", or the Lootbuddy class label. */
+  /** e.g. "Testmist-Antonidas", or the Lootbuddy class label. */
   label: string;
 };
 

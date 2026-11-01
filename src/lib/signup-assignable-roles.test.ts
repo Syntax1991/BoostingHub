@@ -159,8 +159,8 @@ describe("resolveSignupAssignableRoles — historic generic DPS", () => {
       playableSpecs: [] as string[],
     };
     expect(availableRoles(restoOnly)).toEqual(["HEALER"]);
-    expect(() => assertOfferedRolesAllowed(restoOnly, ["MELEE_DPS"], "Synblast")).toThrow(/not configured/);
-    expect(() => assertOfferedRolesAllowed(restoOnly, ["DPS"], "Synblast")).toThrow(/Generic DPS/);
+    expect(() => assertOfferedRolesAllowed(restoOnly, ["MELEE_DPS"], "Testblast")).toThrow(/not configured/);
+    expect(() => assertOfferedRolesAllowed(restoOnly, ["DPS"], "Testblast")).toThrow(/Generic DPS/);
     expect(
       resolve({
         offeredRoles: ["HEALER"],
@@ -269,7 +269,7 @@ describe("resolveEffectivePersistedSelectedRole", () => {
     ).toBe("MELEE_DPS");
   });
 
-  it("keeps Synblast's stored DPS intent as Ranged, not Healer", () => {
+  it("keeps Testblast's stored DPS intent as Ranged, not Healer", () => {
     expect(
       resolveEffectivePersistedSelectedRole({
         storedSelectedRole: "DPS",

@@ -84,7 +84,7 @@ export const CONSUMABLE_CATALOG: readonly ConsumableCatalogEntry[] = [
   // Used by every Tank/DPS spec in the sample.
   { category: "DAMAGE_POTION", spellId: 1236994, name: "Potion of Recklessness", expansion: "MIDNIGHT" },
   // Primary-stat potion (items 241308/241309, Fleeting 245897/245898). 60 casts per
-  // raid in the cauldron reports 6QX9gcpjNTMdBtVR / WV3BMCHnLvZfb9Yd.
+  // raid in the two production cauldron reports.
   { category: "DAMAGE_POTION", spellId: 1236616, name: "Light's Potential", expansion: "MIDNIGHT" },
   // Damage-proc potion (items 241296/241297, Fleeting 245900/245901) — the fourth
   // Midnight combat potion; not seen in the sample logs yet, verified from game data.

@@ -102,7 +102,7 @@ describe("renderRunStartMessageText", () => {
     expect(text).toContain("<@222>");
     expect(text.endsWith("**LFG Manawyrm write your discord name in the note!**")).toBe(true);
     expect(text.endsWith(formatFinalSetupLfgLine())).toBe(true);
-    expect(text).not.toContain("Kiri");
+    expect(text).not.toContain("Delta");
     expect(text).not.toContain("Krum");
     expect(text).not.toContain("Duskmaven");
   });

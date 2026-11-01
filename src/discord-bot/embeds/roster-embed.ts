@@ -63,7 +63,7 @@ function memberList(
 /**
  * One compact line per slot that deviates on some bosses: who (mention, else
  * the slot Character) and the grouped plan, e.g.
- * `<@id> — Venom 5–6: Synpriest-Antonidas · Healer; Tide 1: Ranged DPS`.
+ * `<@id> — Venom 5–6: Testpriest-Antonidas · Healer; Tide 1: Ranged DPS`.
  */
 export function formatRosterBossPlanLine(member: RosterEmbedMember, plan: string): string {
   const who = member.discordUserId ? `<@${member.discordUserId}>` : characterLabel(member.characterName, member.characterRealm);

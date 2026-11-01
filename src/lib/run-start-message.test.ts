@@ -145,7 +145,7 @@ describe("formatFinalSetupLfgLine — Manawyrm community footer", () => {
 
   it("does not include a Raid Lead name or HM", () => {
     const line = formatFinalSetupLfgLine();
-    expect(line).not.toContain("Syntax");
+    expect(line).not.toContain("Gamma");
     expect(line).not.toContain("SomeOtherLead");
     expect(line).not.toContain("HM");
     expect(line.match(/\*\*/g)).toHaveLength(2);
@@ -156,7 +156,7 @@ describe("escapeDiscordInlineText — dynamic Discord text safety", () => {
   const ZWSP = String.fromCharCode(0x200b);
 
   it("leaves ordinary names unchanged", () => {
-    for (const name of ["Syntax", "Kiri", "Simon", "Syn Tax", "Kiri-91", "Simön"]) {
+    for (const name of ["Gamma", "Delta", "Epsilon", "Gam Ma", "Delta-91", "Epsilön"]) {
       expect(escapeDiscordInlineText(name)).toBe(name);
     }
   });
@@ -169,15 +169,15 @@ describe("escapeDiscordInlineText — dynamic Discord text safety", () => {
   });
 
   it("collapses CR/LF (and U+2028/2029) into spaces", () => {
-    const hostile = `Syntax\r\n**Admin says** hi\n\n@everyone${String.fromCharCode(0x2028)}bye\r`;
+    const hostile = `Gamma\r\n**Admin says** hi\n\n@everyone${String.fromCharCode(0x2028)}bye\r`;
     const escaped = escapeDiscordInlineText(hostile);
     expect(escaped).not.toMatch(/[\r\n]/);
     expect(escaped.includes(String.fromCharCode(0x2028))).toBe(false);
   });
 
   it("neutralises raw @ mentions and mention markup", () => {
-    expect(escapeDiscordInlineText("@everyone Syntax")).toBe(`@${ZWSP}everyone Syntax`);
-    expect(escapeDiscordInlineText("@here Kiri")).not.toMatch(/@here/);
+    expect(escapeDiscordInlineText("@everyone Gamma")).toBe(`@${ZWSP}everyone Gamma`);
+    expect(escapeDiscordInlineText("@here Delta")).not.toMatch(/@here/);
     expect(escapeDiscordInlineText("<@123456789012345678>")).not.toContain("<@123456789012345678>");
   });
 });
@@ -201,7 +201,7 @@ describe("renderFinalSetupText — plain Discord Final Setup", () => {
   it("never includes a Raid Lead display name in the Manawyrm footer", () => {
     const text = renderFinalSetupText(sampleInput());
     expect(text.endsWith(formatFinalSetupLfgLine())).toBe(true);
-    expect(text).not.toContain("Syntax");
+    expect(text).not.toContain("Gamma");
     expect(text).not.toContain("SomeOtherLead");
     expect(text).not.toContain("LFG HM");
     expect(formatFinalSetupLfgLine()).toBe("**LFG Manawyrm write your discord name in the note!**");

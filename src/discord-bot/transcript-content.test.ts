@@ -30,8 +30,8 @@ const CHANNEL: Raw[] = [
   { id: "1001", authorId: APP, name: "Manawyrm Hub", content: "", embeds: [{ title: "Raidboost Announce", description: "HC VIP — see channel name" }] },
   { id: "1002", authorId: "700000000000000001", name: "Kael", content: "Can I join as healer?" },
   { id: "1003", authorId: "700000000000000002", name: "Mira", content: "line one\nline two", edited: true },
-  { id: "1004", authorId: "700000000000000002", name: "Mira", content: "log: https://www.warcraftlogs.com/reports/FtwhWRvqjTbAx4NQ" },
-  { id: "1005", authorId: LOG_BOT, name: "PhoenixStar Logs", content: "", embeds: [{ title: "Syntax started a new report", description: "https://www.warcraftlogs.com/reports/AbCdEfGhIjKlMnOp" }] },
+  { id: "1004", authorId: "700000000000000002", name: "Mira", content: "log: https://www.warcraftlogs.com/reports/TestReportCode01" },
+  { id: "1005", authorId: LOG_BOT, name: "Sample Logs", content: "", embeds: [{ title: "Gamma started a new report", description: "https://www.warcraftlogs.com/reports/AbCdEfGhIjKlMnOp" }] },
   { id: "1006", authorId: "700000000000000001", name: "Kael", content: "", attachments: [{ name: `proof${HOSTILE}.png`, size: 2048 }] },
   { id: "1007", authorId: "700000000000000003", name: "Thorne", content: "", stickers: ["gg <b>wp</b>"] },
   { id: "1008", authorId: APP, name: "Manawyrm Hub", content: "Final Setup\nTanks: Kael, Thorne", components: [{}] },
@@ -114,10 +114,10 @@ describe("run transcript — Message Content AVAILABLE", () => {
     expect(html).toContain("Can I join as healer?");
     expect(html).toContain("line one\nline two");
     expect(html).toContain("(edited 2026-09-26 18:30:00 UTC)");
-    expect(html).toContain("https://www.warcraftlogs.com/reports/FtwhWRvqjTbAx4NQ");
+    expect(html).toContain("https://www.warcraftlogs.com/reports/TestReportCode01");
     expect(html).toContain("Final Setup\nTanks: Kael, Thorne");
     expect(html).toContain('<div class="embed-title">Raidboost Announce</div>');
-    expect(html).toContain('<div class="embed-title">Syntax started a new report</div>');
+    expect(html).toContain('<div class="embed-title">Gamma started a new report</div>');
     expect(html).toContain("Attachment: proof&lt;script&gt;");
     expect(html).toContain("(2.0 KB)");
     expect(html).toContain("Sticker: gg &lt;b&gt;wp&lt;/b&gt;");
@@ -146,7 +146,7 @@ describe("run transcript — Message Content UNAVAILABLE (the production pattern
     expect(html.match(/\(message content unavailable\)/g)).toHaveLength(6);
     expect(html).not.toContain("Can I join as healer?");
     expect(html).toContain('<div class="embed-title">Raidboost Announce</div>'); // own embed still visible
-    expect(html).not.toContain("Syntax started a new report"); // a foreign embed is withheld, not shown as empty
+    expect(html).not.toContain("Gamma started a new report"); // a foreign embed is withheld, not shown as empty
     expect(html).toContain("Final Setup\nTanks: Kael, Thorne");
     expect(html).toContain("@Manawyrm Hub are we starting?");
     expect(html).toContain("Sticker: gg &lt;b&gt;wp&lt;/b&gt;");

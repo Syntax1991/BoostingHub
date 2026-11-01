@@ -649,9 +649,9 @@ describe("rosterService publishedRole snapshot", () => {
     await orm.Character.create({
       id: shamanId,
       userId: ids.kael,
-      name: "Synblast",
+      name: "Testblast",
       realm: "Antonidas",
-      normalizedName: "synblast",
+      normalizedName: "testblast",
       normalizedRealm: "antonidas",
       region: "EU",
       wowClass: "SHAMAN",
@@ -715,8 +715,8 @@ describe("rosterService publishedRole snapshot", () => {
     expect(publishedView?.members.find((m) => m.signupId === signup.id)?.selectedRole).toBe("HEALER");
 
     const detailBefore = await runDetailService.getRunDetail(thorne, run.id);
-    expect(detailBefore.finalSetupPreview?.groups.healers.some((m) => m.characterName === "Synblast")).toBe(true);
-    expect(detailBefore.finalSetupPreview?.groups.dps.some((m) => m.characterName === "Synblast")).toBe(false);
+    expect(detailBefore.finalSetupPreview?.groups.healers.some((m) => m.characterName === "Testblast")).toBe(true);
+    expect(detailBefore.finalSetupPreview?.groups.dps.some((m) => m.characterName === "Testblast")).toBe(false);
 
     view = await rosterService.getRosterManagementView(thorne, run.id);
     await rosterService.preparePublishedRosterForEditing(thorne, {
@@ -741,8 +741,8 @@ describe("rosterService publishedRole snapshot", () => {
     );
 
     const detailDraft = await runDetailService.getRunDetail(thorne, run.id);
-    expect(detailDraft.finalSetupPreview?.groups.healers.some((m) => m.characterName === "Synblast")).toBe(true);
-    expect(detailDraft.finalSetupPreview?.groups.dps.some((m) => m.characterName === "Synblast")).toBe(false);
+    expect(detailDraft.finalSetupPreview?.groups.healers.some((m) => m.characterName === "Testblast")).toBe(true);
+    expect(detailDraft.finalSetupPreview?.groups.dps.some((m) => m.characterName === "Testblast")).toBe(false);
 
     view = await rosterService.getRosterManagementView(thorne, run.id);
     await rosterService.publishRoster(thorne, {
@@ -757,8 +757,8 @@ describe("rosterService publishedRole snapshot", () => {
     );
 
     const detailAfter = await runDetailService.getRunDetail(thorne, run.id);
-    expect(detailAfter.finalSetupPreview?.groups.dps.some((m) => m.characterName === "Synblast")).toBe(true);
-    expect(detailAfter.finalSetupPreview?.groups.healers.some((m) => m.characterName === "Synblast")).toBe(false);
+    expect(detailAfter.finalSetupPreview?.groups.dps.some((m) => m.characterName === "Testblast")).toBe(true);
+    expect(detailAfter.finalSetupPreview?.groups.healers.some((m) => m.characterName === "Testblast")).toBe(false);
   });
 
   it("projects a three-role offer into tanks/healers/dps once each and counts composition once", async () => {

@@ -19,7 +19,7 @@ import {
 
 const LOG_BOT = "111111111111111111";
 const BOOSTER = "222222222222222222";
-const URL_A = "https://www.warcraftlogs.com/reports/FtwhWRvqjTbAx4NQ";
+const URL_A = "https://www.warcraftlogs.com/reports/TestReportCode01";
 const URL_B = "https://www.warcraftlogs.com/reports/AbCdEfGhIjKlMnOp";
 
 function message(overrides: Partial<ScannableMessage> & { id: string }): ScannableMessage {
@@ -46,7 +46,7 @@ function fakeChannel(history: ScannableMessage[]) {
 function history(n: number, linkAt?: number, url = URL_A): ScannableMessage[] {
   return Array.from({ length: n }, (_, i) =>
     i === linkAt
-      ? message({ id: String(1000 + i), authorId: LOG_BOT, content: `Syntax_gg started a new report ${url}` })
+      ? message({ id: String(1000 + i), authorId: LOG_BOT, content: `Gamma_gg started a new report ${url}` })
       : message({ id: String(1000 + i) }),
   );
 }
@@ -56,10 +56,10 @@ afterEach(() => {
 });
 
 describe("findTrustedReportLinks", () => {
-  it("reads PhoenixStar-style posts from content and embeds of trusted authors only", () => {
+  it("reads log-bot-style posts from content and embeds of trusted authors only", () => {
     const links = findTrustedReportLinks(
       [
-        message({ id: "1", authorId: LOG_BOT, content: `Syntax_gg started a new report ${URL_A}` }),
+        message({ id: "1", authorId: LOG_BOT, content: `Gamma_gg started a new report ${URL_A}` }),
         message({ id: "2", content: "https://www.warcraftlogs.com/reports/ZzZzZzZzZzZzZzZz" }),
         message({ id: "3", authorId: LOG_BOT, content: "", embeds: [{ title: "New report", url: `${URL_B}#fight=last` }] }),
         message({ id: "4", authorId: LOG_BOT, content: "", embeds: [{ fields: [{ name: "Log", value: `<${URL_A}>` }] }] }),
@@ -68,7 +68,7 @@ describe("findTrustedReportLinks", () => {
       new Set([LOG_BOT]),
     );
     expect(links).toEqual([
-      { reportCode: "FtwhWRvqjTbAx4NQ", messageId: "1", authorId: LOG_BOT },
+      { reportCode: "TestReportCode01", messageId: "1", authorId: LOG_BOT },
       { reportCode: "AbCdEfGhIjKlMnOp", messageId: "3", authorId: LOG_BOT },
     ]);
   });
@@ -91,7 +91,7 @@ describe("scanChannelFromCursor", () => {
       maxPages: WCL_SCAN_MAX_PAGES_PER_PASS,
     });
     expect(attach).toHaveBeenCalledTimes(1);
-    expect(attach).toHaveBeenCalledWith("run-1", expect.objectContaining({ reportCode: "FtwhWRvqjTbAx4NQ", messageId: "1010" }));
+    expect(attach).toHaveBeenCalledWith("run-1", expect.objectContaining({ reportCode: "TestReportCode01", messageId: "1010" }));
     expect(result).toEqual({ cursor: "1350", reachedEnd: true, blocked: false });
     expect(channel.calls.map((call) => call.after)).toEqual(["1000", "1100", "1200", "1300"]);
     expect(channel.calls.every((call) => call.limit === WCL_SCAN_PAGE_SIZE)).toBe(true);
@@ -245,13 +245,13 @@ describe("Warcraft Logs links and Discord Message Content access", () => {
     message({
       id,
       authorId: LOG_BOT,
-      content: access && where === "text" ? `Syntax_gg started a new report ${URL_A}` : "",
+      content: access && where === "text" ? `Gamma_gg started a new report ${URL_A}` : "",
       embeds: access && where === "embed" ? [{ title: "New report", url: URL_A, description: null, fields: [] }] : [],
     });
 
   it("visible text link and visible embed link from the trusted log bot are detected", () => {
-    expect(findTrustedReportLinks([logBotPost("1", "text", true)], trusted).map((l) => l.reportCode)).toEqual(["FtwhWRvqjTbAx4NQ"]);
-    expect(findTrustedReportLinks([logBotPost("2", "embed", true)], trusted).map((l) => l.reportCode)).toEqual(["FtwhWRvqjTbAx4NQ"]);
+    expect(findTrustedReportLinks([logBotPost("1", "text", true)], trusted).map((l) => l.reportCode)).toEqual(["TestReportCode01"]);
+    expect(findTrustedReportLinks([logBotPost("2", "embed", true)], trusted).map((l) => l.reportCode)).toEqual(["TestReportCode01"]);
   });
 
   it("withheld content (no access) is no link — nothing is attached, the cursor moves past it, no retry", async () => {
@@ -292,18 +292,18 @@ describe("Warcraft Logs links and Discord Message Content access", () => {
 });
 
 describe("scanReportChannels — dedicated Warcraft Logs log channel", () => {
-  // Modeled on production: a webhook ("Manawyrm Logging") posts every Run's report into one channel,
+  // Modeled on production: a webhook ("Raid Logging") posts every Run's report into one channel,
   // the report link only in an embed. Discord sets author.id to the webhook id.
-  const LOG_CHANNEL = "1553838853834674226";
-  const WEBHOOK = "1554176548435918910";
+  const LOG_CHANNEL = "1553838800000000226";
+  const WEBHOOK = "1554176500000000910";
   const reportPost = (id: string, code: string): ScannableMessage =>
     message({ id, authorId: WEBHOOK, content: "", embeds: [{ title: "New report", url: `https://www.warcraftlogs.com/reports/${code}`, description: null, fields: [] }] });
   const channelHistory = () =>
     fakeChannel([
       message({ id: "1001", content: `someone else: ${URL_B}` }), // untrusted author — ignored
-      reportPost("1002", "FtwhWRvqjTbAx4NQ"),
+      reportPost("1002", "TestReportCode01"),
       message({ id: "1003", content: "chatter" }),
-      reportPost("1004", "Kp3xZm9QwLr7Vt2N"),
+      reportPost("1004", "TestReportCode04"),
     ]);
   const setup = (history = channelHistory()) => {
     type Link = { channelId: string; messageId: string; authorId: string; reportCode: string };
@@ -319,8 +319,8 @@ describe("scanReportChannels — dedicated Warcraft Logs log channel", () => {
     const { record, saveCursor, scan, history } = setup();
     await scan();
     expect(record.mock.calls.map(([input]) => input)).toEqual([
-      { reportCode: "FtwhWRvqjTbAx4NQ", messageId: "1002", authorId: WEBHOOK, channelId: LOG_CHANNEL },
-      { reportCode: "Kp3xZm9QwLr7Vt2N", messageId: "1004", authorId: WEBHOOK, channelId: LOG_CHANNEL },
+      { reportCode: "TestReportCode01", messageId: "1002", authorId: WEBHOOK, channelId: LOG_CHANNEL },
+      { reportCode: "TestReportCode04", messageId: "1004", authorId: WEBHOOK, channelId: LOG_CHANNEL },
     ]);
     expect(saveCursor).toHaveBeenCalledWith(LOG_CHANNEL, "1004");
     expect(history.calls).toHaveLength(1); // one bounded read, not one per Run
@@ -416,9 +416,9 @@ ${URL_B}` });
     failB = false;
     await scan("999", WCL_CHANNEL_SCAN_INTERVAL_MS);
     expect(record.mock.calls.map(([link]) => link.reportCode)).toEqual([
-      "FtwhWRvqjTbAx4NQ", "AbCdEfGhIjKlMnOp", "FtwhWRvqjTbAx4NQ", "AbCdEfGhIjKlMnOp",
+      "TestReportCode01", "AbCdEfGhIjKlMnOp", "TestReportCode01", "AbCdEfGhIjKlMnOp",
     ]);
-    expect([...stored]).toEqual(["FtwhWRvqjTbAx4NQ", "AbCdEfGhIjKlMnOp"]);
+    expect([...stored]).toEqual(["TestReportCode01", "AbCdEfGhIjKlMnOp"]);
     expect(saveCursor).toHaveBeenCalledWith(LOG_CHANNEL, "1003");
   });
 

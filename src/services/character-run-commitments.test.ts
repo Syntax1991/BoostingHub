@@ -684,7 +684,7 @@ describe("commitments are scoped to the target Run's raid ID (not the 2h conflic
   });
 
   it("C: other Run in the current raid ID, target in the next (production: Tue 21:30 UTC reserved, target Mon next week)", async () => {
-    // Synmist: reserved Tue 29/09 23:30 CEST (21:30 UTC, before Wed 04:00 UTC reset); target roster Mon 05/10 17:30 UTC.
+    // Testmist: reserved Tue 29/09 23:30 CEST (21:30 UTC, before Wed 04:00 UTC reset); target roster Mon 05/10 17:30 UTC.
     const otherAt = EU_WEEK + (6 * 24 + 17.5) * HOUR; // Tuesday 21:30 UTC
     const targetAt = EU_WEEK + (7 * 24 + 5 * 24 + 13.5) * HOUR; // next Monday 17:30 UTC
     const { row } = await rowOnTarget({ name: "Crcidc", otherAt, targetAt });
@@ -768,7 +768,7 @@ describe("isSameRaidIdForCharacter", () => {
     // EU: Tue 23:00 UTC and Wed 03:59 UTC share a raid ID; Wed 04:00 starts the next.
     expect(isSameRaidIdForCharacter("EU", "2026-09-29T23:00:00.000Z", "2026-09-30T03:59:00.000Z")).toBe(true);
     expect(isSameRaidIdForCharacter("EU", "2026-09-30T03:59:00.000Z", "2026-09-30T04:00:00.000Z")).toBe(false);
-    // Synmist production case: Tue 29/09 21:30 UTC vs Mon 05/10 17:30 UTC.
+    // Testmist production case: Tue 29/09 21:30 UTC vs Mon 05/10 17:30 UTC.
     expect(isSameRaidIdForCharacter("EU", "2026-09-29T21:30:00.000Z", "2026-10-05T17:30:00.000Z")).toBe(false);
     // Same calendar week (Mon + Thu) but across the Wednesday reset → different raid IDs.
     expect(isSameRaidIdForCharacter("EU", "2026-09-28T20:00:00.000Z", "2026-10-01T20:00:00.000Z")).toBe(false);

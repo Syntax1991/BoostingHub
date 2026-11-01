@@ -75,7 +75,7 @@ function rank(
 
 describe("rosterReplacementReasons — entry points from existing warnings", () => {
   it("saved selected Character offers a replacement, with the per-content label", () => {
-    expect(rosterReplacementReasons(signup("Synmist", { selectionRisk: SAVED_RISK }))).toEqual([
+    expect(rosterReplacementReasons(signup("Testmist", { selectionRisk: SAVED_RISK }))).toEqual([
       { kind: "SAVED", label: "Saved: The Venomous Abyss HC 6/8 · Saved" },
     ]);
   });
@@ -233,20 +233,20 @@ describe("rankReplacementCandidates", () => {
   it("the target's own other Character is offered (swap); a User holding another draft slot is not", () => {
     const ranked = rank(
       [
-        signup("Synmist", { userId: "syn" }),
-        signup("Synlight", { userId: "syn" }),
+        signup("Testmist", { userId: "syn" }),
+        signup("Testlight", { userId: "syn" }),
         signup("OtherMain", { userId: "other", assignableRoles: ["TANK"] }),
         signup("OtherAlt", { userId: "other" }),
       ],
       {
         staged: new Map<string, CharacterRole | null>([
-          ["Synmist", "HEALER"],
+          ["Testmist", "HEALER"],
           ["OtherMain", "TANK"],
         ]),
-        target: { signupId: "Synmist", userId: "syn" },
+        target: { signupId: "Testmist", userId: "syn" },
       },
     );
-    expect(ranked.map((row) => row.signup.id)).toEqual(["Synlight"]);
+    expect(ranked.map((row) => row.signup.id)).toEqual(["Testlight"]);
   });
 
   it("fill-slot mode (no target) works on the same rules", () => {

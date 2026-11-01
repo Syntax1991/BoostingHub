@@ -14,7 +14,7 @@ function message(i: number, withAttachment = false): Msg {
   return {
     id: `m${String(i).padStart(4, "0")}`,
     createdTimestamp: 1_700_000_000_000 + i * 1000,
-    author: { id: "u1", username: "titan", discriminator: "0", displayName: "Titan" },
+    author: { id: "u1", username: "alpha", discriminator: "0", displayName: "Alpha" },
     content: `msg ${i}`,
     embeds: [],
     attachments: withAttachment

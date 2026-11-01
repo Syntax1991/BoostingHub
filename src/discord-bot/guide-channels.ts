@@ -1,7 +1,7 @@
 /**
  * Discord channels holding the posted guides — plain channels (no threads,
  * no "Back to menu"). The single source for `/guide` and the
- * scripts/post-*-guide.mts posting scripts.
+ * guide publishing scripts.
  */
 export const GUIDE_CHANNEL_IDS = {
   booster: "1552712971543650425",

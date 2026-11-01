@@ -49,7 +49,7 @@ describe("recordRaiderIoParseResult", () => {
   it("records PARSE_SUCCESS without storing the URL", async () => {
     await recordRaiderIoParseResult({
       ok: true,
-      value: { region: "EU", realmSlug: "antonidas", characterName: "Synblast" },
+      value: { region: "EU", realmSlug: "antonidas", characterName: "Testblast" },
     });
     expect(record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -60,7 +60,7 @@ describe("recordRaiderIoParseResult", () => {
       }),
     );
     const arg = record.mock.calls[0]![0] as Record<string, unknown>;
-    expect(JSON.stringify(arg)).not.toMatch(/raider\.io|Synblast|antonidas/i);
+    expect(JSON.stringify(arg)).not.toMatch(/raider\.io|Testblast|antonidas/i);
   });
 
   it("records parse failure codes", async () => {

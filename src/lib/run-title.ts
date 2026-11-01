@@ -19,7 +19,7 @@ function pad(value: number): string {
 /**
  * Server-side title authority.
  * `{weekday} {HH:mm} {difficulty} {lootType} {titleCoverage} {raidLead}`
- * e.g. "Thu 21:00 HC VIP 8/8 Titan" or "Thu 21:00 HC VIP 9/9 Titan" (Bundle).
+ * e.g. "Thu 21:00 HC VIP 8/8 Alpha" or "Thu 21:00 HC VIP 9/9 Alpha" (Bundle).
  */
 export function buildRunTitle(input: BuildRunTitleInput): string {
   const parts = zonedParts(new Date(input.scheduledStartAt), input.timeZone ?? DEFAULT_TIME_ZONE);

@@ -286,11 +286,9 @@ Scripts:
 | `test-db-reset.ts` | Destructively resets `TEST_DATABASE_URL` only | `test:db:reset` |
 | `capture-guide-screenshots.mts`, `capture-raidlead-guide-screenshots.mts` | Playwright guide screenshots | `guide:screenshots`, `guide:raidlead:screenshots` |
 | `publish-booster-guide.mts`, `publish-raidlead-guide.mts` | Discord guide publishers | `guide:*:preview`, `guide:*:publish` |
-| `post-booster-guide.mts`, `post-raidlead-guide.mts` | Deprecated forwarders to the publishers | none |
 | `record-backup-telemetry.mts` | Backup outcome as `IntegrationEvent` | none (called by the backup script) |
 | `generate-wow-item-sockets.mjs` | Regenerates the socket table after a content patch | none |
 | `build-spec-icon-map.mts` | Regenerates the specialization icon map | none |
-| `diagnose-raid-encounters.ts`, `qa-lockout-derive.ts` | Manual Blizzard diagnostics | none |
 
 ## Local development
 
@@ -715,8 +713,6 @@ npm run build
 - External APIs: `src/test/external-api-guard.ts` fails a test that lets a real Warcraft Logs, Blizzard or Raider.IO request escape.
 - Some tests use the seeded database and mutate Roster Lab fixtures; re-seed after them if you need the original demo rows. Parallel checkouts need one test database each, because a reset would break a concurrent run.
 - Discord: pure bot logic is unit-tested. The discord.js wiring (`client.ts`, the real calls in `sync-loop.ts`, `register-commands.ts`) cannot run without a live token and is verified by typecheck, build and smoke tests only.
-
-Known flaky test: see [HANDOVER.md](HANDOVER.md#open-pull-requests).
 
 ### Discord bot test coverage
 

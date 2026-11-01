@@ -18,14 +18,14 @@ const logs: RunWarcraftLogsView = {
   toleranceSeconds: 300,
   reports: [
     {
-      code: "WV3BMCHnLvZfb9Yd",
-      title: "Manawyrm Logging",
-      url: "https://www.warcraftlogs.com/reports/WV3BMCHnLvZfb9Yd",
+      code: "TestReportCode03",
+      title: "Raid Logging",
+      url: "https://www.warcraftlogs.com/reports/TestReportCode03",
       startAt: "2026-09-28T17:19:15.807Z",
       endAt: "2026-09-28T18:54:09.998Z",
       lastScannedAt: "2026-09-28T22:00:00.000Z",
       attachedAt: "2026-09-28T21:39:53.038Z",
-      attachedByName: "Syntax",
+      attachedByName: "Gamma",
       source: "MANUAL",
       assigned: 1,
       needsReview: 1,
@@ -39,7 +39,7 @@ const logs: RunWarcraftLogsView = {
   fights: [
     {
       id: "f1",
-      reportCode: "WV3BMCHnLvZfb9Yd",
+      reportCode: "TestReportCode03",
       wclFightId: 4,
       encounterName: "Nymrissa Wavecaller",
       label: "Nymrissa Wavecaller",

@@ -76,7 +76,7 @@ export type PendingRosterSelectionWarning = {
   /** Null for Add Player before the signup exists. */
   signupId: string | null;
   characterId: string | null;
-  /** e.g. "Synmist-Antonidas". */
+  /** e.g. "Testmist-Antonidas". */
   characterLabel: string;
   warning: RosterSelectionWarning;
 };

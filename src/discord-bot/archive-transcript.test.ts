@@ -10,8 +10,8 @@ import {
 const BASE_MSG = {
   id: "m1",
   createdAt: "2026-09-12T20:00:00.000Z",
-  authorDisplayName: "Titan",
-  authorUsername: "titan",
+  authorDisplayName: "Alpha",
+  authorUsername: "alpha",
   authorDiscriminator: "0",
   authorId: "u1",
   content: "Hello <world>",
@@ -21,8 +21,8 @@ const BASE_MSG = {
 describe("buildArchiveTranscriptFilename", () => {
   it("prefixes transcript- and sanitizes the channel name", () => {
     expect(buildArchiveTranscriptFilename("closed-0337")).toBe("transcript-closed-0337.html");
-    expect(buildArchiveTranscriptFilename("closed-sat-2200-hc-vip-7of9-titan")).toBe(
-      "transcript-closed-sat-2200-hc-vip-7of9-titan.html",
+    expect(buildArchiveTranscriptFilename("closed-sat-2200-hc-vip-7of9-alpha")).toBe(
+      "transcript-closed-sat-2200-hc-vip-7of9-alpha.html",
     );
   });
 });
@@ -30,18 +30,18 @@ describe("buildArchiveTranscriptFilename", () => {
 describe("buildArchiveServerInfoContent", () => {
   it("matches Ticket Tool Server-Info layout posted above the file", () => {
     const text = buildArchiveServerInfoContent({
-      serverName: "Phoenix Star",
-      serverId: "1156899738508079134",
+      serverName: "Test Guild",
+      serverId: "1156899700000000134",
       channelName: "closed-0337",
-      channelId: "1549448946466951189",
+      channelId: "1549448900000000189",
       messageCount: 21,
     });
     expect(text).toBe(
       [
         "```xml",
         "<Server-Info>",
-        "  Server: Phoenix Star (1156899738508079134)",
-        "  Channel: closed-0337 (1549448946466951189)",
+        "  Server: Test Guild (1156899700000000134)",
+        "  Channel: closed-0337 (1549448900000000189)",
         "  Messages: 21",
         "  Attachments Saved: 0",
         "  Attachments Skipped: 0 (due maximum file size limits.)",
@@ -58,7 +58,7 @@ describe("summarizeTranscriptUsers", () => {
       { ...BASE_MSG, id: "m2", authorId: "u2", authorUsername: "other", authorDisplayName: "Other" },
       { ...BASE_MSG, id: "m3" },
     ]);
-    expect(stats[0]).toMatchObject({ authorId: "u1", messageCount: 2, tag: "titan#0" });
+    expect(stats[0]).toMatchObject({ authorId: "u1", messageCount: 2, tag: "alpha#0" });
     expect(stats[1]).toMatchObject({ authorId: "u2", messageCount: 1 });
   });
 });
@@ -66,7 +66,7 @@ describe("summarizeTranscriptUsers", () => {
 describe("buildArchiveTranscriptHtml", () => {
   it("starts with Ticket Tool Server-Info / User-Info / Base-Transcript headers", () => {
     const html = buildArchiveTranscriptHtml({
-      serverName: "Phoenix Star",
+      serverName: "Test Guild",
       serverId: "g1",
       channelName: "closed-0337",
       channelId: "c1",
@@ -75,10 +75,10 @@ describe("buildArchiveTranscriptHtml", () => {
     });
 
     expect(html.startsWith("<Server-Info>")).toBe(true);
-    expect(html).toContain("Server: Phoenix Star (g1)");
+    expect(html).toContain("Server: Test Guild (g1)");
     expect(html).toContain("Channel: closed-0337 (c1)");
     expect(html).toContain("<User-Info>");
-    expect(html).toContain("1 - titan#0 (u1)");
+    expect(html).toContain("1 - alpha#0 (u1)");
     expect(html).toContain("<Base-Transcript>");
     expect(html).toContain("Hello &lt;world&gt;");
     expect(html).toContain("Signup");
@@ -137,7 +137,7 @@ describe("buildArchiveTranscriptHtml — Run archive regression", () => {
           
       <User-Info>
           1 - lead#0 (u2)
-          1 - titan#0 (u1)
+          1 - alpha#0 (u1)
 
       <Base-Transcript>
       <style>
@@ -158,7 +158,7 @@ describe("buildArchiveTranscriptHtml — Run archive regression", () => {
       <meta name="manawyrm-message-content" content="AVAILABLE">
       <div class="transcript">
       <div class="message" data-id="m1">
-        <div class="meta"><strong>Titan</strong> <span class="tag">titan#0</span> <span class="id">(u1)</span> <time>2026-09-12 20:00:00 UTC</time></div>
+        <div class="meta"><strong>Alpha</strong> <span class="tag">alpha#0</span> <span class="id">(u1)</span> <time>2026-09-12 20:00:00 UTC</time></div>
         <div class="content">Hello &lt;world&gt;</div>
         <div class="embed"><div class="embed-title">Signup</div><div class="embed-description">Open now</div></div>
       </div>

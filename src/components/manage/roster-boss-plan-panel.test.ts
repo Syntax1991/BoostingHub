@@ -25,7 +25,7 @@ const sham: BossPlanEditorSignup = {
   userId: "u1",
   status: "PENDING",
   participationType: "BOOSTER",
-  character: { id: "c1", name: "Bexsham", realm: "Antonidas" },
+  character: { id: "c1", name: "Demosham", realm: "Antonidas" },
   characterActive: true,
   boosterApproved: true,
   assignableRoles: ["HEALER", "RANGED_DPS"],
@@ -36,7 +36,7 @@ function render(exceptions: RosterBossException[], warnings: Array<{ code: strin
     createElement(RosterBossPlanPanel, {
       bosses: bundle,
       exceptions,
-      slots: [{ signup: sham, name: "Bexsham-Antonidas", wowClass: "SHAMAN", role: "HEALER" }],
+      slots: [{ signup: sham, name: "Demosham-Antonidas", wowClass: "SHAMAN", role: "HEALER" }],
       signups: [sham],
       stagedSlotIds: new Set(["sham"]),
       evaluation: { issues: [], warnings },

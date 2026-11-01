@@ -35,7 +35,7 @@ const rows: AttendanceViewRow[] = [
   row({ characterName: "Mira", selectedRole: "MELEE_DPS", status: "UNMARKED" }),
   row({ characterName: "Carl", selectedRole: null, participationType: "LOOTBUDDY", status: "UNMARKED" }),
   row({ characterName: "Dora", selectedRole: "TANK", status: "NO_SHOW" }),
-  row({ characterName: "Eli", selectedRole: "HEALER", status: "LATE", isBackup: true, userName: "Synblast" }),
+  row({ characterName: "Eli", selectedRole: "HEALER", status: "LATE", isBackup: true, userName: "Testblast" }),
   row({ characterName: "Finn", selectedRole: "RANGED_DPS", status: "UNMARKED" }),
 ];
 const names = (list: AttendanceViewRow[]) => list.map((entry) => entry.characterName);

@@ -32,8 +32,8 @@ function report(overrides: Partial<WarcraftLogsReportMetadata> = {}): WarcraftLo
       { id: 5, encounterId: ULATEK, name: "Ula'tek", startTime: 800_000, endTime: 1_200_000, kill: true, difficulty: 4, friendlyPlayers: [1, 2] },
     ],
     actors: [
-      { id: 1, name: "Synlight", server: "Blackhand", subType: "Priest" },
-      { id: 2, name: "Synblast", server: "Twisting Nether", subType: "Mage" },
+      { id: 1, name: "Testlight", server: "Blackhand", subType: "Priest" },
+      { id: 2, name: "Testblast", server: "Twisting Nether", subType: "Mage" },
       { id: 3, name: "Lockie", server: "Blackhand", subType: "Warlock" },
     ],
     rankedCharacters: [],
@@ -72,7 +72,7 @@ describe("matchParticipantActors", () => {
       matchStatus: "MATCHED",
       actorIds: [1],
     });
-    expect(matchParticipantActors(attended("Synblast", "twisting-nether"), report())).toEqual({
+    expect(matchParticipantActors(attended("Testblast", "twisting-nether"), report())).toEqual({
       matchStatus: "MATCHED",
       actorIds: [2],
     });
@@ -80,7 +80,7 @@ describe("matchParticipantActors", () => {
   });
 
   it("never matches by name alone — same name on another realm is not in the log", () => {
-    expect(matchParticipantActors(attended("Synlight", "Frostmourne"), report()).matchStatus).toBe("NOT_IN_LOG");
+    expect(matchParticipantActors(attended("Testlight", "Frostmourne"), report()).matchStatus).toBe("NOT_IN_LOG");
   });
 
   it("reports a missing actor as NOT_IN_LOG", () => {
@@ -92,14 +92,14 @@ describe("matchParticipantActors", () => {
 
   it("rejects a character from another region", () => {
     expect(
-      matchParticipantActors(attended("Synlight", "Blackhand", { characterRegion: "US" }), report()).matchStatus,
+      matchParticipantActors(attended("Testlight", "Blackhand", { characterRegion: "US" }), report()).matchStatus,
     ).toBe("NOT_IN_LOG");
   });
 
   it("prefers the stored warcraftLogsId via ranked characters (survives renames)", () => {
     const renamed = attended("OldName", "Blackhand", { warcraftLogsId: "555" });
     const withRanked = report({
-      rankedCharacters: [{ id: "555", canonicalId: "555", name: "Synlight", serverSlug: "blackhand" }],
+      rankedCharacters: [{ id: "555", canonicalId: "555", name: "Testlight", serverSlug: "blackhand" }],
     });
     expect(matchParticipantActors(renamed, withRanked)).toEqual({ matchStatus: "MATCHED", actorIds: [1] });
     expect(matchParticipantActors(renamed, report()).matchStatus).toBe("NOT_IN_LOG");
@@ -109,7 +109,7 @@ describe("matchParticipantActors", () => {
     const external: ConsumableAuditParticipant = {
       source: "EXTERNAL",
       externalBoosterId: "ext-1",
-      displayName: "Synlight",
+      displayName: "Testlight",
       wowClass: "PRIEST",
       role: "HEALER",
     };
@@ -163,21 +163,21 @@ describe("extractConsumableAudit", () => {
     fights: assignedFights,
     events,
     participants: [
-      attended("Synlight", "Blackhand"),
+      attended("Testlight", "Blackhand"),
       attended("Nobody", "Blackhand"),
       { source: "EXTERNAL", externalBoosterId: "ext-1", displayName: "helper", wowClass: "MAGE", role: "RANGED_DPS" },
     ],
   });
 
   it("stores the specialization played per fight on the COMBATANT fact, never the roster role", () => {
-    const synlight = extracted.players[0]!;
-    const combatants = synlight.observations.filter((row) => row.kind === "COMBATANT");
+    const testlight = extracted.players[0]!;
+    const combatants = testlight.observations.filter((row) => row.kind === "COMBATANT");
     expect(combatants.map((row) => [row.wclFightId, row.specId])).toEqual([
       [1, 257],
       [4, 258],
     ]);
-    expect(synlight.observations.filter((row) => row.kind !== "COMBATANT").every((row) => row.specId === null)).toBe(true);
-    expect(synlight.role).toBe("HEALER"); // roster role kept for reference only (Synlight played Holy + Shadow)
+    expect(testlight.observations.filter((row) => row.kind !== "COMBATANT").every((row) => row.specId === null)).toBe(true);
+    expect(testlight.role).toBe("HEALER"); // roster role kept for reference only (Testlight played Holy + Shadow)
   });
 
   it("records fight-level Warlock presence and Healthstone evidence", () => {
@@ -189,10 +189,10 @@ describe("extractConsumableAudit", () => {
   });
 
   it("stores normalized facts per matched player, per fight", () => {
-    const synlight = extracted.players[0]!;
-    expect(synlight.matchStatus).toBe("MATCHED");
-    expect(synlight.wclActorId).toBe(1);
-    const facts = synlight.observations.map((row) => [row.wclFightId, row.kind, row.category, row.atMs]);
+    const testlight = extracted.players[0]!;
+    expect(testlight.matchStatus).toBe("MATCHED");
+    expect(testlight.wclActorId).toBe(1);
+    const facts = testlight.observations.map((row) => [row.wclFightId, row.kind, row.category, row.atMs]);
     expect(facts).toEqual([
       [1, "COMBATANT", null, 10_000],
       [1, "AURA", "FLASK", 10_000],
@@ -210,7 +210,7 @@ describe("extractConsumableAudit", () => {
       report: report(),
       fights: assignedFights,
       events: { ...events, casts: [{ fight: 1, timestamp: 11_100, sourceId: 1, abilityId: 1236616 }] },
-      participants: [attended("Synlight", "Blackhand")],
+      participants: [attended("Testlight", "Blackhand")],
     });
     expect(
       withLightsPotential.players[0]!.observations.filter((row) => row.kind === "CAST").map((row) => [row.category, row.spellId]),
@@ -226,7 +226,7 @@ describe("extractConsumableAudit", () => {
     }
     expect(only1.players[0]!.observations.map((row) => row.kind)).toEqual(["COMBATANT", "AURA", "CAST"]);
     expect(only1.players.map((player) => player.matchStatus)).toEqual(extracted.players.map((player) => player.matchStatus));
-    // Synlight: snapshots in fights 1 and 4; in fight 5 present (PARTICIPANT) without one.
+    // Testlight: snapshots in fights 1 and 4; in fight 5 present (PARTICIPANT) without one.
     expect(combatantCoverageByFight(extracted)).toEqual(
       new Map([
         ["AbCdEfGhIjKlMnOp#1", { present: 1, snapshots: 1 }],
@@ -243,13 +243,13 @@ describe("extractConsumableAudit", () => {
       events: {
         ...events,
         casts: [
-          { fight: 1, timestamp: 11_000, sourceId: 1, abilityId: 403876 }, // Synlight: Divine Protection
+          { fight: 1, timestamp: 11_000, sourceId: 1, abilityId: 403876 }, // Testlight: Divine Protection
           { fight: 1, timestamp: 11_500, sourceId: 3, abilityId: 642 }, // another player's Divine Shield
           { fight: 1, timestamp: 12_000, sourceId: 1, abilityId: 31884 }, // Avenging Wrath (offensive)
           { fight: 1, timestamp: 12_500, sourceId: 1, abilityId: 999_999 }, // unknown
         ],
       },
-      participants: [attended("Synlight", "Blackhand")],
+      participants: [attended("Testlight", "Blackhand")],
     });
     expect(
       withDefensives.players[0]!.observations.filter((row) => row.kind === "CAST").map((row) => [row.category, row.spellId, row.atMs]),
@@ -268,7 +268,7 @@ describe("extractConsumableAudit", () => {
 });
 
 describe("report identity on facts", () => {
-  const participants: ConsumableAuditParticipant[] = [attended("Synlight", "Blackhand"), attended("Nobody", "Blackhand")];
+  const participants: ConsumableAuditParticipant[] = [attended("Testlight", "Blackhand"), attended("Nobody", "Blackhand")];
   const one = extractConsumableAudit({
     report: report(),
     fights: assignedFights.slice(0, 1),
@@ -329,7 +329,7 @@ describe("extractConsumableAudit — food, runes and gear at pull", () => {
         { fight: 1, timestamp: 11_000, sourceId: 1, auraIds: [], gear: [] },
       ],
     },
-    participants: [attended("Synlight", "Blackhand")],
+    participants: [attended("Testlight", "Blackhand")],
   });
   const player = extracted.players[0]!;
 
@@ -352,7 +352,7 @@ describe("extractConsumableAudit — food, runes and gear at pull", () => {
 });
 
 describe("extractConsumableAudit — boss plan: each fight audited for the Character assigned to its boss", () => {
-  // Synblast's player plays the Ula'tek pulls (content-va) on Synlight; Nymrissa (content-tide) stays Synblast.
+  // Testblast's player plays the Ula'tek pulls (content-va) on Testlight; Nymrissa (content-tide) stays Testblast.
   const events: WarcraftLogsConsumableEvents = {
     combatants: [
       { fight: 1, timestamp: 10_000, sourceId: 2, specId: 63, auraIds: [] },
@@ -363,12 +363,12 @@ describe("extractConsumableAudit — boss plan: each fight audited for the Chara
     casts: [],
     deaths: [{ fight: 5, timestamp: 900_000, targetId: 1 }],
   };
-  const withPlan = attended("Synblast", "Twisting Nether", {
+  const withPlan = attended("Testblast", "Twisting Nether", {
     wowClass: "MAGE",
     role: "RANGED_DPS",
     bossCharacters: [
       {
-        characterName: "Synlight",
+        characterName: "Testlight",
         characterRealm: "Blackhand",
         characterRegion: "EU",
         warcraftLogsId: null,
@@ -382,8 +382,8 @@ describe("extractConsumableAudit — boss plan: each fight audited for the Chara
 
   it("audits the alternate in its own row (its name, class, role) on its bosses; the slot row keeps the rest — never both on one pull", () => {
     expect(players.map((row) => [row.attendanceId, row.characterName, row.wowClass, row.role, row.matchStatus, row.sortOrder])).toEqual([
-      ["att-Synblast", "Synblast", "MAGE", "RANGED_DPS", "MATCHED", 0],
-      ["att-Synblast", "Synlight", "PRIEST", "HEALER", "MATCHED", 1],
+      ["att-Testblast", "Testblast", "MAGE", "RANGED_DPS", "MATCHED", 0],
+      ["att-Testblast", "Testlight", "PRIEST", "HEALER", "MATCHED", 1],
     ]);
     expect(players[0]!.observations.map((row) => [row.wclFightId, row.kind, row.specId])).toEqual([[1, "COMBATANT", 63]]);
     expect(players[1]!.observations.map((row) => [row.wclFightId, row.kind, row.specId])).toEqual([
@@ -416,7 +416,7 @@ describe("extractConsumableAudit — boss plan: each fight audited for the Chara
       fights: assignedFights,
       events,
       participants: [
-        attended("Synblast", "Twisting Nether", {
+        attended("Testblast", "Twisting Nether", {
           wowClass: "MAGE",
           role: "RANGED_DPS",
           bossCharacters: [
@@ -442,12 +442,12 @@ describe("extractConsumableAudit — boss plan: each fight audited for the Chara
       report: report(),
       fights: assignedFights,
       events,
-      participants: [attended("Synblast", "Twisting Nether", { wowClass: "MAGE", role: "RANGED_DPS" })],
+      participants: [attended("Testblast", "Twisting Nether", { wowClass: "MAGE", role: "RANGED_DPS" })],
     }).players[0]!;
     expect(plain.observations.map((row) => [row.wclFightId, row.kind])).toEqual([
       [1, "COMBATANT"],
       [4, "COMBATANT"],
-      [5, "PARTICIPANT"], // in the pull without a snapshot — with the plan, pull 5 belongs to Synlight
+      [5, "PARTICIPANT"], // in the pull without a snapshot — with the plan, pull 5 belongs to Testlight
     ]);
   });
 });

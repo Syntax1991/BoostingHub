@@ -185,14 +185,14 @@ describe("effectiveBossRoster + per-boss warnings", () => {
       bosses: bosses8,
       effective,
       isSavedOnBoss: (characterId, boss) => characterId === "char-a-alt" && boss.raidBossId === "v8",
-      characterLabelBySignupId: new Map([["a-alt", "Synalt-Antonidas"]]),
+      characterLabelBySignupId: new Map([["a-alt", "Testalt-Antonidas"]]),
     });
-    expect(warnings.map((row) => row.message)).toEqual(["Boss 8: Synalt-Antonidas is already saved."]);
+    expect(warnings.map((row) => row.message)).toEqual(["Boss 8: Testalt-Antonidas is already saved."]);
   });
 });
 
 describe("describeSlotBossPlan / diffBossPlans / unpublished changes", () => {
-  const labels = new Map([["a-alt", "Synalt-Antonidas"]]);
+  const labels = new Map([["a-alt", "Testalt-Antonidas"]]);
   const plan = [
     exception("a", 5, "HEALER", "a-alt"),
     exception("a", 6, "HEALER", "a-alt"),
@@ -202,12 +202,12 @@ describe("describeSlotBossPlan / diffBossPlans / unpublished changes", () => {
 
   it("describes one slot compactly, grouped by Character + role in boss order", () => {
     expect(describeSlotBossPlan({ exceptions: plan, bosses: bosses8, characterLabelBySignupId: labels })).toBe(
-      "Boss 5–6: Synalt-Antonidas · Healer; Boss 7–8: Ranged DPS",
+      "Boss 5–6: Testalt-Antonidas · Healer; Boss 7–8: Ranged DPS",
     );
   });
 
   it("diff: changed plan of a kept slot is one line; unchanged plans and added slots are not repeated", () => {
-    const member = { signupId: "a", userId: "u-a", participationType: "BOOSTER" as const, role: "HEALER" as const, label: "Synblast-Antonidas" };
+    const member = { signupId: "a", userId: "u-a", participationType: "BOOSTER" as const, role: "HEALER" as const, label: "Testblast-Antonidas" };
     const changes = diffBossPlans({
       published: [exception("a", 8, "RANGED_DPS")],
       draft: plan,
@@ -221,7 +221,7 @@ describe("describeSlotBossPlan / diffBossPlans / unpublished changes", () => {
         kind: "BOSS_PLAN_CHANGED",
         member,
         before: "Boss 8: Ranged DPS",
-        after: "Boss 5–6: Synalt-Antonidas · Healer; Boss 7–8: Ranged DPS",
+        after: "Boss 5–6: Testalt-Antonidas · Healer; Boss 7–8: Ranged DPS",
       },
     ]);
     expect(

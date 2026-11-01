@@ -17,12 +17,12 @@ const BASE = {
   difficulty: "HEROIC" as const,
   lootType: "VIP" as const,
   coverage: "7of9",
-  raidLeadChannelName: "Titan",
+  raidLeadChannelName: "Alpha",
 };
 
 describe("buildDiscordRunChannelName", () => {
   it("builds the weekday-HHMM-difficulty-lootType-coverage-raidLead form", () => {
-    expect(buildDiscordRunChannelName(BASE)).toBe("sat-2200-hc-vip-7of9-titan");
+    expect(buildDiscordRunChannelName(BASE)).toBe("sat-2200-hc-vip-7of9-alpha");
   });
 
   it("abbreviates Normal/Heroic and spells Mythic (never my)", () => {
@@ -47,7 +47,7 @@ describe("buildDiscordRunChannelName", () => {
       difficulty: "MYTHIC",
       lootType: "COMMUNITY",
       coverage: "8of8",
-      raidLeadChannelName: "UwE",
+      raidLeadChannelName: "IvO",
     });
     expect(name).toContain("-mythic-com-");
     expect(name).not.toContain("-my-");
@@ -56,7 +56,7 @@ describe("buildDiscordRunChannelName", () => {
 
   it("builds Heroic + VIP / Mythic + VIP / Heroic + Community examples", () => {
     const fri = "2026-09-11T18:15:00.000Z"; // Fri 20:15 Berlin
-    const lead = "UwE";
+    const lead = "IvO";
     const coverage = "8of8";
     expect(
       buildDiscordRunChannelName({
@@ -66,7 +66,7 @@ describe("buildDiscordRunChannelName", () => {
         coverage,
         raidLeadChannelName: lead,
       }),
-    ).toMatch(/^[a-z]{3}-2015-hc-vip-8of8-uwe$/);
+    ).toMatch(/^[a-z]{3}-2015-hc-vip-8of8-ivo$/);
     expect(
       buildDiscordRunChannelName({
         scheduledStartAt: fri,
@@ -75,7 +75,7 @@ describe("buildDiscordRunChannelName", () => {
         coverage,
         raidLeadChannelName: lead,
       }),
-    ).toMatch(/^[a-z]{3}-2015-mythic-vip-8of8-uwe$/);
+    ).toMatch(/^[a-z]{3}-2015-mythic-vip-8of8-ivo$/);
     expect(
       buildDiscordRunChannelName({
         scheduledStartAt: fri,
@@ -84,7 +84,7 @@ describe("buildDiscordRunChannelName", () => {
         coverage,
         raidLeadChannelName: lead,
       }),
-    ).toMatch(/^[a-z]{3}-2015-mythic-com-8of8-uwe$/);
+    ).toMatch(/^[a-z]{3}-2015-mythic-com-8of8-ivo$/);
     expect(
       buildDiscordRunChannelName({
         scheduledStartAt: fri,
@@ -93,7 +93,7 @@ describe("buildDiscordRunChannelName", () => {
         coverage,
         raidLeadChannelName: lead,
       }),
-    ).toMatch(/^[a-z]{3}-2015-hc-com-8of8-uwe$/);
+    ).toMatch(/^[a-z]{3}-2015-hc-com-8of8-ivo$/);
   });
 
   it("never concatenates difficulty and lootType into one segment", () => {
@@ -112,15 +112,15 @@ describe("buildDiscordRunChannelName", () => {
     expect(
       buildDiscordRunChannelName({ ...BASE, raidLeadChannelName: "Dr. Emile O'Connor Jr." }),
     ).toBe("sat-2200-hc-vip-7of9-dr-emile-o-connor-jr");
-    expect(slugDiscordChannelSegment("Sÿntax")).toBe("syntax");
-    expect(buildDiscordRunChannelName({ ...BASE, raidLeadChannelName: "Sÿntax" })).toBe(
-      "sat-2200-hc-vip-7of9-syntax",
+    expect(slugDiscordChannelSegment("Gämma")).toBe("gamma");
+    expect(buildDiscordRunChannelName({ ...BASE, raidLeadChannelName: "Gämma" })).toBe(
+      "sat-2200-hc-vip-7of9-gamma",
     );
   });
 
   it("collapses duplicate separators and never leaves a leading/trailing hyphen", () => {
-    expect(buildDiscordRunChannelName({ ...BASE, raidLeadChannelName: "  --Titan--  " })).toBe(
-      "sat-2200-hc-vip-7of9-titan",
+    expect(buildDiscordRunChannelName({ ...BASE, raidLeadChannelName: "  --Alpha--  " })).toBe(
+      "sat-2200-hc-vip-7of9-alpha",
     );
   });
 
@@ -136,7 +136,7 @@ describe("buildDiscordRunChannelName", () => {
         difficulty: "NORMAL",
         lootType: "UNSAVED",
       }),
-    ).toBe("tue-0003-nm-unsaved-7of9-titan");
+    ).toBe("tue-0003-nm-unsaved-7of9-alpha");
   });
 
   it("truncates to Discord's 100-character channel name limit without a dangling hyphen", () => {
@@ -151,7 +151,7 @@ describe("buildDiscordRunChannelName", () => {
         ...BASE,
         coverage: "9of9",
       }),
-    ).toBe("sat-2200-hc-vip-9of9-titan");
+    ).toBe("sat-2200-hc-vip-9of9-alpha");
     expect(
       buildDiscordRunChannelName({
         ...BASE,
@@ -167,15 +167,15 @@ describe("buildDiscordRunChannelName", () => {
   });
 
   it("the Raid Lead segment is the Raid Lead's (Discord-resolved) User.name, slugged", () => {
-    expect(buildDiscordRunChannelName({ ...BASE, coverage: "9of9", raidLeadChannelName: "Syntax" })).toBe(
-      "sat-2200-hc-vip-9of9-syntax",
+    expect(buildDiscordRunChannelName({ ...BASE, coverage: "9of9", raidLeadChannelName: "Gamma" })).toBe(
+      "sat-2200-hc-vip-9of9-gamma",
     );
   });
 
   it("temporary Run voice channel: `Raid with <Raid Lead name>`, human-readable, not slugged", () => {
-    expect(formatRunVoiceChannelName("Kiri")).toBe("Raid with Kiri");
-    expect(formatRunVoiceChannelName("Syn Tax")).toBe("Raid with Syn Tax");
-    expect(formatRunVoiceChannelName("Syntax")).not.toContain("raid-with");
+    expect(formatRunVoiceChannelName("Delta")).toBe("Raid with Delta");
+    expect(formatRunVoiceChannelName("Gam Ma")).toBe("Raid with Gam Ma");
+    expect(formatRunVoiceChannelName("Gamma")).not.toContain("raid-with");
   });
 
   it("temporary Run voice channel: line breaks and control characters cannot malform the name", () => {
@@ -207,14 +207,14 @@ describe("buildDiscordRunChannelName", () => {
   });
 
   it("slugifies spaces and underscores in nickname", () => {
-    expect(slugDiscordChannelSegment("Syntax 91")).toBe("syntax-91");
-    expect(slugDiscordChannelSegment("Syntax_91")).toBe("syntax-91");
+    expect(slugDiscordChannelSegment("Gamma 91")).toBe("gamma-91");
+    expect(slugDiscordChannelSegment("Gamma_91")).toBe("gamma-91");
   });
 });
 
 describe("buildClosedDiscordRunChannelName", () => {
   it("prefixes the live slug with closed-", () => {
-    expect(buildClosedDiscordRunChannelName(BASE)).toBe("closed-sat-2200-hc-vip-7of9-titan");
+    expect(buildClosedDiscordRunChannelName(BASE)).toBe("closed-sat-2200-hc-vip-7of9-alpha");
   });
 
   it("uses mythic/com consistently for Mythic Community", () => {
@@ -223,7 +223,7 @@ describe("buildClosedDiscordRunChannelName", () => {
       difficulty: "MYTHIC",
       lootType: "COMMUNITY",
       coverage: "8of8",
-      raidLeadChannelName: "UwE",
+      raidLeadChannelName: "IvO",
     });
     expect(name.startsWith("closed-")).toBe(true);
     expect(name).toContain("-mythic-com-");
@@ -244,8 +244,8 @@ describe("buildClosedDiscordRunChannelName", () => {
       buildClosedDiscordRunChannelName({
         ...BASE,
         coverage: "9of9",
-        raidLeadChannelName: "Syntax",
+        raidLeadChannelName: "Gamma",
       }),
-    ).toBe("closed-sat-2200-hc-vip-9of9-syntax");
+    ).toBe("closed-sat-2200-hc-vip-9of9-gamma");
   });
 });
