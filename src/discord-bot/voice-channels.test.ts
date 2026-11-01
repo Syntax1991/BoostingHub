@@ -11,7 +11,7 @@ const unknownChannel = () => Object.assign(new Error("Unknown Channel"), { code:
 const missingAccess = () => Object.assign(new Error("Missing Access"), { code: 50001 });
 const missingPermissions = () => Object.assign(new Error("Missing Permissions"), { code: 50013 });
 
-function voice(memberCount: number, name = "Raid with Syntax") {
+function voice(memberCount: number, name = "Raid with Gamma") {
   return {
     kind: "voice" as const,
     name,
@@ -48,7 +48,7 @@ function adapters(options: {
 }
 
 function item(action: RunVoiceChannelWorkItem["action"], existingVoiceChannelId: string | null = "voice-1"): RunVoiceChannelWorkItem {
-  return { runId: "run-1", existingVoiceChannelId, desiredVoiceChannelName: "Raid with Syntax", action };
+  return { runId: "run-1", existingVoiceChannelId, desiredVoiceChannelName: "Raid with Gamma", action };
 }
 
 describe("reconcileRunVoiceChannels — creation", () => {
@@ -56,7 +56,7 @@ describe("reconcileRunVoiceChannels — creation", () => {
     const a = adapters();
     const resolved = await reconcileRunVoiceChannels(a.value, [item("PROVISION", null)]);
     expect(a.createVoiceChannel).toHaveBeenCalledTimes(1);
-    expect(a.createVoiceChannel).toHaveBeenCalledWith("Raid with Syntax");
+    expect(a.createVoiceChannel).toHaveBeenCalledWith("Raid with Gamma");
     expect(a.recordVoiceChannel).toHaveBeenCalledWith("run-1", "222");
     expect(resolved.get("run-1")).toBe("222");
   });
@@ -128,10 +128,10 @@ describe("reconcileRunVoiceChannels — create → persist atomicity", () => {
 
 describe("reconcileRunVoiceChannels — no creator (category unset/invalid) still manages existing channels", () => {
   it("RECONCILE keeps and renames an existing channel without any creator", async () => {
-    const channel = voice(0, "Raid with Simon");
+    const channel = voice(0, "Raid with Epsilon");
     const a = adapters({ channel, create: null });
     const resolved = await reconcileRunVoiceChannels(a.value, [item("RECONCILE")]);
-    expect(channel.setName).toHaveBeenCalledWith("Raid with Syntax");
+    expect(channel.setName).toHaveBeenCalledWith("Raid with Gamma");
     expect(a.clearVoiceChannel).not.toHaveBeenCalled();
     expect(resolved.get("run-1")).toBe("voice-1");
   });
@@ -163,9 +163,9 @@ describe("reconcileRunVoiceChannels — IN_PROGRESS (RECONCILE)", () => {
   });
 
   it("renames a reused channel when the effective Raid Lead name changed", async () => {
-    const channel = voice(2, "Raid with Simon");
+    const channel = voice(2, "Raid with Epsilon");
     await reconcileRunVoiceChannels(adapters({ channel }).value, [item("RECONCILE")]);
-    expect(channel.setName).toHaveBeenCalledWith("Raid with Syntax");
+    expect(channel.setName).toHaveBeenCalledWith("Raid with Gamma");
   });
 
   it("Unknown Channel: clears the stale id and recreates exactly once in the same pass", async () => {
@@ -300,7 +300,7 @@ describe("reconcileRunVoiceChannels — fixed pool (Raid #1 / Raid #2)", () => {
   }
 
   function run(runId: string, action: RunVoiceChannelWorkItem["action"], existingVoiceChannelId: string | null = null): RunVoiceChannelWorkItem {
-    return { runId, existingVoiceChannelId, desiredVoiceChannelName: "Raid with Syntax", action };
+    return { runId, existingVoiceChannelId, desiredVoiceChannelName: "Raid with Gamma", action };
   }
 
   it("Start Run assigns the first pool channel — nothing is created", async () => {
@@ -338,7 +338,7 @@ describe("reconcileRunVoiceChannels — fixed pool (Raid #1 / Raid #2)", () => {
       [run("run-a", "RECONCILE", "raid-1"), run("run-b", "RECONCILE", "raid-2"), run("run-c", "PROVISION")],
       { pool: POOL },
     );
-    expect(a.createVoiceChannel).toHaveBeenCalledWith("Raid with Syntax");
+    expect(a.createVoiceChannel).toHaveBeenCalledWith("Raid with Gamma");
     expect(resolved.get("run-c")).toBe("222");
   });
 

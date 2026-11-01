@@ -1285,7 +1285,7 @@ describe("characterService.addCharacterFromBlizzard (public lookup, no ownership
     apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: "400001", isValid: true });
     apiMocks.getCharacterProfileSummary.mockResolvedValue({
       id: "400001",
-      name: "Synblast",
+      name: "Testblast",
       realmId: "1301",
       realmSlug: "antonidas",
       realmName: "Antonidas",
@@ -1298,7 +1298,7 @@ describe("characterService.addCharacterFromBlizzard (public lookup, no ownership
     // public payload type has no such fields, and the server re-resolves
     // both from Blizzard regardless of anything the request body claims.
     const created = await characterService.addCharacterFromBlizzard(owner, {
-      name: "Synblast",
+      name: "Testblast",
       realm: "Antonidas",
       region: "EU",
       specialization: "Elemental",
@@ -1468,7 +1468,7 @@ describe("characterService.addCharacterFromBlizzard (public lookup, no ownership
 
     await expectDomainCode(
       characterService.previewCharacterFromRaiderIoUrl(
-        "https://raider.io.evil.example/characters/eu/antonidas/Synblast",
+        "https://raider.io.evil.example/characters/eu/antonidas/Testblast",
       ),
       "VALIDATION_FAILED",
     );
@@ -1483,7 +1483,7 @@ describe("characterService.addCharacterFromBlizzard (public lookup, no ownership
     // Digits are outside NAME_PATTERN; must fail with INVALID_CHARACTER_NAME.
     await expectDomainCode(
       characterService.previewCharacterFromRaiderIoUrl(
-        "https://raider.io/characters/eu/antonidas/Synblast1",
+        "https://raider.io/characters/eu/antonidas/Testblast1",
       ),
       "INVALID_CHARACTER_NAME",
     );

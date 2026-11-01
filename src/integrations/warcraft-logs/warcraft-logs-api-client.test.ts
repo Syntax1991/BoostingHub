@@ -46,7 +46,7 @@ describe("warcraftLogsApiClient", () => {
     vi.stubEnv("WARCRAFT_LOGS_CLIENT_ID", "");
     vi.stubEnv("WARCRAFT_LOGS_CLIENT_SECRET", "");
     const result = await warcraftLogsApiClient.findCharacter({
-      name: "Synlight",
+      name: "Testlight",
       realm: "Twisting Nether",
       region: "EU",
     });
@@ -61,7 +61,7 @@ describe("warcraftLogsApiClient", () => {
         jsonResponse({
           data: {
             characterData: {
-              character: { id: 11, canonicalID: 99, name: "Synlight", server: { slug: "twisting-nether" } },
+              character: { id: 11, canonicalID: 99, name: "Testlight", server: { slug: "twisting-nether" } },
             },
           },
         }),
@@ -70,19 +70,19 @@ describe("warcraftLogsApiClient", () => {
         jsonResponse({
           data: {
             characterData: {
-              character: { id: 11, canonicalID: 99, name: "Synlight", server: { slug: "twisting-nether" } },
+              character: { id: 11, canonicalID: 99, name: "Testlight", server: { slug: "twisting-nether" } },
             },
           },
         }),
       );
 
     const first = await warcraftLogsApiClient.findCharacter({
-      name: "Synlight",
+      name: "Testlight",
       realm: "Twisting Nether",
       region: "EU",
     });
     const second = await warcraftLogsApiClient.findCharacter({
-      name: "Synlight",
+      name: "Testlight",
       realm: "Twisting Nether",
       region: "EU",
     });
@@ -126,7 +126,7 @@ describe("warcraftLogsApiClient", () => {
               character: {
                 id: 111,
                 canonicalID: 999,
-                name: "Synlight",
+                name: "Testlight",
                 server: { slug: "twisting-nether", region: { slug: "eu" } },
               },
             },
@@ -135,13 +135,13 @@ describe("warcraftLogsApiClient", () => {
       );
 
     const result = await warcraftLogsApiClient.findCharacter({
-      name: "Synlight",
+      name: "Testlight",
       realm: "Twisting Nether",
       region: "EU",
     });
     expect(result).toMatchObject({
       status: "SUCCESS",
-      character: { warcraftLogsId: "999", id: "111", canonicalId: "999", name: "Synlight" },
+      character: { warcraftLogsId: "999", id: "111", canonicalId: "999", name: "Testlight" },
     });
   });
 
@@ -164,7 +164,7 @@ describe("warcraftLogsApiClient", () => {
       .mockResolvedValueOnce(jsonResponse({ errors: [{ message: "rate limited" }] }));
 
     const gql = await warcraftLogsApiClient.findCharacter({
-      name: "Synlight",
+      name: "Testlight",
       realm: "Kazzak",
       region: "EU",
     });
@@ -173,7 +173,7 @@ describe("warcraftLogsApiClient", () => {
     resetWarcraftLogsClientTokenCacheForTests();
     fetchMock.mockResolvedValueOnce(jsonResponse({ error: "nope" }, 500));
     const http = await warcraftLogsApiClient.findCharacter({
-      name: "Synlight",
+      name: "Testlight",
       realm: "Kazzak",
       region: "EU",
     });
@@ -183,7 +183,7 @@ describe("warcraftLogsApiClient", () => {
   it("clears a poisoned token cache after token failure", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ error: "bad" }, 401));
     const first = await warcraftLogsApiClient.findCharacter({
-      name: "Synlight",
+      name: "Testlight",
       realm: "Kazzak",
       region: "EU",
     });
@@ -193,11 +193,11 @@ describe("warcraftLogsApiClient", () => {
       .mockResolvedValueOnce(jsonResponse({ access_token: "ok", expires_in: 3600, token_type: "Bearer" }))
       .mockResolvedValueOnce(
         jsonResponse({
-          data: { characterData: { character: { id: 5, canonicalID: 5, name: "Synlight" } } },
+          data: { characterData: { character: { id: 5, canonicalID: 5, name: "Testlight" } } },
         }),
       );
     const second = await warcraftLogsApiClient.findCharacter({
-      name: "Synlight",
+      name: "Testlight",
       realm: "Kazzak",
       region: "EU",
     });
@@ -237,7 +237,7 @@ describe("warcraftLogsApiClient", () => {
             character: {
               id: 11,
               canonicalID: 99,
-              name: "Synlight",
+              name: "Testlight",
               server: { slug: "twisting-nether", region: { slug: "EU" } },
             },
           },

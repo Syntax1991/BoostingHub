@@ -13,7 +13,7 @@ import {
 export type RosterWarningDialogItem = {
   /** Stable React key (signupId, or characterId for Add Player). */
   key: string;
-  /** e.g. "Synmist-Antonidas". */
+  /** e.g. "Testmist-Antonidas". */
   characterLabel: string;
   warnings: RosterSelectionWarning[];
 };

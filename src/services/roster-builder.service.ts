@@ -80,7 +80,7 @@ export type RosterBuilderResult = {
 export type RosterBuilderWarning = {
   signupId: string;
   characterId: string;
-  /** e.g. "Synmist-Antonidas". */
+  /** e.g. "Testmist-Antonidas". */
   characterLabel: string;
   message: string;
   warning: RosterSelectionWarning;

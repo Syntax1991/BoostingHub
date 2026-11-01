@@ -8,7 +8,7 @@ import type { WowClass } from "@/models/enums";
  *
  * Every id is the Warcraft Logs `abilityGameID` (= spell id) of the player's
  * own cast, taken from real Midnight raid logs (16 Venomous Abyss reports incl.
- * production report WV3BMCHnLvZfb9Yd, September 2026: `events(dataType: Casts)`
+ * a production report, September 2026: `events(dataType: Casts)`
  * filtered by ability name, caster class/spec from `masterData.actors`) and
  * cross-checked against the game's SpellName table. Looked for but not seen in
  * those logs — and therefore left out rather than guessed: Rune Tap,

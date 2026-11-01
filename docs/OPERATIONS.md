@@ -362,7 +362,6 @@ Safety rules:
 - Duplicate markers or foreign authors make the publisher refuse.
 - `--retire-legacy` removes old unmarked posts only if the complete known fingerprint set matches and all v2 cards were verified after the upsert.
 - Every publish writes a local rollback snapshot (`tmp-booster-guide-snapshots/`, `tmp-raidlead-guide-snapshots/`, gitignored). `--snapshot-dir=<path>` changes the location for the Booster guide.
-- `scripts/post-*-guide.mts` are deprecated forwarders. Do not use append-only posting.
 - **Capture only from a freshly seeded local database** (`npm run test:db:reset` on a dedicated database, then run the app against it), never from a database that has seen a real Discord login: a real name would end up in the repository and in Discord. Look at every image before committing or publishing. The seed's Run dates lie in the past, so views of `/runs` and `/my-runs` need `?id=all` to show Runs.
 - Publishing changes Discord for everyone, so it is a deliberate step after a release, not part of a deploy.
 

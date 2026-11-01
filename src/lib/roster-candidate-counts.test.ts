@@ -48,10 +48,10 @@ describe("roster candidate unique counts", () => {
 
   it("keeps filtered unique count at 1 when a hybrid matches in two sections", () => {
     const boosters = [
-      { id: "shaman", roles: ["HEALER", "RANGED_DPS"], name: "Synblast" },
+      { id: "shaman", roles: ["HEALER", "RANGED_DPS"], name: "Testblast" },
       { id: "mage", roles: ["RANGED_DPS"], name: "Frostbolt" },
     ];
-    const filtered = boosters.filter((b) => b.name.toLowerCase().includes("syn"));
+    const filtered = boosters.filter((b) => b.name.toLowerCase().includes("test"));
     expect(uniqueSignupCount(filtered)).toBe(1);
     const healers = filtered.filter((b) => b.roles.includes("HEALER"));
     const dps = filtered.filter((b) => b.roles.some((r) => r === "MELEE_DPS" || r === "RANGED_DPS"));

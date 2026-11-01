@@ -36,17 +36,17 @@ describe("extractWarcraftLogsReportCodes", () => {
   it("finds retail report links in free text, deduplicated and in order", () => {
     expect(
       extractWarcraftLogsReportCodes(
-        "Syntax_gg started a new report https://www.warcraftlogs.com/reports/FtwhWRvqjTbAx4NQ " +
+        "Gamma_gg started a new report https://www.warcraftlogs.com/reports/TestReportCode01 " +
           "(<https://de.warcraftlogs.com/reports/AbCdEfGhIjKlMnOp#fight=3>) and again " +
-          "https://www.warcraftlogs.com/reports/FtwhWRvqjTbAx4NQ",
+          "https://www.warcraftlogs.com/reports/TestReportCode01",
       ),
-    ).toEqual(["FtwhWRvqjTbAx4NQ", "AbCdEfGhIjKlMnOp"]);
+    ).toEqual(["TestReportCode01", "AbCdEfGhIjKlMnOp"]);
   });
 
   it("ignores classic sites, look-alike hosts and malformed codes", () => {
     expect(
       extractWarcraftLogsReportCodes(
-        "https://classic.warcraftlogs.com/reports/FtwhWRvqjTbAx4NQ https://warcraftlogs.com.evil.example/reports/FtwhWRvqjTbAx4NQ https://www.warcraftlogs.com/reports/short",
+        "https://classic.warcraftlogs.com/reports/TestReportCode01 https://warcraftlogs.com.evil.example/reports/TestReportCode01 https://www.warcraftlogs.com/reports/short",
       ),
     ).toEqual([]);
   });

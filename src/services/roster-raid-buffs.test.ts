@@ -11,10 +11,10 @@ import {
 
 function participant(overrides: Partial<RaidBuffParticipant> & { signupId: string; wowClass: WowClass | null }): RaidBuffParticipant {
   return {
-    userName: "Syntax",
+    userName: "Gamma",
     participationType: "BOOSTER",
     lootbuddyMode: null,
-    characterName: "Synlight",
+    characterName: "Testlight",
     ...overrides,
   };
 }
@@ -167,7 +167,7 @@ describe("evaluateRaidBuffCoverage", () => {
 
   it("H/I: same User Booster + PLAYING Lootbuddies contribute distinct classes without userId collapse", () => {
     const result = evaluateRaidBuffCoverage([
-      participant({ signupId: "boost", wowClass: "SHAMAN", characterName: "Synlight" }),
+      participant({ signupId: "boost", wowClass: "SHAMAN", characterName: "Testlight" }),
       participant({
         signupId: "lb-priest",
         wowClass: "PRIEST",

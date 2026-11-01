@@ -27,8 +27,8 @@ export function formatRaidInviteSchedule(scheduledStartAt: string): string {
 
 /**
  * Assignment line body (without the `Assignment:` prefix).
- * BOOSTER VIP: `Healer · Synmist (Monk) · VIP`
- * BOOSTER non-VIP: `Healer · Synmist (Monk)` (no VIP marker)
+ * BOOSTER VIP: `Healer · Testmist (Monk) · VIP`
+ * BOOSTER non-VIP: `Healer · Testmist (Monk)` (no VIP marker)
  * LOOTBUDDY VIP: `Lootbuddy · (Monk) · VIP`
  */
 export function formatRaidInviteAssignment(input: {

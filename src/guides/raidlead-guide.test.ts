@@ -529,7 +529,7 @@ describe("canonical card key renames", () => {
         },
       ],
     };
-    messages[5] = publishedCompletePayout("1554676249627070554");
+    messages[5] = publishedCompletePayout("1554676200000000554");
     return messages;
   }
 
@@ -549,7 +549,7 @@ describe("canonical card key renames", () => {
 
   it("resolves an existing complete-payout message to the complete-run card", () => {
     const { byKey } = indexCanonicalGuideMessages(productionBeforeRepublish(), BOT);
-    expect(byKey.get("complete-run")?.map((m) => m.id)).toEqual(["1554676249627070554"]);
+    expect(byKey.get("complete-run")?.map((m) => m.id)).toEqual(["1554676200000000554"]);
     expect(byKey.has("complete-payout")).toBe(false);
   });
 
@@ -565,7 +565,7 @@ describe("canonical card key renames", () => {
     expect(plan.actions.filter((a) => a.type === "create")).toEqual([]);
     expect(plan.actions.filter((a) => a.type === "update")).toEqual([
       { type: "update", cardKey: "raid-lead-basics", messageId: "m0" },
-      { type: "update", cardKey: "complete-run", messageId: "1554676249627070554" },
+      { type: "update", cardKey: "complete-run", messageId: "1554676200000000554" },
     ]);
     expect(plan.actions.some((a) => a.cardKey === "complete-payout")).toBe(false);
   });
@@ -605,7 +605,7 @@ describe("canonical card key renames", () => {
       const footer =
         card.key === "complete-run" ? embed.footer.text.replace(":complete-run", ":complete-payout") : embed.footer.text;
       return {
-        id: card.key === "complete-run" ? "1554676249627070554" : `m${i}`,
+        id: card.key === "complete-run" ? "1554676200000000554" : `m${i}`,
         author: { id: BOT, bot: true },
         content: "",
         embeds: [{ title: embed.title, description: embed.description, footer: { text: footer }, fields: embed.fields }],
@@ -636,14 +636,14 @@ describe("canonical card key renames", () => {
     expect(client.createMessage).not.toHaveBeenCalled();
     expect(client.deleteMessage).not.toHaveBeenCalled();
     expect(edits).toHaveLength(1);
-    expect(edits[0]!.messageId).toBe("1554676249627070554");
+    expect(edits[0]!.messageId).toBe("1554676200000000554");
     expect(parseRaidleadGuideCardKey(edits[0]!.footer)).toBe("complete-run");
     expect(edits[0]!.footer).toContain(`${RAIDLEAD_GUIDE_MARKER_PREFIX}complete-run`);
-    expect(result.messageIdsByCard["complete-run"]).toBe("1554676249627070554");
+    expect(result.messageIdsByCard["complete-run"]).toBe("1554676200000000554");
 
     // Re-read after the edit: the migrated footer satisfies canonical verification.
     const after = before.map((m) =>
-      m.id === "1554676249627070554"
+      m.id === "1554676200000000554"
         ? { ...m, embeds: [{ ...m.embeds[0]!, footer: { text: edits[0]!.footer } }] }
         : m,
     );

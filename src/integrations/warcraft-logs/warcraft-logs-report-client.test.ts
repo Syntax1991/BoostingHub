@@ -39,7 +39,7 @@ describe("warcraftLogsApiClient.fetchReportMetadata", () => {
         data: {
           reportData: {
             report: {
-              code: "zrQydCT4vaDFk1fw",
+              code: "TestReportCode02",
               title: "VA",
               startTime: 1000,
               endTime: 5000,
@@ -48,19 +48,19 @@ describe("warcraftLogsApiClient.fetchReportMetadata", () => {
                 { id: 1, encounterID: 3492, name: "Ula'tek", startTime: 10, endTime: 20, kill: true, difficulty: 4, friendlyPlayers: [1] },
                 { id: 2, encounterID: 0, name: "Trash", startTime: 30, endTime: 40, kill: null, difficulty: null, friendlyPlayers: [1] },
               ],
-              masterData: { actors: [{ id: 1, name: "Synlight", server: "Blackhand", subType: "Priest" }] },
-              rankedCharacters: [{ id: 5, canonicalID: 6, name: "Synlight", server: { slug: "blackhand" } }],
+              masterData: { actors: [{ id: 1, name: "Testlight", server: "Blackhand", subType: "Priest" }] },
+              rankedCharacters: [{ id: 5, canonicalID: 6, name: "Testlight", server: { slug: "blackhand" } }],
             },
           },
         },
       }),
     );
-    const result = await warcraftLogsApiClient.fetchReportMetadata("zrQydCT4vaDFk1fw");
+    const result = await warcraftLogsApiClient.fetchReportMetadata("TestReportCode02");
     expect(result.status).toBe("SUCCESS");
     if (result.status !== "SUCCESS") return;
     expect(result.report.regionSlug).toBe("EU");
     expect(result.report.fights.map((fight) => fight.id)).toEqual([1]);
-    expect(result.report.actors).toEqual([{ id: 1, name: "Synlight", server: "Blackhand", subType: "Priest" }]);
+    expect(result.report.actors).toEqual([{ id: 1, name: "Testlight", server: "Blackhand", subType: "Priest" }]);
     expect(result.report.rankedCharacters[0]).toMatchObject({ id: "5", canonicalId: "6", serverSlug: "blackhand" });
     expect(graphqlBodies()).toHaveLength(1);
   });
@@ -69,19 +69,19 @@ describe("warcraftLogsApiClient.fetchReportMetadata", () => {
     fetchMock.mockResolvedValueOnce(tokenResponse()).mockResolvedValueOnce(
       jsonResponse({ data: { reportData: { report: null } }, errors: [{ message: "This report does not exist or is private." }] }),
     );
-    await expect(warcraftLogsApiClient.fetchReportMetadata("zrQydCT4vaDFk1fw")).resolves.toEqual({ status: "NOT_FOUND" });
+    await expect(warcraftLogsApiClient.fetchReportMetadata("TestReportCode02")).resolves.toEqual({ status: "NOT_FOUND" });
   });
 
   it("maps HTTP failures to TEMPORARY_FAILURE without throwing", async () => {
     fetchMock.mockResolvedValueOnce(tokenResponse()).mockResolvedValueOnce(jsonResponse({}, 429));
-    await expect(warcraftLogsApiClient.fetchReportMetadata("zrQydCT4vaDFk1fw")).resolves.toMatchObject({
+    await expect(warcraftLogsApiClient.fetchReportMetadata("TestReportCode02")).resolves.toMatchObject({
       status: "TEMPORARY_FAILURE",
     });
   });
 
   it("never calls the network without credentials", async () => {
     vi.stubEnv("WARCRAFT_LOGS_CLIENT_ID", "");
-    await expect(warcraftLogsApiClient.fetchReportMetadata("zrQydCT4vaDFk1fw")).resolves.toEqual({
+    await expect(warcraftLogsApiClient.fetchReportMetadata("TestReportCode02")).resolves.toEqual({
       status: "NOT_CONFIGURED",
     });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -90,7 +90,7 @@ describe("warcraftLogsApiClient.fetchReportMetadata", () => {
 
 describe("warcraftLogsApiClient.fetchReportConsumableEvents", () => {
   const input = {
-    code: "zrQydCT4vaDFk1fw",
+    code: "TestReportCode02",
     fightIds: [1, 4],
     startTime: 10_000,
     endTime: 900_000,

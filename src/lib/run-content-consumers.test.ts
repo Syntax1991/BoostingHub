@@ -227,7 +227,7 @@ describe("Discord Bundle content labels", () => {
       productLabel: display.productLabel,
       contentSummary: display.summary,
       titleCoverage: display.titleCoverage,
-      raidLeadName: "Titan",
+      raidLeadName: "Alpha",
       raidLeadDiscordUserId: "111",
       difficulty: "HEROIC",
       lootType: "VIP",
@@ -251,7 +251,7 @@ describe("Discord Bundle content labels", () => {
     // Older payload without contentTitle: the product label is the title; the
     // header grid carries the Raid Lead, no admin Content/Roster fields.
     expect(embed.title).toBe("Season 2 Bundle");
-    expect(embed.fields?.[0]?.name).toMatch(/ Titan$/);
+    expect(embed.fields?.[0]?.name).toMatch(/ Alpha$/);
     expect(embed.fields?.find((field) => field.name === "Content")).toBeUndefined();
     expect(embed.fields?.find((field) => field.name === "Roster")).toBeUndefined();
     expect(display.titleCoverage).toBe("9/9");

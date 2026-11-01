@@ -221,7 +221,7 @@ describe("characterService create", () => {
 
   it("rejects a duplicate identity including case-only differences", async () => {
     const first = await characterService.createCharacter(owner, {
-      name: "Synblast",
+      name: "Testblast",
       realm: "Tarren Mill",
       region: "EU",
       wowClass: "WARRIOR",
@@ -232,7 +232,7 @@ describe("characterService create", () => {
 
     await expectDomainCode(
       characterService.createCharacter(owner, {
-        name: "synblast",
+        name: "testblast",
         realm: "tarren mill",
         region: "EU",
         wowClass: "WARRIOR",

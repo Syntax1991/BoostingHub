@@ -19,11 +19,11 @@ describe("formatRaidInviteAssignment", () => {
       formatRaidInviteAssignment({
         participationType: "BOOSTER",
         selectedRole: "HEALER",
-        characterName: "Synmist",
+        characterName: "Testmist",
         wowClass: "MONK",
         lootType: "VIP",
       }),
-    ).toBe("Healer · Synmist (Monk) · VIP");
+    ).toBe("Healer · Testmist (Monk) · VIP");
   });
 
   it("omits VIP marker for non-VIP booster assignment", () => {
@@ -31,16 +31,16 @@ describe("formatRaidInviteAssignment", () => {
       formatRaidInviteAssignment({
         participationType: "BOOSTER",
         selectedRole: "TANK",
-        characterName: "Synblast",
+        characterName: "Testblast",
         wowClass: "WARRIOR",
         lootType: "SAVED",
       }),
-    ).toBe("Tank · Synblast (Warrior)");
+    ).toBe("Tank · Testblast (Warrior)");
     expect(
       formatRaidInviteAssignment({
         participationType: "BOOSTER",
         selectedRole: "MELEE_DPS",
-        characterName: "Synvoid",
+        characterName: "Testvoid",
         wowClass: "MAGE",
         lootType: "UNSAVED",
       }),
@@ -66,7 +66,7 @@ describe("buildRaidInviteMessage", () => {
       run: { runId: "r1", contentTitle: "Venom & Tide", scheduledStartAt: "2026-09-16T13:30:00.000Z", difficulty: "HEROIC", lootType: "VIP" },
       participationType: "BOOSTER",
       selectedRole: "HEALER",
-      characterName: "Synmist",
+      characterName: "Testmist",
       wowClass: "MONK",
       runChannelId: "1550000000000000001",
       voiceChannelId: null,
@@ -74,7 +74,7 @@ describe("buildRaidInviteMessage", () => {
 
     expect(text).toContain("<t:1789565400:F> · HEROIC · VIP");
     // VIP once: the meta line names the Run type, the assignment does not repeat it.
-    expect(text).toContain("Assignment: Healer · Synmist (Monk)\n");
+    expect(text).toContain("Assignment: Healer · Testmist (Monk)\n");
     expect(text).toContain("Channel: <#1550000000000000001>");
     expect(text).toContain("<#1550000000000000001>");
     expect(text).not.toMatch(/unknown/i);
@@ -87,7 +87,7 @@ describe("buildRaidInviteMessage", () => {
       run: { runId: "r1", contentTitle: "Venom & Tide", scheduledStartAt: "2026-09-16T13:30:00.000Z", difficulty: "HEROIC", lootType: "VIP" },
       participationType: "BOOSTER",
       selectedRole: "HEALER",
-      characterName: "Synmist",
+      characterName: "Testmist",
       wowClass: "MONK",
       runChannelId: null,
       voiceChannelId: null,
@@ -126,7 +126,7 @@ describe("buildRaidInviteMessage", () => {
       },
       participationType: "BOOSTER" as const,
       selectedRole: "HEALER" as const,
-      characterName: "Synlight",
+      characterName: "Testlight",
       wowClass: "PRIEST" as const,
     };
     const head = [
@@ -135,7 +135,7 @@ describe("buildRaidInviteMessage", () => {
       "Venom & Tide & Kith'ix",
       "<t:1789565400:F> · HEROIC · UNSAVED",
       "",
-      "Assignment: Healer · Synlight (Priest)",
+      "Assignment: Healer · Testlight (Priest)",
     ];
     const runUrl = absoluteRunUrl("r1");
     const tail = ["", "Please be online 10 minutes before start.", ...(runUrl ? ["", `[Open Run](<${runUrl}>)`] : [])];

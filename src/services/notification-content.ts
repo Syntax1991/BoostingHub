@@ -139,7 +139,7 @@ export function rosterCharacterSavedWebNotification(input: {
   };
 }
 
-/** One line per affected pick, e.g. `Synblast-Antonidas — Boss B, Boss C`. */
+/** One line per affected pick, e.g. `Testblast-Antonidas — Boss B, Boss C`. */
 export type SavedSelectedEntry = { characterLabel: string; bossNames: readonly string[] };
 
 function savedSelectedLines(entries: readonly SavedSelectedEntry[]): string[] {
@@ -332,7 +332,7 @@ export function buildRosterSelectedDmMessage(input: {
   runChannelId: string | null;
   /** Character swap for a player already in the roster: "Roster Update" instead of "Roster Selected". */
   update?: boolean;
-  /** The slot's current boss plan ("Boss 5–6: Synpriest-Antonidas · Healer"); null / absent = every boss as rostered. */
+  /** The slot's current boss plan ("Boss 5–6: Testpriest-Antonidas · Healer"); null / absent = every boss as rostered. */
   bossPlan?: string | null;
   /** Only the published boss plan changed for a player who stays in the roster: "Boss Plan Update". */
   bossPlanUpdate?: boolean;

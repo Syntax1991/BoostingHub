@@ -3,10 +3,10 @@ import { parseRaiderIoCharacterUrl } from "@/lib/raiderio-character-url";
 
 describe("parseRaiderIoCharacterUrl", () => {
   it("parses an EU Antonidas Character profile URL", () => {
-    const result = parseRaiderIoCharacterUrl("https://raider.io/characters/eu/antonidas/Synblast");
+    const result = parseRaiderIoCharacterUrl("https://raider.io/characters/eu/antonidas/Testblast");
     expect(result).toEqual({
       ok: true,
-      value: { region: "EU", realmSlug: "antonidas", characterName: "Synblast" },
+      value: { region: "EU", realmSlug: "antonidas", characterName: "Testblast" },
     });
   });
 
@@ -28,11 +28,11 @@ describe("parseRaiderIoCharacterUrl", () => {
 
   it("ignores query and hash", () => {
     const result = parseRaiderIoCharacterUrl(
-      "https://raider.io/characters/eu/antonidas/Synblast?utm=1#gear",
+      "https://raider.io/characters/eu/antonidas/Testblast?utm=1#gear",
     );
     expect(result).toEqual({
       ok: true,
-      value: { region: "EU", realmSlug: "antonidas", characterName: "Synblast" },
+      value: { region: "EU", realmSlug: "antonidas", characterName: "Testblast" },
     });
   });
 
@@ -54,14 +54,14 @@ describe("parseRaiderIoCharacterUrl", () => {
   });
 
   it("rejects evil.example", () => {
-    const result = parseRaiderIoCharacterUrl("https://evil.example/characters/eu/antonidas/Synblast");
+    const result = parseRaiderIoCharacterUrl("https://evil.example/characters/eu/antonidas/Testblast");
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("WRONG_HOST");
   });
 
   it("rejects raider.io.evil.example", () => {
     const result = parseRaiderIoCharacterUrl(
-      "https://raider.io.evil.example/characters/eu/antonidas/Synblast",
+      "https://raider.io.evil.example/characters/eu/antonidas/Testblast",
     );
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("WRONG_HOST");
@@ -69,7 +69,7 @@ describe("parseRaiderIoCharacterUrl", () => {
 
   it("rejects classic.raider.io", () => {
     const result = parseRaiderIoCharacterUrl(
-      "https://classic.raider.io/characters/eu/antonidas/Synblast",
+      "https://classic.raider.io/characters/eu/antonidas/Testblast",
     );
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("WRONG_HOST");
@@ -96,6 +96,6 @@ describe("parseRaiderIoCharacterUrl", () => {
   it("rejects blank input and non-URLs", () => {
     expect(parseRaiderIoCharacterUrl("").ok).toBe(false);
     expect(parseRaiderIoCharacterUrl("not a url").ok).toBe(false);
-    expect(parseRaiderIoCharacterUrl("ftp://raider.io/characters/eu/antonidas/Synblast").ok).toBe(false);
+    expect(parseRaiderIoCharacterUrl("ftp://raider.io/characters/eu/antonidas/Testblast").ok).toBe(false);
   });
 });

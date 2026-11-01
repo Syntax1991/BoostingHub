@@ -96,10 +96,10 @@ describe("loadBotEnv — one active category plus marker channels", () => {
     const withAnnouncement = loadBotEnv(
       baseEnv({
         DISCORD_RUN_CATEGORY_ID: "category-1",
-        DISCORD_ANNOUNCEMENT_CHANNEL_ID: " 1526995703308615732 ",
+        DISCORD_ANNOUNCEMENT_CHANNEL_ID: " 1526995700000000732 ",
       }),
     );
-    expect(withAnnouncement.discordAnnouncementChannelId).toBe("1526995703308615732");
+    expect(withAnnouncement.discordAnnouncementChannelId).toBe("1526995700000000732");
 
     const without = loadBotEnv(baseEnv({ DISCORD_RUN_CATEGORY_ID: "category-1" }));
     expect(without.discordAnnouncementChannelId).toBeNull();

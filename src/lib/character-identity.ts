@@ -1,7 +1,7 @@
 /**
  * Owner-scoped character identity is region + realm + name.
  * Display values keep the operator's spelling; duplicates compare these
- * canonical tokens so "Synblast" / "synblast" cannot be stored twice.
+ * canonical tokens so "Testblast" / "testblast" cannot be stored twice.
  *
  * Diacritics are kept. Éowyn and Eowyn are different characters.
  */

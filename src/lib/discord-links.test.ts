@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { runDiscordChannelUrl } from "@/lib/discord-links";
 
-const GUILD = "1526980319826280509";
-const CHANNEL = "1553838853834674226";
+const GUILD = "1526980300000000509";
+const CHANNEL = "1553838800000000226";
 
 describe("runDiscordChannelUrl", () => {
   it("links the Run channel inside the configured guild", () => {

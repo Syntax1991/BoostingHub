@@ -166,13 +166,13 @@ describe("RosterScheduleConflictAlert", () => {
             source: "WEEKLY_UNAVAILABLE",
             resetIdentifier: "2026-W40",
             difficulty: "HEROIC",
-            message: "Synlight is marked unavailable for Heroic during this reset (2026-W40).",
+            message: "Testlight is marked unavailable for Heroic during this reset (2026-W40).",
           },
         ],
         htmlFor: "signup-checkbox-weekly",
       }),
     );
-    expect(html).toContain("Synlight is marked unavailable for Heroic during this reset (2026-W40).");
+    expect(html).toContain("Testlight is marked unavailable for Heroic during this reset (2026-W40).");
     expect(html).not.toContain("<a ");
     expect(html).not.toContain('href=');
   });

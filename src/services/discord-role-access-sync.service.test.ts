@@ -9,11 +9,11 @@ import {
 import { syncDiscordRoleAccess } from "@/services/discord-role-access-sync.service";
 import { userRepository } from "@/repositories/user.repository";
 
-const RAID_BOOSTER_ROLE_ID = "1527022823103791104";
-const LOOTBUDDY_ROLE_ID = "1527024325306220704";
-const MPLUS_BOOSTER_ROLE_ID = "1527020247683436745";
-const RAID_STAFF_ROLE_ID = "1527026271224201367";
-const RAIDLEADER_ROLE_ID = "1527022875976925427";
+const RAID_BOOSTER_ROLE_ID = "1527022800000000104";
+const LOOTBUDDY_ROLE_ID = "1527024300000000704";
+const MPLUS_BOOSTER_ROLE_ID = "1527020200000000745";
+const RAID_STAFF_ROLE_ID = "1527026200000000367";
+const RAIDLEADER_ROLE_ID = "1527022800000000427";
 
 const USER_IDS = {
   raidBoosterOnly: "dra00000-0000-4000-8000-000000000001",
@@ -125,7 +125,7 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
   fetchMock.mockReset();
   vi.stubEnv("DISCORD_BOT_TOKEN", "test-bot-token");
-  vi.stubEnv("DISCORD_GUILD_ID", "1526980319826280509");
+  vi.stubEnv("DISCORD_GUILD_ID", "1526980300000000509");
   vi.stubEnv("DISCORD_BOOSTER_ROLE_ID", RAID_BOOSTER_ROLE_ID);
   vi.stubEnv("DISCORD_LOOTBUDDY_ROLE_ID", LOOTBUDDY_ROLE_ID);
   vi.stubEnv("DEV_ACCOUNT_BOOTSTRAP_ENABLED", "false");

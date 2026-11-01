@@ -158,7 +158,7 @@ type DraftRosterSlot = {
   warningReasons: string[];
   /** An existing warning a replacement fixes (saved / conflict / inactive / revoked) — shows Find replacement. */
   replaceable?: boolean;
-  /** Compact boss exceptions ("Boss 5–6: Synpriest-Antonidas · Healer"); null = plays every boss as rostered. */
+  /** Compact boss exceptions ("Boss 5–6: Testpriest-Antonidas · Healer"); null = plays every boss as rostered. */
   bossPlan?: string | null;
   external?: boolean;
 };

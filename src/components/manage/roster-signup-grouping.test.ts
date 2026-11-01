@@ -60,7 +60,7 @@ describe("Group by: Player", () => {
   });
 
   it("two players with the same name stay separate in a stable order", () => {
-    expect(groupSignupTilesByPlayer([tile("a", "u2", "Kiri"), tile("b", "u1", "kiri")]).map((group) => group.tiles[0]!.id)).toEqual([
+    expect(groupSignupTilesByPlayer([tile("a", "u2", "Delta"), tile("b", "u1", "delta")]).map((group) => group.tiles[0]!.id)).toEqual([
       "b",
       "a",
     ]);

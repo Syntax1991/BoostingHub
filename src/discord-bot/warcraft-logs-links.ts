@@ -4,7 +4,7 @@ import { extractWarcraftLogsReportCodes } from "@/lib/warcraft-logs";
 
 /**
  * Auto-link Warcraft Logs reports posted by a trusted log bot (e.g.
- * "PhoenixStar Logs: <user> started a new report <url>") in a Run's own
+ * "Sample Logs: <user> started a new report <url>") in a Run's own
  * Discord channel. Reads channel history over REST — no extra gateway intent.
  * The bot only filters; the Bot API re-checks author, channel and Run status.
  *

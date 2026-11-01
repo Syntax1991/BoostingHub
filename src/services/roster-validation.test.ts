@@ -117,7 +117,7 @@ describe("validateRosterDraft", () => {
       runStatus: "ROSTERING",
       selected: [
         member({
-          characterName: "Synblast-Antonidas",
+          characterName: "Testblast-Antonidas",
           selectedRole: null,
           requiresConcreteDpsChoice: true,
         }),
@@ -126,7 +126,7 @@ describe("validateRosterDraft", () => {
     });
     expect(unresolved.canPublish).toBe(false);
     expect(unresolved.blockers.map((item) => item.message)).toContain(
-      "Choose Melee or Ranged DPS for Synblast-Antonidas.",
+      "Choose Melee or Ranged DPS for Testblast-Antonidas.",
     );
 
     const generic = validateRosterDraft({

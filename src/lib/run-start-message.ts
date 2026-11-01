@@ -26,7 +26,7 @@ const DISCORD_MARKDOWN_CHARS = /[\\*_~`|<>[\]#]/g;
 
 /**
  * Makes user-controlled text safe to embed inline in Discord markdown while
- * keeping ordinary names unchanged (Syntax, Kiri, Simon):
+ * keeping ordinary names unchanged (Gamma, Delta, Epsilon):
  * - line breaks collapse to one space → stays one logical line
  * - markdown / mention syntax characters are backslash-escaped → cannot close
  *   the surrounding bold or form <@id>, <#id>, links, code, spoilers
@@ -105,7 +105,7 @@ export type FinalSetupInput = {
   };
   /**
    * Boss-specific deviations of the lineup, one line per affected slot
-   * ("Boss 5–6: Synpriest-Antonidas · Healer"). Absent / empty: no section,
+   * ("Boss 5–6: Testpriest-Antonidas · Healer"). Absent / empty: no section,
    * the message is exactly as before.
    */
   bossPlan?: Array<{ discordUserId: string | null; userName: string; plan: string }>;

@@ -271,7 +271,7 @@ describe("GET /api/bot/discord/sync — Schedule lane projection", () => {
 });
 
 describe("GET /api/bot/discord/sync — Warcraft Logs configuration reaches the bot", () => {
-  const LOG_AUTHOR = "1554176548435918910";
+  const LOG_AUTHOR = "1554176500000000910";
   /** The bot's real API client, with fetch routed straight into the route handler. */
   function botClientAgainstRoute() {
     vi.stubGlobal("fetch", async (url: string, init: RequestInit) =>
@@ -296,7 +296,7 @@ describe("GET /api/bot/discord/sync — Warcraft Logs configuration reaches the 
 
   it("an empty configuration disables it with an empty list", async () => {
     vi.stubEnv("DISCORD_WCL_REPORT_AUTHOR_IDS", "");
-    vi.stubEnv("DISCORD_WCL_REPORT_CHANNEL_IDS", "1553838853834674226");
+    vi.stubEnv("DISCORD_WCL_REPORT_CHANNEL_IDS", "1553838800000000226");
     const work = await botClientAgainstRoute().listSyncWork();
     expect(work.warcraftLogsReportAuthorIds).toEqual([]);
     // No trusted author: no log channel is read either.
@@ -305,10 +305,10 @@ describe("GET /api/bot/discord/sync — Warcraft Logs configuration reaches the 
 
   it("serializes the dedicated log channels (malformed dropped) with their read position into the bot's work", async () => {
     vi.stubEnv("DISCORD_WCL_REPORT_AUTHOR_IDS", LOG_AUTHOR);
-    vi.stubEnv("DISCORD_WCL_REPORT_CHANNEL_IDS", "1553838853834674226, oops,1553838853834674226");
+    vi.stubEnv("DISCORD_WCL_REPORT_CHANNEL_IDS", "1553838800000000226, oops,1553838800000000226");
     const work = await botClientAgainstRoute().listSyncWork();
     expect(work.warcraftLogsReportChannels).toHaveLength(1);
-    expect(work.warcraftLogsReportChannels![0]).toMatchObject({ channelId: "1553838853834674226" });
+    expect(work.warcraftLogsReportChannels![0]).toMatchObject({ channelId: "1553838800000000226" });
     expect(work.warcraftLogsReportChannels![0]!.cursor).toMatch(/^\d{15,25}$/);
   });
 });

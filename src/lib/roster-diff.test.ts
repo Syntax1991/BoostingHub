@@ -11,9 +11,9 @@ function lootbuddy(signupId: string, userId: string, label = "Mage"): RosterDiff
 }
 
 const published = [
-  booster("s-mist", "u-mist", "HEALER", "Synmist-Antonidas"),
-  booster("s-blast", "u-blast", "HEALER", "Synblast-Antonidas"),
-  booster("s-tank", "u-tank", "TANK", "Syntank-Antonidas"),
+  booster("s-mist", "u-mist", "HEALER", "Testmist-Antonidas"),
+  booster("s-blast", "u-blast", "HEALER", "Testblast-Antonidas"),
+  booster("s-tank", "u-tank", "TANK", "Testtank-Antonidas"),
 ];
 
 describe("diffRoster — Update Roster preview", () => {
@@ -22,7 +22,7 @@ describe("diffRoster — Update Roster preview", () => {
   });
 
   it("added", () => {
-    const changes = diffRoster(published, [...published, booster("s-light", "u-light", "HEALER", "Synlight-Antonidas")]);
+    const changes = diffRoster(published, [...published, booster("s-light", "u-light", "HEALER", "Testlight-Antonidas")]);
     expect(changes).toEqual([{ kind: "ADDED", member: expect.objectContaining({ signupId: "s-light", role: "HEALER" }) }]);
   });
 
@@ -43,7 +43,7 @@ describe("diffRoster — Update Roster preview", () => {
 
   it("Character swap of the same User is one change, not add + remove", () => {
     const changes = diffRoster(published, [
-      booster("s-mist-alt", "u-mist", "HEALER", "Synmistalt-Antonidas"),
+      booster("s-mist-alt", "u-mist", "HEALER", "Testmistalt-Antonidas"),
       published[1]!,
       published[2]!,
     ]);
@@ -58,7 +58,7 @@ describe("diffRoster — Update Roster preview", () => {
 
   it("multiple changes: + first, then −, then swaps, then role changes", () => {
     const changes = diffRoster(published, [
-      booster("s-light", "u-light", "HEALER", "Synlight-Antonidas"),
+      booster("s-light", "u-light", "HEALER", "Testlight-Antonidas"),
       { ...published[1]!, role: "RANGED_DPS" },
       published[2]!,
     ]);

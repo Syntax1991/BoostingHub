@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
 import { config, isProtectedPath, PROTECTED_PREFIXES, proxy } from "./proxy";
 
-const ORIGIN = "https://phoenix-star.de";
+const ORIGIN = "https://app.example.test";
 
 function signedOutRequest(pathname: string) {
   return new NextRequest(new URL(pathname, ORIGIN));

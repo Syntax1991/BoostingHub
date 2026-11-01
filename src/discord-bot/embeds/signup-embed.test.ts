@@ -68,11 +68,11 @@ function emptyData(overrides: Partial<SignupEmbedData> = {}): SignupEmbedData {
 }
 
 const INDICATORS: Partial<Record<WowClass, string>> = {
-  PALADIN: "<:paladin:1549226889409863761>",
-  SHAMAN: "<:shaman:1549227028408963113>",
+  PALADIN: "<:paladin:1549226800000000761>",
+  SHAMAN: "<:shaman:1549227000000000113>",
   PRIEST: "<:priest:1549227000000000000>",
-  MAGE: "<:mage:1549226645443969125>",
-  HUNTER: "<:hunter:1549226757536751636>",
+  MAGE: "<:mage:1549226600000000125>",
+  HUNTER: "<:hunter:1549226700000000636>",
   WARLOCK: "<:warlock:1549227100000000000>",
   DEMON_HUNTER: "<:demonhunter:1549227100000000001>",
 };
@@ -146,23 +146,23 @@ describe("participant lines", () => {
         userId: "u1",
         userName: "Display Name",
         discordUserId: "123456789012345678",
-        characterName: "Synblast",
+        characterName: "Testblast",
         characterRealm: "Antonidas",
         wowClass: "SHAMAN",
       }),
       { SHAMAN: "<:shaman:987654321012345678>" },
     );
     expect(line).toBe("<:shaman:987654321012345678> <@123456789012345678>");
-    expect(line).not.toContain("Synblast");
+    expect(line).not.toContain("Testblast");
   });
 
   it("falls back to @discordUsername, then @userName, and to the class label without a Guild emoji", () => {
     expect(
       formatSignupParticipantLine(
-        member({ signupId: "s", userId: "u", userName: "Name", discordUsername: "syntaxgg_1991", wowClass: "SHAMAN" }),
+        member({ signupId: "s", userId: "u", userName: "Name", discordUsername: "gammagg_1991", wowClass: "SHAMAN" }),
         { SHAMAN: "<:shaman:1>" },
       ),
-    ).toBe("<:shaman:1> @syntaxgg_1991");
+    ).toBe("<:shaman:1> @gammagg_1991");
     expect(
       formatSignupParticipantLine(member({ signupId: "s", userId: "u", userName: "UserName", wowClass: "MAGE" }), {}),
     ).toBe("Mage @UserName");
@@ -180,7 +180,7 @@ describe("participant lines", () => {
   });
 
   it("chunkEmbedFieldLines never splits a line, never drops lines, and keeps order", () => {
-    const lines = Array.from({ length: 80 }, (_, index) => `<@${100000000000000000 + index}> <:mage:1549226645443969125>`);
+    const lines = Array.from({ length: 80 }, (_, index) => `<@${100000000000000000 + index}> <:mage:1549226600000000125>`);
     const chunks = chunkEmbedFieldLines(lines);
     expect(chunks.flat()).toEqual(lines);
     for (const chunk of chunks) expect(chunk.join("\n").length).toBeLessThanOrEqual(DISCORD_EMBED_FIELD_VALUE_LIMIT);
@@ -338,7 +338,7 @@ describe("buildSignupEmbed — Discord limits", () => {
 
   it("deterministic fallback: drops class icons (mentions stay) before anything else", () => {
     const longIcons = Object.fromEntries(
-      Object.keys(INDICATORS).map((wowClass) => [wowClass, `<:${"z".repeat(30)}:1549226645443969125>`]),
+      Object.keys(INDICATORS).map((wowClass) => [wowClass, `<:${"z".repeat(30)}:1549226600000000125>`]),
     ) as Partial<Record<WowClass, string>>;
     const data = rosterData(25, 10, Array.from({ length: 20 }, (_, index) => note(`f${index}`, snowflake(500000 + index), "w".repeat(90))));
     const json = buildSignupEmbed(data, { classIndicators: longIcons, runUrl: RUN_URL }).toJSON();
@@ -376,7 +376,7 @@ describe("buildSignupButtons", () => {
   it("LB button uses the Guild lootbuddy emoji (`:Unsaved:`) when present, 💰 otherwise", () => {
     const lbEmoji = (roleIndicators?: { lootbuddy?: string }) =>
       (buildSignupButtons(emptyData(), roleIndicators)[0]!.toJSON().components as Array<{ emoji?: unknown }>)[2]!.emoji;
-    expect(lbEmoji({ lootbuddy: "<:Unsaved:1532868942727741491>" })).toEqual({ animated: false, name: "Unsaved", id: "1532868942727741491" });
+    expect(lbEmoji({ lootbuddy: "<:Unsaved:1532868900000000491>" })).toEqual({ animated: false, name: "Unsaved", id: "1532868900000000491" });
     expect(lbEmoji()).toMatchObject({ name: "💰", id: undefined });
   });
 

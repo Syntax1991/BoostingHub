@@ -32,11 +32,11 @@ import { GET as syncGet } from "@/app/api/bot/discord/sync/route";
  */
 const RUN = "r9999996-9996-4996-8996-999999999996";
 const TOKEN = "bot-api-test-token-discovery-0123";
-const LOG_CHANNEL = "1553838853834674226";
-const LOG_BOT = "1554176548435918910";
+const LOG_CHANNEL = "1553838800000000226";
+const LOG_BOT = "1554176500000000910";
 const OTHER_CHANNEL = "555555555555555555";
-const REPORT = "FtwhWRvqjTbAx4NQ";
-const LATE_REPORT = "Kp3xZm9QwLr7Vt2N";
+const REPORT = "TestReportCode01";
+const LATE_REPORT = "TestReportCode04";
 const at = (hhmm: string) => new Date(`2026-09-20T${hhmm}:00.000Z`);
 const REPORT_START = at("14:05").getTime();
 /** A message posted at 14:06 — its snowflake encodes that time. */
@@ -53,7 +53,7 @@ function metadata(code: string): WarcraftLogsReportMetadata {
   };
   return {
     code,
-    title: "Manawyrm Logging",
+    title: "Raid Logging",
     startTime: REPORT_START,
     endTime: at("15:25").getTime(),
     regionSlug: "EU",

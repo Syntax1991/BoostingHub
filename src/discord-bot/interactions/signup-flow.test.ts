@@ -27,7 +27,7 @@ const mistweaver: {
   defaultRole: "HEALER" | null;
 } = {
   characterId: "c-mist",
-  characterName: "Synmist",
+  characterName: "Testmist",
   realm: "Antonidas",
   roles: ["TANK", "HEALER", "MELEE_DPS"],
   defaultRole: "HEALER",
@@ -42,7 +42,7 @@ describe("buildCharacterSelectOptions", () => {
 
     expect(options).toHaveLength(1);
     expect(options[0]?.value).toBe("c-mist");
-    expect(options[0]?.label).toBe("Synmist-Antonidas");
+    expect(options[0]?.label).toBe("Testmist-Antonidas");
     expect(options[0]?.description).toBe("Healer (default) · Tank/Melee DPS offspec");
   });
 
@@ -51,7 +51,7 @@ describe("buildCharacterSelectOptions", () => {
       characterIds: ["c-mist"],
       offeredRolesByCharacterId: { "c-mist": ["TANK"] },
     }).map((option) => option.toJSON());
-    expect(options[0]?.label).toBe("Synmist-Antonidas");
+    expect(options[0]?.label).toBe("Testmist-Antonidas");
     expect(options[0]?.description).toBe("Tank · Healer/Melee DPS offspec");
   });
 
@@ -100,13 +100,13 @@ describe("describeOfferResult", () => {
 });
 
 const RUN_ID = "r7777777-7777-4777-8777-777777777777";
-const SYNMIST = "c1111111-1111-4111-8111-111111111111"; // hybrid Monk
+const TESTMIST = "c1111111-1111-4111-8111-111111111111"; // hybrid Monk
 const FROSTBOLT = "c2222222-2222-4222-8222-222222222222"; // single-role Mage
 
 function signupOptionsPayload(overrides: {
   offeredRolesByCharacterId?: Record<string, ("TANK" | "HEALER" | "MELEE_DPS" | "RANGED_DPS" | "DPS")[]>;
   activeCharacterIds?: string[];
-  synmistDefaultRole?: "TANK" | "HEALER" | "MELEE_DPS" | "RANGED_DPS" | "DPS" | null;
+  testmistDefaultRole?: "TANK" | "HEALER" | "MELEE_DPS" | "RANGED_DPS" | "DPS" | null;
 } = {}) {
   return {
     run: {
@@ -119,11 +119,11 @@ function signupOptionsPayload(overrides: {
     booster: {
       eligible: [
         {
-          characterId: SYNMIST,
-          characterName: "Synmist",
+          characterId: TESTMIST,
+          characterName: "Testmist",
           realm: "Antonidas",
           roles: ["TANK", "HEALER", "MELEE_DPS", "RANGED_DPS"],
-          defaultRole: overrides.synmistDefaultRole === undefined ? "HEALER" : overrides.synmistDefaultRole,
+          defaultRole: overrides.testmistDefaultRole === undefined ? "HEALER" : overrides.testmistDefaultRole,
         },
         {
           characterId: FROSTBOLT,
@@ -212,12 +212,12 @@ describe("BOOSTER staging flow (character select -> next -> role select -> confi
   it("selecting characters stages silently — same pick UI, no Currently selected dump", async () => {
     const setCharacterOffers = vi.fn();
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()), setCharacterOffers });
-    const interaction = fakeInteraction("user-a", [SYNMIST, FROSTBOLT]);
+    const interaction = fakeInteraction("user-a", [TESTMIST, FROSTBOLT]);
 
     await characterSelect(interaction, api, RUN_ID);
 
     expect(setCharacterOffers).not.toHaveBeenCalled();
-    expect(getSession("user-a", RUN_ID)?.offers.has(SYNMIST)).toBe(true);
+    expect(getSession("user-a", RUN_ID)?.offers.has(TESTMIST)).toBe(true);
     const call = interaction.editReply.mock.calls[0]?.[0];
     expect(call.content).toContain("press **Next**");
     expect(call.content).not.toContain("Currently selected");
@@ -230,7 +230,7 @@ describe("BOOSTER staging flow (character select -> next -> role select -> confi
 
   it("Next opens the role editor for the staged session", async () => {
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()) });
-    await characterSelect(fakeInteraction("user-a", [SYNMIST, FROSTBOLT]), api, RUN_ID);
+    await characterSelect(fakeInteraction("user-a", [TESTMIST, FROSTBOLT]), api, RUN_ID);
 
     const nextInteraction = fakeInteraction("user-a");
     await signupNext(nextInteraction, api, RUN_ID);
@@ -244,28 +244,28 @@ describe("BOOSTER staging flow (character select -> next -> role select -> confi
 
   it("new Character selection seeds the specialization-derived default, never the first class role", async () => {
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()) });
-    const interaction = fakeInteraction("user-a", [SYNMIST]);
+    const interaction = fakeInteraction("user-a", [TESTMIST]);
 
     await characterSelect(interaction, api, RUN_ID);
 
     const session = getSession("user-a", RUN_ID)!;
-    // Synmist's class-order first role is TANK (Brewmaster listed first); the
+    // Testmist's class-order first role is TANK (Brewmaster listed first); the
     // seeded role must be its specialization default (HEALER), never that.
-    expect(session.offers.get(SYNMIST)).toEqual(["HEALER"]);
+    expect(session.offers.get(TESTMIST)).toEqual(["HEALER"]);
   });
 
   it("existing signup preselects each Character's persisted role, which wins over the specialization default", async () => {
     const api = fakeApi({
       getSignupOptions: vi.fn().mockResolvedValue(
-        signupOptionsPayload({ activeCharacterIds: [SYNMIST], offeredRolesByCharacterId: { [SYNMIST]: ["TANK"] } }),
+        signupOptionsPayload({ activeCharacterIds: [TESTMIST], offeredRolesByCharacterId: { [TESTMIST]: ["TANK"] } }),
       ),
     });
-    const interaction = fakeInteraction("user-a", [SYNMIST]);
+    const interaction = fakeInteraction("user-a", [TESTMIST]);
 
     await characterSelect(interaction, api, RUN_ID);
 
     const session = getSession("user-a", RUN_ID)!;
-    expect(session.offers.get(SYNMIST)).toEqual(["TANK"]);
+    expect(session.offers.get(TESTMIST)).toEqual(["TANK"]);
     expect(session.isExistingSignup).toBe(true);
   });
 
@@ -279,31 +279,31 @@ describe("BOOSTER staging flow (character select -> next -> role select -> confi
   });
 
   it("a hybrid Character with no specialization default stays unresolved — never guessed from class order", async () => {
-    const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload({ synmistDefaultRole: null })) });
-    const interaction = fakeInteraction("user-a", [SYNMIST]);
+    const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload({ testmistDefaultRole: null })) });
+    const interaction = fakeInteraction("user-a", [TESTMIST]);
 
     await characterSelect(interaction, api, RUN_ID);
 
-    expect(getSession("user-a", RUN_ID)!.offers.get(SYNMIST)).toEqual([]);
+    expect(getSession("user-a", RUN_ID)!.offers.get(TESTMIST)).toEqual([]);
   });
 
   it("changing a staged role does NOT call setCharacterOffers", async () => {
     const setCharacterOffers = vi.fn();
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()), setCharacterOffers });
-    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID);
+    await characterSelect(fakeInteraction("user-a", [TESTMIST]), api, RUN_ID);
 
     const roleInteraction = fakeInteraction("user-a", ["TANK"]);
-    await roleSelect(roleInteraction, api, RUN_ID, SYNMIST);
+    await roleSelect(roleInteraction, api, RUN_ID, TESTMIST);
 
     expect(setCharacterOffers).not.toHaveBeenCalled();
-    expect(getSession("user-a", RUN_ID)!.offers.get(SYNMIST)).toEqual(["TANK"]);
+    expect(getSession("user-a", RUN_ID)!.offers.get(TESTMIST)).toEqual(["TANK"]);
   });
 
   it("Confirm persists the full staged set exactly once, with each Character's own role", async () => {
     const setCharacterOffers = vi.fn().mockResolvedValue({ created: 2, reactivated: 0, withdrawn: 0, kept: 0 });
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()), setCharacterOffers });
-    await characterSelect(fakeInteraction("user-a", [SYNMIST, FROSTBOLT]), api, RUN_ID);
-    await roleSelect(fakeInteraction("user-a", ["TANK"]), api, RUN_ID, SYNMIST);
+    await characterSelect(fakeInteraction("user-a", [TESTMIST, FROSTBOLT]), api, RUN_ID);
+    await roleSelect(fakeInteraction("user-a", ["TANK"]), api, RUN_ID, TESTMIST);
 
     const confirmInteraction = fakeInteraction("user-a");
     await confirmSignup(confirmInteraction, api, RUN_ID);
@@ -312,7 +312,7 @@ describe("BOOSTER staging flow (character select -> next -> role select -> confi
     const [, , body] = setCharacterOffers.mock.calls[0];
     expect(body.offers).toEqual(
       expect.arrayContaining([
-        { characterId: SYNMIST, offeredRoles: ["TANK"] },
+        { characterId: TESTMIST, offeredRoles: ["TANK"] },
         { characterId: FROSTBOLT, offeredRoles: ["RANGED_DPS"] },
       ]),
     );
@@ -324,23 +324,23 @@ describe("BOOSTER staging flow (character select -> next -> role select -> confi
   it("no offered Character can appear twice in the Confirm payload", async () => {
     const setCharacterOffers = vi.fn().mockResolvedValue({ created: 1, reactivated: 0, withdrawn: 0, kept: 0 });
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()), setCharacterOffers });
-    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID);
-    await roleSelect(fakeInteraction("user-a", ["TANK"]), api, RUN_ID, SYNMIST);
-    await roleSelect(fakeInteraction("user-a", ["HEALER"]), api, RUN_ID, SYNMIST);
+    await characterSelect(fakeInteraction("user-a", [TESTMIST]), api, RUN_ID);
+    await roleSelect(fakeInteraction("user-a", ["TANK"]), api, RUN_ID, TESTMIST);
+    await roleSelect(fakeInteraction("user-a", ["HEALER"]), api, RUN_ID, TESTMIST);
 
     await confirmSignup(fakeInteraction("user-a"), api, RUN_ID);
 
     const [, , body] = setCharacterOffers.mock.calls[0];
     const characterIds = body.offers.map((offer: { characterId: string }) => offer.characterId);
     expect(new Set(characterIds).size).toBe(characterIds.length);
-    expect(body.offers).toEqual([{ characterId: SYNMIST, offeredRoles: ["HEALER"] }]);
+    expect(body.offers).toEqual([{ characterId: TESTMIST, offeredRoles: ["HEALER"] }]);
   });
 
   it("Cancel discards the session and never calls setCharacterOffers", async () => {
     const setCharacterOffers = vi.fn();
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()), setCharacterOffers });
-    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID);
-    await roleSelect(fakeInteraction("user-a", ["TANK"]), api, RUN_ID, SYNMIST);
+    await characterSelect(fakeInteraction("user-a", [TESTMIST]), api, RUN_ID);
+    await roleSelect(fakeInteraction("user-a", ["TANK"]), api, RUN_ID, TESTMIST);
 
     const cancelInteraction = fakeInteraction("user-a");
     await discardSignup(cancelInteraction, RUN_ID);
@@ -357,7 +357,7 @@ describe("BOOSTER staging flow (character select -> next -> role select -> confi
     const api = fakeApi({ setCharacterOffers });
 
     const roleInteraction = fakeInteraction("user-a", ["TANK"]);
-    await roleSelect(roleInteraction, api, RUN_ID, SYNMIST);
+    await roleSelect(roleInteraction, api, RUN_ID, TESTMIST);
     expect(roleInteraction.editReply).toHaveBeenCalledWith(
       expect.objectContaining({ content: expect.stringContaining("expired") }),
     );
@@ -373,22 +373,22 @@ describe("BOOSTER staging flow (character select -> next -> role select -> confi
 
   it("User B cannot read or mutate User A's staged session", async () => {
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()) });
-    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID);
+    await characterSelect(fakeInteraction("user-a", [TESTMIST]), api, RUN_ID);
 
     const userBRoleSelect = fakeInteraction("user-b", ["TANK"]);
-    await roleSelect(userBRoleSelect, api, RUN_ID, SYNMIST);
+    await roleSelect(userBRoleSelect, api, RUN_ID, TESTMIST);
 
     expect(userBRoleSelect.editReply).toHaveBeenCalledWith(
       expect.objectContaining({ content: expect.stringContaining("expired") }),
     );
     // User A's own session is completely unaffected by User B's attempt.
-    expect(getSession("user-a", RUN_ID)!.offers.get(SYNMIST)).toEqual(["HEALER"]);
+    expect(getSession("user-a", RUN_ID)!.offers.get(TESTMIST)).toEqual(["HEALER"]);
   });
 
   it("a failed Confirm keeps the staged session so the User can retry, and mutates nothing", async () => {
     const setCharacterOffers = vi.fn().mockRejectedValue(new Error("boom"));
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()), setCharacterOffers });
-    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID);
+    await characterSelect(fakeInteraction("user-a", [TESTMIST]), api, RUN_ID);
 
     const confirmInteraction = fakeInteraction("user-a");
     await confirmSignup(confirmInteraction, api, RUN_ID);
@@ -402,10 +402,10 @@ describe("BOOSTER staging flow (character select -> next -> role select -> confi
   it("Confirm blocks and re-renders when a Character's role is still unresolved, without calling the API", async () => {
     const setCharacterOffers = vi.fn();
     const api = fakeApi({
-      getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload({ synmistDefaultRole: null })),
+      getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload({ testmistDefaultRole: null })),
       setCharacterOffers,
     });
-    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID);
+    await characterSelect(fakeInteraction("user-a", [TESTMIST]), api, RUN_ID);
 
     const confirmInteraction = fakeInteraction("user-a");
     await confirmSignup(confirmInteraction, api, RUN_ID);
@@ -427,11 +427,11 @@ const signupButton = handleSignupButton as unknown as (
 describe("cross-Run reservation conflicts in the Discord signup flow", () => {
   it("excludes a reservation-blocked character from the select menu but lists it as unavailable", async () => {
     const payload = signupOptionsPayload();
-    payload.booster.eligible = [payload.booster.eligible[1]!]; // Frostbolt only — Synmist is reserved elsewhere
+    payload.booster.eligible = [payload.booster.eligible[1]!]; // Frostbolt only — Testmist is reserved elsewhere
     payload.booster.ineligible = [
       {
-        characterId: SYNMIST,
-        characterName: "Synmist",
+        characterId: TESTMIST,
+        characterName: "Testmist",
         realm: "Antonidas",
         reason: "ALREADY_SELECTED_OTHER_RUN",
         message: "Already selected for Sat 20:00 HC VIP 8/8 Aelira Nightwatch.",
@@ -445,7 +445,7 @@ describe("cross-Run reservation conflicts in the Discord signup flow", () => {
 
     const call = interaction.editReply.mock.calls[0]?.[0];
     expect(call.content).toContain("Unavailable characters");
-    expect(call.content).toContain("Synmist-Antonidas");
+    expect(call.content).toContain("Testmist-Antonidas");
     expect(call.content).toContain("Sat 20:00 HC VIP 8/8 Aelira Nightwatch");
     const menu = call.components[0].components[0].toJSON();
     expect(menu.options.map((option: { value: string }) => option.value)).toEqual([FROSTBOLT]);
@@ -456,8 +456,8 @@ describe("cross-Run reservation conflicts in the Discord signup flow", () => {
     payload.booster.eligible = [];
     payload.booster.ineligible = [
       {
-        characterId: SYNMIST,
-        characterName: "Synmist",
+        characterId: TESTMIST,
+        characterName: "Testmist",
         realm: "Antonidas",
         reason: "ALREADY_SELECTED_OTHER_RUN",
         message: "Already selected for another run.",
@@ -489,7 +489,7 @@ describe("raid save (lockout) is informational in the Discord signup flow", () =
   it("a saved character stays selectable and carries lockout text on its dropdown option", async () => {
     const payload = signupOptionsPayload();
     payload.booster.eligible = payload.booster.eligible.map((option) =>
-      option.characterId === SYNMIST
+      option.characterId === TESTMIST
         ? {
             ...option,
             contentSaves: [
@@ -518,16 +518,16 @@ describe("raid save (lockout) is informational in the Discord signup flow", () =
     expect(call.content).not.toContain("Lockouts this reset");
     const menu = call.components[0].components[0].toJSON();
     // Still selectable — present in the menu, same as any other eligible character.
-    expect(menu.options.map((option: { value: string }) => option.value)).toEqual(expect.arrayContaining([SYNMIST, FROSTBOLT]));
-    const synmistOption = menu.options.find((option: { value: string }) => option.value === SYNMIST);
-    expect(synmistOption.description).toContain("8/8");
-    expect(synmistOption.description).toContain("Fully saved");
+    expect(menu.options.map((option: { value: string }) => option.value)).toEqual(expect.arrayContaining([TESTMIST, FROSTBOLT]));
+    const testmistOption = menu.options.find((option: { value: string }) => option.value === TESTMIST);
+    expect(testmistOption.description).toContain("8/8");
+    expect(testmistOption.description).toContain("Fully saved");
   });
 
   it("puts every Bundle content lockout on the dropdown option, never only HC 0/1", async () => {
     const payload = signupOptionsPayload();
     payload.booster.eligible = payload.booster.eligible.map((option) =>
-      option.characterId === SYNMIST
+      option.characterId === TESTMIST
         ? {
             ...option,
             contentSaves: [
@@ -570,18 +570,18 @@ describe("raid save (lockout) is informational in the Discord signup flow", () =
     expect(call.content).not.toContain("Lockouts this reset");
     expect(call.content).not.toContain("Tide: HC 0/1");
     const menu = call.components[0].components[0].toJSON();
-    const synmistOption = menu.options.find((option: { value: string }) => option.value === SYNMIST);
-    expect(synmistOption.description).toContain("Tide");
-    expect(synmistOption.description).toContain("0/1");
-    expect(synmistOption.description).toContain("Venomous Abyss");
-    expect(synmistOption.description).toContain("3/8");
-    expect(synmistOption.description).not.toMatch(/^HC 0\/1/);
+    const testmistOption = menu.options.find((option: { value: string }) => option.value === TESTMIST);
+    expect(testmistOption.description).toContain("Tide");
+    expect(testmistOption.description).toContain("0/1");
+    expect(testmistOption.description).toContain("Venomous Abyss");
+    expect(testmistOption.description).toContain("3/8");
+    expect(testmistOption.description).not.toMatch(/^HC 0\/1/);
   });
 
   it("selecting a saved character still stages only — no DB call until Confirm", async () => {
     const payload = signupOptionsPayload();
     payload.booster.eligible = payload.booster.eligible.map((option) =>
-      option.characterId === SYNMIST
+      option.characterId === TESTMIST
         ? {
             ...option,
             contentSaves: [
@@ -604,10 +604,10 @@ describe("raid save (lockout) is informational in the Discord signup flow", () =
     const setCharacterOffers = vi.fn();
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(payload), setCharacterOffers });
 
-    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID);
+    await characterSelect(fakeInteraction("user-a", [TESTMIST]), api, RUN_ID);
 
     expect(setCharacterOffers).not.toHaveBeenCalled();
-    expect(getSession("user-a", RUN_ID)?.offers.get(SYNMIST)).toEqual(["HEALER"]);
+    expect(getSession("user-a", RUN_ID)?.offers.get(TESTMIST)).toEqual(["HEALER"]);
   });
 });
 

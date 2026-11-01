@@ -32,7 +32,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
     label: "Default HC",
     notes: null,
     raidLeadId: "lead-1",
-    raidLeadName: "Synblast",
+    raidLeadName: "Testblast",
     raidLeadDiscordUserId: null,
     raidLeadEligible: true,
     runTemplateId: "template-1",
@@ -153,7 +153,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
         runTemplateId: "template-1",
         runSetupName: "HC Unsaved · The Venomous Abyss",
         raidLeadId: "lead-1",
-        raidLeadName: "Synblast",
+        raidLeadName: "Testblast",
         autoCreateSummary: "MIXED" as const,
         canEdit,
         slotCount: 3,
@@ -306,7 +306,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
         autoCreateRun: false,
       },
     ],
-    eligibleRaidLeads: [{ id: "lead-1", name: "Synblast" }],
+    eligibleRaidLeads: [{ id: "lead-1", name: "Testblast" }],
   };
 }
 

@@ -400,7 +400,7 @@ export function bossLockoutWarnings(input: {
     }));
 }
 
-/** Compact description of one slot's exceptions, grouped by Character + role: "Boss 7–8: Ranged DPS; Boss 5–6: Synalt · Healer". */
+/** Compact description of one slot's exceptions, grouped by Character + role: "Boss 7–8: Ranged DPS; Boss 5–6: Testalt · Healer". */
 export function describeSlotBossPlan(input: {
   exceptions: readonly RosterBossException[];
   bosses: readonly RunBoss[];

@@ -7,28 +7,28 @@ import {
 } from "@/lib/wow-raid-catalog";
 
 describe("buildRunTitle", () => {
-  it("formats Thu 21:00 HC VIP 8/8 Titan for Venomous", () => {
+  it("formats Thu 21:00 HC VIP 8/8 Alpha for Venomous", () => {
     expect(
       buildRunTitle({
         scheduledStartAt: "2026-09-10T19:00:00.000Z",
         difficulty: "HEROIC",
         lootType: "VIP",
         titleCoverage: "8/8",
-        raidLeadName: "Titan",
+        raidLeadName: "Alpha",
       }),
-    ).toBe("Thu 21:00 HC VIP 8/8 Titan");
+    ).toBe("Thu 21:00 HC VIP 8/8 Alpha");
   });
 
-  it("formats Fri 18:45 NM Unsaved 6/8 Titan for partial Venomous", () => {
+  it("formats Fri 18:45 NM Unsaved 6/8 Alpha for partial Venomous", () => {
     expect(
       buildRunTitle({
         scheduledStartAt: "2026-09-11T16:45:00.000Z",
         difficulty: "NORMAL",
         lootType: "UNSAVED",
         titleCoverage: "6/8",
-        raidLeadName: "Titan",
+        raidLeadName: "Alpha",
       }),
-    ).toBe("Fri 18:45 NM Unsaved 6/8 Titan");
+    ).toBe("Fri 18:45 NM Unsaved 6/8 Alpha");
   });
 
   it("formats Bundle titles with summed coverage (9/9), not S2B", () => {
@@ -59,7 +59,7 @@ describe("buildRunTitle", () => {
       difficulty: "MYTHIC",
       lootType: "COMMUNITY",
       titleCoverage: "8/8",
-      raidLeadName: "UwE",
+      raidLeadName: "IvO",
     });
     expect(title).toContain("Mythic Community");
     expect(title).not.toContain("MY Community");
@@ -73,7 +73,7 @@ describe("buildRunTitle", () => {
         difficulty: "HEROIC",
         lootType: "COMMUNITY",
         titleCoverage: "8/8",
-        raidLeadName: "UwE",
+        raidLeadName: "IvO",
       }),
     ).toContain("HC Community");
   });
@@ -97,7 +97,7 @@ describe("buildRunTitle", () => {
       difficulty: "HEROIC" as const,
       lootType: "VIP" as const,
       titleCoverage: "8/8",
-      raidLeadName: "Titan",
+      raidLeadName: "Alpha",
     };
     expect(buildRunTitle(input)).toBe(buildRunTitle(input));
   });

@@ -48,7 +48,7 @@ describe("application capability (GET /applications/@me flags)", () => {
 describe("classifyMessageContent", () => {
   it("1–3. text is TEXT: a member's, another bot's, or this app's own", () => {
     expect(classifyMessageContent({ ...empty, content: "hi\nthere" }, "AVAILABLE")).toBe("TEXT");
-    expect(classifyMessageContent({ ...empty, content: "PhoenixStar Logs: new report" }, "AVAILABLE")).toBe("TEXT");
+    expect(classifyMessageContent({ ...empty, content: "Sample Logs: new report" }, "AVAILABLE")).toBe("TEXT");
     expect(classifyMessageContent({ ...empty, authoredByApp: true, content: "Final Setup" }, "AVAILABLE")).toBe("TEXT");
   });
 

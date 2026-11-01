@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import { buildGuideReply, handleGuideCommand } from "@/discord-bot/commands/guide";
 import { GUIDE_CHANNEL_IDS, guideChannelUrl } from "@/discord-bot/guide-channels";
 
-const OLD_BOOSTER_THREAD_ID = "1552698422677737694";
-const OLD_RAIDLEAD_THREAD_ID = "1552709968879292546";
+const OLD_BOOSTER_THREAD_ID = "1552698400000000694";
+const OLD_RAIDLEAD_THREAD_ID = "1552709900000000546";
 
 function buttonUrl(reply: ReturnType<typeof buildGuideReply>) {
   return (reply.components[0].toJSON().components[0] as { url?: string }).url;

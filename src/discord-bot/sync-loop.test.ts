@@ -52,7 +52,7 @@ function signupEmbed(runId: string, scheduledStartAt: string) {
     productLabel: "The Venomous Abyss",
     contentSummary: "The Venomous Abyss 8/8",
     titleCoverage: "8/8",
-    raidLeadName: "Titan",
+    raidLeadName: "Alpha",
     raidLeadDiscordUserId: null,
     difficulty: "HEROIC" as const,
     lootType: "UNSAVED" as const,
@@ -1193,7 +1193,7 @@ describe("syncOnce — Apex-style Raid Invite DMs", () => {
           lootType: "VIP",
           participationType: "BOOSTER",
           selectedRole: "HEALER",
-          characterName: "Synmist",
+          characterName: "Testmist",
           wowClass: "MONK",
         },
       ],
@@ -1205,7 +1205,7 @@ describe("syncOnce — Apex-style Raid Invite DMs", () => {
     expect(sendDm).toHaveBeenCalledTimes(1);
     const content = sendDm.mock.calls[0][0].content as string;
     expect(content).toContain("📣 **Raid Invite**");
-    expect(content).toContain("Healer · Synmist (Monk)");
+    expect(content).toContain("Healer · Testmist (Monk)");
     expect(content).toContain(" · HEROIC · VIP");
     expect(content).toContain("Channel: <#run-chan>");
     expect(content).not.toMatch(/unknown/i);
@@ -1246,7 +1246,7 @@ describe("syncOnce — Apex-style Raid Invite DMs", () => {
           lootType: "VIP",
           participationType: "BOOSTER",
           selectedRole: "HEALER",
-          characterName: "Synmist",
+          characterName: "Testmist",
           wowClass: "MONK",
         },
       ],
@@ -1296,7 +1296,7 @@ describe("syncOnce — UserNotification DMs", () => {
           lootType: "VIP",
           participationType: "BOOSTER",
           selectedRole: "HEALER",
-          characterName: "Synmist",
+          characterName: "Testmist",
           wowClass: "MONK",
         },
       ],
@@ -1347,13 +1347,13 @@ describe("syncOnce — UserNotification DMs", () => {
           lootType: "VIP",
           participationType: "BOOSTER",
           selectedRole: null,
-          characterName: "Synmist",
+          characterName: "Testmist",
           wowClass: null,
           withdrawal: {
-            playerName: "Kiri",
-            characterLabel: "Synmist-Thrall",
+            playerName: "Delta",
+            characterLabel: "Testmist-Thrall",
             reason: "Sick, sorry",
-            rosterUrl: "https://phoenix-star.de/runs/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa9?tab=roster",
+            rosterUrl: "https://app.example.test/runs/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa9?tab=roster",
           },
         },
       ],
@@ -1364,7 +1364,7 @@ describe("syncOnce — UserNotification DMs", () => {
     expect(sendDm).toHaveBeenCalledTimes(1);
     const content = sendDm.mock.calls[0][0].content as string;
     expect(content).toContain("**Roster Withdrawal**");
-    expect(content).toContain("**Kiri** (Synmist-Thrall) withdrew from the roster.");
+    expect(content).toContain("**Delta** (Testmist-Thrall) withdrew from the roster.");
     expect(content).toContain("Reason: Sick, sorry");
     expect(content).toContain("?tab=roster");
     expect(api.recordDiscordState).toHaveBeenCalledWith("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa9", {
@@ -1404,13 +1404,13 @@ describe("syncOnce — UserNotification DMs", () => {
     };
     const saved = (audience: "player" | "lead" | "start") => ({
       audience,
-      characterLabel: "Synmist-Antonidas",
-      playerName: "Kiri",
+      characterLabel: "Testmist-Antonidas",
+      playerName: "Delta",
       bossNames: ["Boss A"],
       url: "https://example.test/runs/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab1",
     });
     // Harmless copy changes (other dash, colon, extra line) must not matter: the text is delivered, never parsed.
-    const summaryMessage = "2 selected Characters are saved:\nSynmist-Antonidas – Boss A\nSynblast-Antonidas: Boss B, Boss C\nCheck the roster.";
+    const summaryMessage = "2 selected Characters are saved:\nTestmist-Antonidas – Boss A\nTestblast-Antonidas: Boss B, Boss C\nCheck the roster.";
     const api = makeApi({ channels: [], signups: [], roster: [] });
     (api.listSyncWork as ReturnType<typeof vi.fn>).mockResolvedValue({
       channels: [],
@@ -1442,8 +1442,8 @@ describe("syncOnce — UserNotification DMs", () => {
     expect(contents[1]).toContain("Picked Character got saved");
     expect(contents[2]).toContain("Reminder: you are saved");
     expect(contents[3]).toContain("Selected Characters are saved");
-    expect(contents[3]).toContain("Synmist-Antonidas – Boss A");
-    expect(contents[3]).toContain("Synblast-Antonidas: Boss B, Boss C");
+    expect(contents[3]).toContain("Testmist-Antonidas – Boss A");
+    expect(contents[3]).toContain("Testblast-Antonidas: Boss B, Boss C");
     expect(contents[3]).toContain("Check the roster.");
   });
 
@@ -1527,7 +1527,7 @@ describe("syncOnce — UserNotification DMs", () => {
           lootType: "VIP",
           participationType: "BOOSTER",
           selectedRole: "HEALER",
-          characterName: "Synmist",
+          characterName: "Testmist",
           wowClass: "MONK",
         },
       ],
@@ -1618,7 +1618,7 @@ describe("syncOnce — notification DM failure classification", () => {
           lootType: "VIP",
           participationType: "BOOSTER",
           selectedRole: "HEALER",
-          characterName: "Synmist",
+          characterName: "Testmist",
           wowClass: "MONK",
         },
       ],
@@ -2046,7 +2046,7 @@ describe("syncOnce — retired Run channel identity convergence", () => {
     const children = new Map<string, Child>([
       [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
       [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
-      [RETIRED, { id: RETIRED, name: "closed-sat-2200-hc-vip-7of9-titan", parentId: CATEGORY_ID, position: 2, type: ChannelType.GuildText }],
+      [RETIRED, { id: RETIRED, name: "closed-sat-2200-hc-vip-7of9-alpha", parentId: CATEGORY_ID, position: 2, type: ChannelType.GuildText }],
       ["archive-log-chan", { id: "archive-log-chan", name: "raid-open-channel-logs", parentId: "logs-cat", position: 3, type: ChannelType.GuildText }],
     ]);
     const { client } = makeDiscordClient(children);
@@ -2055,14 +2055,14 @@ describe("syncOnce — retired Run channel identity convergence", () => {
         {
           runId,
           existingRunChannelId: RETIRED,
-          desiredChannelName: "closed-sat-2200-hc-vip-7of9-titan",
+          desiredChannelName: "closed-sat-2200-hc-vip-7of9-alpha",
           targetBucket: "ARCHIVE",
           scheduledStartAt: "2026-09-12T20:00:00.000Z",
           retireChannel: true,
           archiveArtifactsNeeded: !artifactsDone,
           archiveCloseMessageId: artifactsDone ? "close-1" : null,
           archiveTranscriptMessageId: artifactsDone ? "transcript-1" : null,
-          raidLeadName: "Titan",
+          raidLeadName: "Alpha",
           raidLeadDiscordUserId: "lead-1",
           panelName: "The Venomous Abyss",
         },
@@ -2183,12 +2183,12 @@ describe("syncOnce — app-archive transcript artifacts", () => {
         {
           runId: "run-archived",
           existingRunChannelId: "archive-chan",
-          desiredChannelName: "closed-sat-2200-hc-vip-7of9-titan",
+          desiredChannelName: "closed-sat-2200-hc-vip-7of9-alpha",
           targetBucket: "ARCHIVE",
           scheduledStartAt: "2026-09-12T20:00:00.000Z",
           retireChannel: true,
           archiveArtifactsNeeded: true,
-          raidLeadName: "Titan",
+          raidLeadName: "Alpha",
           raidLeadDiscordUserId: "lead-1",
           panelName: "The Venomous Abyss",
         },
@@ -2203,8 +2203,8 @@ describe("syncOnce — app-archive transcript artifacts", () => {
     expect(logChannel.send).toHaveBeenCalledTimes(2);
     const first = logChannel.send.mock.calls[0][0] as { content: string; files: Array<{ name: string }> };
     expect(first.content).toContain("<Server-Info>");
-    expect(first.content).toContain("closed-sat-2200-hc-vip-7of9-titan");
-    expect(first.files[0]?.name).toBe("transcript-closed-sat-2200-hc-vip-7of9-titan.html");
+    expect(first.content).toContain("closed-sat-2200-hc-vip-7of9-alpha");
+    expect(first.files[0]?.name).toBe("transcript-closed-sat-2200-hc-vip-7of9-alpha.html");
     const second = logChannel.send.mock.calls[1][0] as { embeds: unknown[]; components: unknown[] };
     expect(second.embeds).toHaveLength(1);
     expect(second.components).toHaveLength(1);
@@ -2213,7 +2213,7 @@ describe("syncOnce — app-archive transcript artifacts", () => {
       closeMessageId: "msg-archive-log-chan-2",
       transcriptMessageId: "msg-archive-log-chan-1",
       transcriptHtml: expect.stringContaining("<Server-Info>"),
-      transcriptFilename: "transcript-closed-sat-2200-hc-vip-7of9-titan.html",
+      transcriptFilename: "transcript-closed-sat-2200-hc-vip-7of9-alpha.html",
     });
     const archivedChannel = client.channels.cache.get("archive-chan") as { delete: ReturnType<typeof vi.fn>; setParent: ReturnType<typeof vi.fn> };
     expect(archivedChannel.setParent).not.toHaveBeenCalled();
@@ -2226,7 +2226,7 @@ describe("syncOnce — app-archive transcript artifacts", () => {
     const children = new Map<string, Child>([
       [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
       [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
-      ["archive-chan", { id: "archive-chan", name: "closed-sat-2200-hc-vip-7of9-titan", parentId: "archive-cat", position: 2, type: ChannelType.GuildText }],
+      ["archive-chan", { id: "archive-chan", name: "closed-sat-2200-hc-vip-7of9-alpha", parentId: "archive-cat", position: 2, type: ChannelType.GuildText }],
       ["archive-log-chan", { id: "archive-log-chan", name: "raid-open-channel-logs", parentId: "logs-cat", position: 3, type: ChannelType.GuildText }],
     ]);
     const { client } = makeDiscordClient(children);
@@ -2235,14 +2235,14 @@ describe("syncOnce — app-archive transcript artifacts", () => {
         {
           runId: "run-html-backfill",
           existingRunChannelId: "archive-chan",
-          desiredChannelName: "closed-sat-2200-hc-vip-7of9-titan",
+          desiredChannelName: "closed-sat-2200-hc-vip-7of9-alpha",
           targetBucket: "ARCHIVE",
           scheduledStartAt: "2026-09-12T20:00:00.000Z",
           retireChannel: true,
           archiveArtifactsNeeded: true,
           archiveCloseMessageId: "existing-close",
           archiveTranscriptMessageId: "existing-transcript",
-          raidLeadName: "Titan",
+          raidLeadName: "Alpha",
           raidLeadDiscordUserId: "lead-1",
           panelName: "The Venomous Abyss",
         },
@@ -2260,7 +2260,7 @@ describe("syncOnce — app-archive transcript artifacts", () => {
       closeMessageId: "existing-close",
       transcriptMessageId: "existing-transcript",
       transcriptHtml: expect.stringContaining("<Server-Info>"),
-      transcriptFilename: "transcript-closed-sat-2200-hc-vip-7of9-titan.html",
+      transcriptFilename: "transcript-closed-sat-2200-hc-vip-7of9-alpha.html",
     });
     const archivedChannel = client.channels.cache.get("archive-chan") as { delete: ReturnType<typeof vi.fn> };
     expect(archivedChannel.delete).toHaveBeenCalledTimes(1);
@@ -2272,7 +2272,7 @@ describe("syncOnce — app-archive transcript artifacts", () => {
     const children = new Map<string, Child>([
       [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
       [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
-      ["hold-chan", { id: "hold-chan", name: "sat-2200-hc-vip-7of9-titan", parentId: "archive-cat", position: 2, type: ChannelType.GuildText }],
+      ["hold-chan", { id: "hold-chan", name: "sat-2200-hc-vip-7of9-alpha", parentId: "archive-cat", position: 2, type: ChannelType.GuildText }],
       ["archive-log-chan", { id: "archive-log-chan", name: "raid-open-channel-logs", parentId: "logs-cat", position: 3, type: ChannelType.GuildText }],
     ]);
     const { client } = makeDiscordClient(children);
@@ -2281,12 +2281,12 @@ describe("syncOnce — app-archive transcript artifacts", () => {
         {
           runId: "run-holding",
           existingRunChannelId: "hold-chan",
-          desiredChannelName: "sat-2200-hc-vip-7of9-titan",
+          desiredChannelName: "sat-2200-hc-vip-7of9-alpha",
           targetBucket: "ARCHIVE",
           scheduledStartAt: "2026-08-01T20:00:00.000Z",
           retireChannel: false,
           archiveArtifactsNeeded: false,
-          raidLeadName: "Titan",
+          raidLeadName: "Alpha",
           raidLeadDiscordUserId: null,
           panelName: "Raid",
         },
@@ -2306,7 +2306,7 @@ describe("syncOnce — app-archive transcript artifacts", () => {
     const children = new Map<string, Child>([
       [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
       [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
-      ["archive-chan", { id: "archive-chan", name: "closed-sat-2200-hc-vip-7of9-titan", parentId: "archive-cat", position: 2, type: ChannelType.GuildText }],
+      ["archive-chan", { id: "archive-chan", name: "closed-sat-2200-hc-vip-7of9-alpha", parentId: "archive-cat", position: 2, type: ChannelType.GuildText }],
       ["archive-log-chan", { id: "archive-log-chan", name: "raid-open-channel-logs", parentId: "logs-cat", position: 3, type: ChannelType.GuildText }],
     ]);
     const { client } = makeDiscordClient(children);
@@ -2315,12 +2315,12 @@ describe("syncOnce — app-archive transcript artifacts", () => {
         {
           runId: "run-reactivated",
           existingRunChannelId: "archive-chan",
-          desiredChannelName: "closed-sat-2200-hc-vip-7of9-titan",
+          desiredChannelName: "closed-sat-2200-hc-vip-7of9-alpha",
           targetBucket: "ARCHIVE",
           scheduledStartAt: "2026-09-12T20:00:00.000Z",
           retireChannel: true,
           archiveArtifactsNeeded: true,
-          raidLeadName: "Titan",
+          raidLeadName: "Alpha",
           raidLeadDiscordUserId: "lead-1",
           panelName: "The Venomous Abyss",
         },
@@ -2345,7 +2345,7 @@ describe("syncOnce — app-archive transcript artifacts", () => {
         "completed-kept-chan",
         {
           id: "completed-kept-chan",
-          name: "closed-sat-2200-hc-vip-7of9-titan",
+          name: "closed-sat-2200-hc-vip-7of9-alpha",
           parentId: "archive-cat",
           position: 2,
           type: ChannelType.GuildText,
@@ -2358,7 +2358,7 @@ describe("syncOnce — app-archive transcript artifacts", () => {
         {
           runId: "run-completed-unarchived",
           existingRunChannelId: "completed-kept-chan",
-          desiredChannelName: "closed-sat-2200-hc-vip-7of9-titan",
+          desiredChannelName: "closed-sat-2200-hc-vip-7of9-alpha",
           targetBucket: "ARCHIVE",
           scheduledStartAt: "2026-09-12T20:00:00.000Z",
           // Stale projection as if an older bot build still retired on COMPLETED.
@@ -2366,7 +2366,7 @@ describe("syncOnce — app-archive transcript artifacts", () => {
           archiveArtifactsNeeded: false,
           archiveCloseMessageId: "close-existing",
           archiveTranscriptMessageId: "transcript-existing",
-          raidLeadName: "Titan",
+          raidLeadName: "Alpha",
           raidLeadDiscordUserId: "lead-1",
           panelName: "The Venomous Abyss",
         },
@@ -3189,7 +3189,7 @@ function makeDiscordClient(
       history.set("hist-1", {
         id: "hist-1",
         createdTimestamp: Date.parse("2026-09-12T18:00:00.000Z"),
-        author: { id: "u1", username: "titan", displayName: "Titan", discriminator: "0" },
+        author: { id: "u1", username: "alpha", displayName: "Alpha", discriminator: "0" },
         content: "hello archive",
         embeds: [],
       });
@@ -3308,7 +3308,7 @@ function makeDiscordClient(
     guilds: {
       fetch: vi.fn(async () => ({
         id: GUILD_ID,
-        name: "Phoenix Star",
+        name: "Test Guild",
         emojis: {
           fetch: vi.fn(async () => undefined),
           cache: new Collection([

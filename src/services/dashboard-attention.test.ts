@@ -19,7 +19,7 @@ function baseItem(overrides: Partial<MyRunsProjection["selected"][number]> = {})
     scheduledStartAt: "2026-10-10T20:00:00.000Z",
     runStatus: "PUBLISHED",
     characterId: "char-1",
-    characterName: "Synlight",
+    characterName: "Testlight",
     characterRealm: "Thrall",
     offeredRoles: ["HEALER", "RANGED_DPS"],
     publishedRole: "HEALER",
@@ -53,7 +53,7 @@ describe("projectPersonalDashboardAttention", () => {
     expect(personal.nextSelectedRun?.runId).toBe("run-a");
     expect(personal.nextSelectedRun?.commitments).toHaveLength(1);
     expect(personal.nextSelectedRun?.commitments[0]?.publishedRole).toBe("HEALER");
-    expect(personal.nextSelectedRun?.commitments[0]?.characterName).toBe("Synlight");
+    expect(personal.nextSelectedRun?.commitments[0]?.characterName).toBe("Testlight");
     expect(personal.pendingCount).toBe(0);
     expect(personal.conflicts).toHaveLength(0);
   });

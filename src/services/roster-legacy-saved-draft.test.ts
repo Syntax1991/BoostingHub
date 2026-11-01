@@ -36,8 +36,8 @@ type Fixture = {
 
 const productionNine: Fixture[] = [
   { name: "Glesien", wowClass: "HUNTER", specialization: "Marksmanship", primaryRole: "RANGED_DPS", offeredRoles: ["DPS"], expected: "RANGED_DPS" },
-  { name: "Kiri", wowClass: "PRIEST", specialization: "Shadow", primaryRole: "RANGED_DPS", offeredRoles: ["DPS"], expected: "RANGED_DPS" },
-  { name: "Synblast", wowClass: "SHAMAN", specialization: "Restoration", primaryRole: "HEALER", offeredRoles: ["HEALER", "DPS"], playableSpecs: ["Elemental"], expected: "RANGED_DPS" },
+  { name: "Delta", wowClass: "PRIEST", specialization: "Shadow", primaryRole: "RANGED_DPS", offeredRoles: ["DPS"], expected: "RANGED_DPS" },
+  { name: "Testblast", wowClass: "SHAMAN", specialization: "Restoration", primaryRole: "HEALER", offeredRoles: ["HEALER", "DPS"], playableSpecs: ["Elemental"], expected: "RANGED_DPS" },
   { name: "Pheia", wowClass: "WARLOCK", specialization: "Demonology", primaryRole: "RANGED_DPS", offeredRoles: ["DPS"], expected: "RANGED_DPS" },
   { name: "Temph", wowClass: "ROGUE", specialization: "Subtlety", primaryRole: "MELEE_DPS", offeredRoles: ["DPS"], expected: "MELEE_DPS" },
   { name: "Eunmi", wowClass: "WARRIOR", specialization: "Arms", primaryRole: "MELEE_DPS", offeredRoles: ["DPS"], expected: "MELEE_DPS" },
@@ -467,7 +467,7 @@ describe("historic saved DPS draft self-heal", () => {
     expect(await storedRole(signupId)).toBe("MELEE_DPS");
   });
 
-  it("lets Synblast's healed Ranged assignment be changed to Healer", async () => {
+  it("lets Testblast's healed Ranged assignment be changed to Healer", async () => {
     const runId = await createOpenRun(11);
     const signupId = await createHistoricSignup(runId, productionNine[2]!);
     let view = await rosterService.getRosterManagementView(thorne, runId);

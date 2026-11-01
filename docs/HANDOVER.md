@@ -23,7 +23,7 @@ This repository is public, so concrete server details, access data and secret va
 - Since 2026-11-01 the project is in a **final feature freeze**, because the owner is stepping away from World of Warcraft. The goal is a stable handover. No new features are planned.
 - Stack: Next.js, React, TypeScript, PostgreSQL, Prisma 8 (release candidate), Better Auth, discord.js. Details: [DEVELOPER.md](DEVELOPER.md).
 - The app runs on one Linux server with a web process, one Discord bot process and four systemd timers. See [OPERATIONS.md](OPERATIONS.md).
-- Last recorded production release: `418fd7b` (security dependency update, PR #318), deployed 2026-11-01. The owner's production smoke test passed, including a real Discord login and session survival.
+- Last recorded production release: `418fd7b` (security dependency update, PR #318), deployed 2026-11-01. The owner's production smoke test passed, including a real Discord login and session survival. `main` is ahead of production only by documentation, comments, guide text, four bot messages, test changes and removed one-off scripts; they reach the server with the next normal release.
 
 ## Production and disabled features
 
@@ -36,7 +36,6 @@ This repository is public, so concrete server details, access data and secret va
 | Boss-specific roster exceptions | Behind `ROSTER_BOSS_EXCEPTIONS_ENABLED`; recorded as off in production, with no stored rows. Follow-ups never done: versioning on Run edits, attendance replacement beyond the current rule. Before enabling, read [Boss-specific exceptions](DEVELOPER.md#boss-specific-exceptions). A rollback must handle stored rows |
 | Self-service Booster requests | Disabled (`BOOSTER_ACCESS_SELF_REQUEST_DISABLED`); old requests remain as history |
 | Legacy single-channel Discord mode | Fallback only when no Run category is set |
-| Scripts `scripts/post-*-guide.mts` | Deprecated forwarders |
 
 **Shipped but not yet observed in real use:** Late Fill, Smart Replacement and the Roster Diff had not been seen under real use at last check. A real test of Ping roles was still pending. Check them at first real use.
 
@@ -44,7 +43,6 @@ This repository is public, so concrete server details, access data and secret va
 
 ## Known bugs and limitations
 
-- A roster test depends on the time of week and can fail; see [PR #297](#open-pull-requests).
 - A full test run on a database without reset failed four tests once, while another session was active (cause unproven). Those files passed alone, and the suite passed after a reset. Use `npm run test:full`.
 - The production web log showed a burst of "Server Reference ID did not match" lines on 2026-11-01. The origin was not traced; it looks like invalid Server Action probing, not an app failure.
 - The guide channels in Discord still show the old text and screenshots until someone runs `npm run guide:booster:publish` and `npm run guide:raidlead:publish` after the next release. Source and `USER.md` already agree.
@@ -61,14 +59,12 @@ This repository is public, so concrete server details, access data and secret va
 - **Stale comments:** `.env.example` describes the old difficulty-based bootstrap and an older Warcraft Logs use; `GET /api/bot/runs/:runId/start` mentions gold collectors.
 - **Legacy kept for compatibility:** `lootType` as the name of Run type, `RunTemplate` for Run Setup, generic `DPS` role rows, Character-backed Lootbuddy rows, `BoosterAccess` history, `raidInvites` always empty in the sync payload, `User.discordRunChannelNickname` unused, `runService.createRun` used only by tests, `clear-channel` no longer used for retirement.
 - **Naming:** BoostingHub, Manawyrm Hub, `boostting-bot` and a Discord emoji named `PhoenixStarDiscord` all still exist.
-- **Screenshots:** recaptured on 2026-11-01 from a fresh seed database, without real names or the removed Payout tab, except `common-01-login.png` (older look, no capture script). The seed's Run dates are fixed and lie in the past, so the capture scripts' default views of `/runs` and `/my-runs` come out empty; `bo-03`, `bo-04`, `bo-05` and `rl-02` were taken with `?id=all`. The old images remain in Git history.
+- **Screenshots:** recaptured on 2026-11-01 from a fresh seed database, without real names or the removed Payout tab. The seed's Run dates are fixed and lie in the past, so the capture scripts' default views of `/runs` and `/my-runs` come out empty; `bo-03`, `bo-04`, `bo-05` and `rl-02` were taken with `?id=all`, and there is no capture script for `common-01-login.png`. The old images remain in Git history.
 - **Large files:** `src/discord-bot/sync-loop.ts` and `run.service.ts` have grown large.
 
 ## Open pull requests
 
-| PR | Content | Recommendation |
-| --- | --- | --- |
-| [#297](https://github.com/Syntax1991/BoostingHub/pull/297) | Fixes the time-of-week flaky test in `raid-catalog-import.service.test.ts` (test only) | Reviewed: merge (test only, no deploy needed); the merge awaits the owner. It must be settled before any repository switch, because open PRs are not carried over |
+None. The last one, #297, was merged on 2026-11-01.
 
 ## Open decisions
 
@@ -103,10 +99,10 @@ Named as classes on purpose. Details and evidence go to the new maintainer priva
 | GitHub owner credentials were available to AI tooling | See [Planned access separation](#planned-access-separation) | Owner |
 | Release helper runs an app-writable script as root; server installs dev dependencies | Move to a root-owned helper; review dependency install | New operator |
 | Known dependency advisories remain: `lodash` (not reachable at runtime per the last review) and development tools | Re-run `npm audit` and decide | Maintainer |
-| Public repository history holds operational details and a personal commit e-mail. Pattern scans and a comparison against local secret values found **no credentials**, and the GitGuardian alerts on PRs #58 and #86 were an empty value and test data; prod-only and old secrets were not compared, and the dashboard status of these alerts is not visible from the repository | Full scanner run before any new public snapshot; treat exposed information as public | Owner |
+| Public repository history holds operational details and a personal commit e-mail. On 2026-11-01 Gitleaks and TruffleHog (offline, unverified mode, history including PR refs) found **no confirmed credential**: only Discord ids misread as client ids, and the password fixture in `deploy/production/backup-db.test.sh`, which is also what GitGuardian flagged on PR #86. Prod-only and old secrets were not compared, and the GitGuardian dashboard status is not visible from the repository | Repeat the scans at the snapshot checkpoint; treat exposed information as public | Owner |
 | Discord bot permissions are broader than the documented minimum | Scope down | New operator |
 
-**Remaining sensitive values in tracked files** (no secrets): production Discord ids in `.env.example` comments, guide channel and guild ids in `src/discord-bot/guide-channels.ts` (needed configuration unless moved to environment), and the old domain in test fixtures.
+**Remaining public identifiers in tracked files** (no secrets): the guild and guide channel ids in `src/discord-bot/guide-channels.ts`, the app URL in `deploy/update-server.sh` and the guides, and the Guild emoji name `PhoenixStarDiscord` the bot looks up. They are working configuration. Moving the Discord ids to the environment would be a small separate change worth making when a new community takes over; it brings no security gain on its own. Test fixtures, comments and `.env.example` now use neutral names and ids.
 
 ## Planned access separation
 

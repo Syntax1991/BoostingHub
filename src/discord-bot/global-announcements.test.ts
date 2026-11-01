@@ -16,7 +16,7 @@ import { syncOnce } from "@/discord-bot/sync-loop";
 import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
 
-const ANNOUNCEMENT_CHANNEL_ID = "1526995703308615732";
+const ANNOUNCEMENT_CHANNEL_ID = "1526995700000000732";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -32,7 +32,7 @@ describe("Quick Signup release announcement — content", () => {
     );
     expect(content).toContain(BOOSTER_GUIDE_ANNOUNCEMENT_URL);
     expect(content).toContain("https://discord.com/channels/1526980319826280509/1552712971543650425");
-    expect(content).not.toContain("<#1526998141159735498>");
+    expect(content).not.toContain("<#1526998100000000498>");
     expect(QUICK_SIGNUP_RELEASE_ANNOUNCEMENT_KEY).toBe("quick-signup-release-v1");
   });
 

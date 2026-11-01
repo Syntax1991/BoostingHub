@@ -35,7 +35,7 @@ const rows: AttendanceViewRow[] = [
   row({ characterName: "Mira", selectedRole: "MELEE_DPS", status: "UNMARKED" }),
   row({ characterName: "Carl", selectedRole: null, participationType: "LOOTBUDDY", status: "UNMARKED" }),
   row({ characterName: "Dora", selectedRole: "TANK", status: "NO_SHOW" }),
-  row({ characterName: "Eli", selectedRole: "HEALER", status: "LATE", isBackup: true, userName: "Synblast" }),
+  row({ characterName: "Eli", selectedRole: "HEALER", status: "LATE", isBackup: true, userName: "Testblast" }),
   row({ characterName: "Finn", selectedRole: "RANGED_DPS", status: "UNMARKED" }),
 ];
 const names = (list: AttendanceViewRow[]) => list.map((entry) => entry.characterName);
@@ -123,7 +123,7 @@ describe("attendance filters", () => {
 
   it("Search matches Character, realm or player name, case-insensitively", () => {
     expect(names(filterAttendanceRows(rows, { ...DEFAULT_ATTENDANCE_FILTERS, search: "ANN" }))).toEqual(["anna"]);
-    expect(names(filterAttendanceRows(rows, { ...DEFAULT_ATTENDANCE_FILTERS, search: "synb" }))).toEqual(["Eli"]);
+    expect(names(filterAttendanceRows(rows, { ...DEFAULT_ATTENDANCE_FILTERS, search: "testb" }))).toEqual(["Eli"]);
     expect(filterAttendanceRows(rows, { ...DEFAULT_ATTENDANCE_FILTERS, search: "antonidas" })).toHaveLength(rows.length);
   });
 

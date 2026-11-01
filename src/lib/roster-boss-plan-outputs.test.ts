@@ -34,7 +34,7 @@ function row(slot: string, content: string, boss: string, role: RosterBossExcept
   return { slotSignupId: slot, runRaidContentId: content, raidBossId: boss, playSignupId: play, role };
 }
 
-const labels = new Map([["alt", "Synpriest-Antonidas"]]);
+const labels = new Map([["alt", "Testpriest-Antonidas"]]);
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -58,7 +58,7 @@ describe("compact boss plan lines (Discord / Final Setup / DMs)", () => {
     });
     expect(lines.map((line) => [line.slot.signupId, line.plan])).toEqual([
       ["b", "Venom 1–2, 4: Tank"],
-      ["a", "Venom 5–6: Synpriest-Antonidas · Healer; Tide 1: Ranged DPS"],
+      ["a", "Venom 5–6: Testpriest-Antonidas · Healer; Tide 1: Ranged DPS"],
     ]);
   });
 });
@@ -110,11 +110,11 @@ const embedData: RosterEmbedData = {
   groups: {
     tanks: [],
     healers: [
-      { userId: "u1", userName: "Sham", discordUserId: "111", characterName: "Bexsham", characterRealm: "Antonidas", wowClass: "SHAMAN" },
+      { userId: "u1", userName: "Sham", discordUserId: "111", characterName: "Demosham", characterRealm: "Antonidas", wowClass: "SHAMAN" },
     ],
     meleeDps: [],
     rangedDps: [
-      { userId: "u2", userName: "Mage", discordUserId: null, characterName: "Bexmage", characterRealm: "Antonidas", wowClass: "MAGE" },
+      { userId: "u2", userName: "Mage", discordUserId: null, characterName: "Demomage", characterRealm: "Antonidas", wowClass: "MAGE" },
     ],
     unspecifiedDps: [],
     lootbuddies: [],
@@ -133,15 +133,15 @@ describe("Discord Roster message", () => {
     const embed = buildRosterEmbed({
       ...embedData,
       bossPlan: [
-        { member: embedData.groups.healers[0]!, plan: "Venom 5–6: Synpriest-Antonidas · Healer; Tide 1: Ranged DPS" },
+        { member: embedData.groups.healers[0]!, plan: "Venom 5–6: Testpriest-Antonidas · Healer; Tide 1: Ranged DPS" },
         { member: embedData.groups.rangedDps[0]!, plan: "Venom 3: Tank" },
       ],
     }).toJSON();
     const field = embed.fields!.find((candidate) => candidate.name === "📋 Boss plan")!;
     expect(field.value).toBe(
-      "<@111> — Venom 5–6: Synpriest-Antonidas · Healer; Tide 1: Ranged DPS\nBexmage-Antonidas — Venom 3: Tank",
+      "<@111> — Venom 5–6: Testpriest-Antonidas · Healer; Tide 1: Ranged DPS\nDemomage-Antonidas — Venom 3: Tank",
     );
-    expect(formatRosterBossPlanLine(embedData.groups.rangedDps[0]!, "Venom 3: Tank")).toBe("Bexmage-Antonidas — Venom 3: Tank");
+    expect(formatRosterBossPlanLine(embedData.groups.rangedDps[0]!, "Venom 3: Tank")).toBe("Demomage-Antonidas — Venom 3: Tank");
   });
 });
 
@@ -155,7 +155,7 @@ const finalSetup: FinalSetupInput = {
   groups: {
     tanks: [],
     healers: [
-      { discordUserId: "111", userName: "Sham", characterName: "Bexsham", characterRealm: "Antonidas", wowClass: "SHAMAN", classLabel: "Shaman", participationType: "BOOSTER", selectedRole: "HEALER" },
+      { discordUserId: "111", userName: "Sham", characterName: "Demosham", characterRealm: "Antonidas", wowClass: "SHAMAN", classLabel: "Shaman", participationType: "BOOSTER", selectedRole: "HEALER" },
     ],
     dps: [],
     lootbuddies: [],
@@ -171,27 +171,27 @@ describe("Final Setup (Run Start post / web preview)", () => {
   it("adds one Boss plan section after the lineup", () => {
     const text = renderFinalSetupText({
       ...finalSetup,
-      bossPlan: [{ discordUserId: "111", userName: "Sham", plan: "Venom 5–6: Synpriest-Antonidas · Healer" }],
+      bossPlan: [{ discordUserId: "111", userName: "Sham", plan: "Venom 5–6: Testpriest-Antonidas · Healer" }],
     });
-    expect(text).toContain("📋 **Boss plan**\n<@111> · Venom 5–6: Synpriest-Antonidas · Healer");
+    expect(text).toContain("📋 **Boss plan**\n<@111> · Venom 5–6: Testpriest-Antonidas · Healer");
     expect(text.indexOf("Boss plan")).toBeGreaterThan(text.indexOf("Lootbuddies"));
   });
 });
 
 describe("roster DMs", () => {
   const run: DmRunContext = { runId: "run-1", contentTitle: "Venom & Tide", scheduledStartAt: "2026-10-30T19:00:00.000Z", difficulty: "HEROIC", lootType: "VIP" };
-  const assignment = { participationType: "BOOSTER" as const, publishedRole: "HEALER" as const, characterName: "Bexsham", characterRealm: null, wowClass: "SHAMAN" as const };
+  const assignment = { participationType: "BOOSTER" as const, publishedRole: "HEALER" as const, characterName: "Demosham", characterRealm: null, wowClass: "SHAMAN" as const };
 
   it("Boss Plan Update names the new plan (or every boss as rostered); the plain selected DM is unchanged without a plan", () => {
     const update = buildRosterSelectedDmMessage({
       run,
       assignment,
       runChannelId: null,
-      bossPlan: "Venom 5–6: Synpriest-Antonidas · Healer",
+      bossPlan: "Venom 5–6: Testpriest-Antonidas · Healer",
       bossPlanUpdate: true,
     });
     expect(update).toContain("📋 **Boss Plan Update**");
-    expect(update).toContain("Boss plan: Venom 5–6: Synpriest-Antonidas · Healer");
+    expect(update).toContain("Boss plan: Venom 5–6: Testpriest-Antonidas · Healer");
     expect(update).toContain("Your boss assignments changed — you are still in the roster.");
     expect(buildRosterSelectedDmMessage({ run, assignment, runChannelId: null, bossPlanUpdate: true })).toContain(
       "Boss plan: every boss as rostered",
@@ -219,7 +219,7 @@ describe("roster DMs", () => {
 
 describe("consumables audit: fight → assigned Character", () => {
   const alt = {
-    characterName: "Synpriest",
+    characterName: "Testpriest",
     characterRealm: "Antonidas",
     characterRegion: "EU" as const,
     warcraftLogsId: null,

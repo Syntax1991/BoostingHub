@@ -62,7 +62,6 @@ The build's Next.js `deploymentId` is the deployed commit (`next.config.ts`; `NE
 | `deploy/production/backup-db.sh` | Backup script; production runs a root-owned installed copy |
 | `deploy/production/env-status.py` | Read-only `.env` check that never prints secret values. Database URLs show only scheme/user/host/port/database; the password and every query-parameter value are hidden. |
 | `deploy/production/*.test.sh` | Offline tests for the two scripts above (no DB, no credentials) |
-| `deploy/production/check-signup-sig.py` | One-off read-only diagnostic for stored Discord signup signatures (server path hard-coded); not part of a deploy |
 | `scripts/record-backup-telemetry.mts` | Called by the backup script as the app user; records the outcome as an `IntegrationEvent` for `/manage/system`. Best effort, never carries paths or secrets |
 
 **Units and root-owned executables are never installed by a normal deploy.**
@@ -376,7 +375,7 @@ The new initial commit `R` is valid only if `R^{tree}` equals the tree of `C`. B
 | Git remote | Stays the same URL once the new repository owns the name; the old repository moves to a new private name | Test anonymous fetch before and after. A private new repository would require server credentials |
 | Deploy scripts | No change needed for the switch; they keep using `origin` and the branch argument | A later move to a `production` branch is a separate, tested change |
 | Rollback | Old commit ids no longer exist in the new repository | Keep the local tag on the server and the private archive. Rollback targets after the switch are commits of the new history. Update [Rollback](#rollback) at that time |
-| Open pull requests | Not carried over | Decide or close [PR #297](HANDOVER.md#open-pull-requests) before `C` |
+| Open pull requests | Not carried over | Merge or close every open PR before `C` |
 | Local worktrees and old clones | Their `origin` would point at the new repository and could push old history into it | Before the switch, point them at the archive and disable pushes (`git remote set-url --push origin no_push`). Remove leftover worktrees and branches. Enable secret scanning and push protection on the new repository before the first push |
 | Public old content | Existing clones and third-party caches cannot be recalled | Removal is best effort. Exposed credentials are rotated, not hidden |
 

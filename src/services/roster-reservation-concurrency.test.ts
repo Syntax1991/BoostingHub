@@ -219,7 +219,7 @@ beforeAll(async () => {
   await createTestUser(ids.player, "Reservation Conc Player", "USER");
   await createTestUser(ids.player2, "Reservation Conc Player2", "USER");
 
-  sharedChar = await createCharacter(ids.player, "Synmist");
+  sharedChar = await createCharacter(ids.player, "Testmist");
   secondChar = await createCharacter(ids.player, "Secondmist");
   await orm.User.where({ id: ids.player }).update({ isBooster: true });
   await orm.User.where({ id: ids.player2 }).update({ isBooster: true });

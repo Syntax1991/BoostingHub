@@ -102,7 +102,7 @@ function makeClient(options: {
     guild: { channels: { create } },
   });
   for (const [id, members] of Object.entries(options.existingVoice ?? {})) {
-    channels.set(id, voiceChannel(id, "Raid with Syntax", members));
+    channels.set(id, voiceChannel(id, "Raid with Gamma", members));
   }
 
   const fetchChannel = vi.fn(async (id: string) => {
@@ -125,7 +125,7 @@ function makeClient(options: {
   return { client: client as never, create, fetchChannel, dmSend, channels };
 }
 
-const provision: VoiceItem = { runId: RUN_ID, existingVoiceChannelId: null, desiredVoiceChannelName: "Raid with Syntax", action: "PROVISION" };
+const provision: VoiceItem = { runId: RUN_ID, existingVoiceChannelId: null, desiredVoiceChannelName: "Raid with Gamma", action: "PROVISION" };
 
 describe("syncOnce — temporary Run voice channels", () => {
   beforeEach(() => {
@@ -139,7 +139,7 @@ describe("syncOnce — temporary Run voice channels", () => {
     await syncOnce(client, botEnv(), api);
 
     expect(create).toHaveBeenCalledTimes(1);
-    expect(create).toHaveBeenCalledWith({ name: "Raid with Syntax", type: ChannelType.GuildVoice, parent: VOICE_CATEGORY_ID });
+    expect(create).toHaveBeenCalledWith({ name: "Raid with Gamma", type: ChannelType.GuildVoice, parent: VOICE_CATEGORY_ID });
     expect(api.recordDiscordState).toHaveBeenCalledWith(RUN_ID, { kind: "voice-channel", channelId: "222" });
   });
 
@@ -203,7 +203,7 @@ describe("syncOnce — temporary Run voice channels", () => {
       lootType: "UNSAVED",
       participationType: "BOOSTER",
       selectedRole: "HEALER",
-      characterName: "Synlight",
+      characterName: "Testlight",
       wowClass: "PRIEST",
     };
   }
@@ -257,11 +257,11 @@ describe("syncOnce — temporary Run voice channels", () => {
 
     it("2. env unset + IN_PROGRESS existing voice → still reconciled (fetched/renamed), no create, id kept", async () => {
       const { client, create, fetchChannel, channels } = makeClient({ existingVoice: { "333": 0 } });
-      (channels.get("333") as { name: string }).name = "Raid with Simon";
+      (channels.get("333") as { name: string }).name = "Raid with Epsilon";
       const api = makeApi([existing("RECONCILE")]);
       await syncOnce(client, noEnv(), api);
       expect(fetchChannel).toHaveBeenCalledWith("333");
-      expect((channels.get("333") as { setName: ReturnType<typeof vi.fn> }).setName).toHaveBeenCalledWith("Raid with Syntax");
+      expect((channels.get("333") as { setName: ReturnType<typeof vi.fn> }).setName).toHaveBeenCalledWith("Raid with Gamma");
       expect(create).not.toHaveBeenCalled();
       expect(api.recordDiscordState).not.toHaveBeenCalled();
     });

@@ -114,7 +114,7 @@ beforeAll(async () => {
   await cleanup();
   await createTestUser(ids.owner, "Settings Owner");
   await createTestUser(ids.other, "Settings Other");
-  await createCharacter({ id: ids.charActive, userId: ids.owner, name: "Synmist", isActive: true });
+  await createCharacter({ id: ids.charActive, userId: ids.owner, name: "Testmist", isActive: true });
   await createCharacter({ id: ids.charInactive, userId: ids.owner, name: "Sleepy", isActive: false });
   await createCharacter({ id: ids.charOther, userId: ids.other, name: "Other", isActive: true });
 });

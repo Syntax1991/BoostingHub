@@ -40,7 +40,7 @@ export type ReplacementTarget = {
   /** The draft slot being replaced; null when filling an empty slot / a withdrawn pick's freed slot. */
   signupId: string | null;
   userId: string | null;
-  /** e.g. "Synmist-Antonidas" or "Healer slot". */
+  /** e.g. "Testmist-Antonidas" or "Healer slot". */
   label: string;
   reasons: string[];
 };

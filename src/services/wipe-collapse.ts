@@ -21,7 +21,7 @@ import type { AuditFightFact, AuditPlayerFact } from "@/services/consumable-audi
  * again does not count twice). Kills never have a collapse; too few boosters
  * or no qualifying cluster → none (deaths are judged normally).
  *
- * Production (report WV3BMCHnLvZfb9Yd, 14 boosters): Lost Explorers collapses
+ * Production (one report, 14 boosters): Lost Explorers collapses
  * at +11.9 s (13 boosters dead within 16 s); Sszorak at +112.5 s (7 boosters
  * in 2.7 s) while the lone booster death at +26.6 s stays an active-pull death.
  */
