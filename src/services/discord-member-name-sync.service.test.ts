@@ -245,14 +245,14 @@ describe("bot refresh: people of upcoming Runs, at most once a day, never while 
     await orm.User.where({ id: ids.nick }).update({ discordNameSyncedAt: null });
     await orm.User.where({ id: ids.global }).update({ discordNameSyncedAt: null });
     members.set(discordIdOf(ids.lead), { nick: "Alpha-Antonidas", username: "alpha" });
-    members.set(discordIdOf(ids.nick), { nick: "Syn", username: "gamma1991" });
+    members.set(discordIdOf(ids.nick), { nick: "Gam", username: "gamma1991" });
     members.set(discordIdOf(ids.global), { nick: null, global_name: "Delta", username: "delta" });
     members.set(discordIdOf(ids.outsider), { nick: "Never Read", username: "out" });
 
     const result = await discordMemberNameSyncService.runDuePass(REFRESH_NOW);
     expect(result).toMatchObject({ status: "DONE", stoppedOnError: false });
     expect(await nameOf(ids.lead)).toBe("Alpha");
-    expect(await nameOf(ids.nick)).toBe("Syn");
+    expect(await nameOf(ids.nick)).toBe("Gam");
     expect(await nameOf(ids.outsider)).toBe("Outsider");
     const read = fetchMock.mock.calls.map(([url]) => decodeURIComponent(String(url).split("/members/")[1] ?? ""));
     expect(read).not.toContain(discordIdOf(ids.outsider));
@@ -282,10 +282,10 @@ describe("bot refresh: people of upcoming Runs, at most once a day, never while 
       assignableRoles: [],
     }));
     const groups = groupSignupTilesByPlayer(tiles);
-    expect(groups.map((group) => group.label)).toEqual(["Delta", "Syn"]);
+    expect(groups.map((group) => group.label)).toEqual(["Delta", "Gam"]);
     expect(groups.map((group) => group.key)).toEqual([`player:${ids.global}`, `player:${ids.nick}`]);
     // Same name for two players never merges them.
-    await orm.User.where({ id: ids.global }).update({ name: "Syn" });
+    await orm.User.where({ id: ids.global }).update({ name: "Gam" });
     const same = groupSignupTilesByPlayer(
       (await rosterRepository.listSignups(ids.run)).map((signup) => ({ ...signup, assignableRoles: [] })),
     );
@@ -296,6 +296,6 @@ describe("bot refresh: people of upcoming Runs, at most once a day, never while 
     vi.stubEnv("DISCORD_BOT_TOKEN", "");
     expect(await discordMemberNameSyncService.runDuePass(REFRESH_NOW)).toEqual({ status: "NOT_CONFIGURED" });
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(await userRepository.findDiscordNameState(ids.nick)).toMatchObject({ discordGuildNickname: "Syn" });
+    expect(await userRepository.findDiscordNameState(ids.nick)).toMatchObject({ discordGuildNickname: "Gam" });
   });
 });

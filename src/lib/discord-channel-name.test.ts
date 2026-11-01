@@ -179,9 +179,9 @@ describe("buildDiscordRunChannelName", () => {
   });
 
   it("temporary Run voice channel: line breaks and control characters cannot malform the name", () => {
-    const hostile = `  Syn${String.fromCharCode(13, 10)}tax${String.fromCharCode(9)}${String.fromCharCode(0)}${String.fromCharCode(0x2028)}Lead  `;
+    const hostile = `  Gam${String.fromCharCode(13, 10)}ma${String.fromCharCode(9)}${String.fromCharCode(0)}${String.fromCharCode(0x2028)}Lead  `;
     const name = formatRunVoiceChannelName(hostile);
-    expect(name).toBe("Raid with Syn tax Lead");
+    expect(name).toBe("Raid with Gam ma Lead");
     expect(Array.from(name).every((char) => char.codePointAt(0)! >= 0x20)).toBe(true);
   });
 

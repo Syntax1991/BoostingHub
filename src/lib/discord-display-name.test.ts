@@ -18,7 +18,7 @@ describe("stripKnownRealmSuffix — only a known realm is dropped, never a blank
     expect(stripKnownRealmSuffix("Jean-Luc", realms)).toBe("Jean-Luc");
     expect(stripKnownRealmSuffix("Anna-Maria-Antonidas", realms)).toBe("Anna-Maria");
     expect(stripKnownRealmSuffix("Gamma-Blackhand", realms)).toBe("Gamma-Blackhand"); // not a known realm here
-    expect(stripKnownRealmSuffix("Syn-Tax", realms)).toBe("Syn-Tax");
+    expect(stripKnownRealmSuffix("Gam-Ma", realms)).toBe("Gam-Ma");
   });
 
   it("never strips to nothing and ignores names without a hyphen", () => {

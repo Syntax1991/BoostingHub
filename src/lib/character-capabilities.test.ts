@@ -112,15 +112,15 @@ describe("character capabilities", () => {
 
   it("11–14. signup offers must match configured capabilities", () => {
     const restoOnly = { wowClass: "SHAMAN" as const, specialization: "Restoration", playableSpecs: [] as string[] };
-    expect(() => assertOfferedRolesAllowed(restoOnly, ["RANGED_DPS"], "Syn")).toThrow(/not configured/);
-    expect(assertOfferedRolesAllowed({ ...restoOnly, playableSpecs: ["Elemental"] }, ["HEALER", "RANGED_DPS"], "Syn")).toEqual([
+    expect(() => assertOfferedRolesAllowed(restoOnly, ["RANGED_DPS"], "Gam")).toThrow(/not configured/);
+    expect(assertOfferedRolesAllowed({ ...restoOnly, playableSpecs: ["Elemental"] }, ["HEALER", "RANGED_DPS"], "Gam")).toEqual([
       "HEALER",
       "RANGED_DPS",
     ]);
     expect(() =>
-      assertOfferedRolesAllowed({ ...restoOnly, playableSpecs: ["Elemental"] }, ["MELEE_DPS"], "Syn"),
+      assertOfferedRolesAllowed({ ...restoOnly, playableSpecs: ["Elemental"] }, ["MELEE_DPS"], "Gam"),
     ).toThrow(/not configured/);
-    expect(assertOfferedRolesAllowed({ ...restoOnly, playableSpecs: ["Enhancement"] }, ["MELEE_DPS"], "Syn")).toEqual([
+    expect(assertOfferedRolesAllowed({ ...restoOnly, playableSpecs: ["Enhancement"] }, ["MELEE_DPS"], "Gam")).toEqual([
       "MELEE_DPS",
     ]);
   });
@@ -130,7 +130,7 @@ describe("character capabilities", () => {
       assertOfferedRolesAllowed(
         { wowClass: "WARRIOR", specialization: "Arms", playableSpecs: [] },
         ["DPS"],
-        "Syn",
+        "Gam",
       ),
     ).toThrow(/Generic DPS/);
   });
