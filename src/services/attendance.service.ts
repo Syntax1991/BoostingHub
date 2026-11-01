@@ -237,7 +237,7 @@ export const attendanceService = {
 
   async setStatus(
     user: AuthenticatedUser,
-    input: { attendanceId: string; status: string; note?: string | null },
+    input: { attendanceId: string; expectedStatus: AttendanceStatus; status: string; note?: string | null },
   ) {
     const row = await attendanceRepository.findById(input.attendanceId);
     if (!row) {
@@ -254,17 +254,17 @@ export const attendanceService = {
       throw new DomainError("ATTENDANCE_NOT_MANAGEABLE", "Attendance can only be updated while the run is in progress.");
     }
     const status = assertAttendanceStatus(input.status);
-    const note = input.note === undefined ? row.note : noteValue(input.note);
+    const note = input.note === undefined ? undefined : noteValue(input.note);
     if (note && note.length > ATTENDANCE_NOTE_MAX) {
       throw new DomainError("VALIDATION_FAILED", `Attendance notes must be ${ATTENDANCE_NOTE_MAX} characters or fewer.`);
     }
-    const now = new Date().toISOString();
-    const previousStatus = row.status;
-    await attendanceRepository.updateStatus(row.id, {
+    const { previousStatus } = await attendanceRepository.setStatusAtomic({
+      runId: row.runId,
+      attendanceId: row.id,
+      expectedStatus: input.expectedStatus,
       status,
       note,
-      markedAt: status === "UNMARKED" ? null : now,
-      markedById: status === "UNMARKED" ? null : user.id,
+      markedById: user.id,
     });
     if (previousStatus !== status) {
       await runDomainEventService.record({

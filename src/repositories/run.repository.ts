@@ -4,6 +4,7 @@ import { db, orm } from "@/lib/prisma";
 import { mapRaidBossRefs, type RaidBossRef } from "@/lib/lockout-bosses";
 import { and, or } from "@prisma/orm-postgres/orm-client";
 import { DomainError } from "@/lib/errors";
+import { runEditStaleError, runEditVersion } from "@/lib/run-edit-version";
 import {
   projectRunContentDisplay,
   type RunContentDisplay,
@@ -1173,6 +1174,8 @@ export const runRepository = {
        */
       writeInTx?: (txOrm: TxOrm) => Promise<void>;
       rosterEffect?: "NONE" | "MARK_CHANGED" | "REFRESH_EMBED";
+      /** runEditVersion the edit was based on; a different current version is RUN_EDIT_STALE. */
+      expectedEditVersion?: string;
     } = {},
     hooks: LifecycleAnnouncementTxHooks = {},
   ): Promise<void> {
@@ -1183,6 +1186,9 @@ export const runRepository = {
         unknown
       > | null;
       const roster = rosterLookup ? await lockRosterInTx(txOrm, asString(rosterLookup.id)) : null;
+      const now = new Date().toISOString();
+      // Row lock: a concurrent edit of a Run without a roster row waits here too.
+      await txOrm.Run.where({ id }).update({ updatedAt: now });
       const current = (await txOrm.Run.where({ id }).first()) as Record<string, unknown> | null;
       if (!current) {
         throw new DomainError("NOT_FOUND", "Run was not found.", 404);
@@ -1190,7 +1196,31 @@ export const runRepository = {
       if (!canEditRunBeforeStart(mapRunStatus(current.status))) {
         throw new DomainError("RUN_EDIT_LOCKED", "This run can no longer be edited — it has already started.");
       }
-      const now = new Date().toISOString();
+      if (options.expectedEditVersion) {
+        const contentRows = (await txOrm.RunRaidContent.where({ runId: id })
+          .select("raidId", "sortOrder", "plannedBossCount")
+          .all()) as Array<Record<string, unknown>>;
+        const currentVersion = runEditVersion({
+          scheduledStartAt: asString(current.scheduledStartAt),
+          difficulty: asString(current.difficulty),
+          lootType: asString(current.lootType),
+          raidLeadId: asString(current.raidLeadId),
+          notes: asStringOrNull(current.notes),
+          desiredTankCount: asNumber(current.desiredTankCount),
+          desiredHealerCount: asNumber(current.desiredHealerCount),
+          desiredDpsCount: asNumber(current.desiredDpsCount),
+          desiredLootbuddyCount: asNumber(current.desiredLootbuddyCount),
+          discordRolePing: asBoolean(current.discordRolePing, true),
+          contents: contentRows.map((row) => ({
+            raidId: asString(row.raidId),
+            sortOrder: asNumber(row.sortOrder),
+            plannedBossCount: asNumber(row.plannedBossCount),
+          })),
+        });
+        if (currentVersion !== options.expectedEditVersion) {
+          throw runEditStaleError();
+        }
+      }
       await txOrm.Run.where({ id }).update({ ...fields, updatedAt: now });
       // Boss exceptions re-bound / dropped by a content replacement: the roster
       // version moves so an open Roster Builder refreshes instead of sending

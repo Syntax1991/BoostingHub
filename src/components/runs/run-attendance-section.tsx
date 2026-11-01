@@ -32,6 +32,7 @@ import {
   DEFAULT_ATTENDANCE_FILTERS,
   DEFAULT_ATTENDANCE_SORT,
   attendanceFilterAvailability,
+  isAttendanceConflict,
   isDefaultAttendanceFilters,
   viewAttendanceRows,
   type AttendanceFilters,
@@ -160,12 +161,14 @@ function ManagerAttendancePanel({
   const visibleRows = useMemo(() => viewAttendanceRows(manager.rows, filters, sort), [manager.rows, filters, sort]);
   const availability = useMemo(() => attendanceFilterAvailability(manager.rows), [manager.rows]);
 
-  function runMutation(action: () => Promise<{ ok: boolean; message: string }>) {
+  function runMutation(action: () => Promise<{ ok: boolean; message: string; code?: string }>) {
     setError(null);
     startTransition(async () => {
       const result = await action();
       if (!result.ok) {
         setError(result.message);
+        // Another manager changed this row: show the message over the current list.
+        if (isAttendanceConflict(result.code)) router.refresh();
         return;
       }
       // Re-render with fresh server data; local sort / filter state stays.
@@ -284,8 +287,8 @@ function ManagerAttendancePanel({
                           runMutation(() =>
                             setAttendanceAction({
                               attendanceId: row.id,
+                              expectedStatus: row.status,
                               status: event.target.value,
-                              note: row.note,
                             }),
                           )
                         }
@@ -317,8 +320,8 @@ function ManagerAttendancePanel({
                             runMutation(() =>
                               setAttendanceAction({
                                 attendanceId: row.id,
+                                expectedStatus: row.status,
                                 status: "STANDBY",
-                                note: row.note,
                               }),
                             )
                           }
@@ -382,7 +385,7 @@ function ManagerAttendancePanel({
           onClose={() => setNoteRowId(null)}
           onSave={(status, note) => {
             setNoteRowId(null);
-            runMutation(() => setAttendanceAction({ attendanceId: noteRowId, status, note }));
+            runMutation(() => setAttendanceAction({ attendanceId: noteRowId, expectedStatus: status, status, note }));
           }}
         />
       ) : null}

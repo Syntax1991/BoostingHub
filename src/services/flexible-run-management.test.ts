@@ -1,7 +1,9 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
+import { mapActionError } from "@/lib/action-result";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { db, orm } from "@/lib/prisma";
+import { runEditVersion } from "@/lib/run-edit-version";
 import { venomousCreateInput, venomousUpdateInput, seededProductSelection } from "@/lib/test-run-input";
 import type { CharacterRole, RaidDifficulty } from "@/models/enums";
 import { raidRepository } from "@/repositories/raid.repository";
@@ -12,9 +14,11 @@ import { userNotificationRepository } from "@/repositories/user-notification.rep
 import { getRunCommitmentsForCharacters } from "@/services/character-run-commitment";
 import { discordSyncService } from "@/services/discord-sync.service";
 import { rosterService } from "@/services/roster.service";
+import { runDetailService } from "@/services/run-detail.service";
 import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
 import { currentWeekFutureIso } from "@/test/time";
+import { updateRunSchema } from "@/validators/run";
 
 /** Commitments of one Character as seen from a Run in the same raid ID as `runId` (excluding `excludeRunId`). */
 async function commitmentsInRaidIdOf(runId: string, characterId: string, excludeRunId: string) {
@@ -784,6 +788,112 @@ describe("Run edit vs Start", () => {
 
     await expect(edit).rejects.toMatchObject({ code: "RUN_EDIT_LOCKED" });
     expect((await runRepository.findById(runId))?.lootType).toBe("UNSAVED");
+  });
+});
+
+describe("stale Edit Run forms", () => {
+  async function formOpenedOn(runId: string) {
+    const run = (await runRepository.findById(runId))!;
+    return { run, expectedEditVersion: (await runDetailService.getRunDetail(lead, runId)).editor!.editVersion };
+  }
+
+  it("a form opened before another manager's edit is refused, writes nothing, and works again after reloading", async () => {
+    const runId = await createOpenRun("NORMAL");
+    const stale = await formOpenedOn(runId);
+    await runService.updateRun(admin, venomousUpdateInput(runId, stale.run, { notes: "from the other manager" }));
+    const eventsBefore = (await orm.RunDomainEvent.where({ runId }).all()).length;
+
+    const attempt = runService.updateRun(
+      lead,
+      venomousUpdateInput(runId, stale.run, {
+        expectedEditVersion: stale.expectedEditVersion,
+        notes: "stale notes",
+        scheduledStartAt: currentWeekFutureIso({ hoursAhead: 30 }),
+        desiredDpsCount: stale.run.desiredDpsCount + 1,
+      }),
+    );
+    await expect(attempt).rejects.toMatchObject({ code: "RUN_EDIT_STALE", status: 409 });
+    const failure = mapActionError(await attempt.catch((error: unknown) => error));
+    expect(failure).toMatchObject({ ok: false, code: "RUN_EDIT_STALE" });
+    expect(failure.message).toContain("reload");
+
+    const unchanged = (await runRepository.findById(runId))!;
+    expect(unchanged.notes).toBe("from the other manager");
+    expect(unchanged.scheduledStartAt).toBe(stale.run.scheduledStartAt);
+    expect(unchanged.scheduleRevision).toBe(stale.run.scheduleRevision);
+    expect(unchanged.desiredDpsCount).toBe(stale.run.desiredDpsCount);
+    expect((await orm.RunDomainEvent.where({ runId }).all()).length).toBe(eventsBefore);
+
+    const fresh = await formOpenedOn(runId);
+    expect(fresh.expectedEditVersion).not.toBe(stale.expectedEditVersion);
+    await runService.updateRun(
+      lead,
+      venomousUpdateInput(runId, fresh.run, { expectedEditVersion: fresh.expectedEditVersion, notes: "fresh notes" }),
+    );
+    expect((await runRepository.findById(runId))?.notes).toBe("fresh notes");
+  });
+
+  it("two simultaneous saves of one form version: one wins, the other is refused", async () => {
+    const runId = await createOpenRun("NORMAL");
+    const form = await formOpenedOn(runId);
+    const results = await Promise.allSettled(
+      ["first", "second"].map((notes) =>
+        runService.updateRun(lead, venomousUpdateInput(runId, form.run, { expectedEditVersion: form.expectedEditVersion, notes })),
+      ),
+    );
+    const rejected = results.filter((result) => result.status === "rejected") as PromiseRejectedResult[];
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]!.reason).toMatchObject({ code: "RUN_EDIT_STALE" });
+    expect((await runRepository.findById(runId))?.notes).toBe(results[0].status === "fulfilled" ? "first" : "second");
+  });
+
+  it("the check also covers a Run without a roster row, under the lock", async () => {
+    const runId = await createOpenRun("NORMAL");
+    await orm.RunRoster.where({ runId }).deleteAndCount();
+    const run = (await runRepository.findById(runId))!;
+    const expectedEditVersion = runEditVersion(run);
+    const results = await Promise.allSettled(
+      ["first", "second"].map((notes) =>
+        runService.updateRun(lead, venomousUpdateInput(runId, run, { expectedEditVersion, notes })),
+      ),
+    );
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+  });
+
+  it("changes outside the form do not invalidate it", async () => {
+    const runId = await createOpenRun("NORMAL");
+    const form = await formOpenedOn(runId);
+    await runService.setSignupWindow(admin, runId, false);
+    await runService.setSignupWindow(admin, runId, true);
+    await createSignup(runId, ids.c, cChar, ["TANK"]);
+    await runService.updateRun(
+      lead,
+      venomousUpdateInput(runId, form.run, { expectedEditVersion: form.expectedEditVersion, notes: "still valid" }),
+    );
+    expect((await runRepository.findById(runId))?.notes).toBe("still valid");
+  });
+
+  it("lifecycle rules stay first: a form left open past a cancellation is locked, not stale", async () => {
+    const runId = await createOpenRun("NORMAL");
+    const form = await formOpenedOn(runId);
+    await runService.cancelRun(admin, runId);
+    await expect(
+      runService.updateRun(lead, venomousUpdateInput(runId, form.run, { expectedEditVersion: form.expectedEditVersion, notes: "late" })),
+    ).rejects.toMatchObject({ code: "RUN_EDIT_LOCKED" });
+  });
+
+  it("the action input requires the form's version", () => {
+    const shape = updateRunSchema.safeParse({
+      runId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      difficulty: "NORMAL",
+      lootType: "UNSAVED",
+      scheduledStartAt: currentWeekFutureIso({ hoursAhead: 30 }),
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+    });
+    expect(shape.success).toBe(false);
+    expect(shape.error?.issues[0]?.path).toEqual(["expectedEditVersion"]);
   });
 });
 
