@@ -139,11 +139,12 @@ describe("booster guide v2 content", () => {
     expect(embed.footer.text).not.toContain("asset:");
     expect(embed.fields?.map((f) => f.name)).toEqual([
       "Signup",
-      "Quick Signup",
-      "Sign as Lootbuddy",
-      "Cancel Signup",
+      "Quick Sign",
+      "LB",
+      "Unsign",
+      "Add / Edit Note",
     ]);
-    const quick = embed.fields?.find((f) => f.name === "Quick Signup")?.value ?? "";
+    const quick = embed.fields?.find((f) => f.name === "Quick Sign")?.value ?? "";
     expect(quick).toMatch(/offers/i);
     expect(quick).toMatch(/does \*\*not\*\* put you on the Roster/i);
     expect(quick).toMatch(/Raid Lead selects separately/i);

@@ -11,7 +11,7 @@
  * exclusively gated behind the signup path's `isSignupWindowOpen` +
  * week-bucket rule in discord-sync.service.ts, and never reproduces that
  * weekly calendar logic itself: `item.targetBucket` arrives already decided
- * by the Service. See docs/features/discord-bot.md § weekly raid-ID
+ * by the Service. See docs/DEVELOPER.md § Weekly raid-ID
  * sections for the full architecture.
  *
  * Discord channels cannot contain child channels, so there is only ONE

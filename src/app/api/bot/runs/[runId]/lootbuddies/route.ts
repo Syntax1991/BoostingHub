@@ -9,7 +9,7 @@ const botSetLootbuddiesBodySchema = setLootbuddiesSchema.omit({ runId: true });
 /**
  * PUT /api/bot/runs/:runId/lootbuddies
  *
- * setLootbuddies over HTTP: the Discord Sign as Lootbuddy flow submits the
+ * setLootbuddies over HTTP: the Discord LB (Lootbuddy) flow submits the
  * whole desired Lootbuddy entry set in one request, exactly like the Web
  * dialog. A distinct collection from Booster offers — see
  * /api/bot/runs/:runId/signup. The runId always comes from the URL, never

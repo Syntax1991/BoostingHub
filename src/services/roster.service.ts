@@ -1182,7 +1182,7 @@ export const rosterService = {
      * instead of stacking two slots. LOOTBUDDY entries are independently
      * selectable and never replace each other or the User's Booster row (a
      * User may simultaneously have Booster participation and any number of
-     * selected Lootbuddy entries) — see docs/features/signups.md.
+     * selected Lootbuddy entries) — see docs/DEVELOPER.md#run-signups.
      */
     const replaceSignupIds =
       input.selected && signup.participationType === "BOOSTER"

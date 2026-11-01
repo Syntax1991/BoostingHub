@@ -90,7 +90,7 @@ export function evaluateMigrationStatus(envelope: MigrationStatusEnvelope | null
         : [
             "The database was changed outside the committed migrations (e.g. a branch's draft migration was applied).",
             "Do NOT run `prisma db update` on it: it diffs tables and skips the migrations' data steps.",
-            "Follow docs/development.md → \"Development database off the migration history\".",
+            "Follow docs/DEVELOPER.md → \"Development database off the migration history\".",
           ],
     };
   }

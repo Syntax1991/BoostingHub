@@ -1,230 +1,53 @@
-# Boostting Bot
+# BoostingHub
 
-Internal World of Warcraft boosting operations platform for boosters, lootbuddies, raid leads, and administrators.
+Internal World of Warcraft boosting operations platform for boosters, lootbuddies, raid leads and administrators. The app brand is **Manawyrm Hub**.
 
-Boostting Bot is a **web application** with a production Discord bot for run channels, signups, roster embeds, schedule posts, and DMs. The web app remains the source of truth for roster selection, attendance, and admin ops.
+It is a Next.js web application plus a separate Discord bot process for Run channels, signups, roster posts, schedule posts and DMs. The web app is the source of truth for rosters, attendance and administration.
 
-This repository is on **main**. Character Management, Boosting Roles, Canonical Run detail, Run Management, Run lifecycle/attendance, Blizzard sync, Discord bot, notifications, and Warcraft Logs consumables audit are implemented.
-
-Existing boosting-community platforms inspired workflow thinking only. Their branding, assets, source, and visual identity are not copied.
-
-## Phase status
-
-- **Phase 1 — Foundation — Complete**
-- **Phase 2 — Real Run Signup Workflow — Complete**
-- **Phase 3 — Roster Management — Complete**
-- **Phase 4 — Production Data Transition Foundation — Complete**
-- **Character Management — Complete**
-- **Boosting Roles (Booster / Lootbuddy) — Complete**
-- **Canonical Run Detail — Complete**
-- **Run Management — Complete**
-- **Run lifecycle and attendance — Complete**
-- **Battle.net character linking — Complete** (optional; requires `BLIZZARD_*`)
-- **Blizzard character / lockout sync — Complete** (current-raid lockouts; informational for signup/roster)
-- **Discord bot — Complete** (run channels, signup/roster embeds, schedule, WCL discovery, DMs)
-- **User notifications — Complete** (in-app + Discord DM preferences / quiet hours)
-- **Warcraft Logs consumables audit — Complete** (manual + Discord auto-link; ADMIN / assigned RAID_LEAD)
-- **Post-completion attendance correction — Complete** (audited **Correct Attendance**)
-- **Operational analytics / system health — Complete** (ADMIN; no financial metrics)
-- **Community Schedule — Complete** (admin mutations; RAID_LEAD read-only)
-- **Payout / settlement — Removed** (BoostingHub does not pay boosters; see domain model)
-
-Phase 1 delivered the application shell, auth, MVCS, and seeded domain models.
-
-Phase 2 makes `/runs` persist BOOSTER and LOOTBUDDY signups, with eligibility from `BoosterAccessService` and `LockoutService`, and self-withdrawal on `/my-runs`.
-
-Phase 3 adds persistent draft selection, composition warnings, and transactional roster publication on the canonical Run detail Roster tab.
-
-Phase 4 establishes the GitHub workflow and treats seed data as a fixture, not required production state.
-
-Character Management lets a Discord user add, edit, deactivate, and reactivate owned characters. Add Character resolves Class and Item Level from Blizzard's public Character Profile; the user only picks a specialization. Optional Battle.net account linking (ownership-verified) can import or link the same Character rows and refresh item level when `BLIZZARD_*` is configured.
-
-Boosting Roles: an ADMIN grants or revokes the Booster and Lootbuddy roles on the User after Discord review (Booster covers every raid difficulty); they are independent of the account role.
-
-Canonical Run detail puts every Run at `/runs/[runId]`, with participant data for USER and roster tools for the assigned raid lead or an ADMIN.
-
-Run Management lets a raid lead create a self-led draft (or an admin assign an eligible lead), edit planning fields, open the run, toggle the signup window, and cancel without deleting history.
-
-Run lifecycle and attendance lets the assigned raid lead or an admin start a published run, record attendance, and complete it when every participant is marked.
-
-Not implemented (intentionally deferred or out of scope):
-- Wallets, escrow, payment automation, extra Raid Lead / collector / advertiser cuts (no financial domain)
-- Automatic realm-transfer handling; boss-level lockout eligibility redesign
-- Customer bookings / boost market
-- Discord-side Raid Lead roster builder / Strike management (stay web-only)
-- Preferred / ranked character offers among multi-character signups
-- Next ops epic: [Lead Ops Confidence](docs/roadmap/lead-ops-confidence.md)
-
-## Tech stack
-
-- Next.js 16.3 App Router, React, TypeScript
-- Tailwind CSS
-- PostgreSQL 15+
-- Prisma ORM 8 (contract + `db.orm.public.*`)
-- Better Auth (Kysely/pg adapter, same database)
-- Zod at controller boundaries
-- npm, Node.js 24
-
-Better Auth's Prisma adapter still targets Prisma 7's client API. Phase 1 therefore uses Better Auth's PostgreSQL pool adapter while domain persistence uses Prisma 8. Both share `DATABASE_URL`.
-
-## Architecture
-
-The project follows **MVCS**: Model → View → Controller → Service.
-
-```text
-View
-  ↓
-Controller
-  ↓
-Service
-  ↓
-Repository / Model / Database
-```
-
-Views never call Prisma. Controllers stay thin. Business rules live in Services.
-
-Client interactivity is isolated: `AppShell`, `Button`, Discord sign-in, run filters, the signup dialog, withdraw, roster builder, run detail tabs, character create/edit/lifecycle, Battle.net connect/import, boosting-role controls, run create/edit/cancel/lifecycle actions, and attendance table.
-
-See [docs/architecture.md](docs/architecture.md).
-
-## Local development
-
-1. Copy `.env.example` to `.env` and set `DATABASE_URL`.
-2. Install dependencies: `npm install --legacy-peer-deps`
-3. Emit the Prisma contract: `npm run db:emit`
-4. Apply migrations: `npm run db:migrate`
-5. Seed development data: `npm run db:seed`
-6. Start the app: `npm run dev`
-7. Open [http://localhost:3000](http://localhost:3000)
-
-If you do not have local PostgreSQL, `npx create-db@latest` can provision a temporary Prisma Postgres database. Claim the printed URL if you need it longer than 24 hours.
-
-### Environment variables
-
-| Variable | Purpose |
-| --- | --- |
-| `DATABASE_URL` | PostgreSQL connection string |
-| `BETTER_AUTH_SECRET` | Auth secret, ≥32 characters |
-| `BETTER_AUTH_URL` | App origin, `http://localhost:3000` locally |
-| `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | Discord OAuth. Optional until an application exists |
-| `DEV_AUTH_ENABLED` | `true` enables the development identity picker. Ignored in production |
-| `DEV_AUTH_PASSWORD` | Shared password for seeded credential accounts |
-| `BLIZZARD_CLIENT_ID` / `BLIZZARD_CLIENT_SECRET` / `BLIZZARD_REDIRECT_URI` | Required for Add Character (Class/Item Level lookup, no manual fallback). Also enables optional Battle.net account linking |
-
-### Discord OAuth
-
-Create an application in the Discord Developer Portal. Redirect URL:
-
-```text
-http://localhost:3000/api/auth/callback/discord
-```
-
-Discord login is the real user path. Until those values are set, Discord login is hidden. Development identities remain available when `DEV_AUTH_ENABLED=true` and `NODE_ENV` is not `production`.
-
-### Development authentication
-
-Seeded identities (password from `DEV_AUTH_PASSWORD`):
-
-- `kael@dev.boostting.local` — USER
-- `mira@dev.boostting.local` — USER
-- `thorne@dev.boostting.local` — RAID_LEAD
-- `aelira@dev.boostting.local` — ADMIN
-- `brann@dev.boostting.local` — USER
-- `sylva@dev.boostting.local` — USER
-
-This is not a production bypass. See [docs/authentication.md](docs/authentication.md).
-
-### Testing signups with development identities
-
-After `npm run db:seed`, sign in at `/` and use `/runs` → **Sign up**.
-
-- **Kael** — Heroic resto Shaman has a lockout (not eligible). Elemental Shaman is an eligible Heroic DPS. Inactive Ragnaros alt appears under unavailable. Mythic healer access is only pending.
-- **Brann** — Two Heroic Paladin offers (tank + holy). Mythic tank access exists but Mythic lockout blocks Mythic loot/boost.
-- **Mira** — Lootbuddy examples: loot-only + Access on Wednesday Heroic, playing + Trial on Friday Mythic. Weekend Heroic has a withdrawn lootbuddy row (revive if signed again).
-- **Sylva** — Normal Hunter booster; not approved for Heroic.
-
-Withdraw from `/my-runs` when the service allows it. Kael’s selected DPS on **Published Heroic Split** cannot self-withdraw.
-
-### Testing roster management with development identities
-
-After `npm run db:seed`:
-
-- **Thorne (RAID_LEAD)** — `/manage/runs` lists assigned runs. Actions open `/runs/[runId]`. **Sunday Heroic Boost** is already rostering with a composition-warning draft (3/4 healers). **Weekend Heroic Catch-up** is `Build Roster`. **Published Heroic Split** uses **Edit Published Roster** (live `SELECTED` rows stay until a replacement publish).
-- **Aelira (ADMIN)** — can open **US Evening Normal Clear**, which is assigned to her, and any Thorne-led run.
-- **Kael (USER)** — `/manage` redirects to the dashboard. `/runs/[runId]` shows participant data only. Old `/manage/runs/...` URLs redirect to the canonical Run.
-
-Roster Lab Heroic is seeded for automated tests; prefer Sunday / Weekend / Published Heroic Split for visual QA.
-
-### Testing run management with development identities
-
-Seeded runs are fixtures. A real raid lead does not need them.
-
-- **Thorne (RAID_LEAD)** — `/runs` → **Create Run**. Raid lead is fixed to Thorne. The new run is a draft with signups closed. Open it from `/runs/[runId]`, then close/reopen signups. Thorne cannot reassign the lead or manage Aelira’s runs.
-- **Aelira (ADMIN)** — can assign Thorne (or herself) as raid lead, edit any run before publish, and cancel.
-- **Kael (USER)** — no Create Run. Drafts are not listed on `/runs` and draft URLs 404.
-
-See [docs/features/run-management.md](docs/features/run-management.md).
-
-### Testing character management
-
-A Discord user with zero characters can use `/characters` → **Add Character**, look up a real character by Region/Realm/Name, and pick a specialization — Blizzard supplies Class and Item Level. This lookup requires `BLIZZARD_*` to be set (there is no manual fallback) but needs no Battle.net account connection — it uses client credentials, not user OAuth. Battle.net account linking is separately optional on top of that: when connected, EU/US from `/characters` can import or link characters with ownership verified; Refresh updates item level on linked rows. See [docs/features/blizzard-integration.md](docs/features/blizzard-integration.md).
-
-With a development identity:
-
-- **Kael** — `/characters` lists three Shamans (one inactive). Details, edit, deactivate, and reactivate are owner-only.
-- Create a new alt, confirm Dashboard/Profile counts change, then sign the alt as lootbuddy on an open run. It must not appear as a booster without BoosterAccess.
-
-See [docs/features/character-management.md](docs/features/character-management.md).
-
-## Main routes
-
-| Route | Access |
-| --- | --- |
-| `/` | Public login |
-| `/dashboard` | Authenticated |
-| `/runs` | Authenticated; Create Run CTA for RAID_LEAD/ADMIN |
-| `/runs/create` | RAID_LEAD or ADMIN |
-| `/runs/[runId]` | Authenticated; manager tools only when authorized |
-| `/my-runs` | Authenticated |
-| `/characters` | Authenticated |
-| `/characters/[characterId]` | Owner only |
-| `/profile` | Authenticated |
-| `/manage` | RAID_LEAD or ADMIN |
-| `/manage/runs` | RAID_LEAD or ADMIN (existing-run management) |
-| `/manage/runs/create` | Compatibility redirect to `/runs/create` |
-| `/manage/runs/[runId]` | Compatibility redirect to `/runs/[runId]` |
-| `/manage/boosting-roles` | ADMIN |
-| `/manage/users` | ADMIN |
+**Project status:** final feature freeze and handover. See [docs/HANDOVER.md](docs/HANDOVER.md).
 
 ## Documentation
 
-- [Architecture](docs/architecture.md)
-- [Domain model](docs/domain-model.md)
-- [Authentication](docs/authentication.md)
-- [Development](docs/development.md)
-- [Git workflow](docs/git-workflow.md)
-- [Production operations](docs/deployment-production.md)
-- [Application shell](docs/features/application-shell.md)
-- [Character management](docs/features/character-management.md)
-- [Battle.net integration](docs/features/blizzard-integration.md)
-- [Boosting Roles](docs/features/boosting-roles.md)
-- [User management](docs/features/user-management.md)
-- [Canonical run detail](docs/features/run-detail.md)
-- [Run management](docs/features/run-management.md)
-- [Run signups](docs/features/run-signups.md)
-- [Roster management](docs/features/roster-management.md)
-- [Run lifecycle and attendance](docs/features/run-lifecycle-attendance.md)
+| Document | For |
+| --- | --- |
+| [docs/DEVELOPER.md](docs/DEVELOPER.md) | Architecture, project structure, data model, local setup, tests, authorization, business rules, technical decisions |
+| [docs/API.md](docs/API.md) | HTTP routes, Discord bot API, Server Actions, errors, integrations |
+| [docs/USER.md](docs/USER.md) | Using the app and Discord as Booster, Raid Lead or Admin |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Release process, migrations, deploy scripts, smoke tests, rollback, planned repository restart |
+| [docs/OPERATIONS.md](docs/OPERATIONS.md) | Services, timers, configuration, monitoring, diagnosis, maintenance, backups and restore |
+| [docs/HANDOVER.md](docs/HANDOVER.md) | Real project status, debt, risks, open decisions, takeover steps, AI-assisted development |
 
-## Scripts
+## Tech stack
+
+Next.js App Router, React, TypeScript, Tailwind CSS, PostgreSQL 15+, Prisma ORM 8 (release candidate), Better Auth, Zod, discord.js, Vitest, npm and Node.js 24. Exact versions are in `package.json`.
+
+## Quick start
 
 ```bash
-npm run dev
-npm run build
-npm run lint
-npm run typecheck
-npm test
+cp .env.example .env
+npm install --legacy-peer-deps
 npm run db:emit
 npm run db:migrate
 npm run db:seed
+npm run dev
+```
+
+Set `DATABASE_URL` in `.env` first, then open <http://localhost:3000>. Development identities, Discord login, the test database and the Blizzard requirement for Add Character are explained in [Local development](docs/DEVELOPER.md#local-development).
+
+## Common commands
+
+```bash
+npm run dev            # web app (checks the DB schema first)
+npm run bot:dev        # Discord bot
+npm run lint
+npm run typecheck
+npm test
+npm run test:full      # resets TEST_DATABASE_URL, then runs all tests
+npm run build
+npm run db:status
 npm run db:verify
 ```
+
+## Contributing
+
+Work on a branch, validate locally and open a pull request. See [Git workflow](docs/DEVELOPER.md#git-workflow). The repository is public: never commit secrets, production data or personal data.

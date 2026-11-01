@@ -18,7 +18,7 @@ import { recordScheduledSyncPass } from "@/lib/blizzard/blizzard-integration-eve
  * external scheduler (cron, Windows Task Scheduler, ...) invokes
  * `npm run sync:characters` on that tick, and each invocation calls runOnce()
  * exactly once and exits. Candidate freshness is a separate ~2-hour stale
- * threshold. See docs/features/scheduled-character-sync.md.
+ * threshold. See docs/DEVELOPER.md#scheduled-character-sync.
  */
 
 const SCHEDULED_SYNC_CONCURRENCY = 4;

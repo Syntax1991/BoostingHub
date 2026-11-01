@@ -1,6 +1,6 @@
 # Daily PostgreSQL backup for BoostingHub production (root, oneshot).
 #
-# Reference copy of the live production unit (docs/deployment-production.md).
+# Reference copy of the live production unit (docs/DEPLOYMENT.md).
 # deploy/update-server.sh NEVER installs, enables or reloads units: installing
 # or changing this file on the host is a deliberate operator action (as root):
 #   install -d -o root -g root -m 0755 /usr/local/libexec/boostinghub

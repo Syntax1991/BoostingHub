@@ -617,7 +617,7 @@ export const signupService = {
   /**
    * The complete desired LOOTBUDDY entry set for one User + Run — a distinct
    * collection from Booster offers, never a discriminator on the same one
-   * (see docs/features/signups.md). Each entry is characterless: identity is
+   * (see docs/DEVELOPER.md#run-signups). Each entry is characterless: identity is
    * `RunSignup.id`, never Class+Mode, so two entries with the same Class and
    * Mode are still two distinct rows when the User intentionally adds two. An
    * entry with `signupId` edits that existing owned row in place; an entry
@@ -797,7 +797,7 @@ export const signupService = {
   },
 
   /**
-   * Discord "Cancel Signup": withdraws every active BOOSTER and LOOTBUDDY
+   * Discord "Unsign": withdraws every active BOOSTER and LOOTBUDDY
    * participation for this Run. Protection is checked for both sides before
    * any write — roster-selected or published-locked rows reject the whole
    * cancellation. Returns NOT_FOUND when nothing active remains.
@@ -936,7 +936,7 @@ export const signupService = {
   },
 
   /**
-   * Discord "Cancel Signup": withdraws all of the User's active participation
+   * Discord "Unsign": withdraws all of the User's active participation
    * on this Run. Picked rows need a reason (the bot asks for it in a modal
    * when this throws WITHDRAW_REASON_REQUIRED) and go through
    * `withdrawPickedSignup`; the rest are cancelled as before.

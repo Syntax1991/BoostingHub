@@ -91,7 +91,7 @@ import {
  * FUTURE both resolve to ARCHIVE — a holding placement that keeps the
  * CURRENT/NEXT sections strictly limited to Runs actually in those weeks
  * while never deleting/recreating the same already-provisioned channel (see
- * docs/features/discord-bot.md § weekly raid-ID sections).
+ * docs/DEVELOPER.md § Weekly raid-ID sections).
  */
 export type DiscordRunChannelTarget = "CURRENT" | "NEXT" | "ARCHIVE";
 

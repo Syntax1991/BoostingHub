@@ -71,7 +71,7 @@ export function validateRosterDraft(input: {
   }
 
   // A User may simultaneously hold BOOSTER participation and any number of
-  // LOOTBUDDY entries on the same Run (see docs/features/signups.md) — only
+  // LOOTBUDDY entries on the same Run (see docs/DEVELOPER.md#run-signups) — only
   // two SELECTED BOOSTER rows for the same User is ever invalid; LOOTBUDDY
   // entries are independently selectable and never counted here.
   const seenBoosterUsers = new Map<string, string>();
