@@ -32,6 +32,8 @@ npm run db:seed
 npm run dev
 ```
 
+`npm run db:seed` deletes all existing data in the local database named by `SEED_CONFIRM_DATABASE`, then adds test data. It refuses production.
+
 Set `DATABASE_URL` in `.env` first, then open <http://localhost:3000>. Development identities, Discord login, the test database and the Blizzard requirement for Add Character are explained in [Local development](docs/DEVELOPER.md#local-development).
 
 ## Common commands
