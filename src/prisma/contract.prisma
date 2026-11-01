@@ -1417,7 +1417,7 @@ enum ConsumableObservationKind {
 }
 
 /// Post-run Consumables Audit snapshot for one Run (ADMIN / assigned RAID_LEAD
-/// only — see docs/features/run-consumables-audit.md). Built ONLY from the
+/// only — see docs/DEVELOPER.md#run-consumables-audit). Built ONLY from the
 /// fights ASSIGNED to this Run (RunWarcraftLogsFight), never a whole report.
 /// Stores normalized WCL facts; PASS/WARNING/N/A policy is evaluated at read
 /// time so rule changes never require re-fetching Warcraft Logs. Children are

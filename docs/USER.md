@@ -2,7 +2,7 @@
 
 How to use the app and the Discord integration as a Booster, Lootbuddy, Raid Lead or Admin. The app is available at <https://manawyrm-boosting.com>.
 
-Some screenshots come from an older test build. Tabs named **Payout** no longer exist, and small details may differ from what you see.
+Screenshots show a test system with sample data, so Battle.net appears as not configured there. The sign-in screenshot still shows an older look.
 
 ## Contents
 
@@ -27,6 +27,8 @@ Sign in with **Discord**. Your first sign-in creates your account; you do not ne
 ![Sign in](./guides/screenshots/common-01-login.png)
 
 After signing in you land on the **Dashboard**, which shows what needs your attention. The side menu leads to **Runs**, **My Runs**, **Characters**, **Profile** and **Settings**. On a phone, open the same menu from the header. Raid Leads and Admins also see **Manage**.
+
+![Dashboard](./guides/screenshots/bo-01-dashboard.png)
 
 ## Characters
 
@@ -79,7 +81,9 @@ You can hold several Lootbuddy entries on a Run, and they can exist next to your
 
 A signup is an **offer**. **Signup does not mean selected**: the Raid Lead chooses the roster afterwards.
 
-**On the website:** open **Runs** and choose **Sign up**. Booster and Lootbuddy sections save separately (**Save Booster Offers**, **Save Lootbuddies**). The website is best for choosing roles exactly.
+**On the website:** open **Runs**. The **Current ID**, **Next ID** and **All** filters choose the raid week. Then choose **Sign up**. Booster and Lootbuddy sections save separately (**Save Booster Offers**, **Save Lootbuddies**). The website is best for choosing roles exactly.
+
+![Runs](./guides/screenshots/bo-03-runs.png)
 
 ![Signup dialog](./guides/screenshots/bo-04-signup.png)
 
@@ -91,7 +95,9 @@ A signup is an **offer**. **Signup does not mean selected**: the Raid Lead choos
 | **Quick Sign** | One click: offers all your eligible Characters with their default role. Keeps existing offers and skips Characters that are unavailable, in conflict, inactive or without a default role |
 | **LB** | Lootbuddy signup: pick one or more classes (Loot only) |
 | **Unsign** | Withdraws your Booster and Lootbuddy participation for this Run |
-| **Add / Edit Note** | One short note for the Raid Lead (up to 100 characters) |
+| **Add / Edit Note** | One short note for the Raid Lead (up to 100 characters); needs an active signup |
+
+After a Run has ended, the message shows **Archive Run** instead, for its Raid Lead and Admins.
 
 Use `/mysignups` in Discord for a quick private overview.
 
@@ -128,15 +134,17 @@ You manage Runs where you are the Raid Lead. Admins can manage every Run. Your *
 
 **Create a Run:** **Runs → Create Run**. You can create 1–25 drafts at once.
 
+![Runs for a Raid Lead](./guides/screenshots/rl-02-runs.png)
+
 1. Set the shared defaults: **Product**, boss count, **Difficulty**, **Run type** (Saved, Unsaved, VIP or Community), composition, optional Discord role ping, notes. Mythic cannot use Saved.
 2. Give each row a start time. Rows can override shared values.
 3. Choose **Create N Draft(s)**. The title is generated automatically. Raid Leads always lead their own Runs; Admins choose a lead.
 
 ![Create Run](./guides/screenshots/rl-04-create-run.png)
 
-**Open and manage signups** on the Run page: **Open Run**, **Close / Reopen Signups**, **Edit Run** (until Start), **Cancel Run** (before Start; can be undone with **Reactivate Run**). Drafts stay hidden from normal users. Opening a Run creates its Discord channel once its raid week is current or next.
+**Open and manage signups** in the bar on the Run's **Roster** tab: **Open Run**, **Close / Reopen Signups**, **Edit Run** (until Start), **Cancel Run** (before Start; can be undone with **Reactivate Run**). Drafts stay hidden from normal users. Opening a Run creates its Discord channel once its raid week is current or next.
 
-![Run overview](./guides/screenshots/rl-06-run-overview.png)
+![Run page](./guides/screenshots/rl-06-run-overview.png)
 
 **Community Schedule** (**Manage → Schedule**) shows planned weekly times and their staffing. Raid Leads can read it; Admins change it.
 
@@ -150,7 +158,7 @@ You manage Runs where you are the Raid Lead. Admins can manage every Run. Your *
 2. Add people if needed: **Add Booster** with **Registered player** for someone with an account, or **External** for someone without one.
 3. Use **Auto Build Roster** if you like: **Fill gaps** keeps your picks, **Build from signups** proposes a full draft. Saved Characters are never auto-picked.
 4. Watch composition and class buffs. A composition mismatch is a warning you can accept; a schedule conflict blocks the pick.
-5. Choose **Publish Roster**. The Discord roster message updates in place.
+5. Choose **Publish**. The Discord roster message updates in place.
 
 ![Roster](./guides/screenshots/rl-05-roster.png)
 
@@ -160,7 +168,7 @@ You manage Runs where you are the Raid Lead. Admins can manage every Run. Your *
 - **Ping roles** asks Discord for missing roles or sends your own short request, at most once per 30 minutes per role.
 - **Sync Characters** refreshes picks that have no fresh data.
 
-**Start Run** closes signups, freezes the roster and creates the attendance list. Run the checklist first: **Start will be refused** items must be fixed, **Check before starting** items are your call. Players get a Raid Invite and the Discord channel gets the Final Setup post.
+**Start Run** closes signups, freezes the roster and creates the attendance list. Check the **Operations** tab first: **Start will be refused** items must be fixed, **Check before starting** items are your call. Players get a Raid Invite and the Discord channel gets the Final Setup post.
 
 ![Start Run](./guides/screenshots/rl-08-start-run.png)
 
@@ -168,7 +176,7 @@ You manage Runs where you are the Raid Lead. Admins can manage every Run. Your *
 
 ![Attendance](./guides/screenshots/rl-07-attendance.png)
 
-**After completion** attendance is read-only. Later mistakes are fixed with **Correct Attendance**, which needs a reason and is recorded. The **Consumables** tab shows Warcraft Logs facts about consumables, gear and deaths. It is filled automatically about 15 minutes after completion when a log is available; you can also paste a report link. It lists facts and warnings, never a score. **Archive** keeps the Run and removes its Discord channel after saving a transcript.
+**After completion** attendance is read-only. Later mistakes are fixed with **Correct Attendance**, which needs a reason and is recorded. The **Consumables** tab shows Warcraft Logs facts about consumables, gear and deaths. It is filled automatically about 15 minutes after completion when a log is available; you can also paste a report link. It lists facts and warnings, never a score. **Archive Run** keeps the Run and removes its Discord channel after saving a transcript. The **History** tab shows what happened on the Run.
 
 ## Admin functions
 
@@ -185,7 +193,7 @@ Admins and the Owner can do everything Raid Leads do, on every Run, plus:
 
 The last active Admin cannot be removed, and the Owner role is protected.
 
-**Strikes** are a disciplinary record on a user, never created automatically. Users see their own Strikes on **Profile**, without staff notes. Raid Leads can add one from the Signups tab of a Run they manage; only Admins can add a general Strike or revoke one.
+**Strikes** are a disciplinary record on a user, never created automatically. Users see their own Strikes on **Profile**, without staff notes. Admins add and revoke them on the user's page.
 
 ## Discord notifications and commands
 

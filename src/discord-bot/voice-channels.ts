@@ -9,7 +9,7 @@
  * - RETIRE_IF_EMPTY: release the assignment right away (the channel stays).
  *
  * Temporary fallback ("Raid with <Raid Lead>") when the pool is unset or full
- * (see docs/features/discord-bot.md § Run voice channels):
+ * (see docs/DEVELOPER.md#run-voice-channels):
  * - PROVISION: create one GuildVoice channel in the dedicated voice category.
  * - RECONCILE (Run IN_PROGRESS): keep the channel even when nobody is in it;
  *   if Discord confirms it is gone (Unknown Channel), clear and recreate once.

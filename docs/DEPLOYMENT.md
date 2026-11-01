@@ -70,7 +70,9 @@ The build's Next.js `deploymentId` is the deployed commit (`next.config.ts`; `NE
 `daemon-reload`, or install anything under `/usr/local/libexec`. Changing any of
 those is a deliberate operator step (see [Changing systemd units or the backup
 script](#changing-systemd-units-or-the-backup-script)). The live host is
-authoritative. Keep the tracked copies identical to what is installed.
+authoritative. Keep the tracked copies identical to what is installed. PR #319 changed
+one documentation path in the comments of the tracked units and `backup-db.sh`; until
+they are next installed, a `cmp` difference limited to that comment line is expected.
 
 The checkout may contain untracked one-off diagnostic scripts. The release
 helper preserves them. They are not part of the supported tooling.

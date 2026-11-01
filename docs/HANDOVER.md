@@ -36,7 +36,7 @@ This repository is public, so concrete server details, access data and secret va
 | Boss-specific roster exceptions | Behind `ROSTER_BOSS_EXCEPTIONS_ENABLED`; recorded as off in production, with no stored rows. Follow-ups never done: versioning on Run edits, attendance replacement beyond the current rule. Before enabling, read [Boss-specific exceptions](DEVELOPER.md#boss-specific-exceptions). A rollback must handle stored rows |
 | Self-service Booster requests | Disabled (`BOOSTER_ACCESS_SELF_REQUEST_DISABLED`); old requests remain as history |
 | Legacy single-channel Discord mode | Fallback only when no Run category is set |
-| `POST` scripts `scripts/post-*-guide.mts` | Deprecated forwarders |
+| Scripts `scripts/post-*-guide.mts` | Deprecated forwarders |
 
 **Shipped but not yet observed in real use:** Late Fill, Smart Replacement and the Roster Diff had not been seen under real use at last check. A real test of Ping roles was still pending. Check them at first real use.
 
@@ -47,8 +47,8 @@ This repository is public, so concrete server details, access data and secret va
 - A roster test depends on the time of week and can fail; see [PR #297](#open-pull-requests).
 - A full test run on a database without reset failed four tests once, while another session was active (cause unproven). Those files passed alone, and the suite passed after a reset. Use `npm run test:full`.
 - The production web log showed a burst of "Server Reference ID did not match" lines on 2026-11-01. The origin was not traced; it looks like invalid Server Action probing, not an app failure.
-- Discord guide text in `src/guides/*.ts` still uses older button names (Quick Signup, Sign as Lootbuddy, Cancel Signup). The real labels are Quick Sign, LB and Unsign. Published guides differ from `USER.md` until they are corrected and republished.
-- One bot message still says "Sign as Lootbuddy".
+- The guide channels in Discord still show the old text and screenshots until someone runs `npm run guide:booster:publish` and `npm run guide:raidlead:publish` after the next release. Source and `USER.md` already agree.
+- **Add strike on the Run page looks unreachable.** `AddStrikeButton` only renders in the manager signup list, and `run-detail-tabs.tsx` shows that list only to viewers who are not managers. So in practice Strikes are added on `/manage/users/[userId]`, which means by Admins. Found by reading the code, not reproduced in a browser, and not fixed because the freeze excludes logic changes.
 - External boosters have no Warcraft Logs identity and are shown as "Log data unavailable".
 - The voice-presence hint assumes one web process.
 - Realm transfers are refused, not handled automatically.
@@ -58,11 +58,10 @@ This repository is public, so concrete server details, access data and secret va
 
 - **Prisma 8 release candidate** in production. Better Auth needs `--legacy-peer-deps` because of it.
 - **No CI, no branch protection, no dependency updates automation.** Checks run only locally.
-- **Dead documentation pointers in code** after this consolidation: comments in `.env.example`, `deploy/production/systemd/*`, `deploy/production/backup-db.sh`, `scripts/`, `src/components/ui/lockout-progress.tsx`, `src/discord-bot/*`, `src/services/*`, plus the runtime message in `src/lib/dev-db-schema-check.ts`, which names `docs/development.md`. The named section is now in `DEVELOPER.md`. Three comments already pointed at a missing `docs/features/signups.md`, and `src/lib/wow-role-media.ts` at an untracked `PROVENANCE.md`.
 - **Stale comments:** `.env.example` describes the old difficulty-based bootstrap and an older Warcraft Logs use; `GET /api/bot/runs/:runId/start` mentions gold collectors.
 - **Legacy kept for compatibility:** `lootType` as the name of Run type, `RunTemplate` for Run Setup, generic `DPS` role rows, Character-backed Lootbuddy rows, `BoosterAccess` history, `raidInvites` always empty in the sync payload, `User.discordRunChannelNickname` unused, `runService.createRun` used only by tests, `clear-channel` no longer used for retirement.
 - **Naming:** BoostingHub, Manawyrm Hub, `boostting-bot` and a Discord emoji named `PhoenixStarDiscord` all still exist.
-- **Screenshots:** three contain a real Discord name (`bo-01-dashboard.png`, `bo-03-runs.png`, `rl-02-runs.png`) and are not used in `USER.md`, but `bo-01` is still published by the Discord guide. Three show the removed Payout tab. Recapture them from a clean local database; the capture scripts write to the same folder.
+- **Screenshots:** recaptured on 2026-11-01 from a fresh seed database, without real names or the removed Payout tab, except `common-01-login.png` (older look, no capture script). The seed's Run dates are fixed and lie in the past, so the capture scripts' default views of `/runs` and `/my-runs` come out empty; `bo-03`, `bo-04`, `bo-05` and `rl-02` were taken with `?id=all`. The old images remain in Git history.
 - **Large files:** `src/discord-bot/sync-loop.ts` and `run.service.ts` have grown large.
 
 ## Open pull requests
@@ -107,7 +106,7 @@ Named as classes on purpose. Details and evidence go to the new maintainer priva
 | Public repository history holds operational details and a personal commit e-mail. Pattern scans and a comparison against local secret values found **no credentials**, and the GitGuardian alerts on PRs #58 and #86 were an empty value and test data; prod-only and old secrets were not compared, and the dashboard status of these alerts is not visible from the repository | Full scanner run before any new public snapshot; treat exposed information as public | Owner |
 | Discord bot permissions are broader than the documented minimum | Scope down | New operator |
 
-**Remaining sensitive values in tracked files** (no secrets): production Discord ids in `.env.example` comments, guide channel and guild ids in `src/discord-bot/guide-channels.ts` (needed configuration unless moved to environment), and the old domain in some scripts and test fixtures.
+**Remaining sensitive values in tracked files** (no secrets): production Discord ids in `.env.example` comments, guide channel and guild ids in `src/discord-bot/guide-channels.ts` (needed configuration unless moved to environment), and the old domain in test fixtures.
 
 ## Planned access separation
 

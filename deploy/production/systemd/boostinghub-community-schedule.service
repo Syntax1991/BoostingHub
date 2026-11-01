@@ -1,6 +1,6 @@
 # One-shot community schedule DRAFT materialization, started by boostinghub-community-schedule.timer.
 #
-# Reference copy (docs/deployment-production.md). Install manually on the host as root:
+# Reference copy (docs/DEPLOYMENT.md). Install manually on the host as root:
 #   install -o root -g root -m 0644 deploy/production/systemd/boostinghub-community-schedule.service deploy/production/systemd/boostinghub-community-schedule.timer /etc/systemd/system/
 #   systemctl daemon-reload
 #   systemctl enable --now boostinghub-community-schedule.timer

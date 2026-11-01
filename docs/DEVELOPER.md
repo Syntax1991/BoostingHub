@@ -9,6 +9,7 @@ Naming: the product is **BoostingHub**, the app brand shown to users is **Manawy
 ## Contents
 
 - [Contents](#contents)
+- [Start here](#start-here)
 - [Architecture and MVCS](#architecture-and-mvcs)
   - [Stack](#stack)
   - [Layer responsibilities](#layer-responsibilities)
@@ -62,7 +63,6 @@ Naming: the product is **BoostingHub**, the app brand shown to users is **Manawy
   - [Development authentication](#development-authentication)
   - [Development account bootstrap](#development-account-bootstrap-1)
   - [Session enforcement](#session-enforcement)
-  - [Persistence split](#persistence-split)
   - [Account Roles](#account-roles)
   - [Platform Owner](#platform-owner)
   - [Last Admin](#last-admin)
@@ -70,26 +70,26 @@ Naming: the product is **BoostingHub**, the app brand shown to users is **Manawy
   - [Session Role Freshness](#session-role-freshness)
 - [Feature rules](#feature-rules)
   - [Application shell](#application-shell)
+  - [User management](#user-management)
+  - [Boosting Roles](#boosting-roles)
+  - [User strikes](#user-strikes)
   - [Character management](#character-management)
   - [Lockout boss-dot semantics](#lockout-boss-dot-semantics)
   - [Battle.net integration](#battlenet-integration)
   - [Scheduled character sync](#scheduled-character-sync)
   - [Character Operations](#character-operations)
-  - [Boosting Roles](#boosting-roles)
-  - [User management](#user-management)
-  - [User strikes](#user-strikes)
-  - [User settings and notifications](#user-settings-and-notifications)
-  - [Run management](#run-management)
-  - [Canonical Run detail](#canonical-run-detail-1)
-  - [Run lifecycle and attendance](#run-lifecycle-and-attendance)
-  - [Run signups](#run-signups)
-  - [Roster management](#roster-management)
+  - [Raid Catalog](#raid-catalog)
   - [Run Setups](#run-setups)
   - [Community Schedule](#community-schedule)
-  - [Raid Catalog](#raid-catalog)
+  - [Run management](#run-management)
+  - [Canonical Run detail](#canonical-run-detail-1)
+  - [Run signups](#run-signups)
+  - [Roster management](#roster-management)
+  - [Run lifecycle and attendance](#run-lifecycle-and-attendance)
   - [Run Consumables Audit](#run-consumables-audit)
-  - [Operational analytics and system health](#operational-analytics-and-system-health)
+  - [User settings and notifications](#user-settings-and-notifications)
   - [Discord bot](#discord-bot)
+  - [Operational analytics and system health](#operational-analytics-and-system-health)
 - [Technical decisions](#technical-decisions)
 - [Git workflow](#git-workflow)
   - [Stable branch](#stable-branch)
@@ -100,6 +100,37 @@ Naming: the product is **BoostingHub**, the app brand shown to users is **Manawy
   - [Merge](#merge)
   - [Cleanup](#cleanup)
   - [Emergency / fix branches](#emergency--fix-branches)
+
+## Start here
+
+**First day:** read this section, [Architecture and MVCS](#architecture-and-mvcs) and [Project structure](#project-structure), then follow [Local development](#local-development). Everything under [Feature rules](#feature-rules) is reference: read the part you are about to change.
+
+**Terms you need:**
+
+| Term | Meaning |
+| --- | --- |
+| Run | One planned raid, at `/runs/[runId]` |
+| Run status | `DRAFT` → `OPEN` → `ROSTERING` → `PUBLISHED` → `IN_PROGRESS` → `COMPLETED`, or `CANCELLED` before Start |
+| Account role | Permission in the app: `USER`, `RAID_LEAD`, `ADMIN`, `OWNER` |
+| Boosting Role | Capability on the account: Booster, Lootbuddy. Not an account role |
+| Offer, signup | A `RunSignup` row. Signing up never means being selected |
+| Draft, published roster | The saved selection, and the `SELECTED` signups after Publish. Start Run freezes the roster |
+| Run Setup | Global planning preset, model `RunTemplate` |
+| Product | Raid content offered for creating Runs, managed in the Raid Catalog |
+| Raid ID | The week from Wednesday 06:00 Europe/Berlin to the next, used for Discord sections and filters. Lockouts use Blizzard's regional reset instead |
+| Lane | One kind of work in the bot's sync payload |
+| VERIFIED, PUBLIC sync | A Character sync through a proven Battle.net link, or from public profile data |
+
+**Where do I look?**
+
+| I want to change | Read |
+| --- | --- |
+| Who may do what | [Authentication and authorization](#authentication-and-authorization), [User management](#user-management), [Boosting Roles](#boosting-roles) |
+| Characters and Blizzard data | [Character management](#character-management), [Battle.net integration](#battlenet-integration), [Scheduled character sync](#scheduled-character-sync) |
+| What can be planned | [Raid Catalog](#raid-catalog), [Run Setups](#run-setups), [Community Schedule](#community-schedule) |
+| A Run from create to complete | [Run management](#run-management), [Run signups](#run-signups), [Roster management](#roster-management), [Run lifecycle and attendance](#run-lifecycle-and-attendance) |
+| Logs and consumables | [Run Consumables Audit](#run-consumables-audit) |
+| Messages to players | [User settings and notifications](#user-settings-and-notifications), [Discord bot](#discord-bot) |
 
 ## Architecture and MVCS
 
@@ -679,7 +710,7 @@ npm run build
 
 ### Test setup
 
-- Runner: Vitest, `src/**/*.test.ts`, one file at a time (`fileParallelism: false`). Scripts under `deploy/` have offline shell tests (`bash deploy/update-server.test.sh`, `bash deploy/production/backup-db.test.sh`, `bash deploy/production/env-status.test.sh`).
+- Runner: Vitest, `src/**/*.test.ts`, one file at a time (`fileParallelism: false`). Scripts under `deploy/` have offline shell tests (`bash deploy/update-server.test.sh`, `bash deploy/production/backup-db.test.sh`, `bash deploy/production/env-status.test.sh`; the last two need a real `python3` on the PATH, and most checks fail without one).
 - Database: `TEST_DATABASE_URL` is required and must differ from `DATABASE_URL`. `src/lib/pg-pool.ts` refuses to start under Vitest otherwise. `npm run test:db:reset` resets and reseeds that database destructively; `npm run test:full` resets, then runs everything.
 - External APIs: `src/test/external-api-guard.ts` fails a test that lets a real Warcraft Logs, Blizzard or Raider.IO request escape.
 - Some tests use the seeded database and mutate Roster Lab fixtures; re-seed after them if you need the original demo rows. Parallel checkouts need one test database each, because a reset would break a concurrent run.
@@ -780,10 +811,6 @@ Controllers call:
 
 Management routes are enforced on the server. Users without `RAID_LEAD` or `ADMIN` are redirected to `/dashboard`.
 
-### Persistence split
-
-Better Auth uses Kysely on the shared `pg.Pool` because its Prisma adapter still expects Prisma 7's client. Prisma 8 uses the same pool for domain queries. The `user` table is the shared identity record.
-
 ### Account Roles
 
 Platform permissions on `User.accountRole`:
@@ -845,6 +872,8 @@ Trusted controllers load the session user with `userRepository.findAuthenticated
 
 ## Feature rules
 
+Ordered from accounts and Characters, through planning and the life of a Run, to messaging and operations.
+
 ### Application shell
 
 #### User flow
@@ -860,6 +889,263 @@ Trusted controllers load the session user with `userRepository.findAuthenticated
 - All app routes: authenticated `ACTIVE` user
 - `/manage*`: `RAID_LEAD` or `ADMIN`, enforced in controllers
 - `/manage/users` (All Users + Pending Boosting Access; old `/manage/boosting-roles` and `/manage/booster-access` redirect here): `ADMIN` only
+
+### User management
+
+#### Users: Purpose
+
+Give ADMIN operators a management hub for browsing accounts, inspecting characters, managing Boosting Roles, and assigning platform account roles (`USER`, `RAID_LEAD`, `ADMIN`). Role changes are server-owned and audited.
+
+This feature does **not** turn Booster or Lootbuddy into account roles. They are Boosting Roles on the User (`isBooster`, `isLootbuddy`), independent of the account role and of each other; Booster is not scoped by raid difficulty. See [Boosting Roles](#boosting-roles).
+
+#### Management Hub
+
+`/manage` is the operations overview for RAID_LEAD and ADMIN.
+
+- RAID_LEAD sees run metrics and the Runs entry point.
+- ADMIN additionally sees a Users card with compact counts.
+
+Metrics are prepared by `managementHubService`. Views render cards only; they do not query Prisma.
+
+#### Navigation
+
+`getManagementNavItems(accountRole)` drives the manage sub-nav in the app shell:
+
+| Role | Modules |
+| --- | --- |
+| USER | none (no Manage entry) |
+| RAID_LEAD | Overview, Runs, Schedule |
+| ADMIN / OWNER | Overview, Runs, Schedule, Users, Characters, Raid Catalog, Analytics, System |
+
+Hidden links are not authorization. Controllers still call `requireManagerOrRedirect`, `requireAdmin`, and service asserts.
+
+`isManagementNavActive` treats `/manage` as exact-match only so `/manage/users` does not highlight Overview.
+
+Characters across all users (sync health, linkage, lockouts, admin sync controls) live in [Character Operations](#character-operations) (`/manage/characters`). `/manage/analytics` (operational analytics, `operationalAnalyticsService`) and `/manage/system` (integration health and recent `IntegrationEvent` rows, `systemHealthService`) are ADMIN / OWNER only.
+
+#### User Listing
+
+Route: `/manage/users` (ADMIN only).
+
+Lists accounts with role, Discord identity hints, character counts, and the account-level booster state (Approved / Revoked / None). Filters/sorts are applied in `userRepository.listAdminUsers` via `userManagementService.listUsers`.
+
+#### User Detail
+
+Route: `/manage/users/[userId]`.
+
+Shows identity, account role/status, characters, the account-level booster state (Grant when not approved, Revoke when approved), disciplinary Strike history (Add/Revoke), and recent audit events relevant to that user (including `ACCOUNT_ROLE_CHANGED` events authored by another admin that mention `targetUserId=`).
+
+Strikes are a separate concept from account role, Boosting Roles, and audit — see [User strikes](#user-strikes).
+
+#### Role Administration
+
+ADMIN changes roles through `userManagementService.changeAccountRole`.
+
+Supported transitions include USER → RAID_LEAD, RAID_LEAD → ADMIN, and ADMIN → RAID_LEAD / USER (when another Admin-level account remains). An ADMIN may still change another ADMIN; only the OWNER is protected (see Platform Owner). Same-role assignments throw `ROLE_ALREADY_ASSIGNED`. Unknown values throw `INVALID_ACCOUNT_ROLE`.
+
+Clients cannot invent roles outside `ACCOUNT_ROLES`, and OWNER is never accepted as a target role.
+
+#### Users: Audit
+
+Successful role changes create an `ActivityEvent`:
+
+- `type`: `ACCOUNT_ROLE_CHANGED`
+- `userId`: acting admin
+- `message`: includes previous/next role labels and `targetUserId=<id>`
+
+User detail surfaces those events for the target account.
+
+#### Users: Authorization
+
+| Actor | List / detail users | Change account role | Manage nav users link |
+| --- | --- | --- | --- |
+| USER | no | no | no |
+| RAID_LEAD | no | no | no |
+| ADMIN | yes | yes, except the OWNER and except assigning OWNER | yes |
+| OWNER | yes | yes, except itself and except assigning OWNER | yes |
+
+Service gate: `assertCanManageUsers` → `USER_MANAGEMENT_FORBIDDEN`.
+
+Controller: `requireAdmin` on role-change actions. Pages use admin redirects.
+
+#### Users: MVCS
+
+- Model: `User.accountRole`, `ActivityEvent`
+- View: manage hub cards, `/manage/users`, user detail, change-role dialog
+- Controller: `user-management.actions.ts`, app/management controllers for page data
+- Service: `userManagementService`, `managementHubService`
+- Repository: `userRepository` (list/detail/count/update role/non-terminal runs), `activityRepository`
+
+#### Users: Security
+
+- Role mutations require ADMIN session; target role validated server-side
+- Last-admin and active-run guards run in the service before persist
+- OAuth / clients cannot set `accountRole` (`input: false` on the auth user model)
+- Audit messages identify actor and target without exposing secrets
+- Navigation hiding is presentation only; every mutation re-checks authorization
+
+### Boosting Roles
+
+#### Boosting Roles: Purpose
+
+Let an ADMIN (or the OWNER) grant and revoke a User's **Boosting Roles** after Discord review. A configured Discord guild role may also grant Booster automatically when the User signs in.
+
+#### Account role vs Boosting Roles
+
+Two independent concepts live on the User:
+
+| Concept | Values | Controls |
+| --- | --- | --- |
+| **Account role** (`User.accountRole`) | `USER` · `RAID_LEAD` · `ADMIN` · `OWNER` | Platform authorization — what a User may manage |
+| **Boosting Roles** (`User.isBooster`, `User.isLootbuddy`) | Booster · Lootbuddy (each on/off) | Operational participation |
+
+A User may hold zero, one or both Boosting Roles, independently of the account role and of each other — `USER + Booster`, `USER + Lootbuddy`, `ADMIN + Booster`, `OWNER + Booster + Lootbuddy` are all valid. Booster and Lootbuddy are **never** account roles, and they are **never** stored on a Character. ADMIN / OWNER do not receive a Boosting Role automatically.
+
+Run participation (`RunSignup.participationType` = `BOOSTER` / `LOOTBUDDY`) is still chosen per signup; the Boosting Roles are account-level capabilities.
+
+#### Boosting Roles: Booster
+
+`User.isBooster = true` means the User is approved to sign up and be rostered as a Booster.
+
+**The Booster role is not scoped by raid difficulty.** An approved Booster may boost Normal, Heroic and Mythic Runs alike. **Run difficulty remains relevant** everywhere else — Runs, raid contents, lockouts, weekly availability, signup display, rosters, Discord run posts and history — it is simply not part of the Booster question.
+
+The single check is `isApprovedBooster(...)` / `hasEffectiveBoosterAccess(...)` in `src/services/boosting-role.service.ts` (manual `isBooster` ∨ Discord `discordRaidBooster`). It does not depend on Character, WoW Class, specialization, Character Role, Item Level, account role, Lootbuddy, or Raid Difficulty.
+
+| Concern | Question |
+| --- | --- |
+| Booster role | Is this User an approved Booster? |
+| Character eligibility | May this Character be used in this Run? |
+| Roster composition | Do we want this Character/role on the roster? |
+
+Signup options and roster revalidation read the signup owner's `isBooster` only (hydrated onto Character / roster rows as `ownerIsBooster`). Character ownership, active state, valid role-for-class, weekly availability, cross-Run reservation, lockouts (informational), run/signup state and composition rules are separate and unchanged. A non-Booster is rejected with `NO_BOOSTER_ACCESS` (options) / `BOOSTER_ACCESS_REQUIRED` (signup) on every difficulty; there is no difficulty-specific rejection. Revoking the role takes effect immediately: the owner's roster rows show "Owner no longer has the Booster role." and block publish until resolved; existing signups and history stay.
+
+#### Boosting Roles: Lootbuddy
+
+`User.isLootbuddy = true` marks the User as a recognised Lootbuddy. Today it is a **management and display capability only**:
+
+- Lootbuddy signups (characterless `RunSignup` rows with class / mode / verification) are open to every User and are **not** gated by `isLootbuddy` — there was no Lootbuddy eligibility gate before, and none was invented.
+- Existing Users start with `isLootbuddy = false`; there was no authoritative source to derive it from.
+
+#### Managing the roles
+
+ADMIN / OWNER (`canManageBoostingRoles`) retain the manual controls through the explicit operation `boostingRoleService.setRole(admin, { userId, role: "BOOSTER" | "LOOTBUDDY", enabled, reason? })` (server action `setBoostingRoleAction`). The raw booleans are never accepted by a generic User update. Setting a role to the state it already has is a no-op (no write, no audit event).
+
+Additionally, when `DISCORD_BOOSTER_ROLE_ID` and `DISCORD_LOOTBUDDY_ROLE_ID` are configured alongside the bot token and guild ID, a Discord sign-in reconciles Discord-derived grants into `User.discordRaidBooster` / `User.discordLootbuddy`. These are independent of the manual flags: Discord never overwrites `isBooster` / `isLootbuddy`. Effective Booster access is `manual ∨ Discord Raid Booster`; effective Lootbuddy access is `manual ∨ Discord Lootbuddy`. Authoritative role absence, guild departure, or Discord unlink clears only the Discord-derived grants. Transient Discord API failures preserve last-known Discord grants. M+ Booster and staff/ping roles never grant either access.
+
+Surfaces:
+
+- **`/manage/users`** — canonical Admin surface: **All Users** (directory with platform role, account status, booster status, pending counts) and **Pending Boosting Access** (historical PENDING requests grouped by user). Filters include search, account status, platform role, booster status, and pending access.
+- **`/manage/users/[id]`** — primary grant/revoke place: **Boosting access** with Booster / Lootbuddy Grant·Revoke plus any pending historical requests for that user. No difficulty selector on the role itself.
+- **Legacy URLs** — `/manage/boosting-roles` and `/manage/booster-access` redirect into `/manage/users` (legacy/pending query → `?view=boosting-access`).
+- **Management hub** — single **Users** card: totals, boosters, and pending access (no separate Boosting Roles card).
+
+Audit: every change writes an `ActivityEvent` under the acting admin — `BOOSTER_GRANTED`, `BOOSTER_REVOKED`, `LOOTBUDDY_GRANTED`, `LOOTBUDDY_REVOKED` — with a `targetUserId=<id>` marker so it also appears in the target's audit trail on `/manage/users/[id]`. No difficulty is recorded.
+
+Onboarding:
+
+```text
+User → Apply via Discord → staff review → ADMIN grants Booster manually or staff assigns the configured Discord role → next Discord sign-in grants Booster
+```
+
+Self-service in-app requests stay disabled (`BOOSTER_ACCESS_SELF_REQUEST_DISABLED`). User-facing pages show an **Apply via Discord** CTA when `DISCORD_BOOSTER_TICKET_URL` is set. A User may receive the Booster role with zero Characters.
+
+#### User-facing display
+
+- **Profile** — a **Boosting roles** card showing only the enabled roles (e.g. `Booster` `Lootbuddy`), or "No boosting role yet".
+- **`/characters`** — one **Your boosting roles** line for the account (not repeated per Character), with the Discord CTA when not a Booster.
+- **Character detail** — a compact **Booster signups** note: the Booster role belongs to the account and covers every difficulty.
+- **`/manage/characters/[id]`** — the owner's Boosting Roles, read-only.
+
+Never shown: `Booster · Normal / Heroic / Mythic` — the Booster role has no difficulty.
+
+#### HISTORICAL REQUEST vs CURRENT CAPABILITY
+
+| | Model | Meaning |
+| --- | --- | --- |
+| Historical request | `BoosterAccess` | What was requested at the time (User + Class + Role + Difficulty, optional Character context), `PENDING` / `APPROVED` / `REJECTED` / `REVOKED` |
+| Current capability | `User.isBooster` | Whether the User is an approved Booster **now** |
+
+`BoosterAccess` rows are preserved as history and are **never read for eligibility**; nothing in current eligibility depends on them.
+
+**Pending Boosting Access · N** (`/manage/users?view=boosting-access`) lists unresolved historical `PENDING` rows (grouped by user), filterable by requested difficulty and role:
+
+- **Approve** marks that row and every other PENDING row of the same User `APPROVED` (their recorded difficulty is kept) and grants the account-level Booster role (a no-op if the User already has it).
+- **Reject** marks the row `REJECTED`; it never changes Boosting Roles. Reviewed rows are never rewritten by a later approval.
+
+#### Boosting Roles: Migration
+
+`20260927T1408_boosting_roles_on_user` upgrades directly from the production schema, where `BoosterQualification` was one row per (User, Difficulty):
+
+1. adds `user.isBooster` / `user.isLootbuddy` (`NOT NULL DEFAULT false`);
+2. sets `isBooster = true` for every User with **any** `APPROVED` qualification row, whatever its difficulty (Normal, Heroic, Mythic, several, or approved + revoked). Users with only `REVOKED` rows, or none, stay `false` — no approved booster loses access;
+3. drops `booster_qualification`.
+
+`isLootbuddy` stays `false` for everyone. `booster_access` is not touched. The migration is covered by `src/prisma/boosting-roles-migration.test.ts`.
+
+#### Out of scope here
+
+Automatic revocation from Discord, mass signup, Strikes, Deducts, Lootbuddy eligibility rules, difficulty-specific booster permissions.
+
+### User strikes
+
+#### Strikes: Purpose
+
+A disciplinary history record against a `User`. This is BoostingHub-owned internal administration, independent of Run operations.
+
+BoostingHub owns Users (with their Boosting Roles), Characters, Runs, Signups, Rosters, Run attendance, and this Strike history. Strike is intentionally uncoupled from attendance — it has no relation to `RunAttendance` (no auto-strike from No-show / Late).
+
+Nothing here is automatic: every Strike is an explicit staff action. There is no automatic sanction, no automatic expiry, and no severity scoring.
+
+#### Strikes: Model
+
+`Strike`: `userId` (subject, required), `runId` (nullable), `reason` (required), `notes` (optional, staff-only), `status` (`ACTIVE` \| `REVOKED`), `createdById`, `revokedAt` / `revokedById` / `revokedReason`, timestamps.
+
+Subject is always `User`, never `Character` — a Strike survives account role changes, Character deactivation, and Boosting Role changes. No severity. No expiry (`expiresAt` is explicitly not implemented; "active" means `status === ACTIVE`, permanently, until an ADMIN revokes it). No hard delete — revocation is the only correction path and keeps the row, so history is never lost.
+
+#### Run relation
+
+`runId` is optional: most Strikes reference the Run an incident happened on, but ADMIN may also record a general disciplinary note with no Run context (e.g. a pattern of behavior not tied to one run).
+
+Run association is proven using **BoostingHub's own signup history** (`RunSignup`) — never Attendance, which this feature does not read or write.
+
+#### Strikes: Authorization
+
+| Action | ADMIN | RAID_LEAD | USER |
+| --- | --- | --- | --- |
+| Create (no `runId`) | yes | no (`STRIKE_RUN_REQUIRED`) | no |
+| Create (with `runId`) | yes, any Run | only a Run they manage (`canManageRun`), and only for a User with signup history on it (`STRIKE_USER_NOT_ASSOCIATED` otherwise) | no |
+| Revoke | yes | no (`STRIKE_REVOKE_FORBIDDEN`, even for a Strike they created) | no |
+| Read own history | n/a | n/a | yes (no internal `notes`) |
+| Read another User's history | yes | only via a Run they manage | no |
+
+#### Strikes: Visibility
+
+- ADMIN sees full detail: reason, internal notes, linked Run, creator, revoke metadata.
+- USER sees their own complete history (active and revoked): reason, linked Run, date, status, revoke reason. Internal `notes` are never shown to the User, even for their own Strikes.
+
+#### Strikes: UI
+
+- `/manage/users/[userId]`: **Strikes** card (between Boosting roles / Characters and Audit) — full detail, Add strike (general, ADMIN), Revoke (ADMIN-only, reason required).
+- `/profile`: read-only Strikes card — own history, no internal notes.
+- Run-linked strikes: `AddStrikeButton` sits in the manager signup list and derives `runId`/`userId` from BoostingHub's own signup row. **The current Run page does not render that list for managers** (see [HANDOVER.md](HANDOVER.md#known-bugs-and-limitations)), so in practice Strikes are added on the user page. Marking any Attendance status never creates a Strike.
+
+No dedicated `/manage/strikes` page exists.
+
+#### Activity / Audit
+
+`STRIKE_ADDED` and `STRIKE_REVOKED` follow the existing `ActivityEvent` convention: `userId` is the acting staff member, and the free-text `message` embeds `targetUserId=`/`strikeId=` (and the Run title when linked). Internal notes are never included in the audit message.
+
+#### Strikes: MVCS
+
+- Model: `Strike`
+- View: Strikes card (`/manage/users/[userId]`, `/profile`), Signups-tab Add-strike action
+- Controller: `strike.actions.ts`
+- Service: `strike.service.ts`
+- Repository: `strike.repository.ts`
+
+#### Strikes: Deferred
+
+Strike expiry/decay, severity levels, appeals workflow, automatic sanctions (including any automatic Strike-from-attendance-status or Booster-role-revoke-from-strike-count), a dedicated `/manage/strikes` review page, Discord synchronization, automated bot enforcement, and any financial deduction (BoostingHub has no financial domain).
 
 ### Character management
 
@@ -1502,10 +1788,6 @@ Routine scheduled sync writes **no** `ActivityEvent` rows — not one per Charac
 
 Raid lockouts are informational only, never a signup blocker (see [Run signups](#run-signups)). Scheduled sync will make lockout data fresher — e.g. turning `HC 1/8` into `HC 8/8` between manual refreshes — but this can never, by itself, make a Character ineligible for a signup. `CHARACTER_ALREADY_SELECTED_OTHER_RUN` (cross-run Character reservation) is a separate, unrelated, still hard-blocking rule that this feature does not touch.
 
-#### No schema migration
-
-No `ScheduledJob` / `CronJob` / job-lease table was added. A PostgreSQL advisory lock is sufficient for overlap protection and requires no persistent state or migration.
-
 ### Character Operations
 
 Admin-level area (ADMIN and OWNER — `hasAdminAccess`; USER and RAID_LEAD are denied on pages, actions and services) for inspecting every Character centrally and running Blizzard syncs, instead of navigating through individual user profiles. It reuses the sync telemetry, health model and locks from [Sync telemetry](#sync-telemetry); there is no second sync implementation.
@@ -1555,458 +1837,293 @@ Activity events: `ADMIN_CHARACTER_SYNC`, `ADMIN_CHARACTER_FORCE_REFRESH`, `ADMIN
 
 If the eligible population ever grows far beyond what fits the budget (Apache `Timeout 300`), move bulk refresh to the existing one-shot systemd job pattern rather than adding a queue.
 
-### Boosting Roles
+### Raid Catalog
 
-#### Boosting Roles: Purpose
+`/manage/raid-catalog` (legacy `/manage/content` redirects here) — ADMIN / OWNER only.
 
-Let an ADMIN (or the OWNER) grant and revoke a User's **Boosting Roles** after Discord review. A configured Discord guild role may also grant Booster automatically when the User signs in.
+Raids and their bosses are **imported from the Blizzard Adventure Journal**. Admins no
+longer type raid names, boss lists or Blizzard encounter ids. Products (run presets)
+stay BoostingHub data and are edited by hand.
 
-#### Account role vs Boosting Roles
+#### Data ownership and Blizzard identities
 
-Two independent concepts live on the User:
+##### Data model
 
-| Concept | Values | Controls |
-| --- | --- | --- |
-| **Account role** (`User.accountRole`) | `USER` · `RAID_LEAD` · `ADMIN` · `OWNER` | Platform authorization — what a User may manage |
-| **Boosting Roles** (`User.isBooster`, `User.isLootbuddy`) | Booster · Lootbuddy (each on/off) | Operational participation |
-
-A User may hold zero, one or both Boosting Roles, independently of the account role and of each other — `USER + Booster`, `USER + Lootbuddy`, `ADMIN + Booster`, `OWNER + Booster + Lootbuddy` are all valid. Booster and Lootbuddy are **never** account roles, and they are **never** stored on a Character. ADMIN / OWNER do not receive a Boosting Role automatically.
-
-Run participation (`RunSignup.participationType` = `BOOSTER` / `LOOTBUDDY`) is still chosen per signup; the Boosting Roles are account-level capabilities.
-
-#### Boosting Roles: Booster
-
-`User.isBooster = true` means the User is approved to sign up and be rostered as a Booster.
-
-**The Booster role is not scoped by raid difficulty.** An approved Booster may boost Normal, Heroic and Mythic Runs alike. **Run difficulty remains relevant** everywhere else — Runs, raid contents, lockouts, weekly availability, signup display, rosters, Discord run posts and history — it is simply not part of the Booster question.
-
-The single check is `isApprovedBooster(...)` / `hasEffectiveBoosterAccess(...)` in `src/services/boosting-role.service.ts` (manual `isBooster` ∨ Discord `discordRaidBooster`). It does not depend on Character, WoW Class, specialization, Character Role, Item Level, account role, Lootbuddy, or Raid Difficulty.
-
-| Concern | Question |
-| --- | --- |
-| Booster role | Is this User an approved Booster? |
-| Character eligibility | May this Character be used in this Run? |
-| Roster composition | Do we want this Character/role on the roster? |
-
-Signup options and roster revalidation read the signup owner's `isBooster` only (hydrated onto Character / roster rows as `ownerIsBooster`). Character ownership, active state, valid role-for-class, weekly availability, cross-Run reservation, lockouts (informational), run/signup state and composition rules are separate and unchanged. A non-Booster is rejected with `NO_BOOSTER_ACCESS` (options) / `BOOSTER_ACCESS_REQUIRED` (signup) on every difficulty; there is no difficulty-specific rejection. Revoking the role takes effect immediately: the owner's roster rows show "Owner no longer has the Booster role." and block publish until resolved; existing signups and history stay.
-
-#### Boosting Roles: Lootbuddy
-
-`User.isLootbuddy = true` marks the User as a recognised Lootbuddy. Today it is a **management and display capability only**:
-
-- Lootbuddy signups (characterless `RunSignup` rows with class / mode / verification) are open to every User and are **not** gated by `isLootbuddy` — there was no Lootbuddy eligibility gate before, and none was invented.
-- Existing Users start with `isLootbuddy = false`; there was no authoritative source to derive it from.
-
-#### Managing the roles
-
-ADMIN / OWNER (`canManageBoostingRoles`) retain the manual controls through the explicit operation `boostingRoleService.setRole(admin, { userId, role: "BOOSTER" | "LOOTBUDDY", enabled, reason? })` (server action `setBoostingRoleAction`). The raw booleans are never accepted by a generic User update. Setting a role to the state it already has is a no-op (no write, no audit event).
-
-Additionally, when `DISCORD_BOOSTER_ROLE_ID` and `DISCORD_LOOTBUDDY_ROLE_ID` are configured alongside the bot token and guild ID, a Discord sign-in reconciles Discord-derived grants into `User.discordRaidBooster` / `User.discordLootbuddy`. These are independent of the manual flags: Discord never overwrites `isBooster` / `isLootbuddy`. Effective Booster access is `manual ∨ Discord Raid Booster`; effective Lootbuddy access is `manual ∨ Discord Lootbuddy`. Authoritative role absence, guild departure, or Discord unlink clears only the Discord-derived grants. Transient Discord API failures preserve last-known Discord grants. M+ Booster and staff/ping roles never grant either access.
-
-Surfaces:
-
-- **`/manage/users`** — canonical Admin surface: **All Users** (directory with platform role, account status, booster status, pending counts) and **Pending Boosting Access** (historical PENDING requests grouped by user). Filters include search, account status, platform role, booster status, and pending access.
-- **`/manage/users/[id]`** — primary grant/revoke place: **Boosting access** with Booster / Lootbuddy Grant·Revoke plus any pending historical requests for that user. No difficulty selector on the role itself.
-- **Legacy URLs** — `/manage/boosting-roles` and `/manage/booster-access` redirect into `/manage/users` (legacy/pending query → `?view=boosting-access`).
-- **Management hub** — single **Users** card: totals, boosters, and pending access (no separate Boosting Roles card).
-
-Audit: every change writes an `ActivityEvent` under the acting admin — `BOOSTER_GRANTED`, `BOOSTER_REVOKED`, `LOOTBUDDY_GRANTED`, `LOOTBUDDY_REVOKED` — with a `targetUserId=<id>` marker so it also appears in the target's audit trail on `/manage/users/[id]`. No difficulty is recorded.
-
-Onboarding:
-
-```text
-User → Apply via Discord → staff review → ADMIN grants Booster manually or staff assigns the configured Discord role → next Discord sign-in grants Booster
-```
-
-Self-service in-app requests stay disabled (`BOOSTER_ACCESS_SELF_REQUEST_DISABLED`). User-facing pages show an **Apply via Discord** CTA when `DISCORD_BOOSTER_TICKET_URL` is set. A User may receive the Booster role with zero Characters.
-
-#### User-facing display
-
-- **Profile** — a **Boosting roles** card showing only the enabled roles (e.g. `Booster` `Lootbuddy`), or "No boosting role yet".
-- **`/characters`** — one **Your boosting roles** line for the account (not repeated per Character), with the Discord CTA when not a Booster.
-- **Character detail** — a compact **Booster signups** note: the Booster role belongs to the account and covers every difficulty.
-- **`/manage/characters/[id]`** — the owner's Boosting Roles, read-only.
-
-Never shown: `Booster · Normal / Heroic / Mythic` — the Booster role has no difficulty.
-
-#### HISTORICAL REQUEST vs CURRENT CAPABILITY
-
-| | Model | Meaning |
-| --- | --- | --- |
-| Historical request | `BoosterAccess` | What was requested at the time (User + Class + Role + Difficulty, optional Character context), `PENDING` / `APPROVED` / `REJECTED` / `REVOKED` |
-| Current capability | `User.isBooster` | Whether the User is an approved Booster **now** |
-
-`BoosterAccess` rows are preserved as history and are **never read for eligibility**; nothing in current eligibility depends on them.
-
-**Pending Boosting Access · N** (`/manage/users?view=boosting-access`) lists unresolved historical `PENDING` rows (grouped by user), filterable by requested difficulty and role:
-
-- **Approve** marks that row and every other PENDING row of the same User `APPROVED` (their recorded difficulty is kept) and grants the account-level Booster role (a no-op if the User already has it).
-- **Reject** marks the row `REJECTED`; it never changes Boosting Roles. Reviewed rows are never rewritten by a later approval.
-
-#### Boosting Roles: Migration
-
-`20260927T1408_boosting_roles_on_user` upgrades directly from the production schema, where `BoosterQualification` was one row per (User, Difficulty):
-
-1. adds `user.isBooster` / `user.isLootbuddy` (`NOT NULL DEFAULT false`);
-2. sets `isBooster = true` for every User with **any** `APPROVED` qualification row, whatever its difficulty (Normal, Heroic, Mythic, several, or approved + revoked). Users with only `REVOKED` rows, or none, stay `false` — no approved booster loses access;
-3. drops `booster_qualification`.
-
-`isLootbuddy` stays `false` for everyone. `booster_access` is not touched. The migration is covered by `src/prisma/boosting-roles-migration.test.ts`.
-
-#### Out of scope here
-
-Automatic revocation from Discord, mass signup, Strikes, Deducts, Lootbuddy eligibility rules, difficulty-specific booster permissions.
-
-### User management
-
-#### Users: Purpose
-
-Give ADMIN operators a management hub for browsing accounts, inspecting characters, managing Boosting Roles, and assigning platform account roles (`USER`, `RAID_LEAD`, `ADMIN`). Role changes are server-owned and audited.
-
-This feature does **not** turn Booster or Lootbuddy into account roles. They are Boosting Roles on the User (`isBooster`, `isLootbuddy`), independent of the account role and of each other; Booster is not scoped by raid difficulty. See [Boosting Roles](#boosting-roles).
-
-#### Management Hub
-
-`/manage` is the operations overview for RAID_LEAD and ADMIN.
-
-- RAID_LEAD sees run metrics and the Runs entry point.
-- ADMIN additionally sees a Users card with compact counts.
-
-Metrics are prepared by `managementHubService`. Views render cards only; they do not query Prisma.
-
-#### Navigation
-
-`getManagementNavItems(accountRole)` drives the manage sub-nav in the app shell:
-
-| Role | Modules |
-| --- | --- |
-| USER | none (no Manage entry) |
-| RAID_LEAD | Overview, Runs, Schedule |
-| ADMIN / OWNER | Overview, Runs, Schedule, Users, Characters, Raid Catalog, Analytics, System |
-
-Hidden links are not authorization. Controllers still call `requireManagerOrRedirect`, `requireAdmin`, and service asserts.
-
-`isManagementNavActive` treats `/manage` as exact-match only so `/manage/users` does not highlight Overview.
-
-Characters across all users (sync health, linkage, lockouts, admin sync controls) live in [Character Operations](#character-operations) (`/manage/characters`). `/manage/analytics` (operational analytics, `operationalAnalyticsService`) and `/manage/system` (integration health and recent `IntegrationEvent` rows, `systemHealthService`) are ADMIN / OWNER only.
-
-#### User Listing
-
-Route: `/manage/users` (ADMIN only).
-
-Lists accounts with role, Discord identity hints, character counts, and the account-level booster state (Approved / Revoked / None). Filters/sorts are applied in `userRepository.listAdminUsers` via `userManagementService.listUsers`.
-
-#### User Detail
-
-Route: `/manage/users/[userId]`.
-
-Shows identity, account role/status, characters, the account-level booster state (Grant when not approved, Revoke when approved), disciplinary Strike history (Add/Revoke), and recent audit events relevant to that user (including `ACCOUNT_ROLE_CHANGED` events authored by another admin that mention `targetUserId=`).
-
-Strikes are a separate concept from account role, Boosting Roles, and audit — see [User strikes](#user-strikes).
-
-#### Role Administration
-
-ADMIN changes roles through `userManagementService.changeAccountRole`.
-
-Supported transitions include USER → RAID_LEAD, RAID_LEAD → ADMIN, and ADMIN → RAID_LEAD / USER (when another Admin-level account remains). An ADMIN may still change another ADMIN; only the OWNER is protected (see Platform Owner). Same-role assignments throw `ROLE_ALREADY_ASSIGNED`. Unknown values throw `INVALID_ACCOUNT_ROLE`.
-
-Clients cannot invent roles outside `ACCOUNT_ROLES`, and OWNER is never accepted as a target role.
-
-#### Discord Booster Applications
-
-Self-service creation of PENDING legacy `BoosterAccess` is disabled. Character pages show an **Apply via Discord** CTA when `DISCORD_BOOSTER_TICKET_URL` is set. Review happens in Discord; BoostingHub remains the authoritative store of Boosting Roles.
-
-See [Boosting Roles](#boosting-roles).
-
-#### Boosting Roles vs Account Role
-
-| Concern | Store | Who mutates |
-| --- | --- | --- |
-| Platform permission | `User.accountRole` | ADMIN / OWNER via user management; OWNER only via the owner bootstrap |
-| Boosting Roles | `User.isBooster`, `User.isLootbuddy` | ADMIN / OWNER via explicit grant/revoke (legacy approve also grants Booster) |
-
-A USER may be a Booster without becoming RAID_LEAD, and an ADMIN is not a Booster unless granted. Account role changes never touch Boosting Roles, and Boosting Role changes never touch the account role.
-
-#### Managing Boosting Roles
-
-After Discord review, ADMIN / OWNER grant or revoke each role on the User detail page (**Boosting roles** card; `/manage/boosting-roles` only redirects to `/manage/users`) — `boostingRoleService.setRole(admin, { userId, role, enabled, reason? })`, no difficulty.
-
-- Booster and Lootbuddy are toggled independently; all four combinations are valid
-- Setting a role to its current state is a no-op
-- No Character, class, role, specialization or item level is involved
-- May target USER, RAID_LEAD, ADMIN, OWNER, or the acting admin (no automatic ADMIN bypass)
-- Audited as `BOOSTER_GRANTED` / `BOOSTER_REVOKED` / `LOOTBUDDY_GRANTED` / `LOOTBUDDY_REVOKED` (with a `targetUserId` marker, shown in the target's audit trail)
-
-`/manage/users?view=boosting-access` (**Pending Boosting Access**) lists only unresolved historical PENDING Class/Role/Difficulty applications. Approving one grants the User the Booster role and resolves every PENDING request of that User (their recorded difficulty is kept as history).
-
-RAID_LEAD and USER cannot grant or revoke Boosting Roles.
-
-#### Users: Audit
-
-Successful role changes create an `ActivityEvent`:
-
-- `type`: `ACCOUNT_ROLE_CHANGED`
-- `userId`: acting admin
-- `message`: includes previous/next role labels and `targetUserId=<id>`
-
-User detail surfaces those events for the target account.
-
-#### Users: Authorization
-
-| Actor | List / detail users | Change account role | Manage nav users link |
+| Table | Field | Owner | How it is set |
 | --- | --- | --- | --- |
-| USER | no | no | no |
-| RAID_LEAD | no | no | no |
-| ADMIN | yes | yes, except the OWNER and except assigning OWNER | yes |
-| OWNER | yes | yes, except itself and except assigning OWNER | yes |
-
-Service gate: `assertCanManageUsers` → `USER_MANAGEMENT_FORBIDDEN`.
-
-Controller: `requireAdmin` on role-change actions. Pages use admin redirects.
-
-#### Users: MVCS
-
-- Model: `User.accountRole`, `ActivityEvent`
-- View: manage hub cards, `/manage/users`, user detail, change-role dialog
-- Controller: `user-management.actions.ts`, app/management controllers for page data
-- Service: `userManagementService`, `managementHubService`
-- Repository: `userRepository` (list/detail/count/update role/non-terminal runs), `activityRepository`
-
-#### Users: Security
-
-- Role mutations require ADMIN session; target role validated server-side
-- Last-admin and active-run guards run in the service before persist
-- OAuth / clients cannot set `accountRole` (`input: false` on the auth user model)
-- Audit messages identify actor and target without exposing secrets
-- Navigation hiding is presentation only; every mutation re-checks authorization
-
-### User strikes
-
-#### Strikes: Purpose
-
-A disciplinary history record against a `User`. This is BoostingHub-owned internal administration, independent of Run operations.
-
-BoostingHub owns Users (with their Boosting Roles), Characters, Runs, Signups, Rosters, Run attendance, and this Strike history. Strike is intentionally uncoupled from attendance — it has no relation to `RunAttendance` (no auto-strike from No-show / Late).
-
-Nothing here is automatic: every Strike is an explicit staff action. There is no automatic sanction, no automatic expiry, and no severity scoring.
-
-#### Strikes: Model
-
-`Strike`: `userId` (subject, required), `runId` (nullable), `reason` (required), `notes` (optional, staff-only), `status` (`ACTIVE` \| `REVOKED`), `createdById`, `revokedAt` / `revokedById` / `revokedReason`, timestamps.
-
-Subject is always `User`, never `Character` — a Strike survives account role changes, Character deactivation, and Boosting Role changes. No severity. No expiry (`expiresAt` is explicitly not implemented; "active" means `status === ACTIVE`, permanently, until an ADMIN revokes it). No hard delete — revocation is the only correction path and keeps the row, so history is never lost.
-
-#### Run relation
-
-`runId` is optional: most Strikes reference the Run an incident happened on, but ADMIN may also record a general disciplinary note with no Run context (e.g. a pattern of behavior not tied to one run).
-
-Run association is proven using **BoostingHub's own signup history** (`RunSignup`) — never Attendance, which this feature does not read or write.
-
-#### Strikes: Authorization
-
-| Action | ADMIN | RAID_LEAD | USER |
-| --- | --- | --- | --- |
-| Create (no `runId`) | yes | no (`STRIKE_RUN_REQUIRED`) | no |
-| Create (with `runId`) | yes, any Run | only a Run they manage (`canManageRun`), and only for a User with signup history on it (`STRIKE_USER_NOT_ASSOCIATED` otherwise) | no |
-| Revoke | yes | no (`STRIKE_REVOKE_FORBIDDEN`, even for a Strike they created) | no |
-| Read own history | n/a | n/a | yes (no internal `notes`) |
-| Read another User's history | yes | only via a Run they manage | no |
-
-#### Strikes: Visibility
-
-- ADMIN sees full detail: reason, internal notes, linked Run, creator, revoke metadata.
-- USER sees their own complete history (active and revoked): reason, linked Run, date, status, revoke reason. Internal `notes` are never shown to the User, even for their own Strikes.
-
-#### Strikes: UI
-
-- `/manage/users/[userId]`: **Strikes** card (between Boosting roles / Characters and Audit) — full detail, Add strike (general, ADMIN), Revoke (ADMIN-only, reason required).
-- `/profile`: read-only Strikes card — own history, no internal notes.
-- Canonical Run detail (`/runs/[runId]`), **Signups tab** (manager view): a per-row **Add strike** action, deriving `runId`/`userId` from BoostingHub's own signup row. This is not on the Attendance tab, and marking any Attendance status never creates a Strike.
-
-No dedicated `/manage/strikes` page exists.
-
-#### Activity / Audit
-
-`STRIKE_ADDED` and `STRIKE_REVOKED` follow the existing `ActivityEvent` convention: `userId` is the acting staff member, and the free-text `message` embeds `targetUserId=`/`strikeId=` (and the Run title when linked). Internal notes are never included in the audit message.
-
-#### Strikes: MVCS
-
-- Model: `Strike`
-- View: Strikes card (`/manage/users/[userId]`, `/profile`), Signups-tab Add-strike action
-- Controller: `strike.actions.ts`
-- Service: `strike.service.ts`
-- Repository: `strike.repository.ts`
-
-#### Strikes: Deferred
-
-Strike expiry/decay, severity levels, appeals workflow, automatic sanctions (including any automatic Strike-from-attendance-status or Booster-role-revoke-from-strike-count), a dedicated `/manage/strikes` review page, Discord synchronization, automated bot enforcement, and any financial deduction (BoostingHub has no financial domain).
-
-### User settings and notifications
-
-#### Notifications: Purpose
-
-BoostingHub separates **Profile** (identity / account operations) from **Settings**
-(user-controlled application preferences).
-
-Settings sections:
-
-1. **Notifications** — Discord DM delivery preferences (in-app is always on)
-2. **Regional** — personal IANA timezone
-3. **Gameplay** — Default Character preference for signup UX
-4. **Active sessions** — list and revoke signed-in devices (via Prisma; revoke via Better Auth)
-
-| Type | When created | Web | Run channel | Discord DM |
-| --- | --- | --- | --- | --- |
-| `ROSTER_SELECTED` | **Save Roster** or publish, for selected signups not already told they are in | Always | — | Master + `dmRosterSelectedEnabled` + Discord linked |
-| `RAID_INVITE` | **Start Run** for each SELECTED signup | Always | — | Master + `dmRaidInviteEnabled` + Discord linked |
-| `RUN_CANCELLED` | Run → `CANCELLED` for Users with PENDING/SELECTED | Always | YES if dedicated channel exists (before retirement) | Master + `dmRunCancelledEnabled` + Discord linked |
-| `RUN_RESCHEDULED` | `scheduledStartAt` actually changes | Always | YES if dedicated channel exists | Master + `dmRunRescheduledEnabled` + Discord linked |
-| `RUN_SCOPE_CHANGED` | Edit Run materially changes the planned raid scope (`RunRaidContent` by raidId: boss count changed, content added/removed) on a non-DRAFT Run — for every User still signed up (PENDING / SELECTED / NOT_SELECTED, incl. draft picks; WITHDRAWN excluded). A reorder or same-count save is a no-op. | Always | YES if dedicated channel exists ("⚠️ Run Updated", changed contents only) | Master + `dmRunRescheduledEnabled` ("Run Rescheduled / Updated DMs") + Discord linked |
-| `ROSTER_WITHDRAWN` | To the Run's **Raid Lead** when a picked player withdraws (with their reason, links the Roster tab) | Always | — | Master + Discord linked (no per-event toggle) |
-| `ROSTER_CHARACTER_SAVED` | The Character sync (every 15 min, `rosterSavedNoticeService`) **newly observes** a kill on a **planned** boss (first `plannedBossCount` bosses of a content, same difficulty and raid ID) for a Character that is **draft-selected or SELECTED** on a Run that has not started yet (OPEN / ROSTERING / PUBLISHED). To the Character's **owner** ("no loot there, contact the Raid Lead", links the Run) and the Run's **Raid Lead** ("check the roster", links the Roster tab); once if they are the same User. A Character already saved when it was picked never triggers it (only new kills count); kills during the Run (IN_PROGRESS) never do. A further kill notifies again with the full boss list. The DM is skipped if the Run started before delivery (Quiet Hours). **Also at Start Run** (`runStartSavedCheckService`): after a fresh sync of the SELECTED Characters, a reminder to each owner saved on a planned boss ("Reminder: you are saved") — decided by the same rule as the roster warning and Auto Build (`savedPlannedBosses` → `isSaveRelevantToPlannedBosses`): per boss on Normal / Heroic, the whole content on Mythic; a full clear or progress with an unknown / inconsistent boss list counts and, when no killed planned boss can be named, lists every planned boss of that content and **one grouped summary to the Raid Lead** ("Selected Characters are saved", one line per affected Character, Roster tab); their DMs are only sent while the Run is IN_PROGRESS. | Always | — | Master + Discord linked (no per-event toggle) |
-| `ROSTER_REMOVED` | **Save Roster** or publish, for signups last told they are in that are no longer selected (not WITHDRAWN) | Always (except character-swap bookkeeping, below) | — | Master + `dmRosterRemovedEnabled` + Discord linked |
-
-**Booster character swap.** When a player's booster character is exchanged for
-another of their booster signups (same User, same Run), the player gets exactly
-**one** user-facing notification: a `ROSTER_SELECTED` with a `roster-swapped:`
-source key, titled **"Roster updated"**, which also drives the single
-"Roster Update" DM (subject to `dmRosterSelectedEnabled`). The old character's
-`ROSTER_REMOVED` is still written, but only as hidden bookkeeping state
-(`visibleInApp = false`, `SKIPPED`, already read): it is never shown in the bell
-or on `/notifications`, never counts as unread, and never sends a removal DM.
-It exists so later Save Roster / Publish runs know that signup was already
-taken out. A genuine removal (no other booster signup of the player stays
-selected) and every Lootbuddy removal remain normal visible notifications.
-
-##### In-app visibility (`visibleInApp`)
-
-`UserNotification.visibleInApp` (default `true`) separates user-facing
-notifications from internal notification-state rows. Every user-facing
-repository read — `countUnreadForUser`, `listLatestForUser`, `listForUser`,
-`findOwned` (and so `markRead`), `markAllRead` — filters `visibleInApp = true`
-in the query itself, so the bell's "latest 5" and the page's limit count visible
-rows only. Being read is not the same as being hidden. Internal roster state
-(`notifyRosterSelectionChangesInTx`) reads `UserNotification` directly and still
-sees hidden rows. The `add_notification_visible_in_app` migration backfilled
-`visibleInApp = false` only for historical removals provably paired with a
-same-user/run/version `roster-swapped:` event and created already read with no
-DM; every other historical row stayed visible.
-
-**Run channel announcements** (`RunDiscordAnnouncement`) are shared Run communication.
-They are **not** controlled by User DM preferences (`discordDmEnabled=false` does not
-suppress the channel post). They use deterministic `sourceKey` values distinct from
-UserNotification keys:
-
-- Reschedule: `run-rescheduled:<runId>:<scheduleRevision>`
-- **Durability:** `RUN_RESCHEDULED` and `RUN_SCOPE_CHANGED` UserNotifications are written inside the same Edit Run transaction as the Run fields / `RunRaidContent`, the revision bump and the announcement (`updatePreStartAtomic` → `writeInTx`). Recipients and DM preferences / Quiet Hours are read with that transaction's client, so the audience is the signup state at commit time; a committed change can never lack its DM intent. `RUN_CANCELLED` / `RUN_REACTIVATED` follow the same rule: they are written inside the cancel / reactivate transaction (with the status change, `cancelRevision` and the announcement), including retiring the opposite cycle's still-undelivered DMs (`SKIPPED`).
-- Scope change: `run-scope-changed:<runId>:<contentRevision>` — the row's `scopeChanges` JSON (before → after per changed content) is the single structured snapshot; that revision's `RUN_SCOPE_CHANGED` DMs (`run-scope-changed:<runId>:<contentRevision>:<userId>`) render from it. `Run.contentRevision` increments only on a material scope change.
-- Cancel: `run-cancelled:<runId>`
-
-No historical backfill — only lifecycle events after deployment create rows. Account-level notifications without a Run (for example `CHARACTER_BATTLENET_REPAIR`) reach the bot through the separate `accountNotificationDms` lane and record their outcome through `PUT /api/bot/notifications/:notificationId/delivery`.
-
-#### Settings ownership
-
-Route: `/settings`
-
-Sidebar: **Settings** (after Profile).
-
-Only the authenticated owner may view or update their settings.
-
-#### Notifications: Preferences
-
-Stored on `User`:
-
-- `discordDmEnabled` (default `true`) — master override; does not rewrite per-event toggles
-- `dmRosterSelectedEnabled` / `dmRaidInviteEnabled` / `dmRunCancelledEnabled` /
-  `dmRunRescheduledEnabled` / `dmRosterRemovedEnabled` (default `true`)
-- `timeZone` (default `Europe/Berlin`) — personal presentation only
-- `defaultCharacterId` (nullable) — signup UX preference only
-- `discordRunChannelNickname` — deprecated, no longer read or written (the Raid
-  Lead name comes from Discord, see domain model); dropped by a follow-up migration.
-- `discordDmQuietHoursEnabled` (default `false`) — defer optional personal Discord
-  DMs during a daily local window
-- `discordDmQuietHoursStart` / `discordDmQuietHoursEnd` (nullable `HH:MM`) —
-  local wall-clock window interpreted in `User.timeZone` (Regional Settings)
-
-##### Effective Discord DM rule
-
-At creation:
-
-`discordDmEnabled AND eventSpecificDmEnabled AND usable Discord identity`
-
-→ `PENDING`, else `SKIPPED`. Snapshotted; never re-evaluated later.
-
-When effective DM is `PENDING` and Quiet Hours are enabled, the current local time
-(in `User.timeZone`) is evaluated once at creation. Inside the window,
-`discordDeliverAfter` is set to the next local end time (exclusive boundary)
-converted to UTC; outside the window it stays `null` (immediately eligible).
-Quiet Hours never turn an intended DM into `SKIPPED`.
-
-`PENDING` means delivery is still expected. When the DM lane finds a `PENDING`
-notification whose Run is app-archived (or gone), it can never be delivered:
-the sync pass moves it `PENDING → SKIPPED` (compare-and-set, no Discord request,
-no ERROR log) for every Run notification type, instead of leaving it queued
-forever. The bot's pre-send delivery authority also refuses an archived Run's
-DM, so archival between listing and sending cannot deliver it. `SENT` /
-`FAILED_PERMANENT` / `SKIPPED` rows are never touched.
-
-#### Quiet Hours
-
-Personal Discord DMs only. In-app notifications, shared Run-channel messages,
-`RunDiscordAnnouncement` lifecycle posts, channel provisioning, and role pings are
-never delayed or suppressed.
-
-- **Timezone authority:** `User.timeZone` (Regional Settings). Times are stored as
-  `HH:MM` local wall clock, not UTC offsets.
-- **Window semantics:** start inclusive, end exclusive. Same-day (`13:00`→`15:00`)
-  and overnight (`22:00`→`07:00`) windows are supported. `start === end` is rejected.
-- **DST:** end instants are derived via IANA timezone rules. Spring-forward
-  nonexistent local times resolve to the first valid instant at or after the
-  requested wall clock; fall-back ambiguous times prefer the **later** occurrence so
-  the quiet period is not shortened.
-- **Snapshot:** `discordDeliverAfter` on `UserNotification` is fixed at event
-  creation. Disabling Quiet Hours, changing start/end, or changing timezone later
-  does **not** retroactively alter existing rows.
-- **Bot delivery:** the existing `notificationDms` lane selects `PENDING` rows where
-  `discordDeliverAfter IS NULL OR discordDeliverAfter <= now` (bounded query). No
-  per-notification timers.
-
-#### Idempotency (`sourceKey`)
-
-- Roster pick: `roster-selected:<runId>:<publishedVersion>:<signupId>`
-- Roster removed: `roster-removed:<runId>:<publishedVersion>:<signupId>`
-- Roster update (booster character swap): `roster-swapped:<runId>:<publishedVersion>:<signupId>`
-- Raid invite: `raid-invite:<runId>:<signupId>`
-- Run cancelled: `run-cancelled:<runId>:<userId>`
-- Run rescheduled: `run-rescheduled:<runId>:<scheduleRevision>:<userId>`
-- Picked Character saved: `roster-character-saved:<signupId>:<sorted saved planned boss ids>:<player|lead|start>`
-- Start Run Raid Lead summary: `roster-character-saved-summary:<runId>:<sha256 of the sorted affected set (signupId=bossIds)>` — the same set never notifies twice
-
-`Run.scheduleRevision` increments only when `scheduledStartAt` changes.
-
-#### Community timezone authority
-
-User timezone must **not** alter:
-
-- generated `Run.title`
-- Discord channel names
-- raid-ID week boundaries / CURRENT/NEXT classification
-
-Shared Discord channel posts prefer Discord native timestamps (`<t:UNIX:F>`)
-where appropriate. Personal DMs also prefer native timestamps.
-
-#### Default Character
-
-Preference only. Never bypasses the Booster role, difficulty,
-weekly availability, lockouts, cross-run reservations, role validity, or active
-state. Existing active signup state wins over the preference. Never auto-submits.
-
-#### Notifications: Surfaces
-
-- Header bell (latest 5 visible + unread count of visible rows) → `/notifications` (same visibility)
-- Settings → Notifications / Regional / Gameplay / Active sessions
-- Controllers: `settings.actions.ts`, `notification.actions.ts`, `session.actions.ts`
-- Services: `settingsService`, `notificationService`, `runLifecycleNotificationService`, `sessionManagementService`
+| `Raid` | `name`, `blizzardInstanceId` | Blizzard | Import and refresh |
+| `Raid` | `season`, `sortOrder`, `trackLockouts`, `isActive` (*Available for new Runs*) | BoostingHub | By an Admin |
+| `Raid` | `wclZoneId`, `wclRankingEncounterId` | Warcraft Logs | Detected by name (soft fill); *Retry detection* overwrites |
+| `RaidBoss` | `name`, `sortOrder`, `blizzardEncounterIds` (JSON array) | Blizzard | Import and refresh |
+| `RaidBoss` | `wclEncounterIds` (JSON array) | Warcraft Logs | Detected by name (soft fill) |
+| `Product`, `ProductRaidContent` | name, flags, ordered contents, FIXED / VARIABLE boss counts | BoostingHub | By an Admin |
+| `RunTemplateRaidContent`, `RunRaidContent` | `raidId`, `plannedBossCount` | BoostingHub | Written by Run Setup / Run flows only |
+
+Boss count is never stored: it is `RaidBoss` rows per raid (`RaidCatalog.bossTotal`).
+Boss **order** is display only — planned counts (`plannedBossCount`, product 5/8) are
+numbers, not "the first N bosses", and lockouts store boss UUIDs (`killedBossIds`).
+
+##### Blizzard identities (verified live, EU, 2026-10-23)
+
+- **Instance endpoint:** `GET /data/wow/journal-instance/{id}?namespace=static-{region}` returns
+  `name`, `category.type`, `expansion`, `modes`, `order_index` and the ordered
+  `encounters[] {id, name}` (`blizzardApiClient.getJournalInstance`).
+- **Canonical instance identity = journal instance id.** The character encounters response
+  (`/profile/wow/character/{realm}/{name}/encounters/raids`) carries, per instance,
+  `instance: { key: { href: ".../data/wow/journal-instance/1320?..." }, name, id: 1320 }`
+  — it *links to the journal instance*; the ids are the same identity (sample: eredar/zeti:
+  1314, 1307, 1308, 1305, 1317, 1320, 1324 — all equal to the journal ids). Production
+  lockouts are already derived through `Raid.blizzardInstanceId` = journal id (1320, 1324).
+  One field is correct; there is no second id to store.
+- **Boss identity = journal encounter id.** Encounters in the profile response link to
+  `/data/wow/journal-encounter/{id}` with the same `id` (2888, 2896, …).
+  `deriveCurrentResetLockouts` matches `encounter.id` against `RaidBoss.blizzardEncounterIds`.
+- **Lockout identity** = character + raid (via instance id) + difficulty + weekly reset
+  (`CharacterRaidLockout` unique key); bosses via encounter id → `RaidBoss.id`.
+- Category alone does not mean "real raid": the Midnight **world bosses** are journal instance
+  1312, `category: RAID`, `modes: [NORMAL]`.
+
+##### Seasons
+
+Blizzard has **no authoritative raid-season membership API**. `mythic-keystone/season` covers
+dungeons only. The journal tier "Current Season" (`journal-expansion/505`) lists *every*
+Midnight raid — Season 1 and Season 2 plus the world-boss instance — identical to the
+"Midnight" tier (516). Seasons are therefore small, version-controlled definitions in
+`src/lib/raid-seasons.ts` (key, name, `current`, `journalInstanceIds`). No season CRUD UI.
+
+##### WCL
+
+`warcraft-logs-raid-metadata.service.ts` resolves zone / encounter ids by exact unique
+name; it never guesses and soft discovery fills only empty fields. Blizzard and WCL ids
+are different id spaces (Kith'ix: WCL `journalID` 3271 vs Blizzard 2896; WCL encounter
+3513). Imports keep using soft discovery only, so manual / seeded WCL ids are never
+overwritten, and a missing WCL match only shows "Needs mapping".
+
+#### Import / sync behaviour
+
+All writes are keyed by the Blizzard instance id and run in one transaction **after**
+every Blizzard request has succeeded: a failed or invalid Blizzard response writes nothing
+and the admin sees the reason (not found / not a raid / rate limited / unavailable).
+
+- **Import Raid** — enter a journal instance id → *Fetch* → preview (name, boss count,
+  bosses, NEW / ALREADY IMPORTED / UPDATE AVAILABLE) → *Import*. Season and lockout
+  tracking default from the season definition containing the id.
+- **Import Season** — pick a code season → preview of every raid → *Import*. New raids of
+  the current season start with lockout tracking on; for historic seasons it is a choice.
+- **Refresh from Blizzard** (raid detail) — preview, then updates only Blizzard-owned
+  metadata: raid name, boss names, boss order, encounter ids.
+
+Matching: an existing raid by instance id; otherwise one unlinked raid with the same
+(normalized) name is adopted instead of duplicated. Bosses by encounter id; unlinked
+bosses by unique name (or one boss ↔ one encounter).
+
+Never written by import / refresh: season, order, lockout tracking and run availability of
+existing raids, WCL ids already set, Products, `ProductRaidContent`, `RunTemplateRaidContent`,
+`RunRaidContent`, Runs. New raids are not offered for new Runs until an admin enables it.
+
+**Reconciliation.** A raid that is in use (Runs, Run Setups, Products, lockouts) or seeded
+keeps its encounter set: Blizzard bosses that are new, or bosses Blizzard stopped
+returning, are listed in the preview as *needs reconciliation* and are not added / deleted.
+Unused raids follow Blizzard (new bosses added, missing bosses removed).
+
+#### Status per raid
+
+- **Blizzard** — synced (instance linked) or not linked.
+- **Bosses** — `N/N mapped` (bosses with a Blizzard encounter id).
+- **Lockouts** — ready (tracked + instance + every boss mapped), incomplete, or not tracked.
+- **Warcraft Logs** — mapped (zone + every boss) or needs mapping.
+
+Raw ids are shown only in the expanded details.
+
+#### Page sections
+
+`/manage/raid-catalog?tab=raids` (default; missing / unknown values fall back here) shows
+the imports and the raid list; `?tab=presets` shows Run Presets (Products). The tab is a
+real link, so refresh, back / forward and copied URLs keep it.
+
+The Raids tab is scoped so the working catalog stays short after many seasons:
+
+- **Status** (`?status=`): *Active* (default, not archived), *Archived*, *All*.
+- **Season** (`?season=`): *Current season* (default for Active — the `RAID_SEASONS` entry marked
+  `current`), one persisted `Raid.season` value, or `all`. Options are the persisted
+  seasons, Blizzard seasons newest first (`RAID_SEASONS` order), then other values A–Z.
+  No season names are hard-coded in the UI.
+- Without a chosen season, Archived and All look across every season, so an archived raid of
+  an older season is one click away; an explicit season still narrows them.
+- Defaults are left out of the URL; unknown values fall back to Active / Current season.
+- The tab count is the number of raids the Raids tab shows; the status control shows
+  Active / Archived / All counts inside the chosen season.
+
+**No automatic archive on Import Season.** An import never changes lifecycle or
+availability of existing raids. Season membership is the editable `Raid.season` label plus
+the code-defined `RAID_SEASONS`, and an older-season raid may still be sold (bundles,
+Run Setups, already planned Runs). Archiving closes every product that contains the raid,
+so doing it implicitly could silently break live planning. Older seasons drop out of the
+default view anyway; archiving stays an explicit admin action.
+
+#### Raid lifecycle
+
+**Identity** is the Blizzard journal instance id. Import / refresh reuse the Raid holding
+that id (one Raid per instance, serialized by an advisory lock), and the insert-only
+bootstrap (`ensureReferenceRaids`) skips a fixture raid whose instance already belongs to
+another Raid row. Comparing only fixture UUIDs once inserted a second copy of an existing
+raid, and the lockout sync then wrote every lockout twice; **Remove duplicate** below is
+the repair for such a row.
+
+Raid → Manage offers exactly the action the server accepts in the current state:
+
+| State | Action |
+| --- | --- |
+| No Run, Run Setup, Product or lockout reference, not a bootstrap fixture | **Delete** — removed with its bosses |
+| Shares its Blizzard instance with a Raid that outranks it (more Run / Run Setup / Product references, then lockouts) and has no Run / Run Setup / Product reference itself | **Remove duplicate** — its lockouts move to the kept Raid (exact copies for the same Character / difficulty / reset are dropped, killed boss ids re-mapped), then it is deleted, in one transaction |
+| Referenced, or a bootstrap fixture | **Archive** (`Raid.archivedAt`) |
+| Archived | **Restore** |
+
+An archived Raid stays valid for existing Runs, lockouts and Warcraft Logs (rows and
+foreign keys untouched; lockout sync still follows *Lockout tracking*). It is never
+offered for new planning: not available for new Runs (`availableForRuns` is false), a
+Run Setup with it is unusable, a product holding it is closed to new Runs / Run Setups,
+and it cannot be added to a product (a product that already holds it stays editable).
+Run / Run Setup / Product references are never re-pointed or deleted by any of these actions.
+
+### Run Setups
+
+A **Run Setup** (model `RunTemplate`, older code and routes say "template") is a global, reusable planning preset: *what* a Run contains plus default composition. It has no Raid Lead; the Schedule slot or the Run chooses *who*.
+
+- **Stored:** `name`, `difficulty`, `lootType`, desired Tank / Healer / DPS / Lootbuddy counts, `notes`, `isActive`, the audit fields `createdById` / `updatedById`, and ordered `RunTemplateRaidContent` rows. Never a schedule, status, `signupsOpen`, derived title, roster state or Discord identifier.
+- **Content** is chosen as a persisted Product (same authority as Create Run), so a Run Setup may hold several raids.
+- **Permissions:** ADMIN / OWNER create, edit, duplicate, deactivate, reactivate and delete (`requireManageTemplates`; the Community Schedule actions also manage them). RAID_LEAD and above may list and use active, usable setups (`requireCanUseTemplates`). USER has no access. `/manage/templates` is the ADMIN view, `/profile/templates` a read-only catalog for Raid Leads.
+- **Usability** is computed, never stored (`computeUsability`): active; difficulty and run type still valid; composition within bounds; content still covered by an active Product (same raids in order, FIXED counts equal, VARIABLE counts in range; `selectable` is not required) or every content raid still available for new Runs. An unusable setup is never changed or removed; it is only excluded from use and flagged.
+- **Use at Create Run:** `createManyRuns` accepts an optional `templateId`. The server re-resolves it at submit time and refuses a missing or unusable setup (`RUN_TEMPLATE_NOT_FOUND`, `RUN_TEMPLATE_UNUSABLE`). Every other Run creation rule still applies.
+- **Validation reuse:** create and edit use the same validators as Run creation (`assertValidRunLootType`, `assertValidPlannedBossCount`, `assertComposition`, `notesValue`) from `src/services/run-state.ts`.
+- **Snapshot independence:** there is no `Run.templateId`. Applying a setup copies its values into the Run. Editing or deactivating a setup never changes an existing Run.
+- **No recurrence here:** recurring creation is the [Community Schedule](#community-schedule); a setup never creates a Run on its own. A freshly created Run is `DRAFT` with `signupsOpen: false` and has no Discord infrastructure.
+
+### Community Schedule
+
+Authority (unchanged):
+
+- **Run Setup** (`RunTemplate`) = WHAT + default composition
+- **Schedule slot** (`CommunityScheduleSlot`) = WHEN + WHO + optional composition override + **start boundary**
+- **Concrete Run** = independent operational snapshot — never rewritten by Schedule, Run Setup, Product or composition changes
+
+#### Occurrence identity
+
+One occurrence = **slot + raid-ID window** (`CommunityScheduleRun`, `UNIQUE(scheduleSlotId, windowStartAt)`;
+`windowStartAt` = Wednesday 06:00 Europe/Berlin, DST-safe). `runId` is `UNIQUE`, so a Run belongs to at most
+one occurrence. An occurrence is fulfilled in one of two ways (`origin`):
+
+| origin | meaning |
+| --- | --- |
+| `MATERIALIZED` | Run created for this occurrence from the Run Setup (weekly Draft release, or manual **Create Run**) |
+| `ATTACHED` | an existing, independently created Run adopted as this occurrence (**Use existing Run**) — provenance only, nothing is copied |
+
+Both share the same unique constraints, so a materializer pass and an attach racing for the same occurrence end with
+exactly one fulfillment (the loser rolls back / gets *already fulfilled*).
+
+#### Weekly Draft release
+
+Automatic materialization runs **only** at the weekly release: **Monday 12:00 Europe/Berlin**
+(`boostinghub-community-schedule.timer`, `OnCalendar=Mon *-*-* 12:00:00 Europe/Berlin`, `Persistent=true`). Each pass
+creates the Drafts of the raid ID starting the **following Wednesday 06:00** for every active slot with
+*Automatically create weekly Draft* on (`scheduleDraftRelease` / `releasedWindow`). A pass at any other time (catch-up
+after downtime, a manual `systemctl start`) targets the same released raid ID — never the one after it — and is
+idempotent (one Run per occurrence).
+
+Saving a Schedule (create, add times, edit, enable auto-create, reactivate) **never** creates Runs. An earlier Draft is
+created only by the manual **Create Run** (same uniqueness, start boundary and fulfillment checks, origin
+`MATERIALIZED`). The Schedule view shows an unfulfilled future occurrence as **Draft planned** with its release time;
+if its release already passed (time planned mid-week) it stays without Run until **Create Run**.
+
+#### Ownership and cleanup
+
+Only `origin = MATERIALIZED` **and** `Run.status = DRAFT` is Schedule-owned. When an occurrence goes away —
+time deleted, deactivated, weekday / time changed, start moved later, Run Setup deleted — every future Schedule-owned
+Draft of the affected occurrences is retired in the **same transaction** as the Schedule change: cancelled from DRAFT
+and archived (the Cancel + Archive end state; a Draft has no signups / announcement, so nothing is sent), and its
+occurrence is freed (link `scheduleSlotId → null`, exactly like slot deletion) so it never blocks a later release.
+A `RUN_SCHEDULE_DRAFT_RETIRED` RunDomainEvent is recorded after commit.
+
+Never touched by Schedule edits: Runs that left DRAFT (open / rostering / published / …) and `ATTACHED` Runs —
+no status, time, scope, roster or signup change. No replacement Draft is created eagerly (e.g. Friday → Saturday
+creates the Saturday Draft only at the next release or via Create Run). The confirmation dialogs list the
+consequences (*N scheduled Draft Run(s) will be archived* / *N active Run(s) will remain unchanged* / *Linked existing
+Runs will remain unchanged*).
+
+Concurrency: Schedule mutations, attach and Draft materialization all row-lock the slot first
+(`communityScheduleRepository.lockInTx`). The materializer re-checks the locked slot (active, same weekday / time,
+start boundary) before inserting Run + link, so an edit and a release pass serialize — no orphan Draft, no duplicate.
+The retire step re-checks `DRAFT` under the roster lock, so a Draft opened concurrently is left alone.
+
+#### Start boundary
+
+`CommunityScheduleSlot.firstWindowStartAt` (nullable): raid-ID window of the first occurrence the materializer may
+create. `null` = active immediately (legacy behavior). Occurrences in earlier windows are never auto-created (manual
+**Create Run** is refused with *not started*, and they cannot be fulfilled by **Use existing Run** either); the
+Schedule view shows them as **Before schedule start** with the start date.
+
+**Starts** choices (resolved server-side from `now`, never stored as browser-local datetimes):
+
+| choice | boundary |
+| --- | --- |
+| Immediately | `null` |
+| Next raid ID | the next raid ID (skips a still-upcoming occurrence of the current one) |
+| Skip the next occurrence | the raid ID after the first upcoming occurrence |
+| From date… | raid ID of the first occurrence starting on/after that Berlin calendar day |
+
+A boundary at or before the first upcoming occurrence is stored as `null`. Changing the start (Edit → Starts; default
+**Keep**) only affects future, not-yet-fulfilled occurrences; existing Runs and links are never touched.
+
+#### Schedule source: Run Setup or existing Run (basis Run)
+
+Two different intents — kept apart on purpose:
+
+- **Basis Run** (Create Schedule → *Schedule source: Existing Run*): an existing Run **defines** the new Schedule.
+- **Existing Run for one occurrence** (an additional time, Add times, the Schedule view): the Run only **satisfies**
+  that occurrence and never redefines the Schedule.
+
+With source *Existing Run* the request carries `basisRunId`, and the server derives everything from it, in one
+transaction with the slots, start boundary and attachment:
+
+| field | derived from the basis Run |
+| --- | --- |
+| first weekly time | weekday / time of its start in Europe/Berlin (`scheduleTimeOfInstant`) |
+| first occurrence | the basis Run itself (`ATTACHED`) |
+| Run Setup | see below — no Run Setup selection |
+| Raid Lead | its Raid Lead — only if still eligible, otherwise the user must choose (the only manual step) |
+
+Run Setup: a Run has no Run Setup reference (no `RunTemplate` FK; Schedule-created Runs are linked through
+`CommunityScheduleRun` and are therefore never attachable again), so there is no provenance to follow. The Run's own
+planning snapshot decides: an active, usable Run Setup with **exactly** the same planning fields (difficulty, loot,
+ordered `RunRaidContent` incl. boss counts, planned composition) is reused; otherwise **one** new Run Setup is created
+from that snapshot (`RunRaidContent` → `RunTemplateRaidContent`, `desired*Count`; never roster / signups, never a
+Product guess). One-time copy, no live coupling in either direction.
+
+`basisWeekday` / `basisLocalStartTime`, `raidLeadId` and `runSetup` are optional **future** overrides (the dialog only
+sends values the user changed); the basis Run keeps its own time, Raid Lead, scope and roster. Further weekly times are
+optional and use the Schedule's Run Setup / Raid Lead. With source *Run Setup*, `runSetup` and `raidLeadId` are
+required; an existing Run on a time is attach-only. Basis candidates are all upcoming, unarchived, attachable,
+unlinked Runs (no raid-ID window limit) on/after the chosen **Starts**; the list is reloaded on every dialog opening.
+No Run is created on save (Monday release unchanged).
+
+**Add times** has no basis semantics: an existing Run takes over that time's weekday / time and is attached; the
+group's Run Setup and Raid Lead stay authoritative. On an **existing** Schedule, **Use existing Run** attaches only;
+the Run's Run Setup is used for future occurrences only with the explicit option *Also use this Run's setup for future
+occurrences*.
+
+#### Use existing Run
+
+- **Create Schedule / Add times**: per weekly time, **First occurrence** = *Create normally* or *Use existing Run* (see
+  above). The link is written in the same transaction as the slot. The picker only offers Runs on/after the chosen
+  **Starts**.
+- **Schedule view**: **Use existing Run** on any upcoming, unfulfilled occurrence on/after the start boundary.
+  An occurrence before the boundary is refused with `COMMUNITY_SCHEDULE_NOT_STARTED`.
+
+One service (`community-schedule-occurrence.service.ts`, `attachExistingRunInTx`) backs both. Eligible Runs: not
+archived, `DRAFT` / `OPEN` / `ROSTERING` / `PUBLISHED`, not linked to any occurrence, start inside a current or future
+raid ID. The occurrence is the slot's occurrence in the **Run's** raid ID. Differences are warnings only (start time,
+difficulty, raid scope vs the Run Setup, Raid Lead) — the Run keeps its own values; later occurrences still use the Run
+Setup. Attaching records a `RUN_SCHEDULE_ATTACHED` RunDomainEvent. Detach is not offered.
 
 ### Run management
 
@@ -2265,17 +2382,7 @@ This is the long-term surface for participant information and, when authorized, 
 
 #### Route Architecture
 
-| Route | Role |
-| --- | --- |
-| `/runs` | Discovery/list. Cards link to canonical detail. Signup from the list remains. RAID_LEAD/ADMIN see a Create Run header action. |
-| `/runs/create` | Create Run draft(s) — one canonical workflow, 1–25 rows (see [Creation](#creation)) |
-| `/runs/[runId]` | Canonical Run entity view |
-| `/my-runs` | Current user's participation overview; each row links to canonical detail |
-| `/manage` | Global administration entry |
-| `/manage/runs` | Manager Run index for existing Runs. Actions link to `/runs/[runId]` |
-| `/manage/runs/create` | Compatibility redirect to `/runs/create` |
-| `/manage/runs/[runId]` | Compatibility redirect to `/runs/[runId]` |
-| `/manage/users` | Global ADMIN user directory + Boosting Roles / pending access review (not moved onto a Run) |
+All route access rules are in the routes table under [Project structure](#project-structure).
 
 Do not maintain a second independent Run detail implementation under `/manage`.
 
@@ -2309,13 +2416,13 @@ May manage any Run on the same `/runs/[runId]` route.
 
 #### Run detail: Sections
 
-- **Header** — raid, difficulty, schedule, status, raid lead, signup window, compact composition, server-gated manager actions (edit / open / signup window / cancel / start / complete)
+- **Header** — raid, difficulty, schedule, status, raid lead, signup window, compact composition. Server-gated manager actions (edit / open / signup window / cancel / start / complete) live in the bar on the Roster tab
 - **Discord channel** — every viewer of the Run: `Discord channel ↗` header link (`https://discord.com/channels/{DISCORD_GUILD_ID}/{runChannelId}`, new tab) while the Run has a recorded Discord channel and is not archived. Absent for DRAFT Runs (no channel), archived Runs (channel retired) or without `DISCORD_GUILD_ID`. Built by `runDiscordChannelUrl` (`src/lib/discord-links.ts`); public ids only. Discord channel permissions still decide what the viewer can open.
 - **Archive transcript** — managers only, when HTML was persisted on app-archive: download link to `/runs/[runId]/archive-transcript`
-- **Overview** — prepared summary DTO
-- **Signups** — own participation for USER; operational signup list for authorized managers
-- **Roster** — published roster for USER; existing `RosterBuilderView` for managers
-- **Attendance** — own result for USER; operational attendance for authorized managers after Start
+- **Roster** tab (default, `?tab=` selects tabs, `src/components/runs/run-detail-tabs.tsx`) — managers get the administration bar, roster builder and signup tiles; everyone else gets the Run details, own participation and the published roster
+- **Operations** tab — Pre-flight and roster validation
+- **Attendance** tab — own result for USER; operational attendance for authorized managers after Start
+- **History** tab — Run history, managers only
 - **Consumables** — ADMIN / the Run's RAID_LEAD only, COMPLETED Runs only: Warcraft Logs consumable, gear-readiness and death-context facts. `consumables` is `null` (and the tab absent) for everyone else. See [Run Consumables Audit](#run-consumables-audit)
 
 #### Manager Authorization
@@ -2346,222 +2453,6 @@ Manager reads still reuse `getRosterManagementView`, which may `ensure()` an emp
 - `runConsumableAuditService` — post-run Warcraft Logs consumables audit (read + explicit analyze)
 
 No second roster or signup implementation.
-
-### Run lifecycle and attendance
-
-#### Lifecycle: Purpose
-
-Operational Run completion after roster publication:
-
-`PUBLISHED` → `IN_PROGRESS` → `COMPLETED`
-
-Assigned raid leads and admins start a published Run, record who actually attended, and complete the Run only when every attendance row is marked.
-
-This is not Warcraft Logs, Blizzard, Discord notifications, or analytics.
-
-#### Lifecycle
-
-Roster Management still owns `OPEN → ROSTERING` and publication to `PUBLISHED`.
-
-This feature owns:
-
-- `PUBLISHED → IN_PROGRESS` via **Start Run**
-- `IN_PROGRESS → COMPLETED` via **Complete Run**
-
-There is no generic `RunStatus` dropdown.
-
-Cancellation before start remains Run Management policy (`DRAFT` / `OPEN` / `ROSTERING` / `PUBLISHED`) and is reversible via **Reactivate Run** when a pre-cancel snapshot exists. Ordinary cancellation from `IN_PROGRESS` is still not offered. Start and Complete remain irreversible operational freezes.
-
-#### Start Preconditions
-
-The server re-reads authoritative state. Start requires:
-
-- the Run exists
-- `Run.status === PUBLISHED`
-- the caller can manage the Run (`canManageRun`)
-- a published roster exists (`publishedAt`)
-- at least one currently `SELECTED` participant
-- **no unpublished roster changes** — the saved draft must match the published roster (membership and assigned roles) and no roster-relevant Run setting may have changed since the roster was last published / updated (`RunRoster.runChangedSinceAck`); otherwise Start fails with "Roster has unpublished changes. Update the roster before starting the Run." (`ROSTER_UNPUBLISHED_CHANGES`). The Start dialog also warns, but the server check is authoritative.
-
-These checks run inside the Start transaction after it has locked the `RunRoster` row — the same lock every roster write takes first — so the snapshot always equals the published roster at the moment of Start; a concurrent roster write or Run edit either commits before Start (and is checked) or waits and is rejected once the Run is `IN_PROGRESS`. Start uses the Run's current metadata (difficulty, content, schedule, composition).
-
-Scheduled start time is **not** a blocker. Runs may start early or late.
-
-##### Preflight ("Ready to start?")
-
-`runPreflightService` (`src/services/run-preflight.service.ts`) assembles an advisory checklist from the already-loaded roster management view. It is shown as the Preflight panel on Run Detail and inside the **Start Run** dialog, split into **Start will be refused** (ERROR — mirrors the hard rules above) and **Check before starting** (WARNING). Warnings never block Start; the server checks above stay authoritative.
-
-**Saved re-check after Start** (`runStartSavedCheckService`, after the Start Run response via `after()`): every SELECTED Booster Character gets a fresh Blizzard sync (trigger `RUN_START`, 3 at a time; a failing sync falls back to the last known lockouts), then each owner whose Character is saved on a **planned** boss of this Run gets a `ROSTER_CHARACTER_SAVED` reminder ("Reminder: you are saved — Boss X, no loot from those bosses"), bell + Discord DM, once per pick and boss set. Because this fresh sync can find saves the checklist above did not show, the **Raid Lead** gets **one grouped summary** ("Selected Characters are saved" — one line per affected Character with its bosses, "Check the roster", links the Roster tab), bell + DM, only when at least one pick is affected and once per affected set. "Planned" = the first `plannedBossCount` bosses in authoritative order (6/8 = bosses 1–6; a kill on boss 7 never counts).
-
-ERROR is used only for the server Start rules above (status, published roster, unpublished changes, ≥1 published selected participant). Warnings cover desired composition, a missing Raid Lead, an unseeded draft or draft publish invariants (they block the next Publish, not Start), Discord channel / signup message / integration health, and the selected registered Booster Characters:
-
-- **Schedule conflicts** — reserved on another Run or weekly unavailable (can appear after Publish)
-- **Lockouts** — known saved content needing attention (same `roster-selection-risk` classification as selection)
-- **Blizzard sync** — no fresh successful sync (`deriveCharacterSyncHealth`: ERROR / NEVER_SYNCED / STALE), so lockouts and item level may be outdated
-
-External Boosters carry no Character and are not part of these checks.
-
-#### Roster Freeze
-
-Once the Run is `IN_PROGRESS` (and after `COMPLETED`):
-
-- draft selection is rejected
-- publish / republish is rejected
-- published-roster seed-for-edit, Add Booster and roster repost are rejected
-- Run edits (Edit Run, Raid Lead reassignment) are rejected (`RUN_EDIT_LOCKED`)
-
-Attendance is the roster that entered the Run. Later roster edits cannot silently rewrite attendance rows.
-
-`PUBLISHED` roster editing before Start stays allowed (Start is the lock point — see [Roster lifecycle and lock point](#roster-lifecycle-and-lock-point)). Post-start substitutions go through **Replace** below, which records attendance; it does not reopen the roster editor.
-
-#### Attendance Snapshot
-
-Start is transactional. It either:
-
-1. creates one `RunAttendance` row per currently `SELECTED` published participant
-2. sets `signupsOpen = false`
-3. sets `status = IN_PROGRESS`
-
-or it writes nothing.
-
-Initial status is `UNMARKED`. Nobody is auto-marked `PRESENT`.
-
-Source of truth is live `SELECTED` `RunSignup` rows on a published roster, linked to `RunRosterEntry` (created if a seed/published snapshot is missing the matching entry). `PENDING` / `NOT_SELECTED` / `WITHDRAWN` rows are not snapshotted.
-
-Booster and lootbuddy selected participants are included in the same attendance list.
-
-Double start does not duplicate rows (`rosterEntryId` is unique; a second start is `RUN_ALREADY_STARTED`).
-
-Start does not mutate BoosterAccess, signup history semantics, character ownership, or lockouts.
-
-#### Attendance Status Semantics
-
-| Status | Meaning |
-| --- | --- |
-| `UNMARKED` | Not yet decided. Blocks completion. |
-| `PRESENT` | Attended normally. |
-| `LATE` | Attended, joined late. |
-| `LEFT_EARLY` | Attended, left before expected completion. |
-| `NO_SHOW` | Expected, did not attend. |
-| `EXCUSED` | Did not attend; absence accepted. |
-| `STANDBY` | Rostered as backup/standby and not required to participate. |
-
-A backup that was available but not needed must not be classified as `NO_SHOW`. Use `STANDBY`.
-
-#### Replacing a participant after Start
-
-While the Run is `IN_PROGRESS`, the manager can **Replace** any attendance row (typically a no-show) from the Attendance tab (`attendanceService.replaceParticipant` → `attendanceRepository.replaceParticipantAtomic`, one transaction):
-
-- The original row becomes `NO_SHOW` with the note "Replaced by …"; the original signup leaves the live roster (`SELECTED` → `NOT_SELECTED`).
-- **Signed-up replacement:** a `PENDING` / `NOT_SELECTED` signup of the same Run and participation type (a player already holding a booster slot is rejected). It becomes `SELECTED` in the original's role, gets its own attendance row marked `PRESENT` with the note "Replacement for …", and a `RAID_INVITE` notification.
-- **External replacement** (booster slots only): added to the roster as an external booster in the original's role (see [Roster management](#roster-management)). It appears in the Final Setup but has no attendance.
-- `RunRoster.version` is bumped: the Discord roster post and the **Final Setup** post are edited in place. The Final Setup omits `NO_SHOW` / `EXCUSED` rows. `RunDiscordPost.lastStartRosterVersion` records which roster version the posted Final Setup reflects; a Final Setup posted before this existed gets its baseline set by the first replacement.
-
-This is the one exception to the roster freeze below: draft saves and republish stay rejected after Start.
-
-#### Backup / Standby Semantics
-
-Signup `isBackup` is player intent, not attendance.
-
-Do **not** auto-assign `STANDBY` because `isBackup = true`. A backup may be used and attend.
-
-The manager UI shows Backup clearly and offers an easy Standby action for those rows. Final status is a manager decision.
-
-#### Lifecycle: Authorization
-
-| Account | Start / Complete / mutate attendance | View |
-| --- | --- | --- |
-| `USER` | No | Own attendance row only, without manager notes |
-| `RAID_LEAD` | Assigned Run only | Full operational list on assigned Runs |
-| `ADMIN` | Any Run | Full operational list |
-
-`canManageRun` remains the ownership check. Capabilities (`canStart`, `canManageAttendance`, `canComplete`) are server-derived.
-
-#### Discord voice hint
-
-While the Run is IN_PROGRESS each manager row shows *In voice* / *Not in voice* / *Voice unknown* from the bot's short-lived report of the Run's assigned voice channel (see [Run voice channels](#run-voice-channels)). It is information only: it never sets, suggests or bulk-applies an attendance status — manual attendance stays the only authority.
-
-#### Bulk Mark Present
-
-**Mark all unmarked as Present** is a single service/repository operation.
-
-Only `UNMARKED` rows become `PRESENT`. Existing `LATE`, `LEFT_EARLY`, `NO_SHOW`, `EXCUSED`, and `STANDBY` rows are preserved.
-
-Typical workflow: mark exceptions first, then bulk-present the rest.
-
-#### Completion Invariant
-
-A Run cannot complete while any attendance row is `UNMARKED`.
-
-The check is transactional. The domain error is `ATTENDANCE_INCOMPLETE` and includes how many unmarked rows remain.
-
-Completion records `Run.completedAt`. Together with `RunStartSnapshot.startedAt` it is the Run's active window, which the Consumables Audit uses to tell which Warcraft Logs fights belong to this Run (see [Run Consumables Audit](#run-consumables-audit)).
-
-UI copy: “Mark attendance for all rostered participants before completing the run.”
-
-React is not the enforcement boundary.
-
-#### Completed Read-Only Policy
-
-On success:
-
-- `status = COMPLETED`
-- `signupsOpen = false`
-- attendance remains stored and becomes read-only in this feature
-
-Signup, roster, BoosterAccess, and lockout history stay intact. Completion is final: BoostingHub has no financial follow-up. Exceptional mistakes are fixed with the audited **Correct Attendance** action (reason required; recorded in Run History).
-
-#### Canonical Run Detail Integration
-
-Attendance lives on `/runs/[runId]` as a tab next to Overview, Signups and Roster (completed Runs also show Consumables to managers).
-
-There is no `/manage/runs/[runId]/attendance` implementation.
-
-##### Before start (`PUBLISHED`)
-
-- Manager: “Run has not started yet.” plus **Start Run** (confirmation dialog).
-- USER: “Attendance will be available after the run starts.”
-
-Viewing the tab does not create attendance rows.
-
-##### In progress
-
-Manager compact table: character, user, class/role, participation type, backup, status, note, actions.
-
-USER: “Your Attendance” for their own row only.
-
-##### Completed
-
-Read-only. Manager sees the full list and a compact status summary. USER sees own final status.
-
-#### Security / DTO Shaping
-
-`runDetailService` shapes viewer payloads:
-
-- USER: `attendance.manager = null`, `attendance.own` only, capabilities false, no `markedBy` / manager notes
-- Manager: full attendance list, notes, lifecycle capabilities
-
-Hiding a loaded manager list in React is not sufficient.
-
-`markedById` is always the authenticated manager. Clients cannot submit `RunStatus`, `markedById`, or ownership.
-
-#### Lifecycle: MVCS
-
-```text
-View → Controller → Service → Repository → Model
-```
-
-- `RunService.startRun` / `completeRun` own lifecycle transitions
-- `AttendanceService` owns query, status updates, bulk present, completeness
-- `attendance.repository` owns transactional snapshot and completion writes
-- Controllers (`startRunAction`, `setAttendanceAction`, `markAllPresentAction`, `completeRunAction`) authenticate, validate with Zod, call services, map domain errors, revalidate `/runs/[runId]`
-
-No Prisma in views or controllers. No attendance transition rules in React.
-
-#### Lifecycle: Deferred
-
-- Discord-side attendance marking (stays web-only; Discord DMs and lifecycle announcements exist)
-- Broader performance / reputation products beyond consumables audit and roster WCL rankings
 
 ### Run signups
 
@@ -2666,7 +2557,7 @@ Updating one side never clears the other. Removing one Lootbuddy does not affect
 2. **Booster** section (optional): select Characters + roles. Requires owned active Characters and the account-level Booster role (`User.isBooster`, any run difficulty). For one-click all-eligible signup, use the Discord **Quick Sign** button instead.
 3. **Lootbuddies** section (optional, independent): add N entries with Class + Mode. No Character selector. Zero-character Users may still sign as Lootbuddy.
 4. Save each section separately (`setCharacterOffers` / `setLootbuddies`).
-5. Review on `/my-runs` or the Run detail Signups tab — both participation types can appear for the same Run.
+5. Review on `/my-runs` or the Run page — both participation types can appear for the same Run.
 
 ##### My Runs (`/my-runs`)
 
@@ -2782,7 +2673,7 @@ Run signup counts exclude `WITHDRAWN` rows. Selected counts are `SELECTED` only.
 
 #### Signups: Architecture
 
-- View: `/runs` dialog (independent Booster + Lootbuddy sections; manual Booster offers), `/runs/[runId]` Signups tab, `/my-runs`
+- View: `/runs` dialog (independent Booster + Lootbuddy sections; manual Booster offers), signup lists on the `/runs/[runId]` Roster tab, `/my-runs`
 - Controller: `src/controllers/signup.actions.ts` (`setCharacterOffersAction`, `setLootbuddiesAction`, …)
 - Service: `signupService` (`setCharacterOffers`, `quickSignupBoosters`, `setLootbuddies`, `cancelBoosterSignup`) + `signup-eligibility.ts` + `signup-state.ts` (`planCharacterOfferReconciliation`, `planLootbuddyReconciliation`)
 - Repository: `signup.repository.ts` (`applyOfferPlan`, `applyLootbuddyPlan`)
@@ -3134,304 +3025,221 @@ The published roster stays live until an Update succeeds. The lead may add a new
 - Raid groups 1–8, parties, markers, assignments
 - Customer bookings / boost market
 
-### Run Setups
+### Run lifecycle and attendance
 
-A **Run Setup** (model `RunTemplate`, older code and routes say "template") is a global, reusable planning preset: *what* a Run contains plus default composition. It has no Raid Lead; the Schedule slot or the Run chooses *who*.
+#### Lifecycle: Purpose
 
-- **Stored:** `name`, `difficulty`, `lootType`, desired Tank / Healer / DPS / Lootbuddy counts, `notes`, `isActive`, the audit fields `createdById` / `updatedById`, and ordered `RunTemplateRaidContent` rows. Never a schedule, status, `signupsOpen`, derived title, roster state or Discord identifier.
-- **Content** is chosen as a persisted Product (same authority as Create Run), so a Run Setup may hold several raids.
-- **Permissions:** ADMIN / OWNER create, edit, duplicate, deactivate, reactivate and delete (`requireManageTemplates`; the Community Schedule actions also manage them). RAID_LEAD and above may list and use active, usable setups (`requireCanUseTemplates`). USER has no access. `/manage/templates` is the ADMIN view, `/profile/templates` a read-only catalog for Raid Leads.
-- **Usability** is computed, never stored (`computeUsability`): active; difficulty and run type still valid; composition within bounds; content still covered by an active Product (same raids in order, FIXED counts equal, VARIABLE counts in range; `selectable` is not required) or every content raid still available for new Runs. An unusable setup is never changed or removed; it is only excluded from use and flagged.
-- **Use at Create Run:** `createManyRuns` accepts an optional `templateId`. The server re-resolves it at submit time and refuses a missing or unusable setup (`RUN_TEMPLATE_NOT_FOUND`, `RUN_TEMPLATE_UNUSABLE`). Every other Run creation rule still applies.
-- **Validation reuse:** create and edit use the same validators as Run creation (`assertValidRunLootType`, `assertValidPlannedBossCount`, `assertComposition`, `notesValue`) from `src/services/run-state.ts`.
-- **Snapshot independence:** there is no `Run.templateId`. Applying a setup copies its values into the Run. Editing or deactivating a setup never changes an existing Run.
-- **No recurrence here:** recurring creation is the [Community Schedule](#community-schedule); a setup never creates a Run on its own. A freshly created Run is `DRAFT` with `signupsOpen: false` and has no Discord infrastructure.
+Operational Run completion after roster publication:
 
-### Community Schedule
+`PUBLISHED` → `IN_PROGRESS` → `COMPLETED`
 
-Authority (unchanged):
+Assigned raid leads and admins start a published Run, record who actually attended, and complete the Run only when every attendance row is marked.
 
-- **Run Setup** (`RunTemplate`) = WHAT + default composition
-- **Schedule slot** (`CommunityScheduleSlot`) = WHEN + WHO + optional composition override + **start boundary**
-- **Concrete Run** = independent operational snapshot — never rewritten by Schedule, Run Setup, Product or composition changes
+This is not Warcraft Logs, Blizzard, Discord notifications, or analytics.
 
-#### Occurrence identity
+#### Lifecycle
 
-One occurrence = **slot + raid-ID window** (`CommunityScheduleRun`, `UNIQUE(scheduleSlotId, windowStartAt)`;
-`windowStartAt` = Wednesday 06:00 Europe/Berlin, DST-safe). `runId` is `UNIQUE`, so a Run belongs to at most
-one occurrence. An occurrence is fulfilled in one of two ways (`origin`):
+Roster Management still owns `OPEN → ROSTERING` and publication to `PUBLISHED`.
 
-| origin | meaning |
+This feature owns:
+
+- `PUBLISHED → IN_PROGRESS` via **Start Run**
+- `IN_PROGRESS → COMPLETED` via **Complete Run**
+
+There is no generic `RunStatus` dropdown.
+
+Cancellation before start remains Run Management policy (`DRAFT` / `OPEN` / `ROSTERING` / `PUBLISHED`) and is reversible via **Reactivate Run** when a pre-cancel snapshot exists. Ordinary cancellation from `IN_PROGRESS` is still not offered. Start and Complete remain irreversible operational freezes.
+
+#### Start Preconditions
+
+The server re-reads authoritative state. Start requires:
+
+- the Run exists
+- `Run.status === PUBLISHED`
+- the caller can manage the Run (`canManageRun`)
+- a published roster exists (`publishedAt`)
+- at least one currently `SELECTED` participant
+- **no unpublished roster changes** — the saved draft must match the published roster (membership and assigned roles) and no roster-relevant Run setting may have changed since the roster was last published / updated (`RunRoster.runChangedSinceAck`); otherwise Start fails with "Roster has unpublished changes. Update the roster before starting the Run." (`ROSTER_UNPUBLISHED_CHANGES`). The Start dialog also warns, but the server check is authoritative.
+
+These checks run inside the Start transaction after it has locked the `RunRoster` row — the same lock every roster write takes first — so the snapshot always equals the published roster at the moment of Start; a concurrent roster write or Run edit either commits before Start (and is checked) or waits and is rejected once the Run is `IN_PROGRESS`. Start uses the Run's current metadata (difficulty, content, schedule, composition).
+
+Scheduled start time is **not** a blocker. Runs may start early or late.
+
+##### Preflight ("Ready to start?")
+
+`runPreflightService` (`src/services/run-preflight.service.ts`) assembles an advisory checklist from the already-loaded roster management view. It is shown as the Preflight panel on Run Detail and inside the **Start Run** dialog, split into **Start will be refused** (ERROR — mirrors the hard rules above) and **Check before starting** (WARNING). Warnings never block Start; the server checks above stay authoritative.
+
+**Saved re-check after Start** (`runStartSavedCheckService`, after the Start Run response via `after()`): every SELECTED Booster Character gets a fresh Blizzard sync (trigger `RUN_START`, 3 at a time; a failing sync falls back to the last known lockouts), then each owner whose Character is saved on a **planned** boss of this Run gets a `ROSTER_CHARACTER_SAVED` reminder ("Reminder: you are saved — Boss X, no loot from those bosses"), bell + Discord DM, once per pick and boss set. Because this fresh sync can find saves the checklist above did not show, the **Raid Lead** gets **one grouped summary** ("Selected Characters are saved" — one line per affected Character with its bosses, "Check the roster", links the Roster tab), bell + DM, only when at least one pick is affected and once per affected set. "Planned" = the first `plannedBossCount` bosses in authoritative order (6/8 = bosses 1–6; a kill on boss 7 never counts).
+
+ERROR is used only for the server Start rules above (status, published roster, unpublished changes, ≥1 published selected participant). Warnings cover desired composition, a missing Raid Lead, an unseeded draft or draft publish invariants (they block the next Publish, not Start), Discord channel / signup message / integration health, and the selected registered Booster Characters:
+
+- **Schedule conflicts** — reserved on another Run or weekly unavailable (can appear after Publish)
+- **Lockouts** — known saved content needing attention (same `roster-selection-risk` classification as selection)
+- **Blizzard sync** — no fresh successful sync (`deriveCharacterSyncHealth`: ERROR / NEVER_SYNCED / STALE), so lockouts and item level may be outdated
+
+External Boosters carry no Character and are not part of these checks.
+
+#### Roster Freeze
+
+Once the Run is `IN_PROGRESS` (and after `COMPLETED`):
+
+- draft selection is rejected
+- publish / republish is rejected
+- published-roster seed-for-edit, Add Booster and roster repost are rejected
+- Run edits (Edit Run, Raid Lead reassignment) are rejected (`RUN_EDIT_LOCKED`)
+
+Attendance is the roster that entered the Run. Later roster edits cannot silently rewrite attendance rows.
+
+`PUBLISHED` roster editing before Start stays allowed (Start is the lock point — see [Roster lifecycle and lock point](#roster-lifecycle-and-lock-point)). Post-start substitutions go through **Replace** below, which records attendance; it does not reopen the roster editor.
+
+#### Attendance Snapshot
+
+Start is transactional. It either:
+
+1. creates one `RunAttendance` row per currently `SELECTED` published participant
+2. sets `signupsOpen = false`
+3. sets `status = IN_PROGRESS`
+
+or it writes nothing.
+
+Initial status is `UNMARKED`. Nobody is auto-marked `PRESENT`.
+
+Source of truth is live `SELECTED` `RunSignup` rows on a published roster, linked to `RunRosterEntry` (created if a seed/published snapshot is missing the matching entry). `PENDING` / `NOT_SELECTED` / `WITHDRAWN` rows are not snapshotted.
+
+Booster and lootbuddy selected participants are included in the same attendance list.
+
+Double start does not duplicate rows (`rosterEntryId` is unique; a second start is `RUN_ALREADY_STARTED`).
+
+Start does not mutate BoosterAccess, signup history semantics, character ownership, or lockouts.
+
+#### Attendance Status Semantics
+
+| Status | Meaning |
 | --- | --- |
-| `MATERIALIZED` | Run created for this occurrence from the Run Setup (weekly Draft release, or manual **Create Run**) |
-| `ATTACHED` | an existing, independently created Run adopted as this occurrence (**Use existing Run**) — provenance only, nothing is copied |
+| `UNMARKED` | Not yet decided. Blocks completion. |
+| `PRESENT` | Attended normally. |
+| `LATE` | Attended, joined late. |
+| `LEFT_EARLY` | Attended, left before expected completion. |
+| `NO_SHOW` | Expected, did not attend. |
+| `EXCUSED` | Did not attend; absence accepted. |
+| `STANDBY` | Rostered as backup/standby and not required to participate. |
 
-Both share the same unique constraints, so a materializer pass and an attach racing for the same occurrence end with
-exactly one fulfillment (the loser rolls back / gets *already fulfilled*).
+A backup that was available but not needed must not be classified as `NO_SHOW`. Use `STANDBY`.
 
-#### Weekly Draft release
+#### Replacing a participant after Start
 
-Automatic materialization runs **only** at the weekly release: **Monday 12:00 Europe/Berlin**
-(`boostinghub-community-schedule.timer`, `OnCalendar=Mon *-*-* 12:00:00 Europe/Berlin`, `Persistent=true`). Each pass
-creates the Drafts of the raid ID starting the **following Wednesday 06:00** for every active slot with
-*Automatically create weekly Draft* on (`scheduleDraftRelease` / `releasedWindow`). A pass at any other time (catch-up
-after downtime, a manual `systemctl start`) targets the same released raid ID — never the one after it — and is
-idempotent (one Run per occurrence).
+While the Run is `IN_PROGRESS`, the manager can **Replace** any attendance row (typically a no-show) from the Attendance tab (`attendanceService.replaceParticipant` → `attendanceRepository.replaceParticipantAtomic`, one transaction):
 
-Saving a Schedule (create, add times, edit, enable auto-create, reactivate) **never** creates Runs. An earlier Draft is
-created only by the manual **Create Run** (same uniqueness, start boundary and fulfillment checks, origin
-`MATERIALIZED`). The Schedule view shows an unfulfilled future occurrence as **Draft planned** with its release time;
-if its release already passed (time planned mid-week) it stays without Run until **Create Run**.
+- The original row becomes `NO_SHOW` with the note "Replaced by …"; the original signup leaves the live roster (`SELECTED` → `NOT_SELECTED`).
+- **Signed-up replacement:** a `PENDING` / `NOT_SELECTED` signup of the same Run and participation type (a player already holding a booster slot is rejected). It becomes `SELECTED` in the original's role, gets its own attendance row marked `PRESENT` with the note "Replacement for …", and a `RAID_INVITE` notification.
+- **External replacement** (booster slots only): added to the roster as an external booster in the original's role (see [Roster management](#roster-management)). It appears in the Final Setup but has no attendance.
+- `RunRoster.version` is bumped: the Discord roster post and the **Final Setup** post are edited in place. The Final Setup omits `NO_SHOW` / `EXCUSED` rows. `RunDiscordPost.lastStartRosterVersion` records which roster version the posted Final Setup reflects; a Final Setup posted before this existed gets its baseline set by the first replacement.
 
-#### Ownership and cleanup
+This is the one exception to the roster freeze below: draft saves and republish stay rejected after Start.
 
-Only `origin = MATERIALIZED` **and** `Run.status = DRAFT` is Schedule-owned. When an occurrence goes away —
-time deleted, deactivated, weekday / time changed, start moved later, Run Setup deleted — every future Schedule-owned
-Draft of the affected occurrences is retired in the **same transaction** as the Schedule change: cancelled from DRAFT
-and archived (the Cancel + Archive end state; a Draft has no signups / announcement, so nothing is sent), and its
-occurrence is freed (link `scheduleSlotId → null`, exactly like slot deletion) so it never blocks a later release.
-A `RUN_SCHEDULE_DRAFT_RETIRED` RunDomainEvent is recorded after commit.
+#### Backup / Standby Semantics
 
-Never touched by Schedule edits: Runs that left DRAFT (open / rostering / published / …) and `ATTACHED` Runs —
-no status, time, scope, roster or signup change. No replacement Draft is created eagerly (e.g. Friday → Saturday
-creates the Saturday Draft only at the next release or via Create Run). The confirmation dialogs list the
-consequences (*N scheduled Draft Run(s) will be archived* / *N active Run(s) will remain unchanged* / *Linked existing
-Runs will remain unchanged*).
+Signup `isBackup` is player intent, not attendance.
 
-Concurrency: Schedule mutations, attach and Draft materialization all row-lock the slot first
-(`communityScheduleRepository.lockInTx`). The materializer re-checks the locked slot (active, same weekday / time,
-start boundary) before inserting Run + link, so an edit and a release pass serialize — no orphan Draft, no duplicate.
-The retire step re-checks `DRAFT` under the roster lock, so a Draft opened concurrently is left alone.
+Do **not** auto-assign `STANDBY` because `isBackup = true`. A backup may be used and attend.
 
-#### Start boundary
+The manager UI shows Backup clearly and offers an easy Standby action for those rows. Final status is a manager decision.
 
-`CommunityScheduleSlot.firstWindowStartAt` (nullable): raid-ID window of the first occurrence the materializer may
-create. `null` = active immediately (legacy behavior). Occurrences in earlier windows are never auto-created (manual
-**Create Run** is refused with *not started*, and they cannot be fulfilled by **Use existing Run** either); the
-Schedule view shows them as **Before schedule start** with the start date.
+#### Lifecycle: Authorization
 
-**Starts** choices (resolved server-side from `now`, never stored as browser-local datetimes):
+| Account | Start / Complete / mutate attendance | View |
+| --- | --- | --- |
+| `USER` | No | Own attendance row only, without manager notes |
+| `RAID_LEAD` | Assigned Run only | Full operational list on assigned Runs |
+| `ADMIN` | Any Run | Full operational list |
 
-| choice | boundary |
-| --- | --- |
-| Immediately | `null` |
-| Next raid ID | the next raid ID (skips a still-upcoming occurrence of the current one) |
-| Skip the next occurrence | the raid ID after the first upcoming occurrence |
-| From date… | raid ID of the first occurrence starting on/after that Berlin calendar day |
+`canManageRun` remains the ownership check. Capabilities (`canStart`, `canManageAttendance`, `canComplete`) are server-derived.
 
-A boundary at or before the first upcoming occurrence is stored as `null`. Changing the start (Edit → Starts; default
-**Keep**) only affects future, not-yet-fulfilled occurrences; existing Runs and links are never touched.
+#### Discord voice hint
 
-#### Schedule source: Run Setup or existing Run (basis Run)
+While the Run is IN_PROGRESS each manager row shows *In voice* / *Not in voice* / *Voice unknown* from the bot's short-lived report of the Run's assigned voice channel (see [Run voice channels](#run-voice-channels)). It is information only: it never sets, suggests or bulk-applies an attendance status — manual attendance stays the only authority.
 
-Two different intents — kept apart on purpose:
+#### Bulk Mark Present
 
-- **Basis Run** (Create Schedule → *Schedule source: Existing Run*): an existing Run **defines** the new Schedule.
-- **Existing Run for one occurrence** (an additional time, Add times, the Schedule view): the Run only **satisfies**
-  that occurrence and never redefines the Schedule.
+**Mark all unmarked as Present** is a single service/repository operation.
 
-With source *Existing Run* the request carries `basisRunId`, and the server derives everything from it, in one
-transaction with the slots, start boundary and attachment:
+Only `UNMARKED` rows become `PRESENT`. Existing `LATE`, `LEFT_EARLY`, `NO_SHOW`, `EXCUSED`, and `STANDBY` rows are preserved.
 
-| field | derived from the basis Run |
-| --- | --- |
-| first weekly time | weekday / time of its start in Europe/Berlin (`scheduleTimeOfInstant`) |
-| first occurrence | the basis Run itself (`ATTACHED`) |
-| Run Setup | see below — no Run Setup selection |
-| Raid Lead | its Raid Lead — only if still eligible, otherwise the user must choose (the only manual step) |
+Typical workflow: mark exceptions first, then bulk-present the rest.
 
-Run Setup: a Run has no Run Setup reference (no `RunTemplate` FK; Schedule-created Runs are linked through
-`CommunityScheduleRun` and are therefore never attachable again), so there is no provenance to follow. The Run's own
-planning snapshot decides: an active, usable Run Setup with **exactly** the same planning fields (difficulty, loot,
-ordered `RunRaidContent` incl. boss counts, planned composition) is reused; otherwise **one** new Run Setup is created
-from that snapshot (`RunRaidContent` → `RunTemplateRaidContent`, `desired*Count`; never roster / signups, never a
-Product guess). One-time copy, no live coupling in either direction.
+#### Completion Invariant
 
-`basisWeekday` / `basisLocalStartTime`, `raidLeadId` and `runSetup` are optional **future** overrides (the dialog only
-sends values the user changed); the basis Run keeps its own time, Raid Lead, scope and roster. Further weekly times are
-optional and use the Schedule's Run Setup / Raid Lead. With source *Run Setup*, `runSetup` and `raidLeadId` are
-required; an existing Run on a time is attach-only. Basis candidates are all upcoming, unarchived, attachable,
-unlinked Runs (no raid-ID window limit) on/after the chosen **Starts**; the list is reloaded on every dialog opening.
-No Run is created on save (Monday release unchanged).
+A Run cannot complete while any attendance row is `UNMARKED`.
 
-**Add times** has no basis semantics: an existing Run takes over that time's weekday / time and is attached; the
-group's Run Setup and Raid Lead stay authoritative. On an **existing** Schedule, **Use existing Run** attaches only;
-the Run's Run Setup is used for future occurrences only with the explicit option *Also use this Run's setup for future
-occurrences*.
+The check is transactional. The domain error is `ATTENDANCE_INCOMPLETE` and includes how many unmarked rows remain.
 
-#### Use existing Run
+Completion records `Run.completedAt`. Together with `RunStartSnapshot.startedAt` it is the Run's active window, which the Consumables Audit uses to tell which Warcraft Logs fights belong to this Run (see [Run Consumables Audit](#run-consumables-audit)).
 
-- **Create Schedule / Add times**: per weekly time, **First occurrence** = *Create normally* or *Use existing Run* (see
-  above). The link is written in the same transaction as the slot. The picker only offers Runs on/after the chosen
-  **Starts**.
-- **Schedule view**: **Use existing Run** on any upcoming, unfulfilled occurrence on/after the start boundary.
-  An occurrence before the boundary is refused with `COMMUNITY_SCHEDULE_NOT_STARTED`.
+UI copy: “Mark attendance for all rostered participants before completing the run.”
 
-One service (`community-schedule-occurrence.service.ts`, `attachExistingRunInTx`) backs both. Eligible Runs: not
-archived, `DRAFT` / `OPEN` / `ROSTERING` / `PUBLISHED`, not linked to any occurrence, start inside a current or future
-raid ID. The occurrence is the slot's occurrence in the **Run's** raid ID. Differences are warnings only (start time,
-difficulty, raid scope vs the Run Setup, Raid Lead) — the Run keeps its own values; later occurrences still use the Run
-Setup. Attaching records a `RUN_SCHEDULE_ATTACHED` RunDomainEvent. Detach is not offered (first iteration).
+React is not the enforcement boundary.
 
-### Raid Catalog
+#### Completed Read-Only Policy
 
-`/manage/raid-catalog` (legacy `/manage/content` redirects here) — ADMIN / OWNER only.
+On success:
 
-Raids and their bosses are **imported from the Blizzard Adventure Journal**. Admins no
-longer type raid names, boss lists or Blizzard encounter ids. Products (run presets)
-stay BoostingHub data and are edited by hand.
+- `status = COMPLETED`
+- `signupsOpen = false`
+- attendance remains stored and becomes read-only in this feature
 
-#### Audit (2026-10-23)
+Signup, roster, BoosterAccess, and lockout history stay intact. Completion is final: BoostingHub has no financial follow-up. Exceptional mistakes are fixed with the audited **Correct Attendance** action (reason required; recorded in Run History).
 
-##### Data model
+#### Canonical Run Detail Integration
 
-| Table | Field | Owner | Before this change |
-| --- | --- | --- | --- |
-| `Raid` | `name` | Blizzard | typed by hand in *New raid* |
-| `Raid` | `blizzardInstanceId` | Blizzard | optional advanced field, else detected by **name** match against the journal index |
-| `Raid` | `season` | BoostingHub | typed / picked by hand |
-| `Raid` | `sortOrder`, `trackLockouts`, `isActive` (*Available for new Runs*) | BoostingHub | by hand |
-| `Raid` | `wclZoneId`, `wclRankingEncounterId` | Warcraft Logs | detected by name (soft fill), *Retry detection* overwrites |
-| `RaidBoss` | `name`, `sortOrder` | Blizzard | typed / reordered by hand, one encounter at a time |
-| `RaidBoss` | `blizzardEncounterIds` (JSON array) | Blizzard | typed by hand, else name-matched against the journal |
-| `RaidBoss` | `wclEncounterIds` (JSON array) | Warcraft Logs | detected by name (soft fill) |
-| `Product`, `ProductRaidContent` | name, flags, ordered contents, FIXED / VARIABLE boss counts | BoostingHub | by hand (unchanged) |
-| `RunTemplateRaidContent`, `RunRaidContent` | `raidId`, `plannedBossCount` | BoostingHub | written by Run Setup / Run flows only |
+Attendance lives on `/runs/[runId]` as a tab next to Roster, Operations and History (completed Runs also show Consumables to managers).
 
-Boss count is never stored: it is `RaidBoss` rows per raid (`RaidCatalog.bossTotal`).
-Boss **order** is display only — planned counts (`plannedBossCount`, product 5/8) are
-numbers, not "the first N bosses", and lockouts store boss UUIDs (`killedBossIds`).
+There is no `/manage/runs/[runId]/attendance` implementation.
 
-##### Blizzard identities (verified live, EU, 2026-10-23)
+##### Before start (`PUBLISHED`)
 
-- **Instance endpoint:** `GET /data/wow/journal-instance/{id}?namespace=static-{region}` returns
-  `name`, `category.type`, `expansion`, `modes`, `order_index` and the ordered
-  `encounters[] {id, name}` (`blizzardApiClient.getJournalInstance`).
-- **Canonical instance identity = journal instance id.** The character encounters response
-  (`/profile/wow/character/{realm}/{name}/encounters/raids`) carries, per instance,
-  `instance: { key: { href: ".../data/wow/journal-instance/1320?..." }, name, id: 1320 }`
-  — it *links to the journal instance*; the ids are the same identity (sample: eredar/zeti:
-  1314, 1307, 1308, 1305, 1317, 1320, 1324 — all equal to the journal ids). Production
-  lockouts are already derived through `Raid.blizzardInstanceId` = journal id (1320, 1324).
-  One field is correct; there is no second id to store.
-- **Boss identity = journal encounter id.** Encounters in the profile response link to
-  `/data/wow/journal-encounter/{id}` with the same `id` (2888, 2896, …).
-  `deriveCurrentResetLockouts` matches `encounter.id` against `RaidBoss.blizzardEncounterIds`.
-- **Lockout identity** = character + raid (via instance id) + difficulty + weekly reset
-  (`CharacterRaidLockout` unique key); bosses via encounter id → `RaidBoss.id`.
-- Category alone does not mean "real raid": the Midnight **world bosses** are journal instance
-  1312, `category: RAID`, `modes: [NORMAL]`.
+- Manager: “Run has not started yet.” plus **Start Run** (confirmation dialog).
+- USER: “Attendance will be available after the run starts.”
 
-##### Seasons
+Viewing the tab does not create attendance rows.
 
-Blizzard has **no authoritative raid-season membership API**. `mythic-keystone/season` covers
-dungeons only. The journal tier "Current Season" (`journal-expansion/505`) lists *every*
-Midnight raid — Season 1 and Season 2 plus the world-boss instance — identical to the
-"Midnight" tier (516). Seasons are therefore small, version-controlled definitions in
-`src/lib/raid-seasons.ts` (key, name, `current`, `journalInstanceIds`). No season CRUD UI.
+##### In progress
 
-##### WCL
+Manager compact table: character, user, class/role, participation type, backup, status, note, actions.
 
-`warcraft-logs-raid-metadata.service.ts` resolves zone / encounter ids by exact unique
-name; it never guesses and soft discovery fills only empty fields. Blizzard and WCL ids
-are different id spaces (Kith'ix: WCL `journalID` 3271 vs Blizzard 2896; WCL encounter
-3513). Imports keep using soft discovery only, so manual / seeded WCL ids are never
-overwritten, and a missing WCL match only shows "Needs mapping".
+USER: “Your Attendance” for their own row only.
 
-##### Catalog: Migration
+##### Completed
 
-**None.** `Raid.blizzardInstanceId` and `RaidBoss.blizzardEncounterIds` are exactly the
-two Blizzard identities. Stale bosses are handled by reconciliation (below), not a flag;
-uniqueness of the instance id is enforced by the import inside a transaction behind a
-transaction-scoped advisory lock (as before, at application level).
+Read-only. Manager sees the full list and a compact status summary. USER sees own final status.
 
-#### Import / sync behaviour
+#### Security / DTO Shaping
 
-All writes are keyed by the Blizzard instance id and run in one transaction **after**
-every Blizzard request has succeeded: a failed or invalid Blizzard response writes nothing
-and the admin sees the reason (not found / not a raid / rate limited / unavailable).
+`runDetailService` shapes viewer payloads:
 
-- **Import Raid** — enter a journal instance id → *Fetch* → preview (name, boss count,
-  bosses, NEW / ALREADY IMPORTED / UPDATE AVAILABLE) → *Import*. Season and lockout
-  tracking default from the season definition containing the id.
-- **Import Season** — pick a code season → preview of every raid → *Import*. New raids of
-  the current season start with lockout tracking on; for historic seasons it is a choice.
-- **Refresh from Blizzard** (raid detail) — preview, then updates only Blizzard-owned
-  metadata: raid name, boss names, boss order, encounter ids.
+- USER: `attendance.manager = null`, `attendance.own` only, capabilities false, no `markedBy` / manager notes
+- Manager: full attendance list, notes, lifecycle capabilities
 
-Matching: an existing raid by instance id; otherwise one unlinked raid with the same
-(normalized) name is adopted instead of duplicated. Bosses by encounter id; unlinked
-bosses by unique name (or one boss ↔ one encounter).
+Hiding a loaded manager list in React is not sufficient.
 
-Never written by import / refresh: season, order, lockout tracking and run availability of
-existing raids, WCL ids already set, Products, `ProductRaidContent`, `RunTemplateRaidContent`,
-`RunRaidContent`, Runs. New raids are not offered for new Runs until an admin enables it.
+`markedById` is always the authenticated manager. Clients cannot submit `RunStatus`, `markedById`, or ownership.
 
-**Reconciliation.** A raid that is in use (Runs, Run Setups, Products, lockouts) or seeded
-keeps its encounter set: Blizzard bosses that are new, or bosses Blizzard stopped
-returning, are listed in the preview as *needs reconciliation* and are not added / deleted.
-Unused raids follow Blizzard (new bosses added, missing bosses removed).
+#### Lifecycle: MVCS
 
-#### Status per raid
+```text
+View → Controller → Service → Repository → Model
+```
 
-- **Blizzard** — synced (instance linked) or not linked.
-- **Bosses** — `N/N mapped` (bosses with a Blizzard encounter id).
-- **Lockouts** — ready (tracked + instance + every boss mapped), incomplete, or not tracked.
-- **Warcraft Logs** — mapped (zone + every boss) or needs mapping.
+- `RunService.startRun` / `completeRun` own lifecycle transitions
+- `AttendanceService` owns query, status updates, bulk present, completeness
+- `attendance.repository` owns transactional snapshot and completion writes
+- Controllers (`startRunAction`, `setAttendanceAction`, `markAllPresentAction`, `completeRunAction`) authenticate, validate with Zod, call services, map domain errors, revalidate `/runs/[runId]`
 
-Raw ids are shown only in the expanded details.
+No Prisma in views or controllers. No attendance transition rules in React.
 
-#### Page sections
+#### Lifecycle: Deferred
 
-`/manage/raid-catalog?tab=raids` (default; missing / unknown values fall back here) shows
-the imports and the raid list; `?tab=presets` shows Run Presets (Products). The tab is a
-real link, so refresh, back / forward and copied URLs keep it.
-
-The Raids tab is scoped so the working catalog stays short after many seasons:
-
-- **Status** (`?status=`): *Active* (default, not archived), *Archived*, *All*.
-- **Season** (`?season=`): *Current season* (default for Active — the `RAID_SEASONS` entry marked
-  `current`), one persisted `Raid.season` value, or `all`. Options are the persisted
-  seasons, Blizzard seasons newest first (`RAID_SEASONS` order), then other values A–Z.
-  No season names are hard-coded in the UI.
-- Without a chosen season, Archived and All look across every season, so an archived raid of
-  an older season is one click away; an explicit season still narrows them.
-- Defaults are left out of the URL; unknown values fall back to Active / Current season.
-- The tab count is the number of raids the Raids tab shows; the status control shows
-  Active / Archived / All counts inside the chosen season.
-
-**No automatic archive on Import Season.** An import never changes lifecycle or
-availability of existing raids. Season membership is the editable `Raid.season` label plus
-the code-defined `RAID_SEASONS`, and an older-season raid may still be sold (bundles,
-Run Setups, already planned Runs). Archiving closes every product that contains the raid,
-so doing it implicitly could silently break live planning. Older seasons drop out of the
-default view anyway; archiving stays an explicit admin action.
-
-#### Raid lifecycle
-
-**Identity** is the Blizzard journal instance id. Import / refresh reuse the Raid holding
-that id (one Raid per instance, serialized by an advisory lock), and the insert-only
-bootstrap (`ensureReferenceRaids`) skips a fixture raid whose instance already belongs to
-another Raid row. Before 2026-10-26 the bootstrap only compared fixture UUIDs: when #271
-added The Unbinding of Kith'ix (`eeeeeeee-…`, instance 1324) as a fixture, production
-already had the admin-created Kith'ix (`feac9fd9-…`, same instance), so a second copy was
-inserted and the lockout sync wrote every Kith'ix lockout twice.
-
-Raid → Manage offers exactly the action the server accepts in the current state:
-
-| State | Action |
-| --- | --- |
-| No Run, Run Setup, Product or lockout reference, not a bootstrap fixture | **Delete** — removed with its bosses |
-| Shares its Blizzard instance with a Raid that outranks it (more Run / Run Setup / Product references, then lockouts) and has no Run / Run Setup / Product reference itself | **Remove duplicate** — its lockouts move to the kept Raid (exact copies for the same Character / difficulty / reset are dropped, killed boss ids re-mapped), then it is deleted, in one transaction |
-| Referenced, or a bootstrap fixture | **Archive** (`Raid.archivedAt`) |
-| Archived | **Restore** |
-
-An archived Raid stays valid for existing Runs, lockouts and Warcraft Logs (rows and
-foreign keys untouched; lockout sync still follows *Lockout tracking*). It is never
-offered for new planning: not available for new Runs (`availableForRuns` is false), a
-Run Setup with it is unusable, a product holding it is closed to new Runs / Run Setups,
-and it cannot be added to a product (a product that already holds it stays editable).
-Run / Run Setup / Product references are never re-pointed or deleted by any of these actions.
+- Discord-side attendance marking (stays web-only; Discord DMs and lifecycle announcements exist)
+- Broader performance / reputation products beyond consumables audit and roster WCL rankings
 
 ### Run Consumables Audit
 
@@ -3668,10 +3476,172 @@ The Midnight ids were taken from public Venomous Abyss reports (WCL zone 53) thr
 
 To add a consumable (new season, new rank): add a catalog row with its source. To add a new check category later (food, weapon oil, rune, defensives): add the category + evidence type to the catalog and a rule to the policy — the observation table stores `category` as text, so no enum migration is needed.
 
-### Operational analytics and system health
+### User settings and notifications
 
-- `/manage/analytics` (`operationalAnalyticsService`, ADMIN / OWNER): operational counts over an optional `from` / `to` range. No financial metrics.
-- `/manage/system` (`systemHealthService`, ADMIN / OWNER): per-provider health derived from `IntegrationEvent` rows (`BLIZZARD`, `WARCRAFT_LOGS`, `DISCORD`, `RAIDER_IO`, `SYSTEM`, `BACKUP`), recent events, backup status, plus two manual actions (`adminSystemForceRefreshAllAction`, `adminSystemWclAutoAuditPassAction`). A restore verification is only shown when it was explicitly recorded, never inferred from a dump's existence.
+#### Notifications: Purpose
+
+BoostingHub separates **Profile** (identity / account operations) from **Settings**
+(user-controlled application preferences).
+
+Settings sections:
+
+1. **Notifications** — Discord DM delivery preferences (in-app is always on)
+2. **Regional** — personal IANA timezone
+3. **Gameplay** — Default Character preference for signup UX
+4. **Active sessions** — list and revoke signed-in devices (via Prisma; revoke via Better Auth)
+
+| Type | When created | Web | Run channel | Discord DM |
+| --- | --- | --- | --- | --- |
+| `ROSTER_SELECTED` | **Save Roster** or publish, for selected signups not already told they are in | Always | — | Master + `dmRosterSelectedEnabled` + Discord linked |
+| `RAID_INVITE` | **Start Run** for each SELECTED signup | Always | — | Master + `dmRaidInviteEnabled` + Discord linked |
+| `RUN_CANCELLED` | Run → `CANCELLED` for Users with PENDING/SELECTED | Always | YES if dedicated channel exists (before retirement) | Master + `dmRunCancelledEnabled` + Discord linked |
+| `RUN_RESCHEDULED` | `scheduledStartAt` actually changes | Always | YES if dedicated channel exists | Master + `dmRunRescheduledEnabled` + Discord linked |
+| `RUN_SCOPE_CHANGED` | Edit Run materially changes the planned raid scope (`RunRaidContent` by raidId: boss count changed, content added/removed) on a non-DRAFT Run — for every User still signed up (PENDING / SELECTED / NOT_SELECTED, incl. draft picks; WITHDRAWN excluded). A reorder or same-count save is a no-op. | Always | YES if dedicated channel exists ("⚠️ Run Updated", changed contents only) | Master + `dmRunRescheduledEnabled` ("Run Rescheduled / Updated DMs") + Discord linked |
+| `ROSTER_WITHDRAWN` | To the Run's **Raid Lead** when a picked player withdraws (with their reason, links the Roster tab) | Always | — | Master + Discord linked (no per-event toggle) |
+| `ROSTER_CHARACTER_SAVED` | The Character sync (every 15 min, `rosterSavedNoticeService`) **newly observes** a kill on a **planned** boss (first `plannedBossCount` bosses of a content, same difficulty and raid ID) for a Character that is **draft-selected or SELECTED** on a Run that has not started yet (OPEN / ROSTERING / PUBLISHED). To the Character's **owner** ("no loot there, contact the Raid Lead", links the Run) and the Run's **Raid Lead** ("check the roster", links the Roster tab); once if they are the same User. A Character already saved when it was picked never triggers it (only new kills count); kills during the Run (IN_PROGRESS) never do. A further kill notifies again with the full boss list. The DM is skipped if the Run started before delivery (Quiet Hours). **Also at Start Run** (`runStartSavedCheckService`): after a fresh sync of the SELECTED Characters, a reminder to each owner saved on a planned boss ("Reminder: you are saved") — decided by the same rule as the roster warning and Auto Build (`savedPlannedBosses` → `isSaveRelevantToPlannedBosses`): per boss on Normal / Heroic, the whole content on Mythic; a full clear or progress with an unknown / inconsistent boss list counts and, when no killed planned boss can be named, lists every planned boss of that content and **one grouped summary to the Raid Lead** ("Selected Characters are saved", one line per affected Character, Roster tab); their DMs are only sent while the Run is IN_PROGRESS. | Always | — | Master + Discord linked (no per-event toggle) |
+| `ROSTER_REMOVED` | **Save Roster** or publish, for signups last told they are in that are no longer selected (not WITHDRAWN) | Always (except character-swap bookkeeping, below) | — | Master + `dmRosterRemovedEnabled` + Discord linked |
+
+**Booster character swap.** When a player's booster character is exchanged for
+another of their booster signups (same User, same Run), the player gets exactly
+**one** user-facing notification: a `ROSTER_SELECTED` with a `roster-swapped:`
+source key, titled **"Roster updated"**, which also drives the single
+"Roster Update" DM (subject to `dmRosterSelectedEnabled`). The old character's
+`ROSTER_REMOVED` is still written, but only as hidden bookkeeping state
+(`visibleInApp = false`, `SKIPPED`, already read): it is never shown in the bell
+or on `/notifications`, never counts as unread, and never sends a removal DM.
+It exists so later Save Roster / Publish runs know that signup was already
+taken out. A genuine removal (no other booster signup of the player stays
+selected) and every Lootbuddy removal remain normal visible notifications.
+
+##### In-app visibility (`visibleInApp`)
+
+`UserNotification.visibleInApp` (default `true`) separates user-facing
+notifications from internal notification-state rows. Every user-facing
+repository read — `countUnreadForUser`, `listLatestForUser`, `listForUser`,
+`findOwned` (and so `markRead`), `markAllRead` — filters `visibleInApp = true`
+in the query itself, so the bell's "latest 5" and the page's limit count visible
+rows only. Being read is not the same as being hidden. Internal roster state
+(`notifyRosterSelectionChangesInTx`) reads `UserNotification` directly and still
+sees hidden rows. The `add_notification_visible_in_app` migration backfilled
+`visibleInApp = false` only for historical removals provably paired with a
+same-user/run/version `roster-swapped:` event and created already read with no
+DM; every other historical row stayed visible.
+
+**Run channel announcements** (`RunDiscordAnnouncement`) are shared Run communication.
+They are **not** controlled by User DM preferences (`discordDmEnabled=false` does not
+suppress the channel post). They use deterministic `sourceKey` values distinct from
+UserNotification keys:
+
+- Reschedule: `run-rescheduled:<runId>:<scheduleRevision>`
+- **Durability:** `RUN_RESCHEDULED` and `RUN_SCOPE_CHANGED` UserNotifications are written inside the same Edit Run transaction as the Run fields / `RunRaidContent`, the revision bump and the announcement (`updatePreStartAtomic` → `writeInTx`). Recipients and DM preferences / Quiet Hours are read with that transaction's client, so the audience is the signup state at commit time; a committed change can never lack its DM intent. `RUN_CANCELLED` / `RUN_REACTIVATED` follow the same rule: they are written inside the cancel / reactivate transaction (with the status change, `cancelRevision` and the announcement), including retiring the opposite cycle's still-undelivered DMs (`SKIPPED`).
+- Scope change: `run-scope-changed:<runId>:<contentRevision>` — the row's `scopeChanges` JSON (before → after per changed content) is the single structured snapshot; that revision's `RUN_SCOPE_CHANGED` DMs (`run-scope-changed:<runId>:<contentRevision>:<userId>`) render from it. `Run.contentRevision` increments only on a material scope change.
+- Cancel: `run-cancelled:<runId>`
+
+No historical backfill — only lifecycle events after deployment create rows. Account-level notifications without a Run (for example `CHARACTER_BATTLENET_REPAIR`) reach the bot through the separate `accountNotificationDms` lane and record their outcome through `PUT /api/bot/notifications/:notificationId/delivery`.
+
+#### Settings ownership
+
+Route: `/settings`
+
+Sidebar: **Settings** (after Profile).
+
+Only the authenticated owner may view or update their settings.
+
+#### Notifications: Preferences
+
+Stored on `User`:
+
+- `discordDmEnabled` (default `true`) — master override; does not rewrite per-event toggles
+- `dmRosterSelectedEnabled` / `dmRaidInviteEnabled` / `dmRunCancelledEnabled` /
+  `dmRunRescheduledEnabled` / `dmRosterRemovedEnabled` (default `true`)
+- `timeZone` (default `Europe/Berlin`) — personal presentation only
+- `defaultCharacterId` (nullable) — signup UX preference only
+- `discordRunChannelNickname` — deprecated, no longer read or written (the Raid
+  Lead name comes from Discord, see domain model); dropped by a follow-up migration.
+- `discordDmQuietHoursEnabled` (default `false`) — defer optional personal Discord
+  DMs during a daily local window
+- `discordDmQuietHoursStart` / `discordDmQuietHoursEnd` (nullable `HH:MM`) —
+  local wall-clock window interpreted in `User.timeZone` (Regional Settings)
+
+##### Effective Discord DM rule
+
+At creation:
+
+`discordDmEnabled AND eventSpecificDmEnabled AND usable Discord identity`
+
+→ `PENDING`, else `SKIPPED`. Snapshotted; never re-evaluated later.
+
+When effective DM is `PENDING` and Quiet Hours are enabled, the current local time
+(in `User.timeZone`) is evaluated once at creation. Inside the window,
+`discordDeliverAfter` is set to the next local end time (exclusive boundary)
+converted to UTC; outside the window it stays `null` (immediately eligible).
+Quiet Hours never turn an intended DM into `SKIPPED`.
+
+`PENDING` means delivery is still expected. When the DM lane finds a `PENDING`
+notification whose Run is app-archived (or gone), it can never be delivered:
+the sync pass moves it `PENDING → SKIPPED` (compare-and-set, no Discord request,
+no ERROR log) for every Run notification type, instead of leaving it queued
+forever. The bot's pre-send delivery authority also refuses an archived Run's
+DM, so archival between listing and sending cannot deliver it. `SENT` /
+`FAILED_PERMANENT` / `SKIPPED` rows are never touched.
+
+#### Quiet Hours
+
+Personal Discord DMs only. In-app notifications, shared Run-channel messages,
+`RunDiscordAnnouncement` lifecycle posts, channel provisioning, and role pings are
+never delayed or suppressed.
+
+- **Timezone authority:** `User.timeZone` (Regional Settings). Times are stored as
+  `HH:MM` local wall clock, not UTC offsets.
+- **Window semantics:** start inclusive, end exclusive. Same-day (`13:00`→`15:00`)
+  and overnight (`22:00`→`07:00`) windows are supported. `start === end` is rejected.
+- **DST:** end instants are derived via IANA timezone rules. Spring-forward
+  nonexistent local times resolve to the first valid instant at or after the
+  requested wall clock; fall-back ambiguous times prefer the **later** occurrence so
+  the quiet period is not shortened.
+- **Snapshot:** `discordDeliverAfter` on `UserNotification` is fixed at event
+  creation. Disabling Quiet Hours, changing start/end, or changing timezone later
+  does **not** retroactively alter existing rows.
+- **Bot delivery:** the existing `notificationDms` lane selects `PENDING` rows where
+  `discordDeliverAfter IS NULL OR discordDeliverAfter <= now` (bounded query). No
+  per-notification timers.
+
+#### Idempotency (`sourceKey`)
+
+- Roster pick: `roster-selected:<runId>:<publishedVersion>:<signupId>`
+- Roster removed: `roster-removed:<runId>:<publishedVersion>:<signupId>`
+- Roster update (booster character swap): `roster-swapped:<runId>:<publishedVersion>:<signupId>`
+- Raid invite: `raid-invite:<runId>:<signupId>`
+- Run cancelled: `run-cancelled:<runId>:<userId>`
+- Run rescheduled: `run-rescheduled:<runId>:<scheduleRevision>:<userId>`
+- Picked Character saved: `roster-character-saved:<signupId>:<sorted saved planned boss ids>:<player|lead|start>`
+- Start Run Raid Lead summary: `roster-character-saved-summary:<runId>:<sha256 of the sorted affected set (signupId=bossIds)>` — the same set never notifies twice
+
+`Run.scheduleRevision` increments only when `scheduledStartAt` changes.
+
+#### Community timezone authority
+
+User timezone must **not** alter:
+
+- generated `Run.title`
+- Discord channel names
+- raid-ID week boundaries / CURRENT/NEXT classification
+
+Shared Discord channel posts prefer Discord native timestamps (`<t:UNIX:F>`)
+where appropriate. Personal DMs also prefer native timestamps.
+
+#### Default Character
+
+Preference only. Never bypasses the Booster role, difficulty,
+weekly availability, lockouts, cross-run reservations, role validity, or active
+state. Existing active signup state wins over the preference. Never auto-submits.
+
+#### Notifications: Surfaces
+
+- Header bell (latest 5 visible + unread count of visible rows) → `/notifications` (same visibility)
+- Settings → Notifications / Regional / Gameplay / Active sessions
+- Controllers: `settings.actions.ts`, `notification.actions.ts`, `session.actions.ts`
+- Services: `settingsService`, `notificationService`, `runLifecycleNotificationService`, `sessionManagementService`
 
 ### Discord bot
 
@@ -3748,9 +3718,9 @@ Preferred mode: each Run that becomes signup-available gets its own dedicated Di
 
 #### Channel reconciliation
 
-**Channel state is reconciled independently from message state.** Before this existed, a Run's channel name and category were only ever corrected as a *side effect* of the bot processing a signup or roster message update — so a Run that already had a settled signup/roster message (the common steady state) got no work item at all, and its channel could sit in the wrong category, wrong week section, or under the wrong name indefinitely.
+**Channel state is reconciled independently from message state**, so a Run with a settled signup and roster message still gets its channel name, category and week section corrected.
 
-`discordSyncService.listSyncWork()`'s `channels` lane fixes this: it returns one `ChannelSyncWorkItem` — `{ runId, existingRunChannelId, desiredChannelName, targetBucket, scheduledStartAt }`, with `existingRunChannelId` always non-null — for **every** Run that already has a persisted `RunDiscordPost.runChannelId`, regardless of `Run.status` (DRAFT included, for an abnormal legacy row), archive state, raid-ID week, or whether any signup/roster message currently needs updating. It is expected and correct for this lane to return the same Run on every poll — BoostingHub's database knows the *desired* name/category/ordering but not Discord's *live* `parentId`, position, or actual channel name (including any out-of-band manual change), so the bot must keep re-checking. This is also what makes automatic weekly rollover (NEXT → CURRENT) work with zero database writes — see "Weekly raid-ID sections" below.
+`discordSyncService.listSyncWork()`'s `channels` lane returns one `ChannelSyncWorkItem` — `{ runId, existingRunChannelId, desiredChannelName, targetBucket, scheduledStartAt }`, with `existingRunChannelId` always non-null — for **every** Run that already has a persisted `RunDiscordPost.runChannelId`, regardless of `Run.status` (DRAFT included, for an abnormal legacy row), archive state, raid-ID week, or whether any signup/roster message currently needs updating. It is expected and correct for this lane to return the same Run on every poll — BoostingHub's database knows the *desired* name/category/ordering but not Discord's *live* `parentId`, position, or actual channel name (including any out-of-band manual change), so the bot must keep re-checking. This is also what makes automatic weekly rollover (NEXT → CURRENT) work with zero database writes — see "Weekly raid-ID sections" below.
 
 Two independent mechanisms act on `channels`, both in `src/discord-bot/channel-reconciliation.ts`, deliberately decoupled from discord.js's concrete channel types so they're unit-testable without a live bot token (`channel-reconciliation.test.ts`):
 
@@ -3853,9 +3823,9 @@ Identity lives in `DiscordSchedulePost` (one row per bucket: `channelId`, `messa
 
 **Environment variables**:
 
-- `DISCORD_RUN_CATEGORY_ID` — the ONE active Run category, unchanged in meaning from before this feature. CURRENT and NEXT both resolve to it.
+- `DISCORD_RUN_CATEGORY_ID` — the ONE active Run category. CURRENT and NEXT both resolve to it.
 - `DISCORD_RUN_CURRENT_MARKER_CHANNEL_ID` / `DISCORD_RUN_NEXT_MARKER_CHANNEL_ID` — the two marker channels. Required for CURRENT/NEXT position reconciliation and for the persistent Schedule posts; if either is unset, that reconciliation / Schedule bucket is skipped with a warning each poll (channels still get the correct category and name, just not corrected ordering / Schedule).
-- `DISCORD_RUN_ARCHIVE_CATEGORY_ID` — unchanged in meaning, now also the holding place for PAST/FUTURE-existing channels in addition to app-archived Runs.
+- `DISCORD_RUN_ARCHIVE_CATEGORY_ID` — the holding place for PAST / FUTURE channels and for app-archived Runs.
 
 `loadBotEnv` (`src/discord-bot/env.ts`) still only hard-fails at startup when *no* channel destination exists at all (no `DISCORD_RUN_CATEGORY_ID` and no legacy `DISCORD_SIGNUP_CHANNEL_ID`); missing markers or a missing ARCHIVE category are per-poll warnings at reconciliation time, never a startup failure.
 
@@ -3902,7 +3872,7 @@ Public signup embed Roles field:
 1. Click **LB** → ephemeral **multi** class select (1–13 classes).
 2. Confirm the selection → immediately `PUT .../lootbuddies` with one `LOOT_ONLY` entry per chosen class (replaces any previous Discord lootbuddy set for that User on the Run).
 
-Mode (`Loot only` / `Play along`) and multi-entry lootbuddy sets remain available on the Web. Stale multi-step wizard buttons from older bot messages tell the User to start the Lootbuddy signup again (that message still uses the older name "Sign as Lootbuddy").
+Mode (`Loot only` / `Play along`) and multi-entry lootbuddy sets remain available on the Web. Stale multi-step wizard buttons from older bot messages tell the User to click **LB** again.
 
 ##### Unsign button
 
@@ -4053,6 +4023,11 @@ BoostingHub Run becomes OPEN (signup-available) while its raid-ID week is CURREN
 Every channel move is reconciled by the independent `channels` lane (see "Channel reconciliation" above), whether or not the signup/roster message for that Run currently needs any other update.
 
 The HTTP contract of the bot is in [API.md](API.md#discord-bot-api). One-time product announcements use `DISCORD_ANNOUNCEMENT_CHANNEL_ID` and the `global-announcements` routes: `src/discord-bot/global-announcements.ts` owns the content, the server only records that a key was delivered, so a key is never posted twice.
+
+### Operational analytics and system health
+
+- `/manage/analytics` (`operationalAnalyticsService`, ADMIN / OWNER): operational counts over an optional `from` / `to` range. No financial metrics.
+- `/manage/system` (`systemHealthService`, ADMIN / OWNER): per-provider health derived from `IntegrationEvent` rows (`BLIZZARD`, `WARCRAFT_LOGS`, `DISCORD`, `RAIDER_IO`, `SYSTEM`, `BACKUP`), recent events, backup status, plus two manual actions (`adminSystemForceRefreshAllAction`, `adminSystemWclAutoAuditPassAction`). A restore verification is only shown when it was explicitly recorded, never inferred from a dump's existence.
 
 ## Technical decisions
 

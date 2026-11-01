@@ -9,7 +9,7 @@ import { scheduledCharacterSyncService } from "@/services/scheduled-character-sy
  * one sync cycle, then the process exits. External schedulers should tick
  * about every ~15 minutes; Characters become sync candidates only after the
  * ~120-minute stale threshold (BLIZZARD_SYNC_STALE_MINUTES). The app never
- * owns a timer. See docs/features/scheduled-character-sync.md.
+ * owns a timer. See docs/DEVELOPER.md#scheduled-character-sync.
  *
  * Usage:
  *   npm run sync:characters
