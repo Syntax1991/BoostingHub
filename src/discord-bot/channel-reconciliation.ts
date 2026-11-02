@@ -235,10 +235,35 @@ export type WeekSectionResult =
 export const WEEK_SECTION_POSITION_MAX_ATTEMPTS = 3; // initial attempt + up to 2 retries
 export const WEEK_SECTION_POSITION_RETRY_DELAY_MS = 250;
 
+/**
+ * Write-free sync passes skip REST `guild.channels.fetch()` by default and
+ * trust the gateway/cache planning snapshot. To still notice rare out-of-band
+ * Discord UI reorders that somehow missed the cache, an optional bounded
+ * fresh verify may run at most once per this interval when the caller shares
+ * `outOfBandState`. Default five minutes — far below Discord's
+ * `GET /guilds/:id/channels` budget at a 5s poll, while still self-healing
+ * manual drift without waiting for an unrelated write.
+ */
+export const WEEK_SECTION_OUT_OF_BAND_REFRESH_MS = 5 * 60_000;
+
+export type WeekSectionOutOfBandState = {
+  /** Epoch ms of the last write-free or post-write `listFresh` verify. */
+  lastFreshVerifyAt: number;
+};
+
 export type WeekSectionSettleOptions = {
   maxAttempts?: number;
   retryDelayMs?: number;
   sleep?: (ms: number) => Promise<void>;
+  /**
+   * Minimum gap between write-free REST fresh verifies. `0` disables
+   * out-of-band refresh entirely. Defaults to
+   * {@link WEEK_SECTION_OUT_OF_BAND_REFRESH_MS}. Ignored when
+   * `outOfBandState` is omitted (write-free passes never REST-verify).
+   */
+  outOfBandRefreshMs?: number;
+  now?: () => number;
+  outOfBandState?: WeekSectionOutOfBandState;
 };
 
 export type WeekSectionSettleResult =
@@ -518,6 +543,18 @@ export async function reconcileWeekSectionPositions(
  * `listForPlan` may include same-pass create overlays (cache-friendly).
  * `listFresh` must reflect Discord server state after a write (REST/force
  * fetch) — never validate success solely against the create-time cache view.
+ *
+ * Consistency model:
+ * - **Write path:** every `setPositions` is followed by `listFresh` verify;
+ *   mismatches retry with fresh planning (create→position lag).
+ * - **Write-free path:** when the planning lister already reports correct
+ *   relative order (`moved === 0`), skip `listFresh` so a 5s poll does not
+ *   burn Discord's `GET /guilds/:id/channels` budget. Gateway/cache updates
+ *   plus the next poll's planner still correct ordinary drift.
+ * - **Bounded out-of-band refresh (optional):** when the caller shares
+ *   `outOfBandState`, a write-free pass may still `listFresh` at most once
+ *   per `outOfBandRefreshMs` to catch rare cache misses from manual Discord
+ *   reorders. Without `outOfBandState`, write-free passes never REST-verify.
  */
 export async function reconcileWeekSectionPositionsUntilSettled(
   listForPlan: CategoryChannelLister,
@@ -530,6 +567,9 @@ export async function reconcileWeekSectionPositionsUntilSettled(
   const maxAttempts = options.maxAttempts ?? WEEK_SECTION_POSITION_MAX_ATTEMPTS;
   const retryDelayMs = options.retryDelayMs ?? WEEK_SECTION_POSITION_RETRY_DELAY_MS;
   const sleep = options.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+  const outOfBandRefreshMs = options.outOfBandRefreshMs ?? WEEK_SECTION_OUT_OF_BAND_REFRESH_MS;
+  const now = options.now ?? Date.now;
+  const outOfBandState = options.outOfBandState;
 
   let totalMoved = 0;
 
@@ -547,7 +587,23 @@ export async function reconcileWeekSectionPositionsUntilSettled(
       return { status: "skipped", reason: "DISCORD_RUN_CATEGORY_ID is unset", attempts: attempt };
     }
 
+    // Write-free: planning already saw correct relative order. Skip REST
+    // verify unless a bounded out-of-band refresh is due.
+    if (result.moved === 0) {
+      const dueForOutOfBand =
+        Boolean(outOfBandState) &&
+        outOfBandRefreshMs > 0 &&
+        now() - outOfBandState!.lastFreshVerifyAt >= outOfBandRefreshMs;
+      if (!dueForOutOfBand) {
+        return { status: "ok", moved: totalMoved, attempts: attempt, verified: true };
+      }
+      // Fall through: occasional write-free listFresh for out-of-band drift.
+    }
+
     const freshChildren = await listFresh(env.discordRunCategoryId);
+    if (outOfBandState) {
+      outOfBandState.lastFreshVerifyAt = now();
+    }
     if (!freshChildren) {
       console.warn(
         "[discord-bot] fresh category fetch failed after position reconciliation — cannot verify CURRENT/NEXT order",
@@ -571,7 +627,9 @@ export async function reconcileWeekSectionPositionsUntilSettled(
 
     if (attempt < maxAttempts) {
       console.warn(
-        `[discord-bot] CURRENT/NEXT order still wrong after setPositions (attempt ${attempt}/${maxAttempts}); retrying same-pass reconcile (Discord create→position consistency)`,
+        result.moved === 0
+          ? `[discord-bot] out-of-band fresh verify found CURRENT/NEXT drift (attempt ${attempt}/${maxAttempts}); reconciling from Discord state`
+          : `[discord-bot] CURRENT/NEXT order still wrong after setPositions (attempt ${attempt}/${maxAttempts}); retrying same-pass reconcile (Discord create→position consistency)`,
       );
       await sleep(retryDelayMs);
     }

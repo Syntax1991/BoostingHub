@@ -98,6 +98,7 @@ import {
   type PositionSetter,
   type ReconcilableChannel,
   type WeekSectionItem,
+  type WeekSectionOutOfBandState,
 } from "@/discord-bot/channel-reconciliation";
 import type { RosterEmbedData, RunStartEmbedData, SignupEmbedData } from "@/services/discord-sync.service";
 import {
@@ -145,6 +146,8 @@ type ResolvedRunChannel = {
 let syncContext: { client: Client; env: BotEnv; api: BotApiClient } | null = null;
 let syncInFlight: Promise<void> | null = null;
 let syncPending = false;
+/** Shared across sync passes so write-free REST verifies stay bounded. */
+const weekSectionOutOfBandState: WeekSectionOutOfBandState = { lastFreshVerifyAt: 0 };
 
 async function triggerSync(): Promise<void> {
   if (!syncContext) return;
@@ -703,6 +706,7 @@ async function syncOnceInner(
         discordRunNextMarkerChannelId: env.discordRunNextMarkerChannelId,
       },
       mergeWeekSectionItemsForOrdering(work.channels, newlyProvisionedSections),
+      { outOfBandState: weekSectionOutOfBandState },
     );
   }
 
