@@ -1,14 +1,8 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import {
-  DEFAULT_SCHEDULE_START,
-  FirstOccurrenceField,
-  ScheduleStartField,
-  scheduleStartPayload,
-  useAdoptionCandidates,
-  type ScheduleStartState,
-} from "@/components/manage/community-schedule-start-fields";
+import { FirstOccurrenceField, ScheduleStartField, useAdoptionCandidates } from "@/components/manage/community-schedule-start-fields";
+import { DEFAULT_SCHEDULE_START, scheduleStartPayload, type ScheduleStartState } from "@/lib/schedule-start";
 import { PingRolesField } from "@/components/manage/community-schedule-ping-field";
 import { COMMUNITY_SCHEDULE_RUN_MODES, COMMUNITY_WEEKDAYS, RAID_DIFFICULTIES, RUN_LOOT_TYPES } from "@/models/enums";
 import type { CommunityScheduleRunMode, RaidDifficulty, RunLootType } from "@/models/enums";

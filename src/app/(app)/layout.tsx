@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { requireUserOrRedirect } from "@/auth/session";
 import { AppShell } from "@/components/layout/app-shell";
-import { settingsRepository } from "@/repositories/settings.repository";
+import { settingsController } from "@/controllers/app.controller";
 import { notificationService } from "@/services/notification.service";
 
 export default async function AppLayout({
@@ -12,7 +12,7 @@ export default async function AppLayout({
   const user = await requireUserOrRedirect("/dashboard");
   const [notifications, timeZone] = await Promise.all([
     notificationService.getBellData(user),
-    settingsRepository.getTimeZone(user.id),
+    settingsController.getTimeZone(user.id),
   ]);
 
   return (

@@ -6,7 +6,7 @@ import {
   withRecurringOptIn,
 } from "@/lib/create-run-form-defaults";
 import { buildCreateSchedulePlanFromCreateRun } from "@/lib/create-run-recurring";
-import { DEFAULT_SCHEDULE_START } from "@/components/manage/community-schedule-start-fields";
+import { DEFAULT_SCHEDULE_START } from "@/lib/schedule-start";
 
 describe("Create Run opt-in defaults", () => {
   it("defaults recurring and Discord role ping to false (one-time quiet draft path)", () => {

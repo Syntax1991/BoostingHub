@@ -26,6 +26,10 @@ export type { NotificationDmPreferences, RegionalPreferences, GameplayPreference
  * Only the authenticated owner may read/update.
  */
 export const settingsService = {
+  getTimeZone(userId: string): Promise<string> {
+    return settingsRepository.getTimeZone(userId);
+  },
+
   async getSettings(user: AuthenticatedUser): Promise<SettingsDto> {
     const [settings, characters] = await Promise.all([
       settingsRepository.getSettings(user.id),

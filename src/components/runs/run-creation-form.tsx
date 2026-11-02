@@ -6,11 +6,8 @@ import { createManyRunsAction } from "@/controllers/run.actions";
 import { createCommunitySchedulePlanAction } from "@/controllers/community-schedule.actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/primitives";
-import {
-  DEFAULT_SCHEDULE_START,
-  ScheduleStartField,
-  type ScheduleStartState,
-} from "@/components/manage/community-schedule-start-fields";
+import { ScheduleStartField } from "@/components/manage/community-schedule-start-fields";
+import { DEFAULT_SCHEDULE_START, type ScheduleStartState } from "@/lib/schedule-start";
 import { Copy } from "lucide-react";
 import { fromDatetimeLocalValue, toDatetimeLocalValue } from "@/lib/datetime";
 import {

@@ -9,7 +9,7 @@ import { orm } from "@/lib/prisma";
 import { VENOMOUS_ABYSS_PRODUCT_ID } from "@/lib/product-catalog";
 import { seededProductSelection } from "@/lib/test-run-input";
 import { buildCreateSchedulePlanFromCreateRun } from "@/lib/create-run-recurring";
-import { DEFAULT_SCHEDULE_START } from "@/components/manage/community-schedule-start-fields";
+import { DEFAULT_SCHEDULE_START } from "@/lib/schedule-start";
 import { communityScheduleService } from "@/services/community-schedule.service";
 import { runService } from "@/services/run.service";
 import { freezeSystemTime, restoreSystemTime, SCHEDULE_TEST_CLOCK } from "@/test/time";

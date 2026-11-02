@@ -5,7 +5,7 @@ import {
   defaultRecurringSetupName,
   type CreateRunRecurringFormState,
 } from "@/lib/create-run-recurring";
-import { DEFAULT_SCHEDULE_START } from "@/components/manage/community-schedule-start-fields";
+import { DEFAULT_SCHEDULE_START } from "@/lib/schedule-start";
 
 function baseState(overrides: Partial<CreateRunRecurringFormState> = {}): CreateRunRecurringFormState {
   return {

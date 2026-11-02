@@ -154,6 +154,10 @@ export const notificationController = {
 };
 
 export const settingsController = {
+  getTimeZone(userId: string) {
+    return settingsService.getTimeZone(userId);
+  },
+
   async getSettingsPage() {
     const user = await requireUserOrRedirect("/settings");
     const [settings, sessions] = await Promise.all([

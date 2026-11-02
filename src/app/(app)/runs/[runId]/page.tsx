@@ -1,11 +1,10 @@
-import { runController } from "@/controllers/app.controller";
+import { runController, settingsController } from "@/controllers/app.controller";
 import { RunDetailView } from "@/components/runs/run-detail-view";
 import { PageHeader } from "@/components/ui/primitives";
 import { isDomainError } from "@/lib/errors";
 import { parseRunDetailTab } from "@/lib/run-routes";
 import type { runDetailService } from "@/services/run-detail.service";
 import { requireUser } from "@/auth/session";
-import { settingsRepository } from "@/repositories/settings.repository";
 
 export default async function RunDetailPage({
   params,
@@ -32,6 +31,6 @@ export default async function RunDetailPage({
     throw error;
   }
 
-  const timeZone = await settingsRepository.getTimeZone((await requireUser()).id);
+  const timeZone = await settingsController.getTimeZone((await requireUser()).id);
   return <RunDetailView data={data} initialTab={initialTab} timeZone={timeZone} />;
 }

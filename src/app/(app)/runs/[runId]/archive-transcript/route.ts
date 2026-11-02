@@ -1,9 +1,8 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { canManageRun } from "@/auth/authorization";
 import { requireUser } from "@/auth/session";
 import { isDomainError } from "@/lib/errors";
-import { runRepository } from "@/repositories/run.repository";
+import { runDetailService } from "@/services/run-detail.service";
 import { discordSyncService } from "@/services/discord-sync.service";
 
 /**
@@ -16,8 +15,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   try {
     const user = await requireUser();
     const { runId } = await params;
-    const run = await runRepository.findById(runId);
-    if (!run || !canManageRun(user, run)) {
+    if (!(await runDetailService.canManageRunById(user, runId))) {
       return NextResponse.json({ ok: false, code: "NOT_FOUND", message: "Run was not found." }, { status: 404 });
     }
 
