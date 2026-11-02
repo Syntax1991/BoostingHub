@@ -482,15 +482,15 @@ Backups are stored on the production host only. An off-site copy is not document
 - Development switches (`DEV_AUTH_ENABLED`, `DEV_ACCOUNT_BOOTSTRAP_ENABLED`) stay `false`.
 - **`npm run db:seed` deletes existing data** and replaces it with test fixtures. Never run it on the server. It refuses `NODE_ENV=production`, the production database, non-local hosts, extra connection parameters and any database not named in `SEED_CONFIRM_DATABASE`. To recover data, use the restore procedure, never the seed.
 - Next.js sends these headers on every path (`next.config.ts`): `Strict-Transport-Security` (15552000 s), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` (camera/microphone/geolocation disabled). `poweredByHeader` is false.
-- Next.js already suppresses `X-Powered-By: Next.js`. The Apache/Plesk reverse proxy may still emit `X-Powered-By: PleskLin`. Unset that header in the hosting panel (or `Header unset X-Powered-By`) — it is server config, not an application deploy.
-- Content-Security-Policy: see [Content Security Policy](#content-security-policy). Do not enable an **enforcing** CSP from the hosting panel without matching the app inventory.
+- Next.js suppresses `X-Powered-By: Next.js` (`poweredByHeader: false`). On 2026-11-02 production also stopped emitting Apache `X-Powered-By: PleskLin` for `manawyrm-boosting.com` by adding `Header unset X-Powered-By` to the persistent Plesk additional directives files `/var/www/vhosts/system/manawyrm-boosting.com/conf/vhost.conf` and `vhost_ssl.conf` (do **not** edit generated `plesk.conf.d/server.conf`). Other vhosts are unchanged. Backups of the pre-change files live beside those confs as `*.bak-pre-xpb-*`.
+- Content-Security-Policy: production sends **Report-Only** only (`Content-Security-Policy-Report-Only` from `next.config.ts`). No enforcing `Content-Security-Policy` header. See [Content Security Policy](#content-security-policy). Do not enable an **enforcing** CSP from the hosting panel without matching the app inventory.
 - After a Discord-bot deploy, confirm rate-limit waits with
   `journalctl -u boostinghub-discord-bot --since "1 hour ago" | grep 'rate limited'`.
   The bot logs each Discord REST rate-limit wait; absence of lines does not prove the sync is fast, only that no wait was observed in that window.
 
 ## Content Security Policy
 
-Status on the audit branch: **Report-Only preparation** in `next.config.ts` (not enforcing). Inventory and rollout notes: [docs/audit/CSP-PREPARATION.md](audit/CSP-PREPARATION.md). Owner decision required before flipping to enforce or changing production headers outside the app.
+Status in production (`5802735`): **Report-Only** via `next.config.ts` (not enforcing). Inventory and rollout notes: [docs/audit/CSP-PREPARATION.md](audit/CSP-PREPARATION.md). Public landing observation on 2026-11-02 loaded self-hosted scripts/styles/fonts/images under the Report-Only policy; authenticated Discord/Battle.net/character/run flows were not exercised in that pass. Owner decision required before flipping to enforce or changing production headers outside the app.
 
 ## Operational non-goals
 

@@ -333,7 +333,8 @@ systemctl restart boostinghub-web.service boostinghub-discord-bot.service
 - [ ] Web + Discord bot co-deployed (A19 removed the empty `raidInvites` sync field; mismatched versions disagree on the sync payload)
 - [ ] Optional diagnostics: `journalctl -u boostinghub-discord-bot --since "1 hour ago" | grep 'rate limited'`
       (records Discord REST waits; used to confirm or dismiss the 15–25 s sync-stall hypothesis)
-- [ ] Optional host hardening: Apache/Plesk no longer sends `X-Powered-By: PleskLin`
+- [ ] Host hardening (done 2026-11-02 for `manawyrm-boosting.com`): response has no `X-Powered-By: PleskLin`
+      (domain `vhost.conf` / `vhost_ssl.conf` use `Header unset X-Powered-By`; see [OPERATIONS.md](OPERATIONS.md#security-checklist))
 
 ## Failed deployments
 

@@ -23,8 +23,8 @@ This repository is public, so concrete server details, access data and secret va
 - Since 2026-11-01 the project is in a **final feature freeze**, because the owner is stepping away from World of Warcraft. The goal is a stable handover. No new features are planned.
 - Stack: Next.js, React, TypeScript, PostgreSQL, Prisma 8 (release candidate), Better Auth, discord.js. Details: [DEVELOPER.md](DEVELOPER.md).
 - The app runs on one Linux server with a web process, one Discord bot process and four systemd timers. See [OPERATIONS.md](OPERATIONS.md).
-- Last recorded production release: `418fd7b` (security dependency update, PR #318), deployed 2026-11-01. The owner's production smoke test passed, including a real Discord login and session survival. `main` is ahead of production only by documentation, comments, guide text, four bot messages, test changes and removed one-off scripts; they reach the server with the next normal release.
-- Master audit branch `test/audit-batch-a`: **ACCEPTED WITH DOCUMENTED RISKS**. Canonical docs remain the six files in [README.md](../README.md#documentation). Audit freeze / release checklist: [docs/audit/FINAL-ENGINEERING-HANDOVER.md](audit/FINAL-ENGINEERING-HANDOVER.md#11-release-readiness-checklist-ownerops). A16 closed; `hardcoding-findings.md` **declined**. CSP is **Report-Only** (not enforcing). Remaining release ops: CSP observation → enforce decision, Apache `X-Powered-By`, post-deploy rate-limit journal.
+- Last recorded production release: `5802735` (audit batch A / CSP Report-Only), deployed 2026-11-02 via `deploy/update-server.sh` (previous production `da5df27`). Web + Discord bot co-restarted; migrations applied: none. Rollback SHA remains `da5df27` until the next successful release.
+- Master audit branch `test/audit-batch-a`: **ACCEPTED WITH DOCUMENTED RISKS**, merged fast-forward into `main` at `5802735`. Canonical docs remain the six files in [README.md](../README.md#documentation). A16 closed; `hardcoding-findings.md` **declined**. CSP is **Report-Only** in production (not enforcing). Apache `X-Powered-By: PleskLin` removed for `manawyrm-boosting.com` via domain `vhost*.conf` (`Header unset X-Powered-By`). Remaining owner decision: whether/when to enforce CSP after further authenticated Report-Only observation.
 
 ## Production and disabled features
 
@@ -80,6 +80,7 @@ None. The last one, #297, was merged on 2026-11-01.
 | Enabling boss exceptions | Open; not needed for the freeze |
 | Off-site backups | Open |
 | Scope of the Discord bot's permissions | To be reduced when a new community or operator takes over |
+| Flip CSP from Report-Only to enforcing | Open; needs authenticated-flow Report-Only observation first. Do not enforce from the hosting panel |
 
 ## Open follow-up ideas
 
