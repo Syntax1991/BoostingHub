@@ -1,8 +1,6 @@
-import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   SCHEDULE_EMPTY_DESCRIPTION,
-  SCHEDULE_MESSAGE_FORMAT_VERSION,
   buildScheduleDescription,
   buildScheduleEmbed,
   buildScheduleSignature,
@@ -164,13 +162,6 @@ describe("discord-schedule — embed / signature (U–Z)", () => {
     expect(buildScheduleDescription([])).toBe(SCHEDULE_EMPTY_DESCRIPTION);
   });
 
-  it("V: unchanged signature is stable", () => {
-    const runs = [run({ runId: "a", scheduledStartAt: CURRENT_AT, status: "OPEN" })];
-    expect(buildScheduleSignature({ bucket: "CURRENT", runs })).toBe(
-      buildScheduleSignature({ bucket: "CURRENT", runs: [...runs] }),
-    );
-  });
-
   it("W: changed fields change the signature", () => {
     const a = buildScheduleSignature({
       bucket: "CURRENT",
@@ -186,28 +177,6 @@ describe("discord-schedule — embed / signature (U–Z)", () => {
   it("Y: CURRENT and NEXT titles differ; one embed each", () => {
     expect(scheduleTitle("CURRENT")).toBe("📅 Current Raid ID — Schedule");
     expect(scheduleTitle("NEXT")).toBe("📅 Next Raid ID — Schedule");
-    expect(SCHEDULE_MESSAGE_FORMAT_VERSION).toBe("v1");
-  });
-
-  it("Z: format-version bump changes the signature once", () => {
-    const runs = [run({ runId: "a", scheduledStartAt: CURRENT_AT, status: "OPEN", runChannelId: "c1" })];
-    const current = buildScheduleSignature({ bucket: "CURRENT", runs });
-    const bumpedPayload = {
-      v: "v2",
-      bucket: "CURRENT",
-      runs: runs.map((r) => ({
-        runId: r.runId,
-        scheduledStartAt: r.scheduledStartAt,
-        status: r.status,
-        difficulty: r.difficulty,
-        lootType: r.lootType,
-        titleCoverage: r.titleCoverage,
-        raidLeadDisplay: r.raidLeadDisplay,
-        runChannelId: r.runChannelId,
-      })),
-    };
-    const bumped = createHash("sha256").update(JSON.stringify(bumpedPayload)).digest("hex").slice(0, 32);
-    expect(current).not.toBe(bumped);
   });
 
   it("realistic weekly volume stays under Discord embed description limit", () => {

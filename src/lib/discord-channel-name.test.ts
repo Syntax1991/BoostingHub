@@ -96,13 +96,6 @@ describe("buildDiscordRunChannelName", () => {
     ).toMatch(/^[a-z]{3}-2015-hc-com-8of8-ivo$/);
   });
 
-  it("never concatenates difficulty and lootType into one segment", () => {
-    const name = buildDiscordRunChannelName({ ...BASE, difficulty: "MYTHIC", lootType: "UNSAVED" });
-    expect(name).not.toContain("mythicunsaved");
-    expect(name).not.toContain("myunsaved");
-    expect(name).not.toContain("my-saved");
-  });
-
   it("uses the provided coverage token verbatim (content-native)", () => {
     expect(buildDiscordRunChannelName({ ...BASE, coverage: "8of8" })).toContain("-8of8-");
     expect(buildDiscordRunChannelName({ ...BASE, coverage: "1of8" })).toContain("-1of8-");
@@ -124,10 +117,6 @@ describe("buildDiscordRunChannelName", () => {
     );
   });
 
-  it("is deterministic for the same input", () => {
-    expect(buildDiscordRunChannelName(BASE)).toBe(buildDiscordRunChannelName(BASE));
-  });
-
   it("formats midnight and single-digit minutes with zero-padding", () => {
     expect(
       buildDiscordRunChannelName({
@@ -143,33 +132,6 @@ describe("buildDiscordRunChannelName", () => {
     const name = buildDiscordRunChannelName({ ...BASE, raidLeadChannelName: "A".repeat(200) });
     expect(name.length).toBeLessThanOrEqual(100);
     expect(name.endsWith("-")).toBe(false);
-  });
-
-  it("encodes Season 2 Bundle coverage as Nof9 without s2b prefix", () => {
-    expect(
-      buildDiscordRunChannelName({
-        ...BASE,
-        coverage: "9of9",
-      }),
-    ).toBe("sat-2200-hc-vip-9of9-alpha");
-    expect(
-      buildDiscordRunChannelName({
-        ...BASE,
-        coverage: "7of9",
-      }),
-    ).toContain("7of9");
-    expect(
-      buildDiscordRunChannelName({
-        ...BASE,
-        coverage: "9of9",
-      }),
-    ).not.toContain("s2b");
-  });
-
-  it("the Raid Lead segment is the Raid Lead's (Discord-resolved) User.name, slugged", () => {
-    expect(buildDiscordRunChannelName({ ...BASE, coverage: "9of9", raidLeadChannelName: "Gamma" })).toBe(
-      "sat-2200-hc-vip-9of9-gamma",
-    );
   });
 
   it("temporary Run voice channel: `Raid with <Raid Lead name>`, human-readable, not slugged", () => {

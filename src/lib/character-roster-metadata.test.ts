@@ -1,16 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { countRolesByBucket } from "@/lib/roster-role-buckets";
 import {
   additionalPlayableSpecLabels,
   formatCharacterPageSpecLine,
   formatCharacterRosterMetadata,
   type CharacterRosterMetadataInput,
 } from "@/lib/character-roster-metadata";
-import {
-  resolveEffectivePersistedSelectedRole,
-  resolveSignupAssignableRoles,
-  rosterRoleSectionsForSignup,
-} from "@/lib/signup-assignable-roles";
 
 const restoShaman: CharacterRosterMetadataInput = {
   itemLevel: 325,
@@ -92,84 +86,6 @@ describe("character roster metadata (offspec display)", () => {
     ).toBe("320 ilvl · Devastation · Offspecs: Preservation, Augmentation");
   });
 
-  it("6. displaying Enhancement does not add MELEE_DPS to modern offered roles", () => {
-    const signup = {
-      offeredRoles: ["HEALER", "RANGED_DPS"] as const,
-      characterClass: "SHAMAN" as const,
-      primarySpecialization: "Restoration",
-      playableSpecs: ["Elemental", "Enhancement"],
-    };
-    const text = formatCharacterRosterMetadata({
-      ...restoShaman,
-      itemLevel: 327,
-      playableSpecs: signup.playableSpecs,
-    });
-    expect(text).toBe("327 ilvl · Restoration · Offspecs: Elemental, Enhancement");
-    expect(resolveSignupAssignableRoles(signup)).toEqual(["HEALER", "RANGED_DPS"]);
-    expect(resolveSignupAssignableRoles(signup)).not.toContain("MELEE_DPS");
-  });
-
-  it("7. rendering Enhancement does not change an existing RANGED_DPS selection", () => {
-    const signup = {
-      offeredRoles: ["HEALER", "RANGED_DPS"] as const,
-      characterClass: "SHAMAN" as const,
-      primarySpecialization: "Restoration",
-      playableSpecs: ["Elemental", "Enhancement"],
-    };
-    expect(
-      resolveEffectivePersistedSelectedRole({ storedSelectedRole: "RANGED_DPS", signup }),
-    ).toBe("RANGED_DPS");
-    expect(formatCharacterRosterMetadata({ ...restoShaman, playableSpecs: signup.playableSpecs })).toContain(
-      "Enhancement",
-    );
-  });
-
-  it("8. historic DPS resolution, bucket, and composition stay independent of the label", () => {
-    const signup = {
-      offeredRoles: ["HEALER", "DPS"] as const,
-      characterClass: "SHAMAN" as const,
-      primarySpecialization: "Restoration",
-      playableSpecs: ["Elemental"],
-    };
-    const before = resolveEffectivePersistedSelectedRole({ storedSelectedRole: "DPS", signup });
-    const sections = rosterRoleSectionsForSignup(signup);
-    const text = formatCharacterRosterMetadata({
-      ...restoShaman,
-      playableSpecs: ["Elemental"],
-    });
-    const after = resolveEffectivePersistedSelectedRole({ storedSelectedRole: "DPS", signup });
-    expect(before).toBe("RANGED_DPS");
-    expect(after).toBe("RANGED_DPS");
-    expect(sections.assignableRoles).toEqual(["HEALER", "RANGED_DPS"]);
-    expect(sections.sections).toEqual(["HEALER", "RANGED_DPS"]);
-    expect(text).toBe("325 ilvl · Restoration · Offspec: Elemental");
-    expect(countRolesByBucket([before])).toEqual({
-      tanks: 0,
-      healers: 0,
-      meleeDps: 0,
-      rangedDps: 1,
-      legacyDps: 0,
-      dps: 1,
-    });
-  });
-
-  it("9. the same character metadata is used for every projected section", () => {
-    const signup = {
-      offeredRoles: ["HEALER", "RANGED_DPS"] as const,
-      characterClass: "SHAMAN" as const,
-      primarySpecialization: "Restoration",
-      playableSpecs: ["Elemental", "Enhancement"],
-    };
-    const metadata = formatCharacterRosterMetadata({
-      ...restoShaman,
-      playableSpecs: signup.playableSpecs,
-    });
-    const { sections } = rosterRoleSectionsForSignup(signup);
-    expect(sections).toEqual(["HEALER", "RANGED_DPS"]);
-    expect(sections.map(() => metadata)).toEqual([metadata, metadata]);
-    expect(metadata).toBe("325 ilvl · Restoration · Offspecs: Elemental, Enhancement");
-  });
-
   it("character page spec line uses the same offspec order and wording as roster cards", () => {
     const testdraco = {
       itemLevel: 321,
@@ -202,22 +118,4 @@ describe("character roster metadata (offspec display)", () => {
     expect(formatCharacterPageSpecLine({ specialization: null })).toBe("No spec");
   });
 
-  it("character page spec text does not change offered roles or a stored selection", () => {
-    const signup = {
-      offeredRoles: ["HEALER", "RANGED_DPS"] as const,
-      characterClass: "SHAMAN" as const,
-      primarySpecialization: "Restoration",
-      playableSpecs: ["Elemental", "Enhancement"],
-    };
-    const text = formatCharacterPageSpecLine({
-      specialization: "Restoration",
-      wowClass: "SHAMAN",
-      playableSpecs: signup.playableSpecs,
-    });
-    expect(text).toBe("Restoration · Offspecs: Elemental, Enhancement");
-    expect(resolveSignupAssignableRoles(signup)).toEqual(["HEALER", "RANGED_DPS"]);
-    expect(resolveEffectivePersistedSelectedRole({ storedSelectedRole: "RANGED_DPS", signup })).toBe("RANGED_DPS");
-    expect(signup.offeredRoles).toEqual(["HEALER", "RANGED_DPS"]);
-    expect(signup.playableSpecs).toEqual(["Elemental", "Enhancement"]);
-  });
 });

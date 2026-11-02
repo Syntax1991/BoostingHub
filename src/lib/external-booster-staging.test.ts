@@ -14,7 +14,6 @@ import {
   type StagedExternalBooster,
 } from "@/lib/external-booster-staging";
 import type { ExternalBooster } from "@/lib/external-booster";
-import { externalBoosterInputError } from "@/lib/external-booster";
 
 vi.mock("@/controllers/roster.actions", () => ({
   saveExternalBoostersAction: vi.fn(),
@@ -58,10 +57,6 @@ describe("external booster staging helpers", () => {
   it("D. class change with invalid role picks concrete DPS subtype (never generic DPS)", () => {
     expect(roleAfterClassChange("BOOSTER", "HEALER", "MAGE")).toBe("RANGED_DPS");
     expect(preferredRoleForClass("MAGE", "HEALER")).toBe("RANGED_DPS");
-  });
-
-  it("initial Mage default is unambiguous Ranged DPS (matches dialog useState)", () => {
-    expect(preferredRoleForClass("MAGE")).toBe("RANGED_DPS");
   });
 
   it("pure DPS classes get an unambiguous concrete subtype", () => {
@@ -154,24 +149,7 @@ describe("external booster staging helpers", () => {
     expect(next).toEqual(staged);
   });
 
-  it("H. Cancel is a no-op on staged data (draft discarded by the dialog)", () => {
-    const staged = stagedFromOriginal();
-    expect(staged).toEqual(stagedFromOriginal());
-  });
-
-  it("I/J. editing preserves order and key", () => {
-    const { next } = applyStagedExternalBoosterEdit(stagedFromOriginal(), "id-b", {
-      name: "BravoTwo",
-      wowClass: "WARLOCK",
-      participationType: "BOOSTER",
-      role: "RANGED_DPS",
-    });
-    expect(next.map((row) => row.key)).toEqual(["id-a", "id-b", "id-c"]);
-    expect(next[1]!.name).toBe("BravoTwo");
-    expect(next[1]!.key).toBe("id-b");
-  });
-
-  it("K. single-edit session is enforced by dialog state (helpers keep one-key apply)", () => {
+  it("K. sequential edits each change only their own row", () => {
     const staged = stagedFromOriginal();
     const first = applyStagedExternalBoosterEdit(staged, "id-a", {
       name: "Alpha2",
@@ -185,7 +163,6 @@ describe("external booster staging helpers", () => {
       participationType: "BOOSTER",
       role: "RANGED_DPS",
     });
-    // Helpers allow sequential applies; the dialog prevents concurrent edit UI.
     expect(second.next.map((row) => row.name)).toEqual(["Alpha2", "Bravo2", "Charlie"]);
   });
 
@@ -243,36 +220,6 @@ describe("external booster staging helpers", () => {
       { name: "Bravo", wowClass: "MAGE", participationType: "BOOSTER", role: "RANGED_DPS" },
       { name: "Charlie", wowClass: "ROGUE", participationType: "LOOTBUDDY", role: null },
     ]);
-  });
-
-  it("Q. server-side validation still rejects invalid class/role pair", () => {
-    expect(
-      externalBoosterInputError({
-        name: "dawn",
-        wowClass: "MAGE",
-        participationType: "BOOSTER",
-        role: "HEALER",
-      }),
-    ).toMatch(/cannot play/);
-  });
-
-  it("R. server-side validation rejects legacy generic DPS even if a stale client submits it", () => {
-    expect(
-      externalBoosterInputError({
-        name: "dawn",
-        wowClass: "MAGE",
-        participationType: "BOOSTER",
-        role: "DPS",
-      }),
-    ).toMatch(/generic DPS|Melee DPS|Ranged DPS/i);
-    expect(
-      externalBoosterInputError({
-        name: "dawn",
-        wowClass: "ROGUE",
-        participationType: "BOOSTER",
-        role: "DPS",
-      }),
-    ).not.toBeNull();
   });
 
   it("S. submitted pure-DPS staging rows use concrete subtypes", () => {

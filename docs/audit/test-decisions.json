@@ -302,7 +302,7 @@
     ],
     "src/lib/wcl-performance-display.test.ts": [
       "KEEP",
-      "Moved from src/components/manage/roster-wcl-performance.test.ts because it tests lib/wcl-performance-display. Dropped one assertion that repeated the one before it"
+      "Read in full; pure logic checked against exact expected values"
     ],
     "src/components/runs/signup-dialog.wcl.test.ts": [
       "KEEP",
@@ -498,7 +498,351 @@
     ],
     "src/lib/discord-embed-field-chunking.test.ts": [
       "KEEP",
-      "Chunking rules; gained the ordering test from signup-embed.test.ts"
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/after-response.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/app-url.test.ts": [
+      "KEEP",
+      "Absolute Run URLs; also checks runDetailPath"
+    ],
+    "src/lib/attendance-view.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/blizzard/battle-net-flash.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/blizzard/blizzard-integration-events.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/blizzard/character-domain.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/blizzard/import-selection.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/blizzard/oauth-state.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/blizzard/playable-class.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/blizzard/raid-difficulty.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/blizzard/raid-lockout-derivation.test.ts": [
+      "KEEP",
+      "Current-reset lockout derivation. Four tests repeated raid-difficulty, raid-catalog or neighbouring tests"
+    ],
+    "src/lib/blizzard/sync-backoff.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/blizzard/sync-error.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/blizzard/sync-health.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/blizzard/sync-state.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/character-availability.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/character-capabilities.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/character-identity.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/character-item-level.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/character-lockout-raids.test.ts": [
+      "KEEP",
+      "Lockout slot projection and the no-hardcoded-names source check. Three tests only checked catalog data through a test-local helper or repeated test 1"
+    ],
+    "src/lib/character-reservation-lock.test.ts": [
+      "KEEP",
+      "Lock order and dedupe; the namespace constant is checked because changing it would collide with other advisory locks"
+    ],
+    "src/lib/character-roster-metadata.test.ts": [
+      "KEEP",
+      "Offspec labels. Five tests claimed a label cannot change role resolution, which pure functions cannot do; the role cases are in signup-assignable-roles.test.ts"
+    ],
+    "src/lib/community-schedule-form.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/community-schedule-share.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/community-schedule-start.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/community-schedule.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/consumable-audit-display.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/consumable-catalog.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/create-run-form-defaults.test.ts": [
+      "KEEP",
+      "Opt-in defaults. One test repeated the recurring payload test"
+    ],
+    "src/lib/create-run-recurring.test.ts": [
+      "KEEP",
+      "Schedule payload from Create Run. One test checked a value the test itself passed in; one built an object it never passed to the code. The setup-name test now checks exact output"
+    ],
+    "src/lib/datetime-timezone.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/dev-db-schema-check.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/discord-channel-name.test.ts": [
+      "KEEP",
+      "Channel names. Four tests repeated others or could not fail"
+    ],
+    "src/lib/discord-display-name.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/discord-links.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/discord-run-title-link.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/discord-schedule.test.ts": [
+      "KEEP",
+      "Schedule buckets and signature. Removed a hash of a hand-built payload and a pure-function-with-itself check; dropped a constant echo"
+    ],
+    "src/lib/discord/discord-integration-events.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/domain.test.ts": [
+      "KEEP",
+      "Grab-bag of auth, run state, datetime and lockout checks; kept, but misnamed (see naming table)"
+    ],
+    "src/lib/external-booster-staging.test.ts": [
+      "KEEP",
+      "Staging helpers and dialog markup. Removed a self-comparison, a duplicate, two copies of external-booster.test.ts and a duplicate key-order test; one misleading title fixed"
+    ],
+    "src/lib/external-booster.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/integration-provider-events.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/integration-telemetry.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/lockout-bosses.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/lockout-display.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/map-with-concurrency.test.ts": [
+      "KEEP",
+      "Ordering and concurrency ceiling. A constant-echo test and a redundant bound were removed"
+    ],
+    "src/lib/my-runs-groups.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/personal-defensive-catalog.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/product-key.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/product-selection.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/quiet-hours.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/raid-catalog.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/raid-id-filter.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/raid-lockout-label.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/raiderio-character-url.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/roster-boss-plan-outputs.test.ts": [
+      "KEEP",
+      "Boss plan renderers. The selected-DM test now checks the plan line its title promises"
+    ],
+    "src/lib/roster-boss-plan.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/roster-candidate-counts.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/roster-diff.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/roster-replacement.test.ts": [
+      "KEEP",
+      "Replacement ranking. A single-candidate test proved nothing beyond the first test"
+    ],
+    "src/lib/roster-role-buckets.test.ts": [
+      "KEEP",
+      "Bucket mapping. One test repeated the first with the same calls; a literal-array check and two redundant negatives were removed"
+    ],
+    "src/lib/run-action-feedback.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/run-content-consumers.test.ts": [
+      "KEEP",
+      "Bundle lockout and labels across consumers. One test repeated lockout-display CASE 3; a mojibake separator fixed"
+    ],
+    "src/lib/run-content-lockouts.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/run-domain-event.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/run-routes.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/run-row-duplicate.test.ts": [
+      "KEEP",
+      "Real-hour duplication across DST. The last test repeated create-run-form-defaults constants; retitled to what it checks"
+    ],
+    "src/lib/run-scope-change.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/run-selection-label.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/run-staffing.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/run-start-message.test.ts": [
+      "KEEP",
+      "Final Setup text, escaping and length. Two tests checked the fixed footer for names that never occur"
+    ],
+    "src/lib/run-title.test.ts": [
+      "KEEP",
+      "Run titles. A pure function compared with itself was removed"
+    ],
+    "src/lib/signup-assignable-roles.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/signup-offered-specs.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/signup-tile-invariants.test.ts": [
+      "KEEP",
+      "Role filter and tile specs. Four tests repeated signup-offered-specs, wcl-spec-performance and warcraft-logs tests"
+    ],
+    "src/lib/signup-tile-tone.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/system-health.test.ts": [
+      "KEEP",
+      "Provider health roll-up. One assertion only read back the test input"
+    ],
+    "src/lib/user-character-roles.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/warcraft-logs.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/warcraft-logs/bulk-discovery-message.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/wcl-spec-performance.test.ts": [
+      "KEEP",
+      "Best Perf. Avg rules. One test repeated the first"
+    ],
+    "src/lib/weekly-availability-display.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/wow-class-icons.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/wow-run-week.test.ts": [
+      "KEEP",
+      "Week buckets and DST. Three duplicates removed, and two tests that did arithmetic on their own constants instead of calling the code"
+    ],
+    "src/lib/wow-specializations.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/lib/wow-weekly-reset.test.ts": [
+      "KEEP",
+      "Read in full; pure logic checked against exact expected values"
     ]
   },
   "tests": {
@@ -597,6 +941,26 @@
     "src/discord-bot/sync-start-post.test.ts::syncOnce — Final Setup explicit allowedMentions > send: only unique, non-null selected roster Discord ids may be mentioned; no @everyone/@here/role parsing": [
       "REWRITE",
       "Removed checks for names that are not in the data"
+    ],
+    "src/lib/external-booster-staging.test.ts::external booster staging helpers > K. sequential edits each change only their own row": [
+      "REWRITE",
+      "Retitled: the old title claimed dialog enforcement the test never checks"
+    ],
+    "src/lib/run-row-duplicate.test.ts::duplicateRunRow > a copy carries only its own row fields, never form-wide opt-ins": [
+      "REWRITE",
+      "Dropped repeated constant checks; retitled"
+    ],
+    "src/lib/system-health.test.ts::deriveProviderHealth — SYSTEM domain neutrality > production case: newest cooldown ERROR + older SUCCESS => HEALTHY": [
+      "REWRITE",
+      "Dropped an assertion that read back the input"
+    ],
+    "src/lib/create-run-recurring.test.ts::defaultRecurringSetupName > builds a short Run Setup label from product + difficulty + loot": [
+      "REWRITE",
+      "toContain became exact output, plus the blank-name fallback"
+    ],
+    "src/lib/roster-boss-plan-outputs.test.ts::roster DMs > a newly selected player with a plan sees it in the selected DM": [
+      "REWRITE",
+      "Now checks the plan line"
     ]
   },
   "removed": {
@@ -707,6 +1071,178 @@
     "src/discord-bot/embeds/signup-roster-split.test.ts::Discord Signup vs Roster embeds > E: Signup and Roster are independently titled messages": [
       "MERGE",
       "Same title checks as the first test"
+    ],
+    "src/lib/map-with-concurrency.test.ts::mapWithConcurrency > Raider.IO lookup concurrency constant is 3": [
+      "REMOVE",
+      "Repeats a constant"
+    ],
+    "src/lib/wow-run-week.test.ts::classifyRunWeek — exact NEXT start and rollover to CURRENT > before rollover: a Run at next Wednesday 06:00 is NEXT": [
+      "MERGE",
+      "Same input as the exact NEXT boundary test"
+    ],
+    "src/lib/wow-run-week.test.ts::classifyRunWeek — following start is FUTURE until its own rollover > a Run at the following Wednesday 06:00 is FUTURE relative to the original now": [
+      "MERGE",
+      "Same input as the exact FUTURE boundary test"
+    ],
+    "src/lib/wow-run-week.test.ts::classifyRunWeek — winter (CET, UTC+1) > reset local time remains 06:00 in CET": [
+      "MERGE",
+      "Covered by the boundary instants test"
+    ],
+    "src/lib/wow-run-week.test.ts::classifyRunWeek — spring DST transition (2026-03-29, CET -> CEST) > is NOT exactly 168 UTC hours from currentStart to nextStart across the spring transition (would be a naive +7-day bug)": [
+      "REMOVE",
+      "Arithmetic on test constants; the code is checked by the neighbouring boundary test"
+    ],
+    "src/lib/wow-run-week.test.ts::classifyRunWeek — autumn DST transition (2026-10-25, CEST -> CET) > is NOT exactly 168 UTC hours from currentStart to nextStart across the autumn transition (would be a naive +7-day bug)": [
+      "REMOVE",
+      "Arithmetic on test constants; the code is checked by the neighbouring boundary test"
+    ],
+    "src/lib/discord-schedule.test.ts::discord-schedule — embed / signature (U–Z) > V: unchanged signature is stable": [
+      "REMOVE",
+      "Pure function compared with itself"
+    ],
+    "src/lib/discord-schedule.test.ts::discord-schedule — embed / signature (U–Z) > Z: format-version bump changes the signature once": [
+      "REMOVE",
+      "Hashes a hand-built payload; never calls the code with another version"
+    ],
+    "src/lib/discord-channel-name.test.ts::buildDiscordRunChannelName > never concatenates difficulty and lootType into one segment": [
+      "MERGE",
+      "Exact-format tests cover the separator"
+    ],
+    "src/lib/discord-channel-name.test.ts::buildDiscordRunChannelName > is deterministic for the same input": [
+      "REMOVE",
+      "Pure function compared with itself"
+    ],
+    "src/lib/discord-channel-name.test.ts::buildDiscordRunChannelName > encodes Season 2 Bundle coverage as Nof9 without s2b prefix": [
+      "MERGE",
+      "Same as the verbatim coverage test"
+    ],
+    "src/lib/discord-channel-name.test.ts::buildDiscordRunChannelName > the Raid Lead segment is the Raid Lead's (Discord-resolved) User.name, slugged": [
+      "MERGE",
+      "Covered by the name normalisation test"
+    ],
+    "src/lib/external-booster-staging.test.ts::external booster staging helpers > initial Mage default is unambiguous Ranged DPS (matches dialog useState)": [
+      "MERGE",
+      "Same as the pure DPS classes test"
+    ],
+    "src/lib/external-booster-staging.test.ts::external booster staging helpers > H. Cancel is a no-op on staged data (draft discarded by the dialog)": [
+      "REMOVE",
+      "Compares a helper result with itself"
+    ],
+    "src/lib/external-booster-staging.test.ts::external booster staging helpers > I/J. editing preserves order and key": [
+      "MERGE",
+      "Same checks as test B"
+    ],
+    "src/lib/external-booster-staging.test.ts::external booster staging helpers > Q. server-side validation still rejects invalid class/role pair": [
+      "MERGE",
+      "Copy of external-booster.test.ts"
+    ],
+    "src/lib/external-booster-staging.test.ts::external booster staging helpers > R. server-side validation rejects legacy generic DPS even if a stale client submits it": [
+      "MERGE",
+      "Copy of external-booster.test.ts"
+    ],
+    "src/lib/run-title.test.ts::buildRunTitle > is deterministic for the same input": [
+      "REMOVE",
+      "Pure function compared with itself"
+    ],
+    "src/lib/roster-replacement.test.ts::rankReplacementCandidates > WCL orders but never excludes; missing WCL is listed": [
+      "MERGE",
+      "The first ranking test already lists a candidate without WCL"
+    ],
+    "src/lib/create-run-recurring.test.ts::buildCreateSchedulePlanFromCreateRun > defaults autoCreateRun off so Schedule create does not duplicate concrete Runs": [
+      "REMOVE",
+      "Checks a value the test passed in, not a default"
+    ],
+    "src/lib/create-run-recurring.test.ts::one-time vs recurring state isolation > recurring payload ignores fields that only exist on one-time mass-create rows": [
+      "REMOVE",
+      "Builds an object it never passes to the code"
+    ],
+    "src/lib/blizzard/raid-lockout-derivation.test.ts::current raid catalog selection > requires an explicit raid id for catalog boss totals": [
+      "MERGE",
+      "Covered by raid-catalog.test.ts"
+    ],
+    "src/lib/blizzard/raid-lockout-derivation.test.ts::deriveCurrentResetLockouts > ignores unsupported modes at the difficulty mapper boundary": [
+      "MERGE",
+      "Copy of raid-difficulty.test.ts"
+    ],
+    "src/lib/blizzard/raid-lockout-derivation.test.ts::deriveCurrentResetLockouts > zero-fills both current raids when only a historical raid is present": [
+      "MERGE",
+      "Same scenario as the Manaforge test"
+    ],
+    "src/lib/blizzard/raid-lockout-derivation.test.ts::deriveCurrentResetLockouts > zero-fills HC/Mythic when only Normal mode is present": [
+      "MERGE",
+      "Same as the independent-difficulties test"
+    ],
+    "src/lib/run-content-consumers.test.ts::multi-raid character lockout compact display > groups per raid and never merges boss totals": [
+      "MERGE",
+      "Same as lockout-display CASE 3"
+    ],
+    "src/lib/run-start-message.test.ts::formatFinalSetupLfgLine — Manawyrm community footer > does not include a Raid Lead name or HM": [
+      "REMOVE",
+      "The footer is a constant; the names never occur"
+    ],
+    "src/lib/run-start-message.test.ts::renderFinalSetupText — plain Discord Final Setup > never includes a Raid Lead display name in the Manawyrm footer": [
+      "REMOVE",
+      "The footer is a constant; the names never occur"
+    ],
+    "src/lib/character-roster-metadata.test.ts::character roster metadata (offspec display) > 6. displaying Enhancement does not add MELEE_DPS to modern offered roles": [
+      "REMOVE",
+      "A pure label function cannot change role resolution; covered by signup-assignable-roles.test.ts"
+    ],
+    "src/lib/character-roster-metadata.test.ts::character roster metadata (offspec display) > 7. rendering Enhancement does not change an existing RANGED_DPS selection": [
+      "REMOVE",
+      "Same as above"
+    ],
+    "src/lib/character-roster-metadata.test.ts::character roster metadata (offspec display) > 8. historic DPS resolution, bucket, and composition stay independent of the label": [
+      "REMOVE",
+      "Same as above"
+    ],
+    "src/lib/character-roster-metadata.test.ts::character roster metadata (offspec display) > 9. the same character metadata is used for every projected section": [
+      "REMOVE",
+      "Maps a constant over an array and compares"
+    ],
+    "src/lib/character-roster-metadata.test.ts::character roster metadata (offspec display) > character page spec text does not change offered roles or a stored selection": [
+      "REMOVE",
+      "Same as above"
+    ],
+    "src/lib/signup-tile-invariants.test.ts::signup tile — one Character = one tile > multi-spec Character → one tile with two spec choices": [
+      "MERGE",
+      "Covered by signup-offered-specs.test.ts"
+    ],
+    "src/lib/signup-tile-invariants.test.ts::signup tile — one Character = one tile > Elemental → RANGED_DPS and Restoration → HEALER": [
+      "MERGE",
+      "Covered by signup-offered-specs.test.ts"
+    ],
+    "src/lib/signup-tile-invariants.test.ts::signup tile — per-spec WCL > per-spec Best is correct and never mixed": [
+      "MERGE",
+      "Same as the first wcl-spec-performance test"
+    ],
+    "src/lib/signup-tile-invariants.test.ts::signup tile — per-spec WCL > WCL link uses existing character-id destination": [
+      "MERGE",
+      "Copy of warcraft-logs.test.ts"
+    ],
+    "src/lib/wcl-spec-performance.test.ts::wclBestForSpec > does not return Elemental while choosing Restoration": [
+      "MERGE",
+      "Same assertion as the first test"
+    ],
+    "src/lib/character-lockout-raids.test.ts::Characters multi-raid lockout projection > 3. 8-boss raid exposes 8 boss names for dots": [
+      "REMOVE",
+      "Checks catalog data through a test-local helper"
+    ],
+    "src/lib/character-lockout-raids.test.ts::Characters multi-raid lockout projection > 4. 1-boss raids expose a single boss name for dots": [
+      "REMOVE",
+      "Checks catalog data through a test-local helper"
+    ],
+    "src/lib/character-lockout-raids.test.ts::Characters multi-raid lockout projection > 6. raid order follows catalog sortOrder": [
+      "MERGE",
+      "Same assertion as test 1"
+    ],
+    "src/lib/roster-role-buckets.test.ts::roster role buckets (concrete Melee/Ranged) > 6–7. HEALER + RANGED_DPS assignment picks the chosen concrete bucket": [
+      "MERGE",
+      "Same calls as test 1–4"
+    ],
+    "src/lib/create-run-form-defaults.test.ts::Create Run opt-in defaults > recurring Schedule payload requires explicit discordRolePing opt-in (false stays false)": [
+      "MERGE",
+      "Same as the create-run-recurring payload test"
     ]
   }
 }

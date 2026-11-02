@@ -219,6 +219,10 @@ Found with an AST scan for exports and object methods that nothing references, t
 - Also removed: 19 unused service and repository methods, plus unused helpers, schemas, types and constants. The full list is in the commit.
 - Kept on purpose: methods only tests call, such as `signupService.createBoosterSignup` with 74 test uses. They go with the test cleanup, because removing them needs test rewrites.
 
+## Hardcoding audit (added 2026-11-02)
+
+Requested as an addendum: inspect every source, config, script, test and doc for hardcoded Discord ids, URLs, infrastructure values, business constants, secrets and test fixtures; classify each finding KEEP / CENTRALIZE / CONFIGURE / DERIVE / REMOVE / BLOCKED and implement the justified changes. Runs after the lib and domain test audit and before the services test audit and performance work. Findings: `docs/audit/hardcoding-findings.md` (to be written).
+
 ## Continuation point
 
 The test audit is not complete. Order for the rest, smallest risk first:

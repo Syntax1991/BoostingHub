@@ -48,18 +48,6 @@ describe("Characters multi-raid lockout projection", () => {
     });
   });
 
-  it("3. 8-boss raid exposes 8 boss names for dots", () => {
-    const venomous = lockoutRaidDescriptors().find((raid) => raid.id === VENOMOUS_ABYSS_RAID_ID)!;
-    expect(venomous.bosses).toHaveLength(8);
-  });
-
-  it("4. 1-boss raids expose a single boss name for dots", () => {
-    const tide = lockoutRaidDescriptors().find((raid) => raid.id === TIDEBOUND_GROTTO_RAID_ID)!;
-    const kithix = lockoutRaidDescriptors().find((raid) => raid.id === UNBINDING_KITHIX_RAID_ID)!;
-    expect(tide.bosses).toHaveLength(1);
-    expect(kithix.bosses).toHaveLength(1);
-  });
-
   it("5. Kith'ix is not omitted when other raids have verified rows", () => {
     const slots = projectCurrentRaidLockoutSlots(
       [
@@ -74,11 +62,6 @@ describe("Characters multi-raid lockout projection", () => {
     );
     expect(slots.map((slot) => slot.raidId)).toContain(UNBINDING_KITHIX_RAID_ID);
     expect(slots.find((slot) => slot.raidId === UNBINDING_KITHIX_RAID_ID)?.status).toBe("UNKNOWN");
-  });
-
-  it("6. raid order follows catalog sortOrder", () => {
-    const ids = lockoutRaidDescriptors().map((raid) => raid.id);
-    expect(ids).toEqual([VENOMOUS_ABYSS_RAID_ID, TIDEBOUND_GROTTO_RAID_ID, UNBINDING_KITHIX_RAID_ID]);
   });
 
   it("7. Characters view does not hardcode current-season raid names", () => {

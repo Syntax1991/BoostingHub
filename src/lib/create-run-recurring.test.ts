@@ -96,13 +96,6 @@ describe("buildCreateSchedulePlanFromCreateRun", () => {
     expect(result.payload.start).toEqual({ mode: "FROM_DATE", date: "2026-10-01" });
   });
 
-  it("defaults autoCreateRun off so Schedule create does not duplicate concrete Runs", () => {
-    const result = buildCreateSchedulePlanFromCreateRun(baseState());
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.payload.autoCreateRun).toBe(false);
-  });
-
   it("passes through explicit Discord role ping opt-in when checked", () => {
     const result = buildCreateSchedulePlanFromCreateRun(baseState({ discordRolePing: true }));
     expect(result.ok).toBe(true);
@@ -119,22 +112,7 @@ describe("defaultRecurringSetupName", () => {
         difficulty: "HEROIC",
         lootType: "UNSAVED",
       }),
-    ).toContain("Manaforge Omega");
-  });
-});
-
-describe("one-time vs recurring state isolation", () => {
-  it("recurring payload ignores fields that only exist on one-time mass-create rows", () => {
-    // Simulate leftover one-time form values that must never enter Schedule create.
-    const leaked = {
-      rows: [{ scheduledLocal: "2026-09-10T21:00", overrides: { difficulty: "MYTHIC" as const } }],
-      maxRuns: 25,
-    };
-    const result = buildCreateSchedulePlanFromCreateRun(baseState({ difficulty: "HEROIC" }));
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.payload.runSetup).toMatchObject({ mode: "create", difficulty: "HEROIC" });
-    expect(JSON.stringify(result.payload)).not.toContain("MYTHIC");
-    expect(leaked.rows[0]!.overrides.difficulty).toBe("MYTHIC"); // still local only
+    ).toBe("Manaforge Omega HC Unsaved");
+    expect(defaultRecurringSetupName({ productName: "  ", difficulty: "MYTHIC", lootType: "VIP" })).toBe("Run Mythic VIP");
   });
 });

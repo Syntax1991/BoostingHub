@@ -62,9 +62,6 @@ describe("wclBestForSpec", () => {
     expect(wclBestForSpec(segments, "RANGED_DPS", "Elemental")).toBe(97);
   });
 
-  it("does not return Elemental while choosing Restoration", () => {
-    expect(wclBestForSpec(segments, "HEALER", "Restoration")).not.toBe(97);
-  });
 });
 
 const offered = [

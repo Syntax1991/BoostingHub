@@ -24,15 +24,9 @@ describe("roster role buckets (concrete Melee/Ranged)", () => {
     expect(counts.tanks).toBe(1);
   });
 
-  it("6–7. HEALER + RANGED_DPS assignment picks the chosen concrete bucket", () => {
-    expect(rosterBucketForRole("RANGED_DPS")).toBe("RANGED_DPS");
-    expect(rosterBucketForRole("HEALER")).toBe("HEALER");
-  });
-
   it("8. MELEE_DPS + RANGED_DPS offers stay explicit subtypes", () => {
     const offered = ["MELEE_DPS", "RANGED_DPS"] as const;
     expect(offered.every(isConcreteCharacterRole)).toBe(true);
-    expect(offered.includes("DPS" as never)).toBe(false);
   });
 
   it("9. generic DPS is not a concrete assignment", () => {
@@ -49,8 +43,6 @@ describe("roster role buckets (concrete Melee/Ranged)", () => {
   it("12–14. historical generic DPS stays Legacy — never auto Melee or Ranged", () => {
     expect(rosterBucketForRole("DPS")).toBe("LEGACY_DPS");
     expect(externalBoosterRosterBucket("DPS")).toBe("LEGACY_DPS");
-    expect(externalBoosterRosterBucket("DPS")).not.toBe("MELEE_DPS");
-    expect(externalBoosterRosterBucket("DPS")).not.toBe("RANGED_DPS");
   });
 
   it("aggregate DPS = melee + ranged + legacy", () => {

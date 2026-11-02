@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { CREATE_RUN_OPT_IN_DEFAULTS } from "@/lib/create-run-form-defaults";
 import {
   canAddRunRow,
   duplicateRunRow,
@@ -81,9 +80,7 @@ describe("duplicateRunRow", () => {
     expect(quickDuplicateLabel(2)).toBe("Duplicate run +2 hours");
   });
 
-  it("the approved opt-in defaults stay off (duplication never touches them)", () => {
-    expect(CREATE_RUN_OPT_IN_DEFAULTS.asRecurring).toBe(false);
-    expect(CREATE_RUN_OPT_IN_DEFAULTS.discordRolePing).toBe(false);
+  it("a copy carries only its own row fields, never form-wide opt-ins", () => {
     const copy = duplicateRunRow([row("a", "2026-11-12T20:00", { notes: "x" })], "a", 1, 25, newKey)[1]!;
     expect(Object.keys(copy).sort()).toEqual(["expanded", "key", "overrides", "scheduledLocal"]);
   });

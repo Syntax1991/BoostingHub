@@ -8,7 +8,6 @@ import {
 } from "@/lib/signup-tile-invariants";
 import { wclAvgForSpec, wclBestForSpec } from "@/lib/wcl-spec-performance";
 import type { WclPerformanceRaidSegment } from "@/lib/wcl-performance-display";
-import { getWarcraftLogsCharacterUrl } from "@/lib/warcraft-logs";
 
 const stormhowlInput = {
   wowClass: "SHAMAN" as const,
@@ -52,18 +51,6 @@ describe("signup tile — one Character = one tile", () => {
     expect(specs).toEqual([{ name: "Protection", role: "TANK" }]);
   });
 
-  it("multi-spec Character → one tile with two spec choices", () => {
-    const specs = resolveOfferedSpecs(stormhowlInput);
-    expect(specs).toHaveLength(2);
-    expect(specs.map((s) => s.name).sort()).toEqual(["Elemental", "Restoration"]);
-  });
-
-  it("Elemental → RANGED_DPS and Restoration → HEALER", () => {
-    const specs = resolveOfferedSpecs(stormhowlInput);
-    expect(specs.find((s) => s.name === "Elemental")?.role).toBe("RANGED_DPS");
-    expect(specs.find((s) => s.name === "Restoration")?.role).toBe("HEALER");
-  });
-
   it("uniqueSignupTiles never duplicates by signup id", () => {
     const rows = [
       { id: "a", name: "Stormhowl" },
@@ -93,12 +80,6 @@ describe("signup tile — one Character = one tile", () => {
 });
 
 describe("signup tile — per-spec WCL", () => {
-  it("per-spec Best is correct and never mixed", () => {
-    expect(wclBestForSpec(segments, "RANGED_DPS", "Elemental")).toBe(97);
-    expect(wclBestForSpec(segments, "HEALER", "Restoration")).toBe(61);
-    expect(wclBestForSpec(segments, "HEALER", "Restoration")).not.toBe(97);
-  });
-
   it("per-spec Avg is correct for tooltip/modal", () => {
     expect(wclAvgForSpec(segments, "RANGED_DPS", "Elemental")).toBe(82);
     expect(wclAvgForSpec(segments, "HEALER", "Restoration")).toBe(54);
@@ -107,13 +88,5 @@ describe("signup tile — per-spec WCL", () => {
   it("WCL absent → no percentile (no placeholder)", () => {
     expect(wclBestForSpec([], "HEALER", "Restoration")).toBeNull();
     expect(wclAvgForSpec([], "HEALER", "Restoration")).toBeNull();
-  });
-
-  it("WCL link uses existing character-id destination", () => {
-    expect(getWarcraftLogsCharacterUrl("12345678")).toBe(
-      "https://www.warcraftlogs.com/character/id/12345678",
-    );
-    expect(getWarcraftLogsCharacterUrl(null)).toBeNull();
-    expect(getWarcraftLogsCharacterUrl("")).toBeNull();
   });
 });

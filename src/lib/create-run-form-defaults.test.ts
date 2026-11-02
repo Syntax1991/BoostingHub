@@ -5,8 +5,6 @@ import {
   withDiscordRolePingOptIn,
   withRecurringOptIn,
 } from "@/lib/create-run-form-defaults";
-import { buildCreateSchedulePlanFromCreateRun } from "@/lib/create-run-recurring";
-import { DEFAULT_SCHEDULE_START } from "@/lib/schedule-start";
 
 describe("Create Run opt-in defaults", () => {
   it("defaults recurring and Discord role ping to false (one-time quiet draft path)", () => {
@@ -39,29 +37,5 @@ describe("Create Run opt-in defaults", () => {
   it("both can be enabled independently", () => {
     const next = withDiscordRolePingOptIn(withRecurringOptIn(createRunOptInInitialState(), true), true);
     expect(next).toEqual({ asRecurring: true, discordRolePing: true });
-  });
-
-  it("recurring Schedule payload requires explicit discordRolePing opt-in (false stays false)", () => {
-    const result = buildCreateSchedulePlanFromCreateRun({
-      templateId: "",
-      setupName: "Weekly HC",
-      product: { productId: "11111111-1111-4111-8111-111111111111", contentBossCounts: {} },
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      raidLeadId: "22222222-2222-4222-8222-222222222222",
-      notes: "",
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-      desiredLootbuddyCount: 0,
-      discordRolePing: false,
-      weekday: "FRIDAY",
-      localStartTime: "19:45",
-      start: DEFAULT_SCHEDULE_START,
-      autoCreateRun: false,
-    });
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.payload.discordRolePing).toBe(false);
   });
 });

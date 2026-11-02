@@ -202,9 +202,9 @@ describe("roster DMs", () => {
   });
 
   it("a newly selected player with a plan sees it in the selected DM", () => {
-    expect(
-      buildRosterSelectedDmMessage({ run, assignment, runChannelId: null, bossPlan: "Tide 1: Ranged DPS" }),
-    ).toContain("✅ **Roster Selected**");
+    const message = buildRosterSelectedDmMessage({ run, assignment, runChannelId: null, bossPlan: "Tide 1: Ranged DPS" });
+    expect(message).toContain("✅ **Roster Selected**");
+    expect(message).toContain("Boss plan: Tide 1: Ranged DPS");
   });
 
   it("web copy", () => {

@@ -143,13 +143,6 @@ describe("formatFinalSetupLfgLine — Manawyrm community footer", () => {
     expect(formatFinalSetupLfgLine()).toBe("**LFG Manawyrm write your discord name in the note!**");
   });
 
-  it("does not include a Raid Lead name or HM", () => {
-    const line = formatFinalSetupLfgLine();
-    expect(line).not.toContain("Gamma");
-    expect(line).not.toContain("SomeOtherLead");
-    expect(line).not.toContain("HM");
-    expect(line.match(/\*\*/g)).toHaveLength(2);
-  });
 });
 
 describe("escapeDiscordInlineText — dynamic Discord text safety", () => {
@@ -196,15 +189,6 @@ describe("renderFinalSetupText — plain Discord Final Setup", () => {
     const lootIdx = text.indexOf("📦 **Lootbuddies**");
     const lfgIdx = text.indexOf("**LFG Manawyrm");
     expect(lfgIdx).toBeGreaterThan(lootIdx);
-  });
-
-  it("never includes a Raid Lead display name in the Manawyrm footer", () => {
-    const text = renderFinalSetupText(sampleInput());
-    expect(text.endsWith(formatFinalSetupLfgLine())).toBe(true);
-    expect(text).not.toContain("Gamma");
-    expect(text).not.toContain("SomeOtherLead");
-    expect(text).not.toContain("LFG HM");
-    expect(formatFinalSetupLfgLine()).toBe("**LFG Manawyrm write your discord name in the note!**");
   });
 
   it("renders compact booster rows: mention + class indicator, no character/realm", () => {

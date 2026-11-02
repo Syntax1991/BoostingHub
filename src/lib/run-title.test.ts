@@ -90,17 +90,6 @@ describe("buildRunTitle", () => {
     expect(title).not.toContain("MY Saved");
     expect(title).not.toMatch(/\bMY\b/);
   });
-
-  it("is deterministic for the same input", () => {
-    const input = {
-      scheduledStartAt: "2026-09-10T19:00:00.000Z",
-      difficulty: "HEROIC" as const,
-      lootType: "VIP" as const,
-      titleCoverage: "8/8",
-      raidLeadName: "Alpha",
-    };
-    expect(buildRunTitle(input)).toBe(buildRunTitle(input));
-  });
 });
 
 describe("projectRunContentDisplay coverage tokens", () => {
@@ -136,7 +125,5 @@ describe("projectRunContentDisplay coverage tokens", () => {
     expect(bundle.titleCoverage).toBe("7/9");
     expect(bundle.channelCoverage).toBe("7of9");
     expect(bundle.summary).toBe("Tide 1/1 · The Venomous Abyss 6/8");
-    expect(bundle.titleCoverage).not.toMatch(/S2B|s2b/);
-    expect(bundle.channelCoverage).not.toMatch(/s2b/);
   });
 });

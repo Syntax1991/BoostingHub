@@ -118,10 +118,6 @@ describe("rankReplacementCandidates", () => {
     expect(ranked[0]).toMatchObject({ role: "HEALER", playsRequiredRole: true, saved: false, blocked: false, wclBest: 90 });
   });
 
-  it("WCL orders but never excludes; missing WCL is listed", () => {
-    expect(rank([signup("NoWcl")]).map((row) => row.signup.id)).toEqual(["NoWcl"]);
-  });
-
   it("saved candidates stay selectable (marked saved) and rank below clean ones", () => {
     const ranked = rank([signup("Saved", { selectionRisk: SAVED_RISK }), signup("Clean")]);
     expect(ranked.map((row) => [row.signup.id, row.saved])).toEqual([

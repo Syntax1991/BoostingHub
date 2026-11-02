@@ -118,11 +118,6 @@ describe("classifyRunWeek — half-open interval self-consistency (using the fun
 });
 
 describe("classifyRunWeek — exact NEXT start and rollover to CURRENT", () => {
-  it("before rollover: a Run at next Wednesday 06:00 is NEXT", () => {
-    const result = classifyRunWeek({ scheduledStartAt: WINTER_NEXT_START, now: WINTER_NOW, timeZone: TZ });
-    expect(result.bucket).toBe("NEXT");
-  });
-
   it("at rollover: the same scheduledStartAt becomes CURRENT once `now` itself reaches that Wednesday 06:00 — no schedule mutation involved", () => {
     const nowAtRollover = new Date(WINTER_NEXT_START);
     const result = classifyRunWeek({ scheduledStartAt: WINTER_NEXT_START, now: nowAtRollover, timeZone: TZ });
@@ -131,22 +126,10 @@ describe("classifyRunWeek — exact NEXT start and rollover to CURRENT", () => {
 });
 
 describe("classifyRunWeek — following start is FUTURE until its own rollover", () => {
-  it("a Run at the following Wednesday 06:00 is FUTURE relative to the original now", () => {
-    const result = classifyRunWeek({ scheduledStartAt: WINTER_FOLLOWING_START, now: WINTER_NOW, timeZone: TZ });
-    expect(result.bucket).toBe("FUTURE");
-  });
-
   it("becomes NEXT once `now` reaches the prior boundary (the following Wednesday is now next week's boundary)", () => {
     const nowAtNextRollover = new Date(WINTER_NEXT_START);
     const result = classifyRunWeek({ scheduledStartAt: WINTER_FOLLOWING_START, now: nowAtNextRollover, timeZone: TZ });
     expect(result.bucket).toBe("NEXT");
-  });
-});
-
-describe("classifyRunWeek — winter (CET, UTC+1)", () => {
-  it("reset local time remains 06:00 in CET", () => {
-    const result = classifyRunWeek({ scheduledStartAt: WINTER_CURRENT_START, now: WINTER_NOW, timeZone: TZ });
-    expect(result.currentStart).toBe(WINTER_CURRENT_START); // 06:00 CET == 05:00Z
   });
 });
 
@@ -175,13 +158,6 @@ describe("classifyRunWeek — spring DST transition (2026-03-29, CET -> CEST)", 
     const result = classifyRunWeek({ scheduledStartAt: NEXT_START_AFTER, now: NOW_BEFORE_TRANSITION, timeZone: TZ });
     expect(result.bucket).toBe("NEXT");
   });
-
-  it("is NOT exactly 168 UTC hours from currentStart to nextStart across the spring transition (would be a naive +7-day bug)", () => {
-    const hours =
-      (new Date(NEXT_START_AFTER).getTime() - new Date(CURRENT_START_BEFORE).getTime()) / (60 * 60 * 1000);
-    expect(hours).toBe(167); // one hour "lost" to springing forward
-    expect(hours).not.toBe(168);
-  });
 });
 
 describe("classifyRunWeek — autumn DST transition (2026-10-25, CEST -> CET)", () => {
@@ -200,12 +176,5 @@ describe("classifyRunWeek — autumn DST transition (2026-10-25, CEST -> CET)", 
   it("a Run at 2026-10-28T05:00:00Z (NEXT's start, now in CET) classifies NEXT", () => {
     const result = classifyRunWeek({ scheduledStartAt: NEXT_START_AFTER, now: NOW_BEFORE_TRANSITION, timeZone: TZ });
     expect(result.bucket).toBe("NEXT");
-  });
-
-  it("is NOT exactly 168 UTC hours from currentStart to nextStart across the autumn transition (would be a naive +7-day bug)", () => {
-    const hours =
-      (new Date(NEXT_START_AFTER).getTime() - new Date(CURRENT_START_BEFORE).getTime()) / (60 * 60 * 1000);
-    expect(hours).toBe(169); // one hour "gained" falling back
-    expect(hours).not.toBe(168);
   });
 });

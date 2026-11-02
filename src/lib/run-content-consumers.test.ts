@@ -5,7 +5,6 @@ import {
   formatSignupTileLockoutShort,
   projectRunContentLockouts,
 } from "@/lib/run-content-lockouts";
-import { formatCompactMultiRaidLockoutProgress } from "@/lib/lockout-display";
 import { projectRunContentDisplay } from "@/lib/run-content-display";
 import {
   TIDEBOUND_GROTTO_RAID_ID,
@@ -154,7 +153,7 @@ describe("run content lockout projection", () => {
     expect(rows[0]!.label.text).toContain("1/1");
     expect(rows[1]!.raidName).toBe("The Venomous Abyss");
     expect(rows[1]!.label.text).toContain("3/8");
-    const joined = formatContentLockoutLines(rows).join(" Â· ");
+    const joined = formatContentLockoutLines(rows).join(" · ");
     expect(joined).not.toMatch(/4\/9|9\/9/);
     expect(contentLockoutsNeedAttention(rows)).toBe(true);
   });
@@ -180,39 +179,6 @@ describe("run content lockout projection", () => {
     expect(rows[0]!.label.text).toMatch(/\?\/1|Unknown/);
     expect(rows[1]!.label.text).toContain("0/8");
     expect(formatContentLockoutLines(rows).join(" ")).not.toContain("9/9");
-  });
-});
-
-describe("multi-raid character lockout compact display", () => {
-  it("groups per raid and never merges boss totals", () => {
-    const text = formatCompactMultiRaidLockoutProgress(
-      [
-      {
-        raidId: TIDEBOUND_GROTTO_RAID_ID,
-        raidName: "The Tidebound Grotto",
-        difficulty: "HEROIC",
-        bossesDefeated: 1,
-        bossTotal: 1,
-      },
-      {
-        raidId: VENOMOUS_ABYSS_RAID_ID,
-        raidName: "The Venomous Abyss",
-        difficulty: "HEROIC",
-        bossesDefeated: 3,
-        bossTotal: 8,
-      },
-      ],
-      [
-        { id: VENOMOUS_ABYSS_RAID_ID, name: "The Venomous Abyss", bosses: [] },
-        { id: TIDEBOUND_GROTTO_RAID_ID, name: "Tide", bosses: [] },
-      ],
-    );
-
-    expect(text).toContain("Tide:");
-    expect(text).toContain("The Venomous Abyss:");
-    expect(text).toContain("1/1");
-    expect(text).toContain("3/8");
-    expect(text).not.toMatch(/4\/9|9\/9/);
   });
 });
 

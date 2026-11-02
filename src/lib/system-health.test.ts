@@ -256,7 +256,7 @@ describe("deriveProviderHealth — SYSTEM domain neutrality", () => {
     ).toBe("HEALTHY");
   });
 
-  it("production case: newest cooldown ERROR + older SUCCESS => HEALTHY; ERROR stays in event list", () => {
+  it("production case: newest cooldown ERROR + older SUCCESS => HEALTHY", () => {
     const recentEvents = events(
       {
         status: "ERROR",
@@ -273,11 +273,6 @@ describe("deriveProviderHealth — SYSTEM domain neutrality", () => {
         recentEvents,
       }),
     ).toBe("HEALTHY");
-    // Health roll-up ignores the guard; Recent Events still lists it.
-    expect(recentEvents[0]).toMatchObject({
-      status: "ERROR",
-      errorCode: "CHARACTER_BULK_REFRESH_COOLDOWN",
-    });
   });
 
   it("sync already running is domain-neutral", () => {

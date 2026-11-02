@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  mapWithConcurrency,
-  RAIDER_IO_LOOKUP_CONCURRENCY,
-} from "@/lib/map-with-concurrency";
+import { mapWithConcurrency } from "@/lib/map-with-concurrency";
 
 describe("mapWithConcurrency", () => {
   it("preserves order and never exceeds the concurrency ceiling", async () => {
@@ -20,13 +17,8 @@ describe("mapWithConcurrency", () => {
     });
 
     expect(results).toEqual([10, 20, 30, 40, 50, 60]);
-    expect(peak).toBeLessThanOrEqual(3);
     expect(peak).toBe(3);
     expect(started).toEqual([1, 2, 3, 4, 5, 6]);
-  });
-
-  it("Raider.IO lookup concurrency constant is 3", () => {
-    expect(RAIDER_IO_LOOKUP_CONCURRENCY).toBe(3);
   });
 
   it("runs empty input without calling the mapper", async () => {
