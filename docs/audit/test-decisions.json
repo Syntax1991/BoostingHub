@@ -1319,6 +1319,10 @@
     "tests/integration/services/character-operations.test.ts": [
       "REWRITE",
       "createTestUser + deleteCreatedRows; scoped bulk-force markers via deleteBulkRefreshMarkers(adminId); cooldown update scoped to suite admin; assertIsolatedTestDatabase"
+    ],
+    "tests/integration/services/roster-boss-exceptions.integration.test.ts": [
+      "REWRITE",
+      "assertIsolatedTestDatabase; verified deleteAndCount without swallowed errors; testActor; saveDraftSelection already used; suite-private fixed ids retained"
     ]
   },
   "tests": {

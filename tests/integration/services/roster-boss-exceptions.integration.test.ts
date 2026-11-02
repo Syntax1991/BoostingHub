@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AuthenticatedUser } from "@/auth/authorization";
 import { orm } from "@/lib/prisma";
+import { testActor } from "@tests/fixtures/actors";
+import { assertIsolatedTestDatabase } from "@tests/fixtures/db-fixtures";
 import {
   applyRangeAssignment,
   bossesInRange,
@@ -50,13 +51,10 @@ const ids = {
 
 const START = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
 
-function asUser(id: string, accountRole: AccountRole): AuthenticatedUser {
-  return { id, name: id, email: `${id}@bex.local`, image: null, discordUserId: null, discordUsername: null, accountRole, accountStatus: "ACTIVE" };
-}
-
-const lead = asUser(ids.lead, "RAID_LEAD");
+const lead = testActor(ids.lead, "RAID_LEAD", { name: "Bex Lead", email: `${ids.lead}@bex.local` });
 
 async function createUser(id: string, accountRole: AccountRole) {
+  assertIsolatedTestDatabase();
   const now = new Date().toISOString();
   await orm.User.create({
     id,
@@ -113,33 +111,33 @@ async function createSignup(id: string, userId: string, characterId: string, rol
 
 async function cleanup() {
   // Attendance references roster entries: remove it (and the start snapshot) first.
-  await orm.RunAttendance.where({ runId: ids.run }).deleteAndCount().catch(() => {});
-  await orm.RunStartSnapshot.where({ runId: ids.run }).deleteAndCount().catch(() => {});
+  await orm.RunAttendance.where({ runId: ids.run }).deleteAndCount();
+  await orm.RunStartSnapshot.where({ runId: ids.run }).deleteAndCount();
   const roster = (await orm.RunRoster.where({ runId: ids.run }).first()) as { id: string } | null;
   if (roster) {
-    await orm.RunRosterBossException.where({ rosterId: roster.id }).deleteAndCount().catch(() => {});
-    await orm.RunRosterEntry.where({ rosterId: roster.id }).deleteAndCount().catch(() => {});
-    await orm.RunRoster.where({ id: roster.id }).deleteAndCount().catch(() => {});
+    await orm.RunRosterBossException.where({ rosterId: roster.id }).deleteAndCount();
+    await orm.RunRosterEntry.where({ rosterId: roster.id }).deleteAndCount();
+    await orm.RunRoster.where({ id: roster.id }).deleteAndCount();
   }
   for (const signupId of [ids.signupA, ids.signupAlt, ids.signupB, ids.signupC]) {
-    await orm.UserNotification.where({ signupId }).deleteAndCount().catch(() => {});
-    await orm.RunSignupRole.where({ signupId }).deleteAndCount().catch(() => {});
-    await orm.RunSignup.where({ id: signupId }).deleteAndCount().catch(() => {});
+    await orm.UserNotification.where({ signupId }).deleteAndCount();
+    await orm.RunSignupRole.where({ signupId }).deleteAndCount();
+    await orm.RunSignup.where({ id: signupId }).deleteAndCount();
   }
-  await orm.UserNotification.where({ runId: ids.run }).deleteAndCount().catch(() => {});
-  await orm.RunDomainEvent.where({ runId: ids.run }).deleteAndCount().catch(() => {});
-  await orm.RunRaidContent.where({ runId: ids.run }).deleteAndCount().catch(() => {});
-  await orm.Run.where({ id: ids.run }).deleteAndCount().catch(() => {});
-  await orm.RunAttendance.where({ runId: ids.run }).deleteAndCount().catch(() => {});
-  await orm.RunStartSnapshot.where({ runId: ids.run }).deleteAndCount().catch(() => {});
+  await orm.UserNotification.where({ runId: ids.run }).deleteAndCount();
+  await orm.RunDomainEvent.where({ runId: ids.run }).deleteAndCount();
+  await orm.RunRaidContent.where({ runId: ids.run }).deleteAndCount();
+  await orm.Run.where({ id: ids.run }).deleteAndCount();
+  await orm.RunAttendance.where({ runId: ids.run }).deleteAndCount();
+  await orm.RunStartSnapshot.where({ runId: ids.run }).deleteAndCount();
   for (const id of [ids.charA, ids.charAlt, ids.charB, ids.charC]) {
-    await orm.CharacterRaidLockout.where({ characterId: id }).deleteAndCount().catch(() => {});
-    await orm.Character.where({ id }).deleteAndCount().catch(() => {});
+    await orm.CharacterRaidLockout.where({ characterId: id }).deleteAndCount();
+    await orm.Character.where({ id }).deleteAndCount();
   }
   for (const id of [ids.lead, ids.userA, ids.userB, ids.userC]) {
-    await orm.ActivityEvent.where({ userId: id }).deleteAndCount().catch(() => {});
-    await orm.UserNotification.where({ userId: id }).deleteAndCount().catch(() => {});
-    await orm.User.where({ id }).deleteAndCount().catch(() => {});
+    await orm.ActivityEvent.where({ userId: id }).deleteAndCount();
+    await orm.UserNotification.where({ userId: id }).deleteAndCount();
+    await orm.User.where({ id }).deleteAndCount();
   }
 }
 
@@ -349,7 +347,7 @@ describe("boss exceptions — feature switch on", () => {
     });
     expect(conflicts.map((row) => row.runId)).toEqual([ids.run]);
 
-    await signupService.withdrawSignup(asUser(ids.userA, "USER"), ids.signupAlt);
+    await signupService.withdrawSignup(testActor(ids.userA, "USER"), ids.signupAlt);
     expect((await rosterRepository.findByRunId(ids.run))!.bossExceptions.draft).toEqual([]);
     expect(
       await queryReservationConflicts(orm, {
@@ -390,7 +388,7 @@ describe("boss exceptions — feature switch on", () => {
     // The alternate is part of the plan: Publish does not mark it NOT_SELECTED.
     expect(((await orm.RunSignup.where({ id: ids.signupAlt }).first()) as { status: string }).status).toBe("PENDING");
 
-    await signupService.withdrawSignup(asUser(ids.userA, "USER"), ids.signupAlt);
+    await signupService.withdrawSignup(testActor(ids.userA, "USER"), ids.signupAlt);
     let roster = (await rosterRepository.findByRunId(ids.run))!;
     expect(roster.bossExceptions.draft).toEqual([]);
     expect(roster.bossExceptions.published).toEqual(before.bossExceptions.published);
@@ -670,7 +668,7 @@ describe("boss plan — Roster Builder flows (feature switch on)", () => {
   it("alternate withdrawn while the editor was open: Save refuses with a named message; after Refresh the payload no longer carries it", async () => {
     await saveDefault();
     const open = await view();
-    await signupService.withdrawSignup(asUser(ids.userA, "USER"), ids.signupAlt);
+    await signupService.withdrawSignup(testActor(ids.userA, "USER"), ids.signupAlt);
     const fresh = await view();
     await expect(save(fresh, [await venomException(6, "HEALER", ids.signupAlt)])).rejects.toMatchObject({
       code: "INVALID_ROSTER_SELECTION",
