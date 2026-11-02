@@ -26,6 +26,7 @@ import {
 } from "@/components/manage/roster-warning-confirm-dialog";
 import type { ConfirmedRosterWarning } from "@/domain/roster-selection-risk";
 import type { CharacterRole } from "@/models/enums";
+import { useModalDialog } from "@/hooks/use-modal-dialog";
 
 function PickRow({ pick }: { pick: RosterBuilderProposedPick }) {
   const label =
@@ -138,14 +139,7 @@ export function RosterBuilderDialog({
   // Every local pick counts — Boosters and Lootbuddies (External Boosters are not draft picks).
   const buildReplacesDraft = stageMode && mode === "build" && (baseDraft?.length ?? 0) > 0;
 
-  useEffect(() => {
-    dialogRef.current?.showModal();
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    const onDialogClose = () => onClose();
-    dialog.addEventListener("close", onDialogClose);
-    return () => dialog.removeEventListener("close", onDialogClose);
-  }, [onClose]);
+  useModalDialog(dialogRef, onClose);
 
   const baseSelections = baseDraft ? (mode === "build" ? [] : baseDraft) : undefined;
 

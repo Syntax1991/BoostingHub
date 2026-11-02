@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
+import { useId, useMemo, useRef, useState, useTransition } from "react";
 import { correctAttendanceAction } from "@/controllers/attendance.actions";
 import { Button } from "@/components/ui/button";
 import { ATTENDANCE_STATUS_LABELS } from "@/lib/labels";
 import { MARKABLE_ATTENDANCE_STATUSES, type AttendanceStatus } from "@/models/enums";
 import type { RunDetailView } from "@/services/run-detail.service";
+import { useModalDialog } from "@/hooks/use-modal-dialog";
 
 type AttendanceRow = NonNullable<RunDetailView["attendance"]["manager"]>["rows"][number];
 
@@ -38,14 +39,7 @@ export function AttendanceCorrectionDialog({
   const [newStatus, setNewStatus] = useState<AttendanceStatus | "">("");
   const [reason, setReason] = useState("");
 
-  useEffect(() => {
-    dialogRef.current?.showModal();
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    const onDialogClose = () => onClose();
-    dialog.addEventListener("close", onDialogClose);
-    return () => dialog.removeEventListener("close", onDialogClose);
-  }, [onClose]);
+  useModalDialog(dialogRef, onClose);
 
   const trimmedReason = reason.trim();
   const canSubmit = Boolean(row && newStatus && newStatus !== row.status && trimmedReason.length >= REASON_MIN);

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { useId, useRef, useState, useTransition } from "react";
 import { archiveRunAction } from "@/controllers/run.actions";
 import { Button } from "@/components/ui/button";
+import { useModalDialog } from "@/hooks/use-modal-dialog";
 
 export function RunArchiveDialog({
   runId,
@@ -19,14 +20,7 @@ export function RunArchiveDialog({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    dialogRef.current?.showModal();
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    const onDialogClose = () => onClose();
-    dialog.addEventListener("close", onDialogClose);
-    return () => dialog.removeEventListener("close", onDialogClose);
-  }, [onClose]);
+  useModalDialog(dialogRef, onClose);
 
   function close() {
     dialogRef.current?.close();

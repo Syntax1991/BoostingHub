@@ -127,9 +127,9 @@ Order follows the assignment. Each line is one PR, stacked on the one before.
 | 3 | Security headers, bot log body, route-wide bot credential test, session ownership tests | PR #325, awaiting review |
 | 4 | MVCS boundaries: app and controllers no longer import repositories; lib no longer imports components | PR #326, awaiting review |
 | 4b | Move pure rules from `src/services` to `src/domain` | PR #327, awaiting review |
-| 5 | Guide code: drop legacy paths, share publisher code | PR open, awaiting review |
+| 5 | Guide code: drop legacy paths, share publisher code | PR #328, awaiting review |
 | 6 | Test cleanup by module | Planned; 19 of 337 files read |
-| 7 | Frontend: error and loading states, reload consistency | Planned |
+| 7 | Frontend: error, loading and not-found pages; shared dialog effect | PR open, awaiting review |
 | 8 | Performance, measured: run detail payload, sync p95, event volume | Planned |
 | 9 | Dependencies and final verification | Planned |
 | 10 | ManawyrmHub preparation | Needs approval |
@@ -143,6 +143,12 @@ Order follows the assignment. Each line is one PR, stacked on the one before.
 ## Change log
 
 Updated with every batch.
+
+### Batch 7: frontend states
+
+- Adds `(app)/error.tsx` (uses `retry`, per the Next.js docs in this repo), `(app)/loading.tsx`, `not-found.tsx` and `useModalDialog` in 12 dialogs.
+- Browser check on local dev: a throwing page shows the retry page in the shell; an unknown URL returns 404; a filter click shows no skeleton; a page change does; a non-admin on `/manage/users` still ends on the dashboard; Edit Run opens as a modal and closes.
+- Not changed: 12 `window.location.reload` calls. They reset all client state after a run action. `router.refresh` would keep it, and each site would need its own check. Low value during a freeze.
 
 ### Batch 5: guide publisher
 

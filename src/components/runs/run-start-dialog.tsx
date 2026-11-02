@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { useId, useRef, useState, useTransition } from "react";
 import { startRunAction } from "@/controllers/run.actions";
 import { Button } from "@/components/ui/button";
 import { renderFinalSetupText, type FinalSetupInput } from "@/lib/run-start-message";
 import type { PreflightCheck, RunPreflightResult } from "@/services/run-preflight.service";
+import { useModalDialog } from "@/hooks/use-modal-dialog";
 
 function PreflightList({
   title,
@@ -60,14 +61,7 @@ export function RunStartDialog({
   const blockers = preflight?.checks.filter((check) => check.status === "ERROR") ?? [];
   const warnings = preflight?.checks.filter((check) => check.status === "WARNING") ?? [];
 
-  useEffect(() => {
-    dialogRef.current?.showModal();
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    const onDialogClose = () => onClose();
-    dialog.addEventListener("close", onDialogClose);
-    return () => dialog.removeEventListener("close", onDialogClose);
-  }, [onClose]);
+  useModalDialog(dialogRef, onClose);
 
   function close() {
     dialogRef.current?.close();
