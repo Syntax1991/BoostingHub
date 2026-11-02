@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { blizzardApiClient } from "@/integrations/blizzard/blizzard-api-client";
 import type { WarcraftLogsCatalogZone } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
@@ -15,6 +15,8 @@ import {
   type RaidImportDeps,
 } from "@/services/raid-catalog-import.service";
 import { raidCatalogService } from "@/services/raid-catalog.service";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
 
 /**
  * Raid Catalog import / sync from the Blizzard journal. Battle.net and Warcraft
@@ -60,17 +62,9 @@ vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOr
   },
 }));
 
-/** Seeded ADMIN (src/prisma/seed.ts). */
-const admin: AuthenticatedUser = {
-  id: "44444444-4444-4444-8444-444444444444",
-  name: "Aelira Nightwatch",
-  email: "aelira@dev.boostting.local",
-  image: null,
-  discordUserId: null,
-  discordUsername: null,
-  accountRole: "ADMIN",
-  accountStatus: "ACTIVE",
-};
+let admin: AuthenticatedUser;
+/** Rows a test writes that point at an imported raid; removed before the raids. */
+const created = { runIds: [] as string[], templateIds: [] as string[], productIds: [] as string[], userIds: [] as string[] };
 
 function instance(
   id: number,
@@ -120,26 +114,29 @@ async function countRaids(instanceId: number): Promise<number> {
   return (await orm.Raid.where({ blizzardInstanceId: instanceId }).all()).length;
 }
 
+/**
+ * Removes what the previous test wrote: its Runs, Run Setups and Products by id
+ * (their raid content rows cascade), then the raids of the mocked QA instances.
+ */
 async function cleanup() {
+  assertIsolatedTestDatabase();
+  for (const id of created.runIds.splice(0)) await orm.Run.where({ id }).delete();
+  for (const id of created.templateIds.splice(0)) await orm.RunTemplate.where({ id }).delete();
+  for (const id of created.productIds.splice(0)) await orm.Product.where({ id }).delete();
   const raids = (await orm.Raid.where((raid) =>
     raid.blizzardInstanceId.in(QA_INSTANCE_IDS),
   ).all()) as Array<Record<string, unknown>>;
-  const raidIds = raids.map((row) => asString(row.id));
-  if (raidIds.length === 0) {
-    // Still drop a warm memo — a prior test may have deleted via raw orm.
-    raidRepository.invalidateCatalogMemo();
-    return;
-  }
-  await orm.RunRaidContent.where((row) => row.raidId.in(raidIds)).delete();
-  await orm.Run.where((row) => row.title.like("QA Import %")).delete();
-  await orm.RunTemplateRaidContent.where((row) => row.raidId.in(raidIds)).delete();
-  await orm.RunTemplate.where((row) => row.name.like("QA Import %")).delete();
-  await orm.ProductRaidContent.where((row) => row.raidId.in(raidIds)).delete();
-  await orm.Product.where((row) => row.name.like("QA Import %")).delete();
-  await orm.CharacterRaidLockout.where((row) => row.raidId.in(raidIds)).delete();
-  for (const id of raidIds) await orm.Raid.where({ id }).delete();
+  for (const id of raids.map((row) => asString(row.id))) await orm.Raid.where({ id }).delete();
+  // Always drop the memo: a test may have changed raids directly.
   raidRepository.invalidateCatalogMemo();
 }
+
+beforeAll(async () => {
+  assertIsolatedTestDatabase();
+  const adminId = await createTestUser({ name: "Raid Import Admin", accountRole: "ADMIN" });
+  created.userIds.push(adminId);
+  admin = testActor(adminId, "ADMIN");
+});
 
 beforeEach(async () => {
   await cleanup();
@@ -150,7 +147,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
-afterAll(cleanup);
+afterAll(async () => {
+  await cleanup();
+  await deleteCreatedRows({ userIds: created.userIds });
+});
 
 describe("Import Raid", () => {
   it("imports one valid instance: raid name, bosses, order, derived count and encounter ids", async () => {
@@ -240,8 +240,6 @@ describe("Import Raid", () => {
       ["Second Coil", [995002]],
       ["Third Coil", [995003]],
     ]);
-    await orm.Raid.where({ id: raidId }).delete();
-    raidRepository.invalidateCatalogMemo();
   });
 
   it("a failed or invalid Blizzard response writes nothing and explains why", async () => {
@@ -366,6 +364,7 @@ describe("Refresh from Blizzard", () => {
         },
       ],
     });
+    created.productIds.push(productId);
     const templateId = crypto.randomUUID();
     await orm.RunTemplate.create({
       id: templateId,
@@ -381,6 +380,7 @@ describe("Refresh from Blizzard", () => {
       createdAt: now,
       updatedAt: now,
     });
+    created.templateIds.push(templateId);
     await orm.RunTemplateRaidContent.create({
       id: crypto.randomUUID(),
       runTemplateId: templateId,
@@ -406,6 +406,7 @@ describe("Refresh from Blizzard", () => {
       createdAt: now,
       updatedAt: now,
     });
+    created.runIds.push(runId);
     await orm.RunRaidContent.create({
       id: crypto.randomUUID(),
       runId,

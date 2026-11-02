@@ -10,6 +10,8 @@ import { rosterRepository } from "@/repositories/roster.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { discordSyncService } from "@/services/discord-sync.service";
 import { runService } from "@/services/run.service";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
 
 /**
  * Discord sync candidate selection: only Runs that can still produce Discord
@@ -17,19 +19,9 @@ import { runService } from "@/services/run.service";
  * Lane semantics themselves are covered by discord-sync.service.test.ts.
  */
 
-const ids = {
-  lead: "aaaaaaaa-aaaa-4aaa-8aaa-dc0000000001",
-};
-const lead: AuthenticatedUser = {
-  id: ids.lead,
-  name: "Candidate Lead",
-  email: `${ids.lead}@dscand.boostting.local`,
-  image: null,
-  discordUserId: null,
-  discordUsername: null,
-  accountRole: "RAID_LEAD",
-  accountStatus: "ACTIVE",
-};
+let lead: AuthenticatedUser;
+/** A raid-invite history entry, so a test can see that history survives channel-gone. */
+const HISTORY_SIGNUP_ID = "history-signup";
 
 // A classification "now" far enough ahead that every schedule below is still
 // in the real future (createRun rejects past schedules); only the `now` passed
@@ -39,7 +31,7 @@ const { currentStart, nextStart, followingStart } = classifyRunWeek({
   scheduledStartAt: classificationNow.toISOString(),
   now: classificationNow,
 });
-const createdRunIds: string[] = [];
+const created = { runIds: [] as string[], userIds: [] as string[] };
 
 async function createRunAt(scheduledStartAt: string, state: { status?: RunStatus; archived?: boolean } = {}) {
   const id = await runService
@@ -54,7 +46,7 @@ async function createRunAt(scheduledStartAt: string, state: { status?: RunStatus
       desiredDpsCount: 2,
     })
     .then((run) => run.id);
-  createdRunIds.push(id);
+  created.runIds.push(id);
   if (state.status || state.archived) {
     const now = new Date().toISOString();
     await orm.Run.where({ id }).update({
@@ -72,7 +64,7 @@ async function addStartSnapshot(runId: string) {
     id: crypto.randomUUID(),
     runId,
     startedAt: now,
-    startedById: ids.lead,
+    startedById: lead.id,
     createdAt: now,
     updatedAt: now,
   });
@@ -81,7 +73,7 @@ async function addStartSnapshot(runId: string) {
 async function addPendingAnnouncement(runId: string, type: "RUN_CANCELLED" | "RUN_RESCHEDULED" = "RUN_CANCELLED") {
   const id = crypto.randomUUID();
   // Oldest-first ordering: an early createdAt keeps this row inside listPending(50).
-  const createdAt = new Date(Date.UTC(2000, 0, 1, 0, 0, createdRunIds.length)).toISOString();
+  const createdAt = new Date(Date.UTC(2000, 0, 1, 0, 0, created.runIds.length)).toISOString();
   await orm.RunDiscordAnnouncement.create({
     id,
     runId,
@@ -102,7 +94,7 @@ async function addPendingAnnouncement(runId: string, type: "RUN_CANCELLED" | "RU
 
 async function setPost(runId: string, fields: Record<string, unknown>) {
   // Ensure the row exists via the repository, then set exact test state.
-  await runDiscordPostRepository.recordRaidInviteSent({ runId, signupId: "seed-signup" });
+  await runDiscordPostRepository.recordRaidInviteSent({ runId, signupId: HISTORY_SIGNUP_ID });
   await orm.RunDiscordPost.where({ runId }).update({ ...fields, updatedAt: new Date().toISOString() });
 }
 
@@ -136,42 +128,20 @@ function expectNoWork(work: Awaited<ReturnType<typeof discordSyncService.listSyn
   }
 }
 
-async function cleanupRun(runId: string) {
-  await orm.RunDiscordAnnouncement.where({ runId }).delete().catch(() => {});
-  await orm.RunDiscordPost.where({ runId }).delete().catch(() => {});
-  await orm.RunStartSnapshot.where({ runId }).delete().catch(() => {});
-  const roster = await orm.RunRoster.where({ runId }).first();
-  if (roster) await orm.RunRoster.where({ runId }).delete().catch(() => {});
-  await orm.Run.where({ id: runId }).delete().catch(() => {});
-}
-
-async function cleanupAll() {
-  const runs = await orm.Run.where({ raidLeadId: ids.lead }).select("id").all();
-  for (const row of runs) await cleanupRun((row as { id: string }).id);
-  await orm.User.where({ id: ids.lead }).delete().catch(() => {});
-}
-
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   await raidRepository.ensureReferenceRaids();
-  await cleanupAll();
-  await orm.User.create({
-    id: ids.lead,
-    name: "Candidate Lead",
-    email: `${ids.lead}@dscand.boostting.local`,
-    emailVerified: true,
-    discordUserId: null,
-    accountRole: "RAID_LEAD",
-    accountStatus: "ACTIVE",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
+  const leadId = await createTestUser({ name: "Candidate Lead", accountRole: "RAID_LEAD" });
+  created.userIds.push(leadId);
+  lead = testActor(leadId, "RAID_LEAD");
 }, 60_000);
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-afterAll(cleanupAll, 60_000);
+// Runs cascade their Discord posts, announcements, start snapshots and rosters.
+afterAll(() => deleteCreatedRows(created), 60_000);
 
 describe("Discord sync candidate selection", () => {
   it("1. a fully retired historical Run (only history left) is not loaded and produces no work", async () => {
@@ -193,9 +163,7 @@ describe("Discord sync candidate selection", () => {
       });
     }
 
-    expect(await runDiscordPostRepository.listLiveIdentityRunIds()).not.toEqual(
-      expect.arrayContaining([completedArchived]),
-    );
+    expect(await runDiscordPostRepository.listLiveIdentityRunIds()).not.toContain(completedArchived);
     const { work, loaded } = await loadedRunIds(classificationNow);
     expect(loaded.has(completedArchived)).toBe(false);
     expect(loaded.has(cancelled)).toBe(false);
@@ -268,7 +236,7 @@ describe("Discord sync candidate selection", () => {
     await orm.RunRoster.where({ runId: publishedClosed }).update({
       state: "PUBLISHED",
       publishedAt: new Date().toISOString(),
-      publishedById: ids.lead,
+      publishedById: lead.id,
       version: 2,
       updatedAt: new Date().toISOString(),
     });
@@ -304,12 +272,9 @@ describe("Discord sync candidate selection", () => {
       announceOnCreate: false,
       existingRunChannelId: null,
     });
-    expect(lanesFor(work, publishedClosed).roster.length).toBeGreaterThan(0);
-    expect(lanesFor(work, publishedClosed).roster[0]).toMatchObject({
-      existingRunChannelId: null,
-      existingMessageId: null,
-      mode: "REFRESH",
-    });
+    expect(lanesFor(work, publishedClosed).roster).toMatchObject([
+      { existingRunChannelId: null, existingMessageId: null, mode: "REFRESH" },
+    ]);
 
     expect(lanesFor(work, neverProvisioned).signups).toHaveLength(0);
     expect(lanesFor(work, neverProvisioned).roster).toHaveLength(0);
@@ -558,7 +523,7 @@ describe("retired channel identity convergence (channel-gone)", () => {
       archiveCloseMessageId: "close",
       archiveTranscriptMessageId: "transcript",
       archiveTranscriptHtml: "<html>kept</html>",
-      raidInviteSentSignupIds: JSON.stringify(["seed-signup"]),
+      raidInviteSentSignupIds: JSON.stringify([HISTORY_SIGNUP_ID]),
     });
     expect(await runDiscordPostRepository.listLiveIdentityRunIds()).not.toContain(runId);
     ({ work, loaded } = await loadedRunIds(classificationNow));
@@ -658,7 +623,6 @@ describe("Discord sync batching", () => {
     // Test-visible load size: fully loaded Runs vs all Runs in the database.
     const loaded = ((await listManagedByIds.mock.results[0].value) as unknown[]).length;
     const total = (await orm.Run.select("id").all()).length;
-    console.info(`[discord-sync candidates] full Run loads: ${loaded} of ${total} Runs`);
     expect(loaded).toBeLessThan(total);
   });
 

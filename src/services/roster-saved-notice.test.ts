@@ -4,7 +4,6 @@ import { orm } from "@/lib/prisma";
 import { venomousCreateInput } from "@/lib/test-run-input";
 import { runRepository } from "@/repositories/run.repository";
 import { userNotificationRepository } from "@/repositories/user-notification.repository";
-import { boostingRoleService } from "@/services/boosting-role.service";
 import { newlyKilledBossIds } from "@/services/character-blizzard-sync.service";
 import { characterService } from "@/services/character.service";
 import { lockoutService } from "@/services/lockout.service";
@@ -30,7 +29,10 @@ import {
 } from "@/services/roster-saved-notice.service";
 import { runService } from "@/services/run.service";
 import { runStartSavedCheckService } from "@/services/run-start-saved-check.service";
-import { offerCharacter, offerCharacters } from "@/test/signup-offers";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows, syntheticDiscordId } from "@/test/db-fixtures";
+import { offerCharacter } from "@/test/signup-offers";
+import { CURRENT_WEEK_RUN_START, DAY_MS, RAID_WEEK_TEST_CLOCK, freezeSystemTime, restoreSystemTime } from "@/test/time";
 
 // Warcraft Logs auto-link enrichment runs after Character writes; keep it offline.
 vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOriginal) => ({
@@ -52,7 +54,8 @@ vi.mock("@/integrations/blizzard/blizzard-api-client", () => ({
 // ---------------------------------------------------------------------------
 
 const BOSSES = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({ id: `boss-${n}`, name: `Boss ${n}`, sortOrder: n }));
-const START = "2026-12-12T20:30:00.000Z"; // Saturday
+/** Pure planning only: a Saturday start whose raid ID the kill fixtures use. */
+const START = "2026-12-12T20:30:00.000Z";
 const RESET = lockoutService.getResetIdentifierForRun("EU", START);
 
 function commitment(overrides: Partial<SavedNoticeCommitment["run"]> = {}): SavedNoticeCommitment {
@@ -320,109 +323,70 @@ describe("copy + source key", () => {
 // Integration: real draft pick → notifications + Discord DM work
 // ---------------------------------------------------------------------------
 
-const ids = {
-  owner: "dddddddd-dddd-4ddd-8ddd-rsn000000001",
-  lead: "dddddddd-dddd-4ddd-8ddd-rsn000000002",
-  admin: "dddddddd-dddd-4ddd-8ddd-rsn000000003",
-};
-const createdRunIds: string[] = [];
-const createdCharacterIds: string[] = [];
+/**
+ * Runs need a start in the real future, so this part runs at the frozen raid-week
+ * clock and derives each Run's raid ID from its own start.
+ */
+const created = { runIds: [] as string[], characterIds: [] as string[], userIds: [] as string[] };
+let owner: AuthenticatedUser;
+let lead: AuthenticatedUser;
 
-function asUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"] = "USER"): AuthenticatedUser {
-  return {
-    id,
+async function createUser(name: string, accountRole: AuthenticatedUser["accountRole"], isBooster: boolean) {
+  const id = await createTestUser({ name, accountRole, isBooster, discordUserId: syntheticDiscordId() });
+  created.userIds.push(id);
+  return testActor(id, accountRole, { name });
+}
+
+async function createHealer(player: AuthenticatedUser, name: string) {
+  const character = await characterService.createCharacter(player, {
     name,
-    email: `${id}@rsn.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
+    realm: "Antonidas",
+    region: "EU",
+    wowClass: "PRIEST",
+    specialization: "Holy",
+    itemLevel: 640,
+  });
+  created.characterIds.push(character.id);
+  return character;
 }
-
-async function ensureUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"], discordUserId: string) {
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@rsn.boostting.local`,
-    emailVerified: false,
-    image: null,
-    discordUserId,
-    discordUsername: `u${discordUserId}`,
-    accountRole,
-    accountStatus: "ACTIVE",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }).catch(() => {});
-}
-
-async function cleanupRun(runId: string) {
-  await orm.UserNotification.where({ runId }).delete().catch(() => {});
-  const roster = await orm.RunRoster.where({ runId }).first();
-  if (roster) {
-    const rosterId = (roster as { id: string }).id;
-    await orm.RunRosterEntry.where({ rosterId }).delete().catch(() => {});
-    await orm.RunRoster.where({ id: rosterId }).delete().catch(() => {});
-  }
-  const signups = (await orm.RunSignup.where({ runId }).all()) as Array<{ id: string }>;
-  for (const signup of signups) await orm.RunSignupRole.where({ signupId: signup.id }).delete().catch(() => {});
-  await orm.RunSignup.where({ runId }).delete().catch(() => {});
-  await orm.RunDiscordPost.where({ runId }).delete().catch(() => {});
-  await orm.RunRaidContent.where({ runId }).delete().catch(() => {});
-  await orm.Run.where({ id: runId }).delete().catch(() => {});
-}
-
-const owner = asUser(ids.owner, "RSN Owner");
-const lead = asUser(ids.lead, "RSN Lead", "RAID_LEAD");
-const admin = asUser(ids.admin, "RSN Admin", "ADMIN");
 
 beforeAll(async () => {
-  await ensureUser(ids.owner, "RSN Owner", "USER", "991700000000000001");
-  await ensureUser(ids.lead, "RSN Lead", "RAID_LEAD", "991700000000000002");
-  await ensureUser(ids.admin, "RSN Admin", "ADMIN", "991700000000000003");
-  await boostingRoleService.setRole(admin, { userId: ids.owner, role: "BOOSTER", enabled: true }).catch(() => {});
-  const leftover = (await orm.Character.where({ userId: ids.owner }).all()) as Array<{ id: string }>;
-  for (const row of leftover) await orm.Character.where({ id: row.id }).delete().catch(() => {});
+  assertIsolatedTestDatabase();
+  freezeSystemTime(RAID_WEEK_TEST_CLOCK, { advance: true });
+  owner = await createUser("RSN Owner", "USER", true);
+  lead = await createUser("RSN Lead", "RAID_LEAD", false);
 });
 
 afterAll(async () => {
-  for (const runId of createdRunIds) await cleanupRun(runId);
-  for (const id of createdCharacterIds) await orm.Character.where({ id }).delete().catch(() => {});
+  await deleteCreatedRows(created);
+  restoreSystemTime();
 });
 
 describe("rosterSavedNoticeService.notifyNewKills", () => {
   it("draft-picked Character newly saved on a planned boss → player + Raid Lead (bell + DM), once per boss set", async () => {
-    const character = await characterService.createCharacter(owner, {
-      name: "Rsnstorm",
-      realm: "Antonidas",
-      region: "EU",
-      wowClass: "PRIEST",
-      specialization: "Holy",
-      itemLevel: 640,
-    });
-    createdCharacterIds.push(character.id);
-    const created = await runService.createRun(
+    const character = await createHealer(owner, "Rsnstorm");
+    const { id: runId } = await runService.createRun(
       lead,
-      venomousCreateInput({ scheduledStartAt: START, desiredTankCount: 0, desiredHealerCount: 1, desiredDpsCount: 0 }),
+      venomousCreateInput({ scheduledStartAt: CURRENT_WEEK_RUN_START, desiredTankCount: 0, desiredHealerCount: 1, desiredDpsCount: 0 }),
     );
-    createdRunIds.push(created.id);
-    await runService.openRun(lead, created.id);
-    const offerId = await offerCharacter(owner, created.id, character.id, "HEALER");
+    created.runIds.push(runId);
+    await runService.openRun(lead, runId);
+    const offerId = await offerCharacter(owner, runId, character.id, "HEALER");
 
-    const run = (await runRepository.findById(created.id))!;
+    const run = (await runRepository.findById(runId))!;
     const content = run.contents[0]!;
     const [first, second] = [...content.bosses].sort((a, b) => a.sortOrder - b.sortOrder);
+    const resetIdentifier = lockoutService.getResetIdentifierForRun("EU", run.scheduledStartAt);
     const newKill = (killed: string[], fresh: string[]) => [
-      { raidId: content.raidId, difficulty: run.difficulty, resetIdentifier: RESET, killedBossIds: killed, newBossIds: fresh },
+      { raidId: content.raidId, difficulty: run.difficulty, resetIdentifier, killedBossIds: killed, newBossIds: fresh },
     ];
 
     // Not picked yet: a pending offer is not a pick.
     expect(await rosterSavedNoticeService.notifyNewKills(character.id, newKill([first!.id], [first!.id]))).toBe(0);
 
-    const view = await rosterService.getRosterManagementView(lead, created.id);
+    const view = await rosterService.getRosterManagementView(lead, runId);
     await rosterService.saveDraftSelection(lead, {
-      runId: created.id,
+      runId: runId,
       version: view.roster.version,
       selections: [{ signupId: offerId, selectedRole: "HEALER" }],
     });
@@ -431,11 +395,11 @@ describe("rosterSavedNoticeService.notifyNewKills", () => {
     // Same boss set again (next sync) → no duplicates.
     expect(await rosterSavedNoticeService.notifyNewKills(character.id, newKill([first!.id], [first!.id]))).toBe(0);
 
-    const leadNotes = (await userNotificationRepository.listForUser(ids.lead)).filter(
-      (row) => row.type === "ROSTER_CHARACTER_SAVED" && row.runId === created.id,
+    const leadNotes = (await userNotificationRepository.listForUser(lead.id)).filter(
+      (row) => row.type === "ROSTER_CHARACTER_SAVED" && row.runId === runId,
     );
-    const ownerNotes = (await userNotificationRepository.listForUser(ids.owner)).filter(
-      (row) => row.type === "ROSTER_CHARACTER_SAVED" && row.runId === created.id,
+    const ownerNotes = (await userNotificationRepository.listForUser(owner.id)).filter(
+      (row) => row.type === "ROSTER_CHARACTER_SAVED" && row.runId === runId,
     );
     expect(leadNotes).toHaveLength(1);
     expect(ownerNotes).toHaveLength(1);
@@ -444,7 +408,7 @@ describe("rosterSavedNoticeService.notifyNewKills", () => {
 
     // Discord DM work carries the structured notice for both.
     const work = await discordSyncService.listSyncWork();
-    const dms = work.notificationDms.filter((item) => item.runId === created.id && item.type === "ROSTER_CHARACTER_SAVED");
+    const dms = work.notificationDms.filter((item) => item.runId === runId && item.type === "ROSTER_CHARACTER_SAVED");
     expect(dms.map((item) => item.characterSaved?.audience).sort()).toEqual(["lead", "player"]);
     for (const item of dms) expect(item.contentTitle).toBe(contentShortTitle(run.contents));
     expect(dms.find((item) => item.characterSaved?.audience === "lead")?.characterSaved).toMatchObject({
@@ -462,14 +426,15 @@ describe("runStartSavedCheckService (Start Run re-check)", () => {
   let slot = 0;
 
   /**
-   * A Run with one SELECTED Booster pick per entry (state set directly — the
-   * roster/start flow is covered elsewhere). `kills` are 1-based boss
-   * positions in authoritative order, stored as this raid ID's lockout.
+   * A Run with one SELECTED Booster pick per entry, each owned by its own
+   * Booster (a User holds at most one selected Booster offer per Run). State
+   * is set directly — the roster/start flow is covered elsewhere. `kills` are
+   * 1-based boss positions in authoritative order, stored as this raid ID's lockout.
    */
   async function startedRun(entries: Array<{ name: string; kills: number[] }>, plannedBossCount = 8) {
     slot += 1;
-    const start = new Date(Date.parse("2026-12-26T20:30:00.000Z") + slot * 7 * 24 * 3_600_000).toISOString();
-    const created = await runService.createRun(
+    const start = new Date(Date.parse(CURRENT_WEEK_RUN_START) + slot * 7 * DAY_MS).toISOString();
+    const runCreated = await runService.createRun(
       lead,
       venomousCreateInput({
         scheduledStartAt: start,
@@ -479,34 +444,18 @@ describe("runStartSavedCheckService (Start Run re-check)", () => {
         desiredDpsCount: 0,
       }),
     );
-    createdRunIds.push(created.id);
-    await runService.openRun(lead, created.id);
-    const run = (await runRepository.findById(created.id))!;
+    const runId = runCreated.id;
+    created.runIds.push(runId);
+    await runService.openRun(lead, runId);
+    const run = (await runRepository.findById(runId))!;
     const content = run.contents[0]!;
     const bosses = [...content.bosses].sort((a, b) => a.sortOrder - b.sortOrder);
     const resetIdentifier = lockoutService.getResetIdentifierForRun("EU", start);
-    const characterIds: string[] = [];
+    const picks: Array<{ signupId: string; label: string; userId: string }> = [];
     for (const entry of entries) {
-      const character = await characterService.createCharacter(owner, {
-        name: entry.name,
-        realm: "Antonidas",
-        region: "EU",
-        wowClass: "PRIEST",
-        specialization: "Holy",
-        itemLevel: 640,
-      });
-      createdCharacterIds.push(character.id);
-      characterIds.push(character.id);
-    }
-    const offerIds = await offerCharacters(
-      owner,
-      created.id,
-      characterIds.map((characterId) => ({ characterId, roles: ["HEALER"] })),
-    );
-    const picks: Array<{ signupId: string; label: string }> = [];
-    for (const [index, entry] of entries.entries()) {
-      const characterId = characterIds[index]!;
-      const offerId = offerIds[index]!;
+      const player = await createUser(`RSN ${entry.name}`, "USER", true);
+      const characterId = (await createHealer(player, entry.name)).id;
+      const offerId = await offerCharacter(player, runId, characterId, "HEALER");
       await orm.RunSignup.where({ id: offerId }).update({ status: "SELECTED", publishedRole: "HEALER" });
       if (entry.kills.length > 0) {
         const now = new Date().toISOString();
@@ -523,15 +472,22 @@ describe("runStartSavedCheckService (Start Run re-check)", () => {
           updatedAt: now,
         });
       }
-      picks.push({ signupId: offerId, label: `${entry.name}-Antonidas` });
+      picks.push({ signupId: offerId, label: `${entry.name}-Antonidas`, userId: player.id });
     }
-    return { runId: created.id, run, bosses, picks };
+    return { runId, run, bosses, picks };
   }
 
   async function notesFor(userId: string, runId: string) {
     return (await userNotificationRepository.listForUser(userId)).filter(
       (row) => row.type === "ROSTER_CHARACTER_SAVED" && row.runId === runId,
     );
+  }
+
+  /** The player reminders across every pick's Booster. */
+  async function remindersFor(picks: ReadonlyArray<{ userId: string }>, runId: string) {
+    const all = [];
+    for (const pick of picks) all.push(...(await notesFor(pick.userId, runId)));
+    return all;
   }
 
   it("one saved SELECTED Character → its player reminder + ONE Raid Lead summary; clean picks get nothing", async () => {
@@ -545,13 +501,13 @@ describe("runStartSavedCheckService (Start Run re-check)", () => {
 
     expect(await runStartSavedCheckService.run(runId)).toBe(2); // player reminder + RL summary
 
-    const reminders = await notesFor(ids.owner, runId);
+    const reminders = await remindersFor(picks, runId);
     expect(reminders).toHaveLength(1);
     expect(reminders[0]!.signupId).toBe(picks[0]!.signupId);
     expect(reminders[0]!.title).toBe("Reminder: you are saved");
     expect(reminders[0]!.message).toContain(`Rsnsaved-Antonidas is saved on ${bosses[0]!.name}, ${bosses[1]!.name}`);
 
-    const summaries = await notesFor(ids.lead, runId);
+    const summaries = await notesFor(lead.id, runId);
     expect(summaries).toHaveLength(1);
     expect(summaries[0]!.title).toBe("Selected Characters are saved");
     expect(summaries[0]!.message).toBe(
@@ -584,7 +540,7 @@ describe("runStartSavedCheckService (Start Run re-check)", () => {
   });
 
   it("several saved SELECTED Characters → one reminder each + exactly ONE grouped summary; a repeated check adds nothing", async () => {
-    const { runId, run, bosses } = await startedRun([
+    const { runId, run, bosses, picks } = await startedRun([
       { name: "Rsnmist", kills: [1] },
       { name: "Rsnblast", kills: [2, 3] },
       { name: "Rsnquiet", kills: [] },
@@ -594,11 +550,11 @@ describe("runStartSavedCheckService (Start Run re-check)", () => {
     expect(await runStartSavedCheckService.run(runId)).toBe(3); // 2 reminders + 1 summary
     expect(await runStartSavedCheckService.run(runId)).toBe(0); // same affected set → no duplicate
 
-    expect((await notesFor(ids.owner, runId)).map((row) => row.message).sort()).toEqual([
+    expect((await remindersFor(picks, runId)).map((row) => row.message).sort()).toEqual([
       `Rsnblast-Antonidas is saved on ${bosses[1]!.name}, ${bosses[2]!.name} for ${run.title} — no loot from those bosses for you.`,
       `Rsnmist-Antonidas is saved on ${bosses[0]!.name} for ${run.title} — no loot from those bosses for you.`,
     ]);
-    const summaries = await notesFor(ids.lead, runId);
+    const summaries = await notesFor(lead.id, runId);
     expect(summaries).toHaveLength(1);
     expect(summaries[0]!.message).toBe(
       [
@@ -610,18 +566,18 @@ describe("runStartSavedCheckService (Start Run re-check)", () => {
   });
 
   it("no affected SELECTED Character → no reminder and no Raid Lead summary", async () => {
-    const { runId } = await startedRun([
+    const { runId, picks } = await startedRun([
       { name: "Rsnnone", kills: [] },
       { name: "Rsnzero", kills: [] },
     ]);
     await orm.Run.where({ id: runId }).update({ status: "IN_PROGRESS" });
     expect(await runStartSavedCheckService.run(runId)).toBe(0);
-    expect(await notesFor(ids.owner, runId)).toEqual([]);
-    expect(await notesFor(ids.lead, runId)).toEqual([]);
+    expect(await remindersFor(picks, runId)).toEqual([]);
+    expect(await notesFor(lead.id, runId)).toEqual([]);
   });
 
   it("6/8 Run: a kill on boss 7 alone never triggers; a kill on boss 6 does", async () => {
-    const { runId, bosses } = await startedRun(
+    const { runId, bosses, picks } = await startedRun(
       [
         { name: "Rsnseven", kills: [7] },
         { name: "Rsnsix", kills: [6, 7] },
@@ -631,11 +587,11 @@ describe("runStartSavedCheckService (Start Run re-check)", () => {
     await orm.Run.where({ id: runId }).update({ status: "IN_PROGRESS" });
     expect(await runStartSavedCheckService.run(runId)).toBe(2); // Rsnsix reminder + summary
 
-    const reminders = await notesFor(ids.owner, runId);
+    const reminders = await remindersFor(picks, runId);
     expect(reminders).toHaveLength(1);
     expect(reminders[0]!.message).toContain(`Rsnsix-Antonidas is saved on ${bosses[5]!.name} for`);
     expect(reminders[0]!.message).not.toContain(bosses[6]!.name);
-    const [summary] = await notesFor(ids.lead, runId);
+    const [summary] = await notesFor(lead.id, runId);
     expect(summary!.message).toBe(
       ["1 selected Character is saved:", `Rsnsix-Antonidas — ${bosses[5]!.name}`].join("\n"),
     );

@@ -74,7 +74,6 @@ async function createPublishedRunnableRun() {
       desiredTankCount: 1,
       desiredHealerCount: 0,
       desiredDpsCount: 0,
-      title: `LC race ${created.runIds.length}`,
     }),
   );
   created.runIds.push(run.id);

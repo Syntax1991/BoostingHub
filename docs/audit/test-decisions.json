@@ -1190,7 +1190,7 @@
     ],
     "src/services/scheduled-character-sync-backoff.test.ts": [
       "REWRITE",
-      "Shared user fixtures and verified cleanup; Force refresh all removes only its own admin marker and fails on a foreign marker inside the cooldown instead of deleting every marker; the repository spy is restored even when the run throws"
+      "Shared user fixtures and verified cleanup; Force refresh all removes only its own admin marker and fails on a foreign marker inside the cooldown instead of deleting every marker; the repository-level fairness pass runs through withOnlySyncCandidates, so skippedBackoff is exact (was >= early.length)"
     ],
     "src/services/character-delete.test.ts": [
       "REWRITE",
@@ -1222,7 +1222,7 @@
     ],
     "src/services/run-lifecycle-concurrency.test.ts": [
       "REWRITE",
-      "Fresh users instead of fixed ids with a pre-delete and swallowed deletes; waitForLockWaiter instead of 150 ms sleeps (mutation: Start without the roster lock now fails); held transactions released in finally; race losers asserted by their exact codes (30 rounds stable); mocks restored in afterEach"
+      "Fresh users instead of fixed ids with a pre-delete and swallowed deletes; waitForLockWaiter instead of 150 ms sleeps (mutation: Start without the roster lock now fails); held transactions released in finally; race losers asserted by their exact codes (30 rounds stable); mocks restored in afterEach; dropped a title field that the Run input does not have (Zod discarded it; tsc error)"
     ],
     "src/services/character-sync-telemetry.test.ts": [
       "REWRITE",
@@ -1235,6 +1235,38 @@
     "src/services/signup-eligibility.test.ts": [
       "KEEP",
       "Pure eligibility and lockout-save rules with explicit inputs; a duplicated assertion and a test of deprecated availability blocks that never passed a block removed; withdrawal rules moved to domain/signup-state.test.ts, the run/signup coupling check replaced by a real lifecycle test in domain/run-state.test.ts"
+    ],
+    "src/services/signup-cross-run-reservation.test.ts": [
+      "REWRITE",
+      "Every test gets its own hybrid Character and users instead of one shared fixture with fixed ids; production saveDraftSelection instead of the test-only setDraftSelection; scheduledStartsCollideForReservation cases KEEP"
+    ],
+    "src/services/roster-saved-notice.test.ts": [
+      "REWRITE",
+      "Two time bombs removed (hard-coded 12 and 26 December resets): frozen RAID_WEEK clock, Runs at CURRENT_WEEK_RUN_START and the reset derived from the run start; one selected Booster offer per user (the impossible two-offers state is gone); fresh users per test; reminders read through one helper"
+    ],
+    "src/services/run-template.service.test.ts": [
+      "REWRITE",
+      "Fresh users instead of seeded ones; dead writes to the shared Raid row removed; \"no template created\" cases now assert the template count instead of only the error"
+    ],
+    "src/services/raid-catalog-import.service.test.ts": [
+      "REWRITE",
+      "Own admin instead of the seeded one; cleanup by the ids the test created instead of deleting every Run, Run Setup and Product whose name matches \"QA Import %\"; raid content rows go with their parents by cascade (verified)"
+    ],
+    "src/services/scheduled-character-sync.service.test.ts": [
+      "REWRITE",
+      "Pass totals depended on how long ago the DB was reset (every stale seeded Character counted): asserted passes now run through withOnlySyncCandidates and pin exact counts instead of >= 1; shared user fixtures; cleanup errors no longer swallowed; console spies restored by vi.restoreAllMocks"
+    ],
+    "src/services/discord-sync-candidates.test.ts": [
+      "REWRITE",
+      "Fresh lead instead of a fixed id; id-based cleanup through deleteCreatedRows; arrayContaining negation replaced by not.toContain; roster lane asserted as exactly one REFRESH item; console.info of load counts removed"
+    ],
+    "src/guides/guide-replace.test.ts": [
+      "KEEP",
+      "Pure file-system and fake-Discord tests with temp directories cleaned per test; two write-once lets made const"
+    ],
+    "src/lib/test-database-guard.test.ts": [
+      "KEEP",
+      "New in this audit: first tests of the test-database guard (valid URL; missing, development and non-test names refused; TEST_DATABASE_EXPECTED_NAME pin)"
     ]
   },
   "tests": {
@@ -1943,6 +1975,14 @@
     "src/services/signup-eligibility.test.ts::withdrawal > keeps withdrawn as a terminal persisted state": [
       "MERGE",
       "Moved to domain/signup-state.test.ts (self-withdrawal)"
+    ],
+    "src/services/signup-cross-run-reservation.test.ts::cross-Run Character reservation — write-boundary enforcement > setDraftSelection rejects selecting a Character already reserved on a colliding Run, leaving the original selection intact": [
+      "MERGE",
+      "setDraftSelection was test-only; the batch test now also asserts that both rosters stay as they were"
+    ],
+    "src/services/signup-cross-run-reservation.test.ts::cross-Run Character reservation — write-boundary enforcement > saveDraftSelection rejects a whole batch when any booster Character is reserved on a colliding Run": [
+      "REWRITE",
+      "Renamed: \"... leaving both rosters as they were\", also checks the colliding Run's roster"
     ]
   }
 }

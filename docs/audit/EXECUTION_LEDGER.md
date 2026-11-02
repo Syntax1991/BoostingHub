@@ -131,7 +131,7 @@ Order follows the assignment. Each line is one PR, stacked on the one before.
 | 4 | MVCS boundaries: app and controllers no longer import repositories; lib no longer imports components | PR #326, awaiting review |
 | 4b | Move pure rules from `src/services` to `src/domain` | PR #327, awaiting review |
 | 5 | Guide code: drop legacy paths, share publisher code | PR #328, awaiting review |
-| 6 | Test cleanup by module | Partial: flagged tests in PR open; 39 of 342 files read, 358 of 3933 tests decided |
+| 6 | Test cleanup by module | In progress on `test/audit-batch-a`: 316 of 341 files decided, 2999 of 3825 tests (25 files left) |
 | 7 | Frontend: error, loading and not-found pages; shared dialog effect | PR #329, awaiting review |
 | 8 | Performance, measured: run detail payload, event purge, rate-limit log | PR #330, awaiting review |
 | 9 | Dependencies and final verification | Dependencies audited, no change; TruffleHog scan still invalid |
@@ -275,12 +275,47 @@ Refactored so far:
 - `createBoosterSignup` removed (see continuation point 3). The migration is mechanical in unaudited files; their own audit is still due. Same-User same-Run offers that used to add up are now one `offerCharacters` call.
 - Not yet audited and found while migrating: `roster.service.test.ts` passes only on a freshly reset test DB (5 failures otherwise, also before this change); `roster-saved-notice.test.ts` starts Runs on fixed dates from 26 December 2026 and forces several SELECTED offers onto one User.
 
+### Test database isolation (2026-11-02)
+
+- Incident: one run of the then-unaudited `character.service.test.ts` reached the shared `boostting_bot_test` because a chained shell prefix was skipped after an earlier command failed. That database's schema is behind (`discordGlobalName` missing), so the suite failed at its first User write; its old setup touches only its own fixed test users. No other data, no production.
+- Resolution paths checked: the pg pool, Vitest's global setup and `scripts/test-db-reset.ts` all resolve the target through `resolveTestDatabaseUrl()` (`TEST_DATABASE_URL`); `test:db:reset` passes that URL to the migrate and seed child processes as their `DATABASE_URL`; `dotenv` never overrides an exported variable; `prisma.config.ts` reads `DATABASE_URL` only for CLI use, which the reset overrides.
+- Fail-closed now on two levels: `resolveTestDatabaseUrl()` refuses any database other than `TEST_DATABASE_EXPECTED_NAME` when that is set (new unit test `src/lib/test-database-guard.test.ts`, which also covers the existing checks that had no test); every database command of this audit runs through one wrapper that builds the URL itself, checks host, port and name, then confirms `current_database()` live before running. A wrong URL with the pin set fails in Vitest's global setup before any connection.
+- The audit uses its own `boostting_bot_test_audit`, created for it: the stale `elastic-euler-bbd562` worktree also lists `boostting_bot_test_s3` in its `.env`.
+
+### A17 evidence: Admin-level lock in `changeAccountRoleAtomic`
+
+- Before `26a80d5`: the lock step ran `txOrm.User.where(accountRole in (ADMIN, OWNER) or id = target).update(...)`. Prisma Next's `update()` resolves the first matching row and updates only that one (`orm-client.mjs`, `#findFirstMatchingRowIdentityWhere`), so the transaction locked one arbitrary Admin-level row, not the set it counts afterwards.
+- Reproduced with the unmodified code: holding only adminB's demotion uncommitted, a concurrent demotion of adminA did not block and succeeded, which leaves zero Admin-level accounts once both commit.
+- Fix: `updateAndCount()` writes, and row-locks, every matching row inside the same transaction that then re-reads and counts the Admin-level rows. The single-owner partial unique index (`user_single_owner`) is unaffected; the count's error path (`LAST_ADMIN_REQUIRED`) is unchanged.
+- Verified: the race test now waits until the second demotion is blocked on a row lock (`waitForLockWaiter`), then releases. Fixed code: passes. `update()` restored: fails in 4 of 5 runs (which row is "first" varies). Admin-level lock removed: fails every run. The sequential last-admin tests and the concurrent `Promise.allSettled` test pass alongside.
+
+### Item C: `wcl-fight-assignment.ts` diagnostics
+
+The file moved from `src/services` to `src/domain` in `1ea64b5` (batch 4b). Its three imports (`@/integrations/warcraft-logs/warcraft-logs-api-client`, `@/domain/consumable-audit-extract`, `@/models/enums`) resolve; nothing references the old path; `tsc --noEmit` is clean. The reported unresolved imports, implicit any and Map errors came from an editor buffer of the old path (`@/services/consumable-audit-extract` no longer exists). No code change.
+
+### A18 and A19 analysis
+
+- A18: 35 inline sites cast `tx.orm` inside `db.transaction(async (tx) => ...)`, where `tx.orm.public` is already typed `typeof orm` (checked by compiling a probe and at runtime). Four helpers (`txOrmOf` / `resolveTxOrm`) take `tx: { orm: unknown }` and so erase the type themselves. Plan: inline sites use `tx.orm.public`; the helpers go and their callers pass `tx.orm.public`. Every site is proven by `tsc`.
+- A19: dead are the `raidInvites` work lane (always `[]`), `RaidInviteWorkItem`, the route field, the bot client type, `syncRaidInvite` in the sync loop, the `"raid-invite"` discord-state kind (sent only by `syncRaidInvite`), its route branch and `discordSyncService.recordRaidInviteSent`. Live and kept: `runDiscordPostRepository.recordRaidInviteSent` and the `raidInviteSentSignupIds` column, written by `recordNotificationDmDelivery` when a RAID_INVITE DM is SENT. Web and bot deploy together and an older bot never sends `"raid-invite"` (its lane was always empty), so no persisted or wire compatibility is lost.
+
+### Multi-row deletes in test cleanups
+
+A scan of every test file found about 45 cleanups of the form `orm.X.where(<non-unique filter>).delete()`, which removes only the first matching row (the trap #301 fixed in production code). Many were masked by cascades from a later User or Run delete. They become `deleteAndCount()` with the same filter, in one commit.
+
+### Services batches 8–11
+
+- Batch 8 (`214ec7b`): `run-discord-announcement` (embed tests merged into `discord-bot/embeds/run-lifecycle-announcement.test.ts`), `roster-builder.service`, `character.service`.
+- Batch 9 (`71635fb`): `roster-legacy-saved-draft` (synthetic names), `run-lifecycle-concurrency`, `character-sync-telemetry`.
+- Batch 10 (`059f237`): `roster-reservation-concurrency` on the production `saveDraftSelection`; with the locked reservation check disabled both race tests fail every run. `signup-eligibility` KEEP; its withdrawal rules moved to `domain/signup-state.test.ts`, and `canTransitionRun` gained its first test.
+- Batch 11: `signup-cross-run-reservation`, `roster-saved-notice` (both fixed-date time bombs removed: 12 and 26 December), `run-template.service`, `raid-catalog-import.service` (deleted rows by name pattern before), `scheduled-character-sync.service` and `-backoff` (pass totals depended on how long ago the DB was reset; new `src/test/sync-candidates.ts`), `discord-sync-candidates`, `guide-replace` (KEEP). `run-lifecycle-concurrency` passed a `title` the Run input does not have; `tsc` reported it, and it is dropped.
+- Full suite on the audited state before batch 11, on `boostting_bot_test_audit` after `test:db:reset`: 341 files, 3826 tests passed, exit 0 (438 s). The earlier 3,832-test baseline is not used as evidence.
+
 ## Continuation point
 
 The test audit is not complete. Order for the rest, smallest risk first:
 
-1. Done on branch `test/audit-batch-a`: `src/repositories` (11 files), `src/components` (39), `src/discord-bot` (37), `src/lib` (88), `src/domain` (22), `src/services` batches 1–6 (67 files, the smallest by line count, through `scheduled-character-sync-backoff.test.ts`).
-2. Next: the rest of `src/services`, smallest first, starting at `character-delete.test.ts`; then `src/guides/guide-replace.test.ts`. A test file without an entry in `test-decisions.json` is unreviewed. Each file now also gets the fixture rules above; files already audited get a fixture sweep afterwards (local `asUser`, `expectDomainCode`, fixed-id pre-cleans, swallowed `.catch(() => {})` cleanups).
+1. Done on branch `test/audit-batch-a`: `src/repositories` (11 files), `src/components` (39), `src/discord-bot` (37), `src/lib` (88), `src/domain` (22), `src/guides`, `src/services` batches 1–11.
+2. Next: the 25 remaining `src/services` files, smallest first; `test-decisions.json` lists what is decided. `run-warcraft-logs-auto` writes on seeded Runs and needs its own fixtures; `roster.service` passes only on a freshly reset DB. A test file without an entry in `test-decisions.json` is unreviewed. Each file now also gets the fixture rules above; files already audited get a fixture sweep afterwards (local `asUser`, `expectDomainCode`, fixed-id pre-cleans, swallowed `.catch(() => {})` cleanups).
 3. Done: `signupService.createBoosterSignup` is removed with `persistSignup`, `signupRepository.create` / `findDuplicate`, `isBlockingDuplicate` and `boosterSignupSchema`. All 13 suites offer through `offerCharacters` / `offerCharacter` in `src/test/signup-offers.ts`, which calls the production `setCharacterOffers`. `signup.service.test.ts` is rewritten.
 
 Services batch 2 notes worth keeping:
@@ -295,3 +330,7 @@ Services batch 2 notes worth keeping:
 5. Then shared helpers for `createTestUser` (36 copies), `createCharacter` (29) and `createUser` (26), and `restoreMocks` for the 52 files that never reset mocks.
 
 Not started: renames from the naming table, other than the move to `src/domain`.
+
+Owner decision (2026-11-02), after the audit: every test moves to a root-level `tests/` directory (`unit/`, `integration/`, `e2e/`, `fixtures/`, `helpers/`, `setup/`), and `src/` keeps production code only. Tests are classified by what they do: a test that needs the database or several real components is `integration`, whatever its file name. The move is its own structural commit with no behaviour change; the discovered file inventory is compared exactly before and after, and the database guards stay in force.
+
+Open tracked items: A18 and A19 (one commit each), the multi-row `.delete()` cleanups in tests, removing `rosterService.setDraftSelection` once its last caller has moved to `saveDraftSelection`.

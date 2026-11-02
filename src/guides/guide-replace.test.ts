@@ -243,14 +243,12 @@ describe("guide replace", () => {
     const fixture = boosterFixture();
     const discord = new FakeDiscord(fixture);
     discord.seedOldGuide();
-    let stateAtFirstCreate: GuideReplaceState | null = null;
-    let snapshotAtFirstCreate = "";
     discord.beforeCreate = () => {
       throw new Error("stop here");
     };
     const outcome = await publishGuideReplacement(context(fixture, discord));
-    stateAtFirstCreate = await savedState();
-    snapshotAtFirstCreate = await readFile(stateAtFirstCreate.snapshotPath, "utf8");
+    const stateAtFirstCreate = await savedState();
+    const snapshotAtFirstCreate = await readFile(stateAtFirstCreate.snapshotPath, "utf8");
 
     expect(outcome.ok).toBe(false);
     expect(stateAtFirstCreate.oldMessages).toHaveLength(5);

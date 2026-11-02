@@ -1,10 +1,9 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PRODUCT_CATALOG_FIXTURE } from "@/lib/product-catalog";
 import type { PlanningProduct } from "@/lib/product-selection";
 import { fixtureRaidCatalog } from "@/lib/raid-catalog";
 import { seededProductSelection } from "@/lib/test-run-input";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
 import { MANAFORGE_OMEGA_RAID_ID, TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
@@ -17,85 +16,20 @@ import { runService } from "@/services/run.service";
 import { expandProductSelection } from "@/lib/product-selection";
 import { productPlanningService } from "@/services/product-planning.service";
 import { VENOMOUS_ABYSS_PRODUCT_CONTENT_ID, VENOMOUS_ABYSS_PRODUCT_ID } from "@/lib/product-catalog";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { expectDomainError } from "@/test/domain-error";
 
 const raidId = VENOMOUS_ABYSS_RAID_ID;
-const ids = {
-  user: "aaaaaaaa-aaaa-4aaa-8aaa-rs0000000001",
-  lead: "aaaaaaaa-aaaa-4aaa-8aaa-rs0000000002",
-  otherLead: "aaaaaaaa-aaaa-4aaa-8aaa-rs0000000003",
-  admin: "aaaaaaaa-aaaa-4aaa-8aaa-rs0000000004",
-};
+const created = { userIds: [] as string[] };
+const ids = { user: "", lead: "", admin: "" };
+let user: AuthenticatedUser;
+let lead: AuthenticatedUser;
+let admin: AuthenticatedUser;
 
-const createdTemplateIds: string[] = [];
-
-function asUser(
-  id: string,
-  name: string,
-  accountRole: AuthenticatedUser["accountRole"] = "USER",
-  accountStatus: AuthenticatedUser["accountStatus"] = "ACTIVE",
-): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@rstest.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus,
-  };
+async function templateCountBy(createdById: string) {
+  return (await orm.RunTemplate.where({ createdById }).select("id").all()).length;
 }
-
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    if (error instanceof Error && error.message === `Expected domain error ${code}`) {
-      throw error;
-    }
-    expect(isDomainError(error) && error.code).toBe(code);
-  }
-}
-
-async function createTestUser(
-  id: string,
-  name: string,
-  accountRole: AuthenticatedUser["accountRole"],
-  accountStatus: AuthenticatedUser["accountStatus"] = "ACTIVE",
-) {
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@rstest.boostting.local`,
-    emailVerified: true,
-    accountRole,
-    accountStatus,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
-}
-
-async function deleteIfPresent(table: "User" | "RunTemplate", id: string) {
-  try {
-    if (table === "User") await orm.User.where({ id }).delete();
-    else await orm.RunTemplate.where({ id }).delete();
-  } catch {
-    // Already gone.
-  }
-}
-
-async function setRaidAvailable(id: string, available: boolean) {
-  await orm.Raid.where({ id }).update({ isActive: available, updatedAt: new Date().toISOString() });
-}
-
-async function setAccountStatus(id: string, status: AuthenticatedUser["accountStatus"]) {
-  await orm.User.where({ id }).update({ accountStatus: status, updatedAt: new Date().toISOString() });
-}
-
-const user = asUser(ids.user, "RTS User");
-const lead = asUser(ids.lead, "RTS Lead", "RAID_LEAD");
-const admin = asUser(ids.admin, "RTS Admin", "ADMIN");
 
 function inputFor(overrides: Partial<CreateRunTemplateInput> = {}): CreateRunTemplateInput {
   return {
@@ -112,39 +46,26 @@ function inputFor(overrides: Partial<CreateRunTemplateInput> = {}): CreateRunTem
 }
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   await raidRepository.ensureReferenceRaids();
-  for (const id of [ids.user, ids.lead, ids.otherLead, ids.admin]) {
-    await deleteIfPresent("User", id);
+  for (const [key, name, role] of [
+    ["user", "RTS User", "USER"],
+    ["lead", "RTS Lead", "RAID_LEAD"],
+    ["admin", "RTS Admin", "ADMIN"],
+  ] as const) {
+    ids[key] = await createTestUser({ name, accountRole: role });
+    created.userIds.push(ids[key]);
   }
-  await createTestUser(ids.user, "RTS User", "USER");
-  await createTestUser(ids.lead, "RTS Lead", "RAID_LEAD");
-  await createTestUser(ids.otherLead, "RTS Other Lead", "RAID_LEAD");
-  await createTestUser(ids.admin, "RTS Admin", "ADMIN");
+  user = testActor(ids.user, "USER");
+  lead = testActor(ids.lead, "RAID_LEAD");
+  admin = testActor(ids.admin, "ADMIN");
 });
 
 afterAll(async () => {
-  for (const id of createdTemplateIds) {
-    await deleteIfPresent("RunTemplate", id);
-  }
-  for (const id of [ids.user, ids.lead, ids.otherLead, ids.admin]) {
-    await deleteIfPresent("User", id);
-  }
-  // Defensive — every test that mutates shared reference state restores it
-  // itself, but this guards the rest of the suite even if one didn't.
-  await setRaidAvailable(raidId, true);
-  await setAccountStatus(ids.lead, "ACTIVE");
-});
-
-afterEach(async () => {
-  for (const creatorId of [ids.lead, ids.admin, ids.otherLead]) {
-    const stray = await orm.RunTemplate.where({ createdById: creatorId }).select("id").all();
-    for (const row of stray) {
-      const id = String((row as { id: string }).id);
-      if (!createdTemplateIds.includes(id)) {
-        await deleteIfPresent("RunTemplate", id);
-      }
-    }
-  }
+  assertIsolatedTestDatabase();
+  // Templates restrict deleting their creator and updater; only the suite's Admin writes them.
+  await orm.RunTemplate.where({ createdById: ids.admin }).deleteAndCount();
+  await deleteCreatedRows(created);
 });
 
 function fakeTemplate(overrides: Partial<RunTemplateRecord> = {}): RunTemplateRecord {
@@ -353,7 +274,6 @@ describe("template → DB product expansion", () => {
       admin,
       inputFor({ name: "Preset Map", contentBossCounts: { [VENOMOUS_ABYSS_PRODUCT_CONTENT_ID]: 5 } }),
     );
-    createdTemplateIds.push(created.id);
     const form = await runService.getCreateManyForm(lead);
     const row = form.templates.find((template) => template.id === created.id);
     expect(row?.productId).toBe(VENOMOUS_ABYSS_PRODUCT_ID);
@@ -373,16 +293,17 @@ describe("createRunTemplateSchema — structural validation", () => {
 
 describe("runTemplateService.createTemplate — authorization", () => {
   it("USER is forbidden, no template created", async () => {
-    await expectDomainCode(runTemplateService.createTemplate(user, inputFor()), "NOT_AUTHORIZED");
+    await expectDomainError(runTemplateService.createTemplate(user, inputFor()), "NOT_AUTHORIZED");
+    expect(await templateCountBy(ids.user)).toBe(0);
   });
 
   it("RAID_LEAD cannot manage global templates", async () => {
-    await expectDomainCode(runTemplateService.createTemplate(lead, inputFor()), "NOT_AUTHORIZED");
+    await expectDomainError(runTemplateService.createTemplate(lead, inputFor()), "NOT_AUTHORIZED");
+    expect(await templateCountBy(ids.lead)).toBe(0);
   });
 
   it("ADMIN creates a global template without raidLeadId", async () => {
     const result = await runTemplateService.createTemplate(admin, inputFor());
-    createdTemplateIds.push(result.id);
     const template = await runTemplateRepository.findById(result.id);
     expect(template?.createdById).toBe(ids.admin);
     expect(template?.updatedById).toBe(ids.admin);
@@ -395,7 +316,6 @@ describe("runTemplateService.createTemplate — domain validation reuses Run pla
       admin,
       inputFor({ name: "Bundle create", ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 6), }),
     );
-    createdTemplateIds.push(created.id);
     const template = await runTemplateRepository.findById(created.id);
     expect(template?.contents).toHaveLength(2);
     expect(template?.contents.find((row) => row.raidId === TIDEBOUND_GROTTO_RAID_ID)?.plannedBossCount).toBe(1);
@@ -403,21 +323,21 @@ describe("runTemplateService.createTemplate — domain validation reuses Run pla
   });
 
   it("an invalid difficulty/lootType combination is rejected", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       runTemplateService.createTemplate(admin, inputFor({ difficulty: "MYTHIC", lootType: "SAVED" })),
       "RUN_LOOT_TYPE_INVALID",
     );
   });
 
   it("a planned boss count exceeding the raid's total is rejected", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       runTemplateService.createTemplate(admin, inputFor({ contentBossCounts: { [VENOMOUS_ABYSS_PRODUCT_CONTENT_ID]: 999 } })),
       "RUN_BOSS_COUNT_INVALID",
     );
   });
 
   it("an out-of-range composition value is rejected", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       runTemplateService.createTemplate(admin, inputFor({ desiredHealerCount: -1 })),
       "VALIDATION_FAILED",
     );
@@ -439,10 +359,8 @@ describe("runTemplateService.duplicateTemplate", () => {
         notes: "orig notes",
       }),
     );
-    createdTemplateIds.push(created.id);
 
     const dup = await runTemplateService.duplicateTemplate(admin, created.id);
-    createdTemplateIds.push(dup.id);
     expect(dup.id).not.toBe(created.id);
 
     const original = await runTemplateRepository.findById(created.id);
@@ -482,10 +400,8 @@ describe("runTemplateService.duplicateTemplate", () => {
         lootType: "VIP",
       }),
     );
-    createdTemplateIds.push(created.id);
 
     const dup = await runTemplateService.duplicateTemplate(admin, created.id);
-    createdTemplateIds.push(dup.id);
 
     const copy = await runTemplateRepository.findById(dup.id);
     expect(copy?.contents).toHaveLength(2);
@@ -512,16 +428,14 @@ describe("runTemplateService.duplicateTemplate", () => {
 
   it("USER cannot duplicate", async () => {
     const created = await runTemplateService.createTemplate(admin, inputFor({ name: "No dup for user" }));
-    createdTemplateIds.push(created.id);
-    await expectDomainCode(runTemplateService.duplicateTemplate(user, created.id), "NOT_AUTHORIZED");
+    await expectDomainError(runTemplateService.duplicateTemplate(user, created.id), "NOT_AUTHORIZED");
   });
 });
 
 describe("runTemplateService.updateTemplate — manage authorization", () => {
   it("RAID_LEAD cannot edit global templates", async () => {
     const created = await runTemplateService.createTemplate(admin, inputFor({ name: "Owned" }));
-    createdTemplateIds.push(created.id);
-    await expectDomainCode(
+    await expectDomainError(
       runTemplateService.updateTemplate(lead, {
         ...inputFor({ name: "Owned, edited" }),
         templateId: created.id,
@@ -534,7 +448,6 @@ describe("runTemplateService.updateTemplate — manage authorization", () => {
 
   it("ADMIN may edit any global template", async () => {
     const created = await runTemplateService.createTemplate(admin, inputFor({ name: "Editable" }));
-    createdTemplateIds.push(created.id);
     const result = await runTemplateService.updateTemplate(admin, {
       ...inputFor({ name: "Editable, updated" }),
       templateId: created.id,
@@ -550,7 +463,6 @@ describe("runTemplateService.updateTemplate — manage authorization", () => {
 describe("runTemplateService — active/inactive lifecycle", () => {
   it("deactivate then reactivate round-trips isActive", async () => {
     const created = await runTemplateService.createTemplate(admin, inputFor({ name: "Lifecycle" }));
-    createdTemplateIds.push(created.id);
 
     await runTemplateService.deactivate(admin, created.id);
     expect((await runTemplateRepository.findById(created.id))?.isActive).toBe(false);
@@ -561,20 +473,17 @@ describe("runTemplateService — active/inactive lifecycle", () => {
 
   it("deactivating an already-inactive template is rejected", async () => {
     const created = await runTemplateService.createTemplate(admin, inputFor({ name: "Already inactive" }));
-    createdTemplateIds.push(created.id);
     await runTemplateService.deactivate(admin, created.id);
-    await expectDomainCode(runTemplateService.deactivate(admin, created.id), "RUN_TEMPLATE_ALREADY_INACTIVE");
+    await expectDomainError(runTemplateService.deactivate(admin, created.id), "RUN_TEMPLATE_ALREADY_INACTIVE");
   });
 
   it("reactivating an already-active template is rejected", async () => {
     const created = await runTemplateService.createTemplate(admin, inputFor({ name: "Already active" }));
-    createdTemplateIds.push(created.id);
-    await expectDomainCode(runTemplateService.reactivate(admin, created.id), "RUN_TEMPLATE_ALREADY_ACTIVE");
+    await expectDomainError(runTemplateService.reactivate(admin, created.id), "RUN_TEMPLATE_ALREADY_ACTIVE");
   });
 
   it("reactivation re-validates the raid and fails if it is not Run Setup selectable, without flipping isActive", async () => {
     const created = await runTemplateService.createTemplate(admin, inputFor({ name: "Raid goes historical" }));
-    createdTemplateIds.push(created.id);
     await runTemplateService.deactivate(admin, created.id);
 
     await runTemplateRepository.update(created.id, {
@@ -589,12 +498,8 @@ describe("runTemplateService — active/inactive lifecycle", () => {
       notes: null,
       updatedById: ids.admin,
     });
-    try {
-      await expectDomainCode(runTemplateService.reactivate(admin, created.id), "RUN_TEMPLATE_UNUSABLE");
-      expect((await runTemplateRepository.findById(created.id))?.isActive).toBe(false);
-    } finally {
-      await setRaidAvailable(raidId, true);
-    }
+    await expectDomainError(runTemplateService.reactivate(admin, created.id), "RUN_TEMPLATE_UNUSABLE");
+    expect((await runTemplateRepository.findById(created.id))?.isActive).toBe(false);
   });
 });
 
@@ -602,7 +507,6 @@ describe("runTemplateService.listUsableForCreation — global catalog", () => {
   it("RAID_LEAD sees every active usable global template", async () => {
     const first = await runTemplateService.createTemplate(admin, inputFor({ name: "Selector A" }));
     const second = await runTemplateService.createTemplate(admin, inputFor({ name: "Selector B" }));
-    createdTemplateIds.push(first.id, second.id);
 
     const usable = await runTemplateService.listUsableForCreation(lead);
     expect(usable.some((t) => t.id === first.id)).toBe(true);
@@ -612,7 +516,6 @@ describe("runTemplateService.listUsableForCreation — global catalog", () => {
   it("ADMIN sees the same usable global catalog", async () => {
     const first = await runTemplateService.createTemplate(admin, inputFor({ name: "Selector Admin A" }));
     const second = await runTemplateService.createTemplate(admin, inputFor({ name: "Selector Admin B" }));
-    createdTemplateIds.push(first.id, second.id);
 
     const usable = await runTemplateService.listUsableForCreation(admin);
     expect(usable.some((t) => t.id === first.id)).toBe(true);
@@ -621,7 +524,6 @@ describe("runTemplateService.listUsableForCreation — global catalog", () => {
 
   it("an inactive template never appears in the selector", async () => {
     const created = await runTemplateService.createTemplate(admin, inputFor({ name: "Selector Inactive" }));
-    createdTemplateIds.push(created.id);
     await runTemplateService.deactivate(admin, created.id);
 
     const usable = await runTemplateService.listUsableForCreation(lead);
@@ -632,26 +534,23 @@ describe("runTemplateService.listUsableForCreation — global catalog", () => {
 describe("runTemplateService.resolveTemplateForUse — global template access", () => {
   it("RAID_LEAD may resolve any usable global template", async () => {
     const created = await runTemplateService.createTemplate(admin, inputFor({ name: "Resolve Global" }));
-    createdTemplateIds.push(created.id);
     const resolved = await runTemplateService.resolveTemplateForUse(lead, created.id);
     expect(resolved.id).toBe(created.id);
   });
 
   it("ADMIN may resolve any usable template", async () => {
     const created = await runTemplateService.createTemplate(admin, inputFor({ name: "Resolve Admin" }));
-    createdTemplateIds.push(created.id);
     const resolved = await runTemplateService.resolveTemplateForUse(admin, created.id);
     expect(resolved.id).toBe(created.id);
   });
 
   it("resolving a nonexistent template is rejected", async () => {
-    await expectDomainCode(runTemplateService.resolveTemplateForUse(admin, crypto.randomUUID()), "RUN_TEMPLATE_NOT_FOUND");
+    await expectDomainError(runTemplateService.resolveTemplateForUse(admin, crypto.randomUUID()), "RUN_TEMPLATE_NOT_FOUND");
   });
 
   it("resolving an inactive template is rejected", async () => {
     const created = await runTemplateService.createTemplate(admin, inputFor({ name: "Resolve Inactive" }));
-    createdTemplateIds.push(created.id);
     await runTemplateService.deactivate(admin, created.id);
-    await expectDomainCode(runTemplateService.resolveTemplateForUse(lead, created.id), "RUN_TEMPLATE_UNUSABLE");
+    await expectDomainError(runTemplateService.resolveTemplateForUse(lead, created.id), "RUN_TEMPLATE_UNUSABLE");
   });
 });

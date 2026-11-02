@@ -9,6 +9,8 @@ import { raidRepository } from "@/repositories/raid.repository";
 import { integrationEventRepository } from "@/repositories/integration-event.repository";
 import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import type { WowRegion } from "@/models/enums";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { withOnlySyncCandidates } from "@/test/sync-candidates";
 
 const apiMocks = vi.hoisted(() => ({
   getClientCredentialsToken: vi.fn(),
@@ -44,24 +46,18 @@ import {
   scheduledCharacterSyncService,
 } from "@/services/scheduled-character-sync.service";
 
-const createdUserIds: string[] = [];
-const createdCharacterIds: string[] = [];
+/** Rows of the running test; afterEach removes them (Characters, lockouts and connections go with their owner). */
+let created = { characterIds: [] as string[], userIds: [] as string[] };
 
 async function createUser(name: string): Promise<string> {
-  const id = crypto.randomUUID();
-  const now = new Date().toISOString();
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@sc.boostting.local`,
-    emailVerified: true,
-    accountRole: "USER",
-    accountStatus: "ACTIVE",
-    createdAt: now,
-    updatedAt: now,
-  });
-  createdUserIds.push(id);
+  const id = await createTestUser({ name });
+  created.userIds.push(id);
   return id;
+}
+
+/** A scheduler pass that sees only this test's Characters, so its totals are this test's. */
+function runOnceForThisTest() {
+  return withOnlySyncCandidates(created.characterIds, () => scheduledCharacterSyncService.runOnce());
 }
 
 async function createConnection(userId: string, region: WowRegion) {
@@ -105,7 +101,7 @@ async function createCharacter(input: {
     blizzardRealmId: input.blizzardRealmId === undefined ? "1301" : input.blizzardRealmId,
     lastSyncedAt: input.lastSyncedAt === undefined ? null : input.lastSyncedAt,
   });
-  createdCharacterIds.push(record.id);
+  created.characterIds.push(record.id);
   return record;
 }
 
@@ -130,17 +126,10 @@ function mockProfileSuccess(byName: Record<string, { itemLevel?: number; realmId
 }
 
 async function cleanupAll() {
-  for (const id of createdCharacterIds) {
-    await orm.CharacterRaidLockout.where({ characterId: id }).delete().catch(() => {});
-    await orm.Character.where({ id }).delete().catch(() => {});
-  }
-  for (const id of createdUserIds) {
-    await orm.BattleNetConnection.where({ userId: id }).delete().catch(() => {});
-    await orm.ActivityEvent.where({ userId: id }).delete().catch(() => {});
-    await orm.User.where({ id }).delete().catch(() => {});
-  }
-  createdCharacterIds.length = 0;
-  createdUserIds.length = 0;
+  assertIsolatedTestDatabase();
+  for (const userId of created.userIds) await orm.BattleNetConnection.where({ userId }).deleteAndCount();
+  await deleteCreatedRows(created);
+  created = { characterIds: [], userIds: [] };
 }
 
 beforeAll(() => {
@@ -163,10 +152,15 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await cleanupAll();
 });
 
 describe("resolveScheduledSyncStaleMs", () => {
+  afterEach(() => {
+    vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "");
+  });
+
   it("defaults to 120 minutes when unset", () => {
     vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "");
     expect(resolveScheduledSyncStaleMs()).toBe(120 * 60_000);
@@ -175,7 +169,6 @@ describe("resolveScheduledSyncStaleMs", () => {
   it("honors an intentional 15-minute override", () => {
     vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "15");
     expect(resolveScheduledSyncStaleMs()).toBe(15 * 60_000);
-    vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "");
   });
 
   it("honors a positive integer override", () => {
@@ -183,31 +176,26 @@ describe("resolveScheduledSyncStaleMs", () => {
     expect(resolveScheduledSyncStaleMs()).toBe(30 * 60_000);
     vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "120");
     expect(resolveScheduledSyncStaleMs()).toBe(120 * 60_000);
-    vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "");
   });
 
   it("fails loudly on a zero threshold rather than permitting a busy loop", () => {
     vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "0");
     expect(() => resolveScheduledSyncStaleMs()).toThrow(/positive integer/);
-    vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "");
   });
 
   it("fails loudly on a negative threshold", () => {
     vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "-5");
     expect(() => resolveScheduledSyncStaleMs()).toThrow(/positive integer/);
-    vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "");
   });
 
   it("fails loudly on a non-numeric threshold", () => {
     vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "soon");
     expect(() => resolveScheduledSyncStaleMs()).toThrow(/positive integer/);
-    vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "");
   });
 
   it("fails loudly on a fractional threshold", () => {
     vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "1.5");
     expect(() => resolveScheduledSyncStaleMs()).toThrow(/positive integer/);
-    vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "");
   });
 });
 
@@ -326,7 +314,7 @@ describe("characterRepository.listScheduledSyncCandidates", () => {
 describe("scheduledCharacterSyncService.runOnce — data ownership and partial failure", () => {
   it("updates name/itemLevel/lastSyncedAt and current-raid lockouts, never specialization/primaryRole", async () => {
     const userId = await createUser("Owner Refresh");
-    const connection = await createConnection(userId, "EU");
+    await createConnection(userId, "EU");
     const character = await createCharacter({
       userId,
       name: "Screfresh",
@@ -336,9 +324,9 @@ describe("scheduledCharacterSyncService.runOnce — data ownership and partial f
 
     mockProfileSuccess({ Screfresh: { itemLevel: 690, realmId: character.blizzardRealmId ?? undefined } });
 
-    const result = await scheduledCharacterSyncService.runOnce();
+    const result = await runOnceForThisTest();
     expect(result.status).toBe("COMPLETED");
-    expect(result.refreshed).toBeGreaterThanOrEqual(1);
+    expect(result.refreshed).toBe(1);
 
     const updated = await characterRepository.findById(character.id);
     expect(updated?.itemLevel).toBe(690);
@@ -348,7 +336,6 @@ describe("scheduledCharacterSyncService.runOnce — data ownership and partial f
 
     const refreshedConnection = await battleNetConnectionRepository.findByUserAndRegion(userId, "EU");
     expect(refreshedConnection?.lastSuccessfulSyncAt).toBeTruthy();
-    void connection;
   });
 
   it("preserves the existing itemLevel when Blizzard omits equippedItemLevel", async () => {
@@ -363,7 +350,7 @@ describe("scheduledCharacterSyncService.runOnce — data ownership and partial f
 
     mockProfileSuccess({ Scretain: { realmId: character.blizzardRealmId ?? undefined } });
 
-    const result = await scheduledCharacterSyncService.runOnce();
+    const result = await runOnceForThisTest();
     expect(result.status).toBe("COMPLETED");
 
     const updated = await characterRepository.findById(character.id);
@@ -397,9 +384,9 @@ describe("scheduledCharacterSyncService.runOnce — data ownership and partial f
     mockProfileSuccess({ Sclockoutfail: { itemLevel: 710, realmId: character.blizzardRealmId ?? undefined } });
     apiMocks.getCharacterRaidEncounters.mockRejectedValue(new Error("timeout"));
 
-    const result = await scheduledCharacterSyncService.runOnce();
+    const result = await runOnceForThisTest();
     expect(result.status).toBe("COMPLETED");
-    expect(result.lockoutsUnavailable).toBeGreaterThanOrEqual(1);
+    expect(result.lockoutsUnavailable).toBe(1);
 
     const updated = await characterRepository.findById(character.id);
     expect(updated?.itemLevel).toBe(710);
@@ -420,10 +407,9 @@ describe("scheduledCharacterSyncService.runOnce — data ownership and partial f
     // Scbroken is absent from the success map, so getCharacterProfileStatus
     // reports isValid:false for it — a profile-unavailable failure.
 
-    const result = await scheduledCharacterSyncService.runOnce();
+    const result = await runOnceForThisTest();
     expect(result.status).toBe("COMPLETED");
-    expect(result.failed).toBeGreaterThanOrEqual(1);
-    expect(result.refreshed).toBeGreaterThanOrEqual(1);
+    expect(result).toMatchObject({ failed: 1, refreshed: 1 });
 
     const brokenRow = await characterRepository.findById(broken.id);
     expect(brokenRow?.itemLevel).toBe(600); // untouched
@@ -433,18 +419,15 @@ describe("scheduledCharacterSyncService.runOnce — data ownership and partial f
     const userId = await createUser("Owner Grouping");
     await createConnection(userId, "EU");
     const old = new Date(Date.now() - 3 * 60 * 60_000).toISOString();
-    const a = await createCharacter({ userId, name: "Scgroupa", lastSyncedAt: old });
-    const b = await createCharacter({ userId, name: "Scgroupb", lastSyncedAt: old });
-    void a;
-    void b;
+    await createCharacter({ userId, name: "Scgroupa", lastSyncedAt: old });
+    await createCharacter({ userId, name: "Scgroupb", lastSyncedAt: old });
 
     mockProfileSuccess({ Scgroupa: { itemLevel: 620 } });
     // Scgroupb has no realmId in the mock and no entry — it will report a
     // realm mismatch / invalid profile, i.e. a failure.
 
-    const result = await scheduledCharacterSyncService.runOnce();
-    expect(result.status).toBe("COMPLETED");
-    expect(result.connectionsUpdated).toBe(1);
+    const result = await runOnceForThisTest();
+    expect(result).toMatchObject({ status: "COMPLETED", refreshed: 1, failed: 1, connectionsUpdated: 1 });
   });
 
   it("does not mark the connection when every candidate for it fails", async () => {
@@ -458,7 +441,7 @@ describe("scheduledCharacterSyncService.runOnce — data ownership and partial f
     mockProfileSuccess({});
 
     const before = await battleNetConnectionRepository.findByUserAndRegion(userId, "EU");
-    const result = await scheduledCharacterSyncService.runOnce();
+    const result = await runOnceForThisTest();
     expect(result.status).toBe("COMPLETED");
     expect(result.refreshed).toBe(0);
     expect(result.connectionsUpdated).toBe(0);
@@ -502,7 +485,7 @@ describe("scheduledCharacterSyncService.runOnce — global concurrency", () => {
       activeSpecialization: "Arcane",
     }));
 
-    const result = await scheduledCharacterSyncService.runOnce();
+    const result = await runOnceForThisTest();
     expect(result.status).toBe("COMPLETED");
     expect(result.totalCandidates).toBe(6);
     expect(maxInFlight).toBeLessThanOrEqual(4);
@@ -524,7 +507,7 @@ describe("scheduledCharacterSyncService.runOnce — rate limiting", () => {
       new DomainError("BATTLENET_RATE_LIMITED", "Battle.net rate limit reached.", 429),
     );
 
-    const result = await scheduledCharacterSyncService.runOnce();
+    const result = await runOnceForThisTest();
     expect(result.status).toBe("COMPLETED");
     expect(result.totalCandidates).toBe(6);
     expect(result.refreshed).toBe(0);
@@ -550,7 +533,7 @@ describe("scheduledCharacterSyncService.runOnce — overlap protection (advisory
     expect(handle).not.toBeNull();
 
     try {
-      const result = await scheduledCharacterSyncService.runOnce();
+      const result = await runOnceForThisTest();
       expect(result.status).toBe("SKIPPED_ALREADY_RUNNING");
       expect(result.totalCandidates).toBe(0);
       expect(apiMocks.getCharacterProfileStatus).not.toHaveBeenCalled();
@@ -560,7 +543,7 @@ describe("scheduledCharacterSyncService.runOnce — overlap protection (advisory
   });
 
   it("releases the lock on a normal completion, so the next cycle can acquire it", async () => {
-    const result = await scheduledCharacterSyncService.runOnce();
+    const result = await runOnceForThisTest();
     expect(result.status).toBe("COMPLETED");
 
     const handle = await scheduledJobLockRepository.tryAcquireLock(
@@ -603,7 +586,7 @@ describe("scheduledCharacterSyncService.runOnce — overlap protection (advisory
     });
     mockProfileSuccess({ Sctelemetry: { itemLevel: 700 } });
 
-    const result = await scheduledCharacterSyncService.runOnce();
+    const result = await runOnceForThisTest();
     expect(result.status).toBe("COMPLETED");
     expect(result.refreshed).toBe(1);
 
@@ -612,9 +595,9 @@ describe("scheduledCharacterSyncService.runOnce — overlap protection (advisory
       operation: "SCHEDULED_SYNC_PASS",
       limit: 5,
     });
-    expect(rows.length).toBeGreaterThanOrEqual(1);
+    // This pass wrote the newest SCHEDULED_SYNC_PASS row.
     expect(rows[0]?.status).toBe("SUCCESS");
-    expect(rows[0]?.metadataJson).toContain('"succeeded":1');
+    expect(JSON.parse(rows[0]!.metadataJson!)).toMatchObject({ succeeded: 1 });
   });
 });
 
@@ -638,7 +621,7 @@ describe("scheduledJobLockRepository", () => {
 
 describe("scheduledCharacterSyncService.runOnce — Blizzard profile unavailable (404)", () => {
   it("F: counts it, keeps last-good data, and does not mark the character fresh", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
     const userId = await createUser("Owner 404");
     await createConnection(userId, "EU");
@@ -649,7 +632,7 @@ describe("scheduledCharacterSyncService.runOnce — Blizzard profile unavailable
       new DomainError("BLIZZARD_CHARACTER_NOT_FOUND", "Blizzard resource was not found (character-status).", 404),
     );
 
-    const result = await scheduledCharacterSyncService.runOnce();
+    const result = await runOnceForThisTest();
     expect(result).toMatchObject({ status: "COMPLETED", failed: 1, profileUnavailable: 1, refreshed: 0 });
     expect(info).toHaveBeenCalledWith(expect.stringContaining("profileUnavailable=1"));
 
@@ -662,8 +645,5 @@ describe("scheduledCharacterSyncService.runOnce — Blizzard profile unavailable
     const staleBefore = new Date(Date.now() - resolveScheduledSyncStaleMs()).toISOString();
     const candidates = await characterRepository.listScheduledSyncCandidates({ staleBefore });
     expect(candidates.some((candidate) => candidate.character.id === unavailable.id)).toBe(true);
-
-    warn.mockRestore();
-    info.mockRestore();
   });
 });
