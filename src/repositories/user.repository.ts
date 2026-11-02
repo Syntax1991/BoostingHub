@@ -500,9 +500,10 @@ export const userRepository = {
       const mayRemoveAdminAccess =
         hasAdminAccess(mapUserRole(before.accountRole)) && !hasAdminAccess(input.nextRole);
       if (mayRemoveAdminAccess) {
+        // updateAndCount, not update(): update() writes (and locks) only the first matching row.
         await txOrm.User.where((user) =>
           or(user.accountRole.in(["ADMIN", "OWNER"]), user.id.eq(input.targetUserId)),
-        ).update({ updatedAt: now });
+        ).updateAndCount({ updatedAt: now });
       } else {
         await txOrm.User.where({ id: input.targetUserId }).update({ updatedAt: now });
       }

@@ -1,5 +1,5 @@
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
-import { pgConnectionConfig } from "@/lib/pg-pool";
+import { pgConnectionConfig, pgPool } from "@/lib/pg-pool";
 import { orm } from "@/lib/prisma";
 import { isTestRuntime, resolveTestDatabaseUrl } from "@/lib/test-database-guard";
 import type { AccountRole, AccountStatus, CharacterRole, WowClass } from "@/models/enums";
@@ -17,6 +17,34 @@ export function assertIsolatedTestDatabase(): void {
   if (!isTestRuntime()) throw new Error("Refusing destructive test setup outside a test run.");
   if (pgConnectionConfig.connectionString !== resolveTestDatabaseUrl()) {
     throw new Error("Refusing destructive test setup: the pool is not connected to TEST_DATABASE_URL.");
+  }
+}
+
+const LOCK_WAIT_POLL_MS = 10;
+/** Below Vitest's 5 s default test timeout, so a missing waiter fails with this helper's message. */
+const LOCK_WAIT_TIMEOUT_MS = 3_000;
+
+/**
+ * Resolves once another session on the test database is blocked on a row or
+ * transaction lock. A concurrency test awaits it between starting its second
+ * writer and releasing the first, so the second writer provably queued behind
+ * the lock instead of running before or after it. Times out (and fails) when
+ * nothing ever waits, which is what a dropped lock looks like.
+ *
+ * Measures with `performance.now()`, because suites may freeze `Date`.
+ */
+export async function waitForLockWaiter(): Promise<void> {
+  const deadline = performance.now() + LOCK_WAIT_TIMEOUT_MS;
+  for (;;) {
+    const { rows } = await pgPool.query<{ waiting: number }>(
+      `SELECT count(*)::int AS waiting FROM pg_stat_activity
+       WHERE datname = current_database() AND wait_event_type = 'Lock' AND pid <> pg_backend_pid()`,
+    );
+    if (rows[0]!.waiting > 0) return;
+    if (performance.now() > deadline) {
+      throw new Error(`No session waited on a lock within ${LOCK_WAIT_TIMEOUT_MS} ms.`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, LOCK_WAIT_POLL_MS));
   }
 }
 
