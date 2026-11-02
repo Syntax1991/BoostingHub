@@ -2,7 +2,7 @@ import type {
   WarcraftLogsReportFight,
   WarcraftLogsReportMetadata,
 } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
-import { identityKey } from "@/services/consumable-audit-extract";
+import { identityKey } from "@/domain/consumable-audit-extract";
 import type { RaidDifficulty } from "@/models/enums";
 
 /**

@@ -10,12 +10,12 @@ import {
   type PersonalDefensiveKind,
 } from "@/lib/personal-defensive-catalog";
 import { specializationById } from "@/lib/wow-specializations";
-import { deathContextOf, type DeathContext } from "@/services/wipe-collapse";
+import { deathContextOf, type DeathContext } from "@/domain/wipe-collapse";
 import type { CharacterRole, WowClass } from "@/models/enums";
 import type {
   ConsumableAuditMatchStatus,
   ConsumableObservationKindValue,
-} from "@/services/consumable-audit-extract";
+} from "@/domain/consumable-audit-extract";
 import {
   evaluateEnchants,
   evaluateGems,
@@ -26,7 +26,7 @@ import {
   type GemCheck,
   type WeaponEnhancementExpectation,
   type WeaponEnhancementResult,
-} from "@/services/gear-readiness-policy";
+} from "@/domain/gear-readiness-policy";
 
 /**
  * Read-time rules for the Run Consumables Audit. Facts are stored; statuses

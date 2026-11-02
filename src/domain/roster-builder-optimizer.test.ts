@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   optimizeRosterProposal,
   type RosterBuilderCandidateInput,
-} from "@/services/roster-builder-optimizer";
+} from "@/domain/roster-builder-optimizer";
 
 function booster(input: {
   signupId: string;

@@ -1,5 +1,5 @@
 import type { CharacterRole, ParticipationType, RaidDifficulty, SignupStatus, WowClass } from "@/models/enums";
-import type { UserRunSelectionState } from "@/services/user-run-participation";
+import type { UserRunSelectionState } from "@/domain/user-run-participation";
 
 /**
  * My Runs groups the signed-in User's participations by Run inside each

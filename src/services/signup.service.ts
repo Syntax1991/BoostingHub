@@ -25,7 +25,7 @@ import { userRepository } from "@/repositories/user.repository";
 import type { IneligibleBoosterCharacter } from "@/services/signup-eligibility";
 import { assertSignupWindowOpen, evaluateBoosterOptions } from "@/services/signup-eligibility";
 import { withSignupEligibilityContext } from "@/services/signup-eligibility-context";
-import { isApprovedBooster } from "@/services/boosting-role.service";
+import { isApprovedBooster } from "@/domain/boosting-access";
 import {
   assertSignupTransition,
   canSelfWithdrawSignup,
@@ -36,7 +36,7 @@ import {
   planCharacterOfferReconciliation,
   planLootbuddyReconciliation,
   normalizeSignupNote,
-} from "@/services/signup-state";
+} from "@/domain/signup-state";
 import {
   getScheduleConflictsForCharacters,
   type CharacterScheduleConflict,
@@ -45,7 +45,7 @@ import {
   isMyRunsPendingBucket,
   isMyRunsSelectedBucket,
   resolveUserRunParticipation,
-} from "@/services/user-run-participation";
+} from "@/domain/user-run-participation";
 
 export type { QuickSignupBoostersResult } from "@/lib/quick-signup-message";
 export { formatQuickSignupBoostersMessage } from "@/lib/quick-signup-message";

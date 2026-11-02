@@ -20,7 +20,7 @@ import { signupService } from "@/services/signup.service";
 import {
   canToggleSignupWindow,
   isSignupWindowOpen,
-} from "@/services/run-state";
+} from "@/domain/run-state";
 
 const ids = {
   lead: "aaaaaaaa-aaaa-4aaa-8aaa-ps0000000001",

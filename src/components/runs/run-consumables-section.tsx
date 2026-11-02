@@ -32,7 +32,7 @@ import type {
   DeathView,
   FightRef,
   PlayerConsumableAudit,
-} from "@/services/consumable-audit-policy";
+} from "@/domain/consumable-audit-policy";
 import type { RunConsumableAuditView } from "@/services/run-consumable-audit.service";
 
 const STATUS_STYLES: Record<ConsumableCheckStatus, string> = {

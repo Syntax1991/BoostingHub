@@ -5,7 +5,7 @@ import { activityRepository } from "@/repositories/activity.repository";
 import { runRepository, type RunListRecord } from "@/repositories/run.repository";
 import { userRepository } from "@/repositories/user.repository";
 import { strikeRepository, type StrikeRecord } from "@/repositories/strike.repository";
-import { STRIKE_NOTES_MAX, STRIKE_REASON_MAX, STRIKE_REVOKE_REASON_MAX } from "@/services/strike-state";
+import { STRIKE_NOTES_MAX, STRIKE_REASON_MAX, STRIKE_REVOKE_REASON_MAX } from "@/domain/strike-state";
 
 function trimmedOrNull(value: string | null | undefined): string | null {
   const trimmed = value?.trim() ?? "";

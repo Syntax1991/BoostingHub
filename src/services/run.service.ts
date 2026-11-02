@@ -74,7 +74,7 @@ import {
   notesValue,
   RUN_SCHEDULE_PAST_GRACE_MS,
   type RunLifecycleCapabilities,
-} from "@/services/run-state";
+} from "@/domain/run-state";
 import type { CreateRunInput, StartRunInput, UpdateRunInput } from "@/validators/run";
 import type { ManageRunFilterInput } from "@/validators/manage-run-filters";
 import type { CreateManyRunsInput, MassCreateDefaults, MassCreateRunRow } from "@/validators/mass-create-runs";

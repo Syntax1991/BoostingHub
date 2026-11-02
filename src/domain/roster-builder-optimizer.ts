@@ -15,7 +15,7 @@ import {
   type RaidBuffCoverage,
   type RaidBuffId,
   type RaidBuffParticipant,
-} from "@/services/roster-raid-buffs";
+} from "@/domain/roster-raid-buffs";
 
 export type RosterBuilderBucket = "TANK" | "HEALER" | "DPS" | "LOOTBUDDY";
 

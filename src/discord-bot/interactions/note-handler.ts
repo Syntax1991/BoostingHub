@@ -10,7 +10,7 @@ import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import { buildCustomId } from "@/discord-bot/custom-ids";
 import { describeBotApiError } from "@/discord-bot/interactions/error-copy";
 import { requestImmediateSync } from "@/discord-bot/sync-loop";
-import { SIGNUP_NOTE_MAX_LENGTH } from "@/services/signup-state";
+import { SIGNUP_NOTE_MAX_LENGTH } from "@/domain/signup-state";
 
 export const SIGNUP_NOTE_INPUT_ID = "note";
 

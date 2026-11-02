@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { PING_ROLE_KEYS } from "@/lib/late-fill-help";
 import { CHARACTER_ROLES, PARTICIPATION_TYPES, WOW_CLASSES } from "@/models/enums";
-import { ROSTER_SELECTION_WARNING_TYPES } from "@/services/roster-selection-risk";
+import { ROSTER_SELECTION_WARNING_TYPES } from "@/domain/roster-selection-risk";
 import { entityIdSchema } from "@/validators/ids";
 
 /** One hand-added external: a booster (role required) or a lootbuddy (no role). Older clients omit the type → booster. */

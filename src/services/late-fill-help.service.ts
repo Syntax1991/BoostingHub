@@ -26,7 +26,7 @@ import { rosterRepository } from "@/repositories/roster.repository";
 import { runDiscordAnnouncementRepository } from "@/repositories/run-discord-announcement.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { runRepository, type RunListRecord } from "@/repositories/run.repository";
-import { missingBuffProviderClasses, resolveBuffContributorClass } from "@/services/roster-raid-buffs";
+import { missingBuffProviderClasses, resolveBuffContributorClass } from "@/domain/roster-raid-buffs";
 
 export type LateFillHelpResult = {
   /** Roles the request pings (one Run-channel message, sent by the bot). */

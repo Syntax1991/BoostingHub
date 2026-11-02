@@ -5,7 +5,7 @@ import { orm } from "@/lib/prisma";
 import type { CharacterRole, RaidDifficulty, WowClass } from "@/models/enums";
 import { userRepository } from "@/repositories/user.repository";
 import { boosterAccessService } from "@/services/booster-access.service";
-import { canTransitionBoosterAccess, canRequestFromStatus } from "@/services/booster-access-state";
+import { canTransitionBoosterAccess, canRequestFromStatus } from "@/domain/booster-access-state";
 import { signupService } from "@/services/signup.service";
 import { characterService } from "@/services/character.service";
 import { rolesForClass } from "@/lib/wow-specializations";

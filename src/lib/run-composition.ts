@@ -1,5 +1,5 @@
 import { DomainError } from "@/lib/errors";
-import { assertComposition } from "@/services/run-state";
+import { assertComposition } from "@/domain/run-state";
 
 /** Default or Schedule-override composition snapshotted onto a concrete Run. */
 export type EffectiveRunComposition = {

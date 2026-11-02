@@ -7,10 +7,10 @@ import { lockoutService } from "@/services/lockout.service";
 import {
   deriveCharacterRunCommitmentState,
   type CharacterRunCommitment,
-} from "@/services/character-run-commitment-state";
+} from "@/domain/character-run-commitment-state";
 
-export type { CharacterRunCommitment } from "@/services/character-run-commitment-state";
-export { deriveCharacterRunCommitmentState } from "@/services/character-run-commitment-state";
+export type { CharacterRunCommitment } from "@/domain/character-run-commitment-state";
+export { deriveCharacterRunCommitmentState } from "@/domain/character-run-commitment-state";
 
 export function projectCharacterRunCommitment(
   row: CharacterReservationCommitmentRow,

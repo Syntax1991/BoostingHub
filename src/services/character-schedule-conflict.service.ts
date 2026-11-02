@@ -5,7 +5,7 @@ import {
   projectScheduleConflictsByCharacter,
   type CharacterScheduleConflict,
   type WeeklyUnavailableConflictInput,
-} from "@/services/character-schedule-conflict";
+} from "@/domain/character-schedule-conflict";
 import { characterWeeklyAvailabilityService } from "@/services/character-weekly-availability.service";
 import { lockoutService } from "@/services/lockout.service";
 

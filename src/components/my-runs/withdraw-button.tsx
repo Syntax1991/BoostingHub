@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { withdrawPickedSignupAction, withdrawSignupAction } from "@/controllers/signup.actions";
 import { Button } from "@/components/ui/button";
-import { WITHDRAW_REASON_MAX_LENGTH, WITHDRAW_REASON_MIN_LENGTH } from "@/services/signup-state";
+import { WITHDRAW_REASON_MAX_LENGTH, WITHDRAW_REASON_MIN_LENGTH } from "@/domain/signup-state";
 
 /**
  * Withdraws one signup. A picked signup (on the roster or its saved draft)

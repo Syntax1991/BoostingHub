@@ -5,12 +5,12 @@ import { runRepository, type RunListRecord } from "@/repositories/run.repository
 import {
   projectRunOperationalHandoff,
   type RunOperationalHandoff,
-} from "@/services/run-operational-handoff";
+} from "@/domain/run-operational-handoff";
 import {
   emptyRunCapabilities,
   getRunLifecycleCapabilities,
   type RunLifecycleCapabilities,
-} from "@/services/run-state";
+} from "@/domain/run-state";
 
 export type ManagedRunOperationalProjection = {
   run: RunListRecord;

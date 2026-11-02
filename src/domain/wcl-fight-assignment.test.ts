@@ -4,7 +4,7 @@ import type {
   WarcraftLogsReportFight,
 } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
 import { fixtureRaidCatalog } from "@/lib/raid-catalog";
-import { identityKey } from "@/services/consumable-audit-extract";
+import { identityKey } from "@/domain/consumable-audit-extract";
 import {
   WCL_FIGHT_ASSIGNMENT_POLICY,
   WCL_RUN_MATCH_TOLERANCE_SECONDS,
@@ -12,7 +12,7 @@ import {
   assignReportFights,
   runActiveWindow,
   type RunAssignmentCandidate,
-} from "@/services/wcl-fight-assignment";
+} from "@/domain/wcl-fight-assignment";
 import {
   MANAFORGE_OMEGA_RAID_ID,
   TIDEBOUND_GROTTO_RAID_ID,

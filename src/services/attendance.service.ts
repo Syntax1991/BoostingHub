@@ -9,7 +9,7 @@ import { runDiscordPostRepository } from "@/repositories/run-discord-post.reposi
 import { userRepository } from "@/repositories/user.repository";
 import { voicePresenceService } from "@/services/voice-presence.service";
 import type { VoicePresence } from "@/lib/voice-presence";
-import { ATTENDANCE_NOTE_MAX } from "@/services/run-state";
+import { ATTENDANCE_NOTE_MAX } from "@/domain/run-state";
 import {
   externalBoosterInputError,
   normalizeExternalBoosterName,

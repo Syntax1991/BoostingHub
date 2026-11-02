@@ -8,7 +8,7 @@ import {
   type ExternalBooster,
   type ExternalBoosterInput,
 } from "@/lib/external-booster";
-import { isApprovedBooster } from "@/services/boosting-role.service";
+import { isApprovedBooster } from "@/domain/boosting-access";
 import { lockoutService } from "@/services/lockout.service";
 import { isLateFillWindow } from "@/lib/roster-replacement";
 import { isRosterBossExceptionsEnabled } from "@/lib/feature-flags";
@@ -25,15 +25,15 @@ import {
   resolveSyncHealthStaleMinutes,
   type CharacterSyncHealth,
 } from "@/lib/blizzard/sync-health";
-import { assertRunTransition, isSignupWindowOpen } from "@/services/run-state";
-import { assertSignupTransition } from "@/services/signup-state";
-import { validateRosterDraft, type RosterIssue } from "@/services/roster-validation";
+import { assertRunTransition, isSignupWindowOpen } from "@/domain/run-state";
+import { assertSignupTransition } from "@/domain/signup-state";
+import { validateRosterDraft, type RosterIssue } from "@/domain/roster-validation";
 import {
   evaluateRaidBuffCoverage,
   resolveBuffContributorClass,
   type RaidBuffCoverage,
   type RaidBuffParticipant,
-} from "@/services/roster-raid-buffs";
+} from "@/domain/roster-raid-buffs";
 import {
   assertCharacterSelectableForSchedule,
   assertRosterPublishableForSchedule,
@@ -51,7 +51,7 @@ import { signupRepository } from "@/repositories/signup.repository";
 import { userRepository } from "@/repositories/user.repository";
 import { characterRepository } from "@/repositories/character.repository";
 import { signupService } from "@/services/signup.service";
-import { hasUnpublishedRosterChanges } from "@/services/roster-publish-state";
+import { hasUnpublishedRosterChanges } from "@/domain/roster-publish-state";
 import { activityRepository } from "@/repositories/activity.repository";
 import { runDomainEventService } from "@/services/run-domain-event.service";
 import { isConcreteCharacterRole, isLegacyGenericDps, type ConcreteCharacterRole } from "@/lib/character-roles";
@@ -79,7 +79,7 @@ import {
   type PendingRosterSelectionWarning,
   type RosterSelectionRisk,
   type RosterWarningAcknowledgement,
-} from "@/services/roster-selection-risk";
+} from "@/domain/roster-selection-risk";
 import {
   resolveRosterWclPerformance,
   type WclPerformanceRaidSegment,

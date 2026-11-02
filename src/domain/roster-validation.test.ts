@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateRosterDraft, type RosterValidationMember } from "@/services/roster-validation";
+import { validateRosterDraft, type RosterValidationMember } from "@/domain/roster-validation";
 
 function member(overrides: Partial<RosterValidationMember>): RosterValidationMember {
   return {

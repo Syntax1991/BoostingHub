@@ -7,7 +7,7 @@ import { formatDateTime } from "@/lib/datetime";
 import { formatRetryIn } from "@/lib/blizzard/sync-backoff";
 import type { RaidDifficulty } from "@/models/enums";
 import type { managementController } from "@/controllers/app.controller";
-import { SYNC_INELIGIBLE_COPY } from "@/services/character-operations.service";
+import { SYNC_INELIGIBLE_COPY } from "@/domain/character-sync-eligibility";
 import { CharacterSyncButtons } from "@/components/manage/character-operations/character-sync-buttons";
 import {
   LinkageBadge,

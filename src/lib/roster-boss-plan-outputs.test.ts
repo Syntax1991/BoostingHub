@@ -7,9 +7,9 @@ import {
 } from "@/lib/roster-boss-plan";
 import { renderFinalSetupText, type FinalSetupInput } from "@/lib/run-start-message";
 import { buildRosterEmbed, formatRosterBossPlanLine } from "@/discord-bot/embeds/roster-embed";
-import { buildRosterSelectedDmMessage, rosterBossPlanWebNotification } from "@/services/notification-content";
+import { buildRosterSelectedDmMessage, rosterBossPlanWebNotification } from "@/domain/notification-content";
 import { rosterEmbedRenderFingerprint, type RosterEmbedData } from "@/services/discord-sync.service";
-import { bossCharacterForFight } from "@/services/consumable-audit-extract";
+import { bossCharacterForFight } from "@/domain/consumable-audit-extract";
 import type { DmRunContext } from "@/lib/discord-run-dm";
 
 /**

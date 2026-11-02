@@ -237,6 +237,7 @@ src/
   components/      View components
   controllers/     Thin application boundary
   services/        Business rules
+  domain/          Pure business rules: no database, no network; views, services and repositories may import them
   repositories/    Prisma access
   integrations/    External HTTP clients (e.g. Blizzard)
   models/          Domain enumerations
@@ -523,7 +524,7 @@ Historical Runs are **not** retroactively retitled — their `title` stays whate
 
 #### RunLootType (product: Run type)
 
-`SAVED` \| `UNSAVED` \| `VIP` \| `COMMUNITY` — independent of `RaidDifficulty`, not a combined enum. The database column and TypeScript field stay named `lootType` / `RunLootType`; Create/Edit UI labels this selector **Run type**. **Compatibility is a Service-layer rule, not a schema constraint**: every difficulty allows every value except `MYTHIC + SAVED`, which is rejected everywhere (Create, Edit, Mass Create, templates, and Discord naming) via one central helper, `isLootTypeAllowedForDifficulty` / `assertValidRunLootType` in `src/services/run-state.ts` (throwing `RUN_LOOT_TYPE_INVALID`). `COMMUNITY` is valid for Normal, Heroic, and Mythic. New Runs default to `UNSAVED` — valid for every difficulty including Mythic, so the default never needs a client-side override. The Create/Edit UI disables the `SAVED` option and auto-switches to `UNSAVED` when the selected difficulty is Mythic.
+`SAVED` \| `UNSAVED` \| `VIP` \| `COMMUNITY` — independent of `RaidDifficulty`, not a combined enum. The database column and TypeScript field stay named `lootType` / `RunLootType`; Create/Edit UI labels this selector **Run type**. **Compatibility is a Service-layer rule, not a schema constraint**: every difficulty allows every value except `MYTHIC + SAVED`, which is rejected everywhere (Create, Edit, Mass Create, templates, and Discord naming) via one central helper, `isLootTypeAllowedForDifficulty` / `assertValidRunLootType` in `src/domain/run-state.ts` (throwing `RUN_LOOT_TYPE_INVALID`). `COMMUNITY` is valid for Normal, Heroic, and Mythic. New Runs default to `UNSAVED` — valid for every difficulty including Mythic, so the default never needs a client-side override. The Create/Edit UI disables the `SAVED` option and auto-switches to `UNSAVED` when the selected difficulty is Mythic.
 
 #### Planned boss count (per content)
 
@@ -1017,7 +1018,7 @@ Run participation (`RunSignup.participationType` = `BOOSTER` / `LOOTBUDDY`) is s
 
 **The Booster role is not scoped by raid difficulty.** An approved Booster may boost Normal, Heroic and Mythic Runs alike. **Run difficulty remains relevant** everywhere else — Runs, raid contents, lockouts, weekly availability, signup display, rosters, Discord run posts and history — it is simply not part of the Booster question.
 
-The single check is `isApprovedBooster(...)` / `hasEffectiveBoosterAccess(...)` in `src/services/boosting-role.service.ts` (manual `isBooster` ∨ Discord `discordRaidBooster`). It does not depend on Character, WoW Class, specialization, Character Role, Item Level, account role, Lootbuddy, or Raid Difficulty.
+The single check is `isApprovedBooster(...)` / `hasEffectiveBoosterAccess(...)` in `src/domain/boosting-access.ts` (manual `isBooster` ∨ Discord `discordRaidBooster`). It does not depend on Character, WoW Class, specialization, Character Role, Item Level, account role, Lootbuddy, or Raid Difficulty.
 
 | Concern | Question |
 | --- | --- |
@@ -2003,7 +2004,7 @@ A **Run Setup** (model `RunTemplate`, older code and routes say "template") is a
 - **Permissions:** ADMIN / OWNER create, edit, duplicate, deactivate, reactivate and delete (`requireManageTemplates`; the Community Schedule actions also manage them). RAID_LEAD and above may list and use active, usable setups (`requireCanUseTemplates`). USER has no access. `/manage/templates` is the ADMIN view, `/profile/templates` a read-only catalog for Raid Leads.
 - **Usability** is computed, never stored (`computeUsability`): active; difficulty and run type still valid; composition within bounds; content still covered by an active Product (same raids in order, FIXED counts equal, VARIABLE counts in range; `selectable` is not required) or every content raid still available for new Runs. An unusable setup is never changed or removed; it is only excluded from use and flagged.
 - **Use at Create Run:** `createManyRuns` accepts an optional `templateId`. The server re-resolves it at submit time and refuses a missing or unusable setup (`RUN_TEMPLATE_NOT_FOUND`, `RUN_TEMPLATE_UNUSABLE`). Every other Run creation rule still applies.
-- **Validation reuse:** create and edit use the same validators as Run creation (`assertValidRunLootType`, `assertValidPlannedBossCount`, `assertComposition`, `notesValue`) from `src/services/run-state.ts`.
+- **Validation reuse:** create and edit use the same validators as Run creation (`assertValidRunLootType`, `assertValidPlannedBossCount`, `assertComposition`, `notesValue`) from `src/domain/run-state.ts`.
 - **Snapshot independence:** there is no `Run.templateId`. Applying a setup copies its values into the Run. Editing or deactivating a setup never changes an existing Run.
 - **No recurrence here:** recurring creation is the [Community Schedule](#community-schedule); a setup never creates a Run on its own. A freshly created Run is `DRAFT` with `signupsOpen: false` and has no Discord infrastructure.
 
@@ -2224,7 +2225,7 @@ A run may be `OPEN`, `ROSTERING`, or `PUBLISHED` with `signupsOpen = false`. Clo
 
 #### Editability matrix
 
-Centralized in `getRunLifecycleCapabilities` (`src/services/run-state.ts`). Views render server flags.
+Centralized in `getRunLifecycleCapabilities` (`src/domain/run-state.ts`). Views render server flags.
 
 | Status | Raid / difficulty / content / bosses | Schedule / loot / composition / notes / role ping | Raid lead reassignment |
 | --- | --- | --- | --- |
@@ -3307,7 +3308,7 @@ A trusted log bot posts a report link → the report is linked with `source = DI
 
 #### Report → fight → Run association
 
-One Warcraft Logs report often holds several consecutive BoostingHub Runs — possibly with identical `RunRaidContent` (two Venomous 8/8 Runs back to back). Raid identity alone can never decide which fights belong to which Run, so every fight is associated explicitly (`src/services/wcl-fight-assignment.ts`, pure):
+One Warcraft Logs report often holds several consecutive BoostingHub Runs — possibly with identical `RunRaidContent` (two Venomous 8/8 Runs back to back). Raid identity alone can never decide which fights belong to which Run, so every fight is associated explicitly (`src/domain/wcl-fight-assignment.ts`, pure):
 
 1. **Time — primary.** WCL fight times are relative to the report start and are converted first: `absolute = report.startTime + fight.startTime`. A fight is a candidate when its absolute start lies in the Run's active window `[RunStartSnapshot.startedAt, Run.completedAt]` padded by `WCL_RUN_MATCH_TOLERANCE_SECONDS` (**300 s**, boundaries inclusive). The tolerance stays well below the usual gap between back-to-back boost Runs.
 2. **RunRaidContent + difficulty — validation.** The encounter must belong to one of the Run's contents (catalog `warcraftLogsEncounterIds`; Bundles accept both Tidebound and Venomous encounters) at the Run's difficulty. In-window fights that fail this are **IGNORED**. Encounters the catalog does not know yet pass (time decides). Content never replaces time: two identical Runs stay separated by their windows.
@@ -3333,7 +3334,7 @@ A `(report, fight)` pair is ASSIGNED to at most one Run — enforced by the part
 
 ##### Several reports for one Run
 
-Several reports may be linked to one Run — different parts of it, overlapping parts, or two people logging the same raid. Every report keeps its association and fight rows (provenance stays visible); the **audit** uses each real pull exactly **once** — the union of unique pulls, never "one report only" (`src/services/wcl-report-overlap.ts`, `realPullsOfRun`).
+Several reports may be linked to one Run — different parts of it, overlapping parts, or two people logging the same raid. Every report keeps its association and fight rows (provenance stays visible); the **audit** uses each real pull exactly **once** — the union of unique pulls, never "one report only" (`src/domain/wcl-report-overlap.ts`, `realPullsOfRun`).
 
 - **Same pull across two reports:** same encounter, difficulty, kill/wipe and raid content (when both known), durations within 2 s, and starts that differ by the report pair's **clock offset** within 2 s. Each logger stamps times with its own computer clock (production: 10.87–10.93 s apart on all 9 pulls, durations within 45 ms), so the offset is the start delta most same-shaped pairs agree on — never "equal timestamps". A single shared pull only matches when both copies overlap in absolute time (two distinct pulls of one raid never overlap). Fights of one report are never merged, so repeated pulls and close wipes stay separate.
 - **Which copy counts:** more identified roster players; then the report covering more of the Run (identical reports → one report's events, one request); then the earlier link; then the report code. A kept copy is **incomplete** when an audited booster took part in the pull without a CombatantInfo snapshot (a `PARTICIPANT` fact instead of `COMBATANT`) or it has no snapshot at all; only then are the other loggers' copies of just those pulls read (one extra request per report) and the copy with the most snapshots kept — ties keep the ranking. The expectation is the audit's own participants, not the fight assignment's `rosterMatched` (which also counts lootbuddies). One pull's facts always come from one copy — never CAST from one logger and COMBATANT from another.
@@ -3363,7 +3364,7 @@ Audited players are **attended BOOSTER roster participants** (`PRESENT`, `LATE`,
 
 ##### Weapon enhancement — class-aware
 
-One rule (`resolveWeaponEnhancementRequirement`, `src/services/gear-readiness-policy.ts`) with the game data kept apart (`src/lib/wow-gear-catalog.ts`). Per weapon, from the CombatantInfo gear at pull:
+One rule (`resolveWeaponEnhancementRequirement`, `src/domain/gear-readiness-policy.ts`) with the game data kept apart (`src/lib/wow-gear-catalog.ts`). Per weapon, from the CombatantInfo gear at pull:
 
 | Weapon has | Result |
 | --- | --- |
@@ -3413,7 +3414,7 @@ A consumable used early in a fight never satisfies a later death. Multiple death
 
 **Kill or wipe.** Every death shows whether its pull ended in a **Kill** or a **Wipe** (Warcraft Logs `kill`), and the Survival heading counts deaths in wipes and in kills. That is all a wipe means here: the log does not say when a wipe was called, so nothing is inferred about whether a player "should have survived". The fight result alone changes nothing: a death in a wipe is judged exactly like one in a kill — unless it happened during the boosting team's collapse (death context "part of raid wipe", below), which is shown but not judged. Combat potions are still only expected on kills.
 
-**Part of raid wipe.** Deaths while the **boosting team** is collapsing at the end of a wipe are shown but not judged (`src/services/wipe-collapse.ts`): what was used appears as usual, a missing Healing Potion / Healthstone reads "not detected · not judged during raid wipe" and is never a warning. The collapse is judged from the **audited boosters only** — matched, attended BOOSTER participants who took part in the pull; buyers (who may die on purpose while the boosters keep fighting), lootbuddies, unmatched players and external boosters without a Warcraft Logs identity count in neither numerator nor denominator. For a **wipe** with at least 5 such boosters, the onset is the earliest booster death with at least 3 different boosters dying within 10 s **and** at least half of the pull's boosters within 20 s; every booster death from there on is part of the raid wipe (also a trailing survivor dying much later), every earlier death is judged normally. A battle-ressed booster counts once for the thresholds, each death is still listed. Kills never have one. It is derived from the snapshot's own facts (participation and deaths of the kept copy of each pull), so no extra request and no stored state.
+**Part of raid wipe.** Deaths while the **boosting team** is collapsing at the end of a wipe are shown but not judged (`src/domain/wipe-collapse.ts`): what was used appears as usual, a missing Healing Potion / Healthstone reads "not detected · not judged during raid wipe" and is never a warning. The collapse is judged from the **audited boosters only** — matched, attended BOOSTER participants who took part in the pull; buyers (who may die on purpose while the boosters keep fighting), lootbuddies, unmatched players and external boosters without a Warcraft Logs identity count in neither numerator nor denominator. For a **wipe** with at least 5 such boosters, the onset is the earliest booster death with at least 3 different boosters dying within 10 s **and** at least half of the pull's boosters within 20 s; every booster death from there on is part of the raid wipe (also a trailing survivor dying much later), every earlier death is judged normally. A battle-ressed booster counts once for the thresholds, each death is still listed. Kills never have one. It is derived from the snapshot's own facts (participation and deaths of the kept copy of each pull), so no extra request and no stored state.
 
 Why not Warcraft Logs' own cutoffs: `Report.events(wipeCutoff: N)` drops everything after the N-th death of **any** raid member (buyers included) and also cuts kills; `wipeCutoff: -1` has no effect there; the fight's `wipeCalledTime` is only set when a wipe is called in the Companion app — empty on all 122 wipes of 16 public Venomous Abyss reports and on production. Checked on one production report (14 boosters): Lost Explorers collapses at +11.9 s (13 boosters dead within 16 s); Sszorak at +112.5 s (7 boosters in 2.7 s) while the lone booster death at +26.6 s stays judged. The authoritative validation of this booster-only rule is the production case above plus the deterministic tests. Public logs have no BoostingHub roster, so they could only serve as a proxy with the whole raid as the population: in the raid wipes of 16 public Venomous Abyss reports no onset fell on an early mechanic cluster the raid fought on from, and 52 such early clusters were rejected by the 50 %-in-20 s rule (the only flagged cases came from a 5-player dungeon log, which the audit does not cover). That is evidence, not a measured false-positive rate.
 

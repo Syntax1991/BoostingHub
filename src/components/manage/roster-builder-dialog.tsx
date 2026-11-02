@@ -18,13 +18,13 @@ import {
   RUN_LOOT_TYPE_LABELS,
 } from "@/lib/labels";
 import type { RosterBuilderResult } from "@/services/roster-builder.service";
-import type { RosterBuilderProposedPick } from "@/services/roster-builder-optimizer";
-import { summarizeRaidBuffCoverageByClass } from "@/services/roster-raid-buffs";
+import type { RosterBuilderProposedPick } from "@/domain/roster-builder-optimizer";
+import { summarizeRaidBuffCoverageByClass } from "@/domain/roster-raid-buffs";
 import {
   confirmedWarningsFor,
   RosterWarningConfirmDialog,
 } from "@/components/manage/roster-warning-confirm-dialog";
-import type { ConfirmedRosterWarning } from "@/services/roster-selection-risk";
+import type { ConfirmedRosterWarning } from "@/domain/roster-selection-risk";
 import type { CharacterRole } from "@/models/enums";
 
 function PickRow({ pick }: { pick: RosterBuilderProposedPick }) {

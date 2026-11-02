@@ -10,7 +10,7 @@ import { BotApiError, type BotApiClient } from "@/discord-bot/bot-api-client";
 import { buildCustomId } from "@/discord-bot/custom-ids";
 import { describeBotApiError } from "@/discord-bot/interactions/error-copy";
 import { requestImmediateSync } from "@/discord-bot/sync-loop";
-import { WITHDRAW_REASON_MAX_LENGTH, WITHDRAW_REASON_MIN_LENGTH } from "@/services/signup-state";
+import { WITHDRAW_REASON_MAX_LENGTH, WITHDRAW_REASON_MIN_LENGTH } from "@/domain/signup-state";
 
 export const WITHDRAW_REASON_INPUT_ID = "reason";
 

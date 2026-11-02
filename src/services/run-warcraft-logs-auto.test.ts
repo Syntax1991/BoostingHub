@@ -10,8 +10,8 @@ import { runConsumableAuditRepository } from "@/repositories/run-consumable-audi
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { runWarcraftLogsRepository } from "@/repositories/run-warcraft-logs.repository";
 import { scheduledJobLockRepository } from "@/repositories/scheduled-job-lock.repository";
-import { identityKey, type ConsumableAuditParticipant } from "@/services/consumable-audit-extract";
-import { CONSUMABLE_AUTO_AUDIT_POLICY, autoAuditState } from "@/services/consumable-auto-audit-policy";
+import { identityKey, type ConsumableAuditParticipant } from "@/domain/consumable-audit-extract";
+import { CONSUMABLE_AUTO_AUDIT_POLICY, autoAuditState } from "@/domain/consumable-auto-audit-policy";
 import { discordSyncService } from "@/services/discord-sync.service";
 import {
   CONSUMABLE_AUTO_AUDIT_LOCK_KEY,

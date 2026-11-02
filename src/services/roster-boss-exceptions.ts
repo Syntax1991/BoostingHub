@@ -22,7 +22,7 @@ import { resolveSignupAssignableRoles } from "@/lib/signup-assignable-roles";
 import type { CharacterRole, RaidDifficulty, RunLootType } from "@/models/enums";
 import type { RosterSignupRow } from "@/repositories/roster.repository";
 import type { RunRaidContentRecord } from "@/repositories/run.repository";
-import { isApprovedBooster } from "@/services/boosting-role.service";
+import { isApprovedBooster } from "@/domain/boosting-access";
 import { getScheduleConflictsForCharacters } from "@/services/character-schedule-conflict.service";
 import { lockoutService } from "@/services/lockout.service";
 

@@ -2,7 +2,7 @@ import type { WowClass } from "@/models/enums";
 
 /**
  * Game data for the Gear Readiness and weapon-enhancement checks — no
- * evaluation logic (see src/services/gear-readiness-policy.ts). Enchant ids are
+ * evaluation logic (see src/domain/gear-readiness-policy.ts). Enchant ids are
  * SpellItemEnchantment ids exactly as Warcraft Logs reports them in
  * CombatantInfo `gear[].permanentEnchant` / `temporaryEnchant`; names are from
  * the client game data (DB2, build 12.1.5).

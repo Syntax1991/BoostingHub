@@ -10,7 +10,7 @@ import {
   autoAuditState,
   CONSUMABLE_AUTO_AUDIT_POLICY,
   PERMANENT_AUTO_AUDIT_FAILURES,
-} from "@/services/consumable-auto-audit-policy";
+} from "@/domain/consumable-auto-audit-policy";
 import { recordWarcraftLogsJobSummary } from "@/lib/integration-provider-events";
 
 /**

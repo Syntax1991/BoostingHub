@@ -3,7 +3,7 @@ import {
   optimizeRosterProposal,
   type RosterBuilderCandidateInput,
   type RosterBuilderLockedPick,
-} from "@/services/roster-builder-optimizer";
+} from "@/domain/roster-builder-optimizer";
 
 function booster(input: {
   signupId: string;

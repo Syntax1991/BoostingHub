@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   projectDashboardOperations,
   projectPersonalDashboardAttention,
-} from "@/services/dashboard-attention";
-import { getRunLifecycleCapabilities } from "@/services/run-state";
-import { projectRunOperationalHandoff } from "@/services/run-operational-handoff";
-import type { MyRunsProjection } from "@/services/dashboard-attention";
+} from "@/domain/dashboard-attention";
+import { getRunLifecycleCapabilities } from "@/domain/run-state";
+import { projectRunOperationalHandoff } from "@/domain/run-operational-handoff";
+import type { MyRunsProjection } from "@/domain/dashboard-attention";
 
 function baseItem(overrides: Partial<MyRunsProjection["selected"][number]> = {}): MyRunsProjection["selected"][number] {
   return {

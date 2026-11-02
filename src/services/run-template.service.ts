@@ -32,7 +32,7 @@ import {
   notesValue,
   RUN_COMPOSITION_MAX,
   RUN_COMPOSITION_MIN,
-} from "@/services/run-state";
+} from "@/domain/run-state";
 import type {
   CreateRunTemplateInput,
   ManageTemplateFiltersInput,

@@ -2,7 +2,7 @@ import type { CharacterSyncHealth } from "@/lib/blizzard/sync-health";
 import { isDpsRole, type ConcreteCharacterRole } from "@/lib/character-roles";
 import { wclPerformanceMetricValue, type WclPerformanceRaidSegment } from "@/lib/wcl-performance-display";
 import type { CharacterRole, ParticipationType, SignupStatus } from "@/models/enums";
-import type { RosterSelectionRisk } from "@/services/roster-selection-risk";
+import type { RosterSelectionRisk } from "@/domain/roster-selection-risk";
 import type { RunStaffingShortage } from "@/lib/run-staffing";
 
 /**

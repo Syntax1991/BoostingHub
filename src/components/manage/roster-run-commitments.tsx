@@ -8,8 +8,8 @@ import {
   getRunCommitmentPresentation,
   SCHEDULE_CONFLICT_ALERT_CLASSNAME,
 } from "@/lib/run-commitment-presentation";
-import type { CharacterRunCommitment } from "@/services/character-run-commitment-state";
-import type { CharacterScheduleConflict } from "@/services/character-schedule-conflict";
+import type { CharacterRunCommitment } from "@/domain/character-run-commitment-state";
+import type { CharacterScheduleConflict } from "@/domain/character-schedule-conflict";
 
 function stopRosterToggle(event: MouseEvent) {
   event.stopPropagation();

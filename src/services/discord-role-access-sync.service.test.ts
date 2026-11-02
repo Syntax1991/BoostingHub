@@ -1,11 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { auth } from "@/auth/auth";
 import { orm } from "@/lib/prisma";
-import {
-  hasEffectiveBoosterAccess,
-  hasEffectiveLootbuddyAccess,
-  isApprovedBooster,
-} from "@/services/boosting-role.service";
+import { hasEffectiveBoosterAccess, hasEffectiveLootbuddyAccess, isApprovedBooster } from "@/domain/boosting-access";
 import { syncDiscordRoleAccess } from "@/services/discord-role-access-sync.service";
 import { userRepository } from "@/repositories/user.repository";
 

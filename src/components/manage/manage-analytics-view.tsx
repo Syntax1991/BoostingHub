@@ -1,7 +1,7 @@
 import { Card, CardHeader, PageHeader } from "@/components/ui/primitives";
 import { PageWorkspace } from "@/components/ui/layout";
 import { KpiItem, KpiStrip } from "@/components/ui/data-table";
-import type { OperationalAnalyticsReport } from "@/services/operational-analytics";
+import type { OperationalAnalyticsReport } from "@/domain/operational-analytics";
 import { formatDateTime } from "@/lib/datetime";
 
 function pct(rate: number | null): string {

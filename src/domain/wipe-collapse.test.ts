@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { AuditFightFact, AuditObservationFact, AuditPlayerFact } from "@/services/consumable-audit-policy";
-import { deathContextOf, wipeCollapseOnset, wipeCollapseOnsets } from "@/services/wipe-collapse";
+import type { AuditFightFact, AuditObservationFact, AuditPlayerFact } from "@/domain/consumable-audit-policy";
+import { deathContextOf, wipeCollapseOnset, wipeCollapseOnsets } from "@/domain/wipe-collapse";
 
 const S = 1_000;
 const team = (n: number) => new Set(Array.from({ length: n }, (_, i) => `b${i + 1}`));

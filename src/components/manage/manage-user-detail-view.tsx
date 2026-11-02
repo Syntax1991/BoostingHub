@@ -22,12 +22,7 @@ import { BoosterAccessReviewDialog } from "@/components/manage/booster-access-re
 import { BoostingRoleControl } from "@/components/manage/boosting-role-control";
 import { AddStrikeDialog } from "@/components/manage/add-strike-dialog";
 import { RevokeStrikeDialog } from "@/components/manage/revoke-strike-dialog";
-import {
-  boosterAccessSourceLabel,
-  hasEffectiveBoosterAccess,
-  hasEffectiveLootbuddyAccess,
-  lootbuddyAccessSourceLabel,
-} from "@/services/boosting-role.service";
+import { boosterAccessSourceLabel, hasEffectiveBoosterAccess, hasEffectiveLootbuddyAccess, lootbuddyAccessSourceLabel } from "@/domain/boosting-access";
 import type { managementController } from "@/controllers/app.controller";
 
 type Page = Awaited<ReturnType<typeof managementController.getUserDetailPage>>;

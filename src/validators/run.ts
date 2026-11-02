@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { RAID_DIFFICULTIES, RUN_LOOT_TYPES } from "@/models/enums";
 import { entityIdSchema } from "@/validators/ids";
-import { RUN_COMPOSITION_MAX, RUN_COMPOSITION_MIN, RUN_NOTES_MAX } from "@/services/run-state";
+import { RUN_COMPOSITION_MAX, RUN_COMPOSITION_MIN, RUN_NOTES_MAX } from "@/domain/run-state";
 
 // Exported so create-many (and any other Run-adjacent validator) can reuse
 // the exact same field rules instead of drifting into a second definition.

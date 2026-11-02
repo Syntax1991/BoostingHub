@@ -3,7 +3,7 @@ import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import { describeBotApiError } from "@/discord-bot/interactions/error-copy";
 import { CHARACTER_ROLE_LABELS, CLASS_LABELS } from "@/lib/labels";
 import type { CharacterRole, WowClass } from "@/models/enums";
-import type { UserRunSelectionState } from "@/services/user-run-participation";
+import type { UserRunSelectionState } from "@/domain/user-run-participation";
 
 type MySignupItem = {
   runId: string;

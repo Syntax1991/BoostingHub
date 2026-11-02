@@ -5,7 +5,7 @@ import { buildRunTitle } from "@/lib/run-title";
 import { buildDiscordRunChannelName } from "@/lib/discord-channel-name";
 import { classifyRunWeek } from "@/lib/wow-run-week";
 import { isValidIanaTimeZone, listIanaTimeZones } from "@/lib/timezone";
-import { resolveDiscordDelivery } from "@/services/notification-content";
+import { resolveDiscordDelivery } from "@/domain/notification-content";
 
 describe("preferDefaultCharacterId", () => {
   const eligible = [

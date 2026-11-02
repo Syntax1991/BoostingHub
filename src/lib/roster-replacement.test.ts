@@ -10,7 +10,7 @@ import {
   withdrawnPickOpenRole,
   type ReplacementSignupInput,
 } from "@/lib/roster-replacement";
-import { CLEAN_ROSTER_SELECTION_RISK, type RosterSelectionRisk } from "@/services/roster-selection-risk";
+import { CLEAN_ROSTER_SELECTION_RISK, type RosterSelectionRisk } from "@/domain/roster-selection-risk";
 import type { WclPerformanceRaidSegment } from "@/lib/wcl-performance-display";
 
 const SAVED_RISK: RosterSelectionRisk = {

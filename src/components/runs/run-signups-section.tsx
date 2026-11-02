@@ -1,5 +1,5 @@
 import { Card, CardHeader, EmptyState } from "@/components/ui/primitives";
-import { isActiveSignupOffer } from "@/services/signup-state";
+import { isActiveSignupOffer } from "@/domain/signup-state";
 import {
   ClassBadge,
   ParticipationBadge,

@@ -12,7 +12,7 @@ import { isSelectableProduct, productPlanningService } from "@/services/product-
 import { runRepository } from "@/repositories/run.repository";
 import { raidRepository } from "@/repositories/raid.repository";
 import { userRepository } from "@/repositories/user.repository";
-import { emptyRunCapabilities, getRunLifecycleCapabilities, isSignupWindowOpen } from "@/services/run-state";
+import { emptyRunCapabilities, getRunLifecycleCapabilities, isSignupWindowOpen } from "@/domain/run-state";
 import { hasAdminAccess } from "@/auth/authorization";
 import { attendanceService } from "@/services/attendance.service";
 import { CLASS_LABELS } from "@/lib/labels";

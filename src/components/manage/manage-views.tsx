@@ -7,7 +7,7 @@ import { DifficultyBadge, RunStatusBadge } from "@/components/ui/badges";
 import { runDetailPath } from "@/lib/run-routes";
 import { ManageRunsFilters } from "@/components/manage/manage-runs-filters";
 import { RunQuickActions } from "@/components/manage/run-quick-actions";
-import { formatOperationalAttentionHint } from "@/services/run-operational-handoff";
+import { formatOperationalAttentionHint } from "@/domain/run-operational-handoff";
 import type { ManagedRunsPage } from "@/services/run.service";
 
 export function ManageRunsView({ data, massCreatedCount }: { data: ManagedRunsPage; massCreatedCount?: number }) {

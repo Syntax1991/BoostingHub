@@ -1,6 +1,6 @@
 import { UPCOMING_RUN_STATUSES, type CharacterRole, type ParticipationType, type RaidDifficulty, type RunStatus, type WowClass } from "@/models/enums";
-import type { CharacterScheduleConflict } from "@/services/character-schedule-conflict";
-import type { RunOperationalAction, RunOperationalAttention } from "@/services/run-operational-handoff";
+import type { CharacterScheduleConflict } from "@/domain/character-schedule-conflict";
+import type { RunOperationalAction, RunOperationalAttention } from "@/domain/run-operational-handoff";
 import type { signupService } from "@/services/signup.service";
 
 export type MyRunsProjection = Awaited<ReturnType<typeof signupService.getMyRuns>>;

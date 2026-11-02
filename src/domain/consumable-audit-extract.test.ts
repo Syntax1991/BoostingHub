@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { playedRolesByFight } from "@/services/consumable-audit-policy";
+import { playedRolesByFight } from "@/domain/consumable-audit-policy";
 import type {
   WarcraftLogsConsumableEvents,
   WarcraftLogsReportMetadata,
@@ -14,7 +14,7 @@ import {
   realmKey,
   mergeExtractedAudits,
   type ConsumableAuditParticipant,
-} from "@/services/consumable-audit-extract";
+} from "@/domain/consumable-audit-extract";
 
 const ULATEK = 3492; // Venomous Abyss
 const NYMRISSA = 3379; // Tidebound Grotto

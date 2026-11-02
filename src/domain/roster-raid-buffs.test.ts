@@ -7,7 +7,7 @@ import {
   resolveBuffContributorClass,
   summarizeRaidBuffCoverageByClass,
   type RaidBuffParticipant,
-} from "@/services/roster-raid-buffs";
+} from "@/domain/roster-raid-buffs";
 
 function participant(overrides: Partial<RaidBuffParticipant> & { signupId: string; wowClass: WowClass | null }): RaidBuffParticipant {
   return {

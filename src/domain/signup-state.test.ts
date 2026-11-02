@@ -10,7 +10,7 @@ import {
   planCharacterOfferReconciliation,
   planLootbuddyReconciliation,
   type OfferReconciliationSignup,
-} from "@/services/signup-state";
+} from "@/domain/signup-state";
 
 function row(
   id: string,

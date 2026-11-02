@@ -125,8 +125,8 @@ Order follows the assignment. Each line is one PR, stacked on the one before.
 | 1 | Documentation and restart plan | PR #323, awaiting review |
 | 2 | Remove dead code | PR #324, awaiting review |
 | 3 | Security headers, bot log body, route-wide bot credential test, session ownership tests | PR #325, awaiting review |
-| 4 | MVCS boundaries: app and controllers no longer import repositories; lib no longer imports components | PR open, awaiting review |
-| 4b | Move pure rules from `src/services` to `src/domain` | Planned |
+| 4 | MVCS boundaries: app and controllers no longer import repositories; lib no longer imports components | PR #326, awaiting review |
+| 4b | Move pure rules from `src/services` to `src/domain` | PR open, awaiting review |
 | 5 | Guide code: drop legacy paths, share publisher code | Planned |
 | 6 | Test cleanup by module | Planned; 19 of 337 files read |
 | 7 | Frontend: error and loading states, reload consistency | Planned |
@@ -143,6 +143,13 @@ Order follows the assignment. Each line is one PR, stacked on the one before.
 ## Change log
 
 Updated with every batch.
+
+### Batch 4b: pure rules in `src/domain`
+
+- 26 pure modules and their 22 test files moved from `src/services` to `src/domain`, plus two new modules: `boosting-access.ts` and `character-sync-eligibility.ts`.
+- Views, validators and repositories no longer import value code from `src/services`, apart from type imports.
+- Stayed in `src/services`: `character-raider-io-ilvl`, `character-run-commitment`, `signup-eligibility-context`, `raid-catalog-import-plan`, `roster-boss-exceptions`, `signup-eligibility`: each needs a repository, client or service.
+- Accepted: `consumable-auto-audit-policy`, `dashboard-attention`, `wcl-report-overlap` keep type-only imports from services or repositories.
 
 ### Batch 4: MVCS boundaries
 

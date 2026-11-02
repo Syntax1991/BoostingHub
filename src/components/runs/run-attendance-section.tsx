@@ -20,7 +20,7 @@ import {
   type WowClass,
 } from "@/models/enums";
 import type { ReplacementInput } from "@/services/attendance.service";
-import { ATTENDANCE_NOTE_MAX } from "@/services/run-state";
+import { ATTENDANCE_NOTE_MAX } from "@/domain/run-state";
 import { RunCompleteDialog } from "@/components/runs/run-complete-dialog";
 import { RunStartDialog } from "@/components/runs/run-start-dialog";
 import { AttendanceCorrectionDialog } from "@/components/runs/attendance-correction-dialog";

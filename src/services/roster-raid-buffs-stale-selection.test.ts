@@ -3,7 +3,7 @@ import {
   evaluateRaidBuffCoverage,
   resolveBuffContributorClass,
   type RaidBuffParticipant,
-} from "@/services/roster-raid-buffs";
+} from "@/domain/roster-raid-buffs";
 
 /**
  * Mirrors the roster projection rule: draft-selected WITHDRAWN rows must not
@@ -105,7 +105,7 @@ describe("class buff coverage after signup removal", () => {
 
 describe("live composition from staged selection", () => {
   it("updates tank/healer/dps counts when a staged signup is removed", async () => {
-    const { composeRoster } = await import("@/services/roster-composition");
+    const { composeRoster } = await import("@/domain/roster-composition");
     const selected = [
       { participationType: "BOOSTER" as const, selectedRole: "TANK" as const },
       { participationType: "BOOSTER" as const, selectedRole: "HEALER" as const },

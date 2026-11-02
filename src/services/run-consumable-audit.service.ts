@@ -29,9 +29,9 @@ import {
   mergeExtractedAudits,
   restrictExtractedToFights,
   type ExtractedConsumableAudit,
-} from "@/services/consumable-audit-extract";
-import { overlapFightKey, realPullsOfRun, snapshotCoversRealPulls } from "@/services/wcl-report-overlap";
-import { wipeCollapseOnsets } from "@/services/wipe-collapse";
+} from "@/domain/consumable-audit-extract";
+import { overlapFightKey, realPullsOfRun, snapshotCoversRealPulls } from "@/domain/wcl-report-overlap";
+import { wipeCollapseOnsets } from "@/domain/wipe-collapse";
 import {
   CONSUMABLE_AUDIT_POLICY,
   buildFightRefs,
@@ -40,8 +40,8 @@ import {
   type FightRef,
   type HealthstoneApplicability,
   type PlayerConsumableAudit,
-} from "@/services/consumable-audit-policy";
-import { autoAuditState, type AutoAuditState } from "@/services/consumable-auto-audit-policy";
+} from "@/domain/consumable-audit-policy";
+import { autoAuditState, type AutoAuditState } from "@/domain/consumable-auto-audit-policy";
 import {
   WCL_RUN_ACTION_COOLDOWN_SECONDS,
   runWarcraftLogsService,

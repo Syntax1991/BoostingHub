@@ -55,10 +55,10 @@ import {
   rosterSwappedWebNotification,
   rosterWithdrawnWebNotification,
   type NotificationAssignmentInput,
-} from "@/services/notification-content";
-import { quietHoursDeliveryContextFromUserRow } from "@/services/notification-delivery-context";
-import { canEditRunBeforeStart } from "@/services/run-state";
-import { hasUnpublishedRosterChanges } from "@/services/roster-publish-state";
+} from "@/domain/notification-content";
+import { quietHoursDeliveryContextFromUserRow } from "@/domain/notification-delivery-context";
+import { canEditRunBeforeStart } from "@/domain/run-state";
+import { hasUnpublishedRosterChanges } from "@/domain/roster-publish-state";
 
 export type RosterCharacterSnapshot = {
   id: string;

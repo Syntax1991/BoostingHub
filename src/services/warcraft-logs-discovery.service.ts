@@ -9,8 +9,8 @@ import {
   type WarcraftLogsDiscoveryRecord,
 } from "@/repositories/warcraft-logs-discovery.repository";
 import { fetchReport, linkDiscoveredReport } from "@/services/run-warcraft-logs.service";
-import { WCL_FIGHT_ASSIGNMENT_POLICY } from "@/services/wcl-fight-assignment";
-import { WCL_DISCOVERY_POLICY, evaluateReportDiscovery } from "@/services/wcl-report-discovery";
+import { WCL_FIGHT_ASSIGNMENT_POLICY } from "@/domain/wcl-fight-assignment";
+import { WCL_DISCOVERY_POLICY, evaluateReportDiscovery } from "@/domain/wcl-report-discovery";
 
 /**
  * Warcraft Logs reports the trusted log bot posts in a dedicated log channel

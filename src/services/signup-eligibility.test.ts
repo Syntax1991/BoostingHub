@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { EligibilityCharacter, EligibilityRun } from "@/services/signup-eligibility";
 import { evaluateBoosterOptions } from "@/services/signup-eligibility";
 import { assertSignupWindowOpen } from "@/services/signup-eligibility";
-import { canSelfWithdrawSignup, canTransitionSignup, isBlockingDuplicate } from "@/services/signup-state";
-import { canTransitionRun } from "@/services/run-state";
+import { canSelfWithdrawSignup, canTransitionSignup, isBlockingDuplicate } from "@/domain/signup-state";
+import { canTransitionRun } from "@/domain/run-state";
 import { boosterSignupSchema, setLootbuddiesSchema, signupOptionsSchema } from "@/validators/signup";
 
 const reset = "2026-W37";

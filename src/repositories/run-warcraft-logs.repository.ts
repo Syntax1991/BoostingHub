@@ -10,13 +10,13 @@ import {
 } from "@/lib/persistence";
 import type { AttendanceStatus } from "@/models/enums";
 import type { WarcraftLogsReportMetadata } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
-import { identityKey } from "@/services/consumable-audit-extract";
+import { identityKey } from "@/domain/consumable-audit-extract";
 import type {
   FightAssignment,
   RunAssignmentCandidate,
   WclFightReason,
   WclFightStatus,
-} from "@/services/wcl-fight-assignment";
+} from "@/domain/wcl-fight-assignment";
 
 type TxOrm = typeof orm;
 

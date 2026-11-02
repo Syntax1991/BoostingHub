@@ -1,4 +1,4 @@
-import type { PendingRosterSelectionWarning } from "@/services/roster-selection-risk";
+import type { PendingRosterSelectionWarning } from "@/domain/roster-selection-risk";
 export const DOMAIN_ERROR_CODES = [
   "NOT_AUTHENTICATED",
   "NOT_AUTHORIZED",

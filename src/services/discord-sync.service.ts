@@ -9,7 +9,7 @@ import { contentShortTitle } from "@/lib/raid-catalog";
 import type { CharacterRole, NotificationType, RaidDifficulty, RunLootType, RunStatus, WowClass } from "@/models/enums";
 import { trustedWarcraftLogsReportAuthorIds, warcraftLogsReportChannelIds } from "@/lib/warcraft-logs/config";
 import { warcraftLogsDiscoveryRepository } from "@/repositories/warcraft-logs-discovery.repository";
-import { WCL_DISCOVERY_POLICY } from "@/services/wcl-report-discovery";
+import { WCL_DISCOVERY_POLICY } from "@/domain/wcl-report-discovery";
 import { snowflakeAtTime } from "@/lib/discord-snowflake";
 /** The first Warcraft Logs link scan starts this long before the recorded Run start. */
 export const WCL_SCAN_START_MARGIN_MINUTES = 10;
@@ -65,9 +65,9 @@ import {
 } from "@/repositories/user-notification.repository";
 import { projectRunContentLockouts } from "@/lib/run-content-lockouts";
 import { lockoutService } from "@/services/lockout.service";
-import { isSignupWindowOpen, SIGNUP_WINDOW_STATUSES } from "@/services/run-state";
-import { isActiveSignupOffer, isAvailableSignup, isSignedUpSignup } from "@/services/signup-state";
-import { parseRescheduleHrefTimestamps } from "@/services/notification-content";
+import { isSignupWindowOpen, SIGNUP_WINDOW_STATUSES } from "@/domain/run-state";
+import { isActiveSignupOffer, isAvailableSignup, isSignedUpSignup } from "@/domain/signup-state";
+import { parseRescheduleHrefTimestamps } from "@/domain/notification-content";
 import { findCharacterStillNeedingBattleNetRepair } from "@/services/character-repair-notification.service";
 import {
   ROSTER_CHARACTER_SAVED_RUN_STATUSES,

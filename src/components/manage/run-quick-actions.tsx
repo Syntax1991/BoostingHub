@@ -12,8 +12,8 @@ import { RunCompleteDialog } from "@/components/runs/run-complete-dialog";
 import { RunDeleteDialog } from "@/components/runs/run-delete-dialog";
 import { RunStartDialog } from "@/components/runs/run-start-dialog";
 import { runDetailPath } from "@/lib/run-routes";
-import type { RunLifecycleCapabilities } from "@/services/run-state";
-import type { RunOperationalAction } from "@/services/run-operational-handoff";
+import type { RunLifecycleCapabilities } from "@/domain/run-state";
+import type { RunOperationalAction } from "@/domain/run-operational-handoff";
 import type { RunStatus } from "@/models/enums";
 
 type QuickActionRun = {

@@ -24,8 +24,8 @@ import {
   assignReportFights,
   type WclFightReason,
   type WclFightStatus,
-} from "@/services/wcl-fight-assignment";
-import { overlapFightKey, realPullsOfRun } from "@/services/wcl-report-overlap";
+} from "@/domain/wcl-fight-assignment";
+import { overlapFightKey, realPullsOfRun } from "@/domain/wcl-report-overlap";
 
 /**
  * Report → fight → Run association for the Run Consumables Audit.

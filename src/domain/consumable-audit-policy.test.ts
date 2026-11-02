@@ -8,7 +8,7 @@ import {
   type AuditFightFact,
   type AuditObservationFact,
   type AuditPlayerFact,
-} from "@/services/consumable-audit-policy";
+} from "@/domain/consumable-audit-policy";
 import { findConsumableBySpellId } from "@/lib/consumable-catalog";
 import type { CharacterRole } from "@/models/enums";
 
