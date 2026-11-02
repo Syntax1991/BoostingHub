@@ -1355,6 +1355,10 @@
     "tests/integration/services/signup-offers.service.test.ts": [
       "REWRITE",
       "assertIsolatedTestDatabase; verified deleteAndCount; testActor; expectDomainError; local setDraftSelection adapter over saveDraftSelection (same-user booster replace)"
+    ],
+    "tests/integration/services/attendance.service.test.ts": [
+      "REWRITE",
+      "assertIsolatedTestDatabase; verified deleteAndCount (incl RunSignupRole/events/snapshot); testActor; expectDomainError; local setDraftSelection→saveDraftSelection; fixed sleeps→waitForLockWaiter"
     ]
   },
   "tests": {

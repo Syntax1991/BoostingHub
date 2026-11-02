@@ -132,7 +132,7 @@ Order follows the assignment. Each line is one PR, stacked on the one before.
 | 4 | MVCS boundaries: app and controllers no longer import repositories; lib no longer imports components | PR #326, awaiting review |
 | 4b | Move pure rules from `src/services` to `src/domain` | PR #327, awaiting review |
 | 5 | Guide code: drop legacy paths, share publisher code | PR #328, awaiting review |
-| 6 | Test cleanup by module | Phase 1 DONE ([PHASE-1.md](reports/PHASE-1.md)). Phase 2 in progress on `test/audit-batch-a`: 338 of 341 live files decided (+1 tombstone), 3667 of 3825 ledger tests reviewed, 158 UNREVIEWED across 3 files |
+| 6 | Test cleanup by module | Phase 1 DONE ([PHASE-1.md](reports/PHASE-1.md)). Phase 2 in progress on `test/audit-batch-a`: 339 of 341 live files decided (+1 tombstone), 3703 of 3825 ledger tests reviewed, 122 UNREVIEWED across 2 files |
 | 7 | Frontend: error, loading and not-found pages; shared dialog effect | PR #329, awaiting review |
 | 8 | Performance, measured: run detail payload, event purge, rate-limit log | PR #330, awaiting review |
 | 9 | Dependencies and final verification | Dependencies audited, no change; TruffleHog scan still invalid |
@@ -267,7 +267,7 @@ Refactored so far:
 - New shared helpers: `waitForLockWaiter()` in `db-fixtures.ts` replaces fixed sleeps that were meant to let a second writer reach a lock (a sleep passes even when the lock is gone); `DISCORD_SCHEDULE_TEST_CLOCK` in `time.ts`; `src/test/bulk-force-refresh.ts`.
 - Removed 1 test: the schedule "signature matches pure builder" test never called the builder.
 - Mutation checks: single-row `update()` lock restored, 4 of 5 runs fail; Admin-level lock removed, every run fails.
-- Fixed sleeps still waiting for a lock in unaudited files: `attendance.service`, `flexible-run-management`, `roster-pre-start-replacements`, `roster-reservation-concurrency`, `run-lifecycle-concurrency`. Each moves to `waitForLockWaiter` when its file is audited.
+- Fixed sleeps still waiting for a lock in unaudited files: `roster-reservation-concurrency` (attendance + flexible-run-management + roster-pre-start-replacements + run-lifecycle-concurrency moved). Each moves to `waitForLockWaiter` when its file is audited.
 
 ### Batch 7 and the test-only signup path
 
@@ -355,7 +355,7 @@ Found while moving, not changed (feature freeze): four production modules are im
 | Phase | Name | Status | Report |
 | --- | --- | --- | --- |
 | 1 | Centralized test structure | DONE | [PHASE-1.md](reports/PHASE-1.md) |
-| 2 | Test quality audit | IN PROGRESS (3 UNREVIEWED files / 158 tests) | — |
+| 2 | Test quality audit | IN PROGRESS (2 UNREVIEWED files / 122 tests) | — |
 | 3 | Production refactoring / code quality | NOT STARTED | — |
 | 4 | Performance, security, reliability | NOT STARTED | — |
 | 5 | UX and documentation | NOT STARTED | — |
@@ -365,9 +365,8 @@ Found while moving, not changed (feature freeze): four production modules are im
 
 HEAD at last ledger touch: see git. Still UNREVIEWED:
 
-1. `attendance.service.test.ts` (36) — has `setDraftSelection`
-2. `roster.service.test.ts` (30) — has `setDraftSelection`; historically needs fresh DB reset
-3. `discord-sync.service.test.ts` (92) — has `setDraftSelection`
+1. `roster.service.test.ts` (30) — has `setDraftSelection`; historically needs fresh DB reset
+2. `discord-sync.service.test.ts` (92) — has `setDraftSelection`
 
 Then: remove `rosterService.setDraftSelection` once callers are gone; full suite ×2 without reset; lint; typecheck; build; `PHASE-2.md`.
 
@@ -391,7 +390,7 @@ Services batch 2 notes worth keeping:
 - `warcraft-logs-discovery.test.ts` and `discord-member-name-sync.service.test.ts` used real-looking Discord snowflakes (log channel, log bot, guild, role ids). They are now synthetic per run.
 - Bulk refresh markers (resolved in batch 6): the cooldown stays community-wide in production, which is the intended behaviour. Suites now start bulk runs with their own admin, remove only that admin's markers (`src/test/bulk-force-refresh.ts`), and fail with the marker's id when a foreign marker is still inside the cooldown. No suite deletes another suite's markers any more.
 3. For each file: read every test, record a decision in `docs/audit/test-decisions.json`, change what the decision says, then rebuild `docs/audit/test-ledger.tsv` from `vitest list --json`.
-4. Next test-only method: `rosterService.setDraftSelection`. Six audited callers moved in `af6bb59`; remaining callers are in still-unreviewed suites (`attendance.service`, `discord-sync.service`, `roster.service`) — `signup-offers` and `notification-roster-events` migrated. Move those with their file audits, then remove the method.
+4. Next test-only method: `rosterService.setDraftSelection`. Six audited callers moved in `af6bb59`; remaining callers are in still-unreviewed suites (`discord-sync.service`, `roster.service`) — attendance/signup-offers/notification-roster-events migrated. Move those with their file audits, then remove the method.
 5. Then shared helpers for `createTestUser` (36 copies), `createCharacter` (29) and `createUser` (26), and `restoreMocks` for the 52 files that never reset mocks.
 
 Not started: renames from the naming table, other than the move to `src/domain`.

@@ -4,10 +4,10 @@ import { POST as voicePresencePost } from "@/app/api/bot/discord/voice-presence/
 import { VOICE_PRESENCE_TTL_MS } from "@/lib/voice-presence";
 import { voicePresenceService } from "@/services/voice-presence.service";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
-import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { mapActionError } from "@/lib/action-result";
 import { isAttendanceConflict } from "@/lib/attendance-view";
+import { normalizeCharacterIdentity } from "@/lib/character-identity";
+import { isDomainError } from "@/lib/errors";
 import { db, orm } from "@/lib/prisma";
 import { raidRepository } from "@/repositories/raid.repository";
 import { lockRosterInTx } from "@/repositories/roster.repository";
@@ -16,7 +16,10 @@ import { attendanceService } from "@/services/attendance.service";
 import { rosterService } from "@/services/roster.service";
 import { runDetailService } from "@/services/run-detail.service";
 import { runService } from "@/services/run.service";
+import { testActor } from "@tests/fixtures/actors";
+import { assertIsolatedTestDatabase, waitForLockWaiter } from "@tests/fixtures/db-fixtures";
 import { venomousCreateInput } from "@tests/fixtures/test-run-input";
+import { expectDomainError } from "@tests/helpers/domain-error";
 import type { AttendanceStatus, CharacterRole, ParticipationType } from "@/models/enums";
 import { correctAttendanceSchema, setAttendanceSchema } from "@/validators/attendance";
 import { operationalAnalyticsRepository } from "@/repositories/operational-analytics.repository";
@@ -42,25 +45,46 @@ function asUser(
   name: string,
   accountRole: AuthenticatedUser["accountRole"] = "USER",
 ): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@attest.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
+  return testActor(id, accountRole, { name, email: `${id}@attest.boostting.local` });
 }
 
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    expect(isDomainError(error) && error.code).toBe(code);
-  }
+/** Test-local adapter: production path is saveDraftSelection (full draft replace).
+ * Mirrors setDraftSelection's one-booster-per-user replace when selecting a second Booster. */
+async function setDraftSelection(
+  actor: AuthenticatedUser,
+  input: {
+    runId: string;
+    signupId: string;
+    selected: boolean;
+    version: number;
+    selectedRole?: CharacterRole | null;
+  },
+) {
+  const view = await rosterService.getRosterManagementView(actor, input.runId);
+  const all = [...view.boosters, ...view.groups.lootbuddies];
+  const target = all.find((row) => row.id === input.signupId);
+  const others = all
+    .filter((row) => {
+      if (!row.draftSelected || row.id === input.signupId) return false;
+      if (
+        input.selected &&
+        target?.participationType === "BOOSTER" &&
+        row.participationType === "BOOSTER" &&
+        row.userId === target.userId
+      ) {
+        return false;
+      }
+      return true;
+    })
+    .map((row) => ({ signupId: row.id, selectedRole: row.selectedRole }));
+  const selections = input.selected
+    ? [...others, { signupId: input.signupId, selectedRole: input.selectedRole ?? null }]
+    : others;
+  await rosterService.saveDraftSelection(actor, {
+    runId: input.runId,
+    version: input.version,
+    selections,
+  });
 }
 
 async function createTestUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"]) {
@@ -76,16 +100,22 @@ async function createTestUser(id: string, name: string, accountRole: Authenticat
   });
 }
 
-async function deleteIfPresent(table: string, id: string) {
-  try {
-    if (table === "User") await orm.User.where({ id }).delete();
-    else if (table === "Character") await orm.Character.where({ id }).delete();
-    else if (table === "RunSignup") await orm.RunSignup.where({ id }).delete();
-    else if (table === "BoosterAccess") await orm.BoosterAccess.where({ id }).delete();
-    else if (table === "RunAttendance") await orm.RunAttendance.where({ id }).delete();
-    else if (table === "Run") await orm.Run.where({ id }).delete();
-  } catch {
-    // Already gone.
+async function deleteOwnedRow(
+  table:
+    | "User"
+    | "Character"
+    | "RunSignup"
+    | "RunSignupRole"
+    | "RunAttendance"
+    | "Run"
+    | "BoosterAccess",
+  id: string,
+) {
+  assertIsolatedTestDatabase();
+  const model = orm[table];
+  const n = await model.where({ id }).deleteAndCount();
+  if (n !== 0 && n !== 1) {
+    throw new Error(`Expected 0 or 1 delete for ${table} ${id}, got ${n}`);
   }
 }
 
@@ -177,7 +207,7 @@ async function createDraft(actor: AuthenticatedUser, extra: Record<string, unkno
 async function selectAndPublish(lead: AuthenticatedUser, runId: string, signupIds: string[]) {
   for (const signupId of signupIds) {
     const view = await rosterService.getRosterManagementView(lead, runId);
-    await rosterService.setDraftSelection(lead, {
+    await setDraftSelection(lead, {
       runId,
       signupId,
       selected: true,
@@ -193,29 +223,38 @@ async function selectAndPublish(lead: AuthenticatedUser, runId: string, signupId
 }
 
 async function cleanupRun(runId: string) {
+  assertIsolatedTestDatabase();
   const attendance = await orm.RunAttendance.where({ runId }).select("id").all();
   for (const row of attendance) {
-    await deleteIfPresent("RunAttendance", (row as { id: string }).id);
+    await deleteOwnedRow("RunAttendance", (row as { id: string }).id);
+  }
+  const events = await orm.RunDomainEvent.where({ runId }).select("id").all();
+  for (const row of events) {
+    await orm.RunDomainEvent.where({ id: (row as { id: string }).id }).deleteAndCount();
+  }
+  const snapshot = await orm.RunStartSnapshot.where({ runId }).first();
+  if (snapshot) {
+    await orm.RunStartSnapshot.where({ runId }).deleteAndCount();
   }
   const roster = await orm.RunRoster.where({ runId }).first();
   if (roster) {
     const rosterId = (roster as { id: string }).id;
     const entries = await orm.RunRosterEntry.where({ rosterId }).all();
     for (const entry of entries) {
-      await orm.RunRosterEntry.where({ id: (entry as { id: string }).id }).delete();
+      await orm.RunRosterEntry.where({ id: (entry as { id: string }).id }).deleteAndCount();
     }
-    await orm.RunRoster.where({ id: rosterId }).delete();
+    await orm.RunRoster.where({ id: rosterId }).deleteAndCount();
   }
   const signups = await orm.RunSignup.where({ runId }).select("id").all();
   for (const row of signups) {
     const signupId = (row as { id: string }).id;
     const offered = await orm.RunSignupRole.where({ signupId }).select("id").all();
     for (const offer of offered) {
-      await deleteIfPresent("RunSignupRole", (offer as { id: string }).id);
+      await deleteOwnedRow("RunSignupRole", (offer as { id: string }).id);
     }
-    await deleteIfPresent("RunSignup", signupId);
+    await deleteOwnedRow("RunSignup", signupId);
   }
-  await deleteIfPresent("Run", runId);
+  await deleteOwnedRow("Run", runId);
 }
 
 const user = asUser(ids.user, "Attendance User");
@@ -226,6 +265,7 @@ const admin = asUser(ids.admin, "Attendance Admin", "ADMIN");
 const characters: Record<string, string> = {};
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   await raidRepository.ensureReferenceRaids();
   for (const userId of createdUserIds) {
     const runs = await orm.Run.where({ raidLeadId: userId }).select("id").all();
@@ -237,15 +277,15 @@ beforeAll(async () => {
       const signupId = (row as { id: string }).id;
       const offered = await orm.RunSignupRole.where({ signupId }).select("id").all();
       for (const offer of offered) {
-        await deleteIfPresent("RunSignupRole", (offer as { id: string }).id);
+        await deleteOwnedRow("RunSignupRole", (offer as { id: string }).id);
       }
-      await deleteIfPresent("RunSignup", signupId);
+      await deleteOwnedRow("RunSignup", signupId);
     }
     const chars = await orm.Character.where({ userId }).select("id").all();
     for (const row of chars) {
-      await deleteIfPresent("Character", (row as { id: string }).id);
+      await deleteOwnedRow("Character", (row as { id: string }).id);
     }
-    await deleteIfPresent("User", userId);
+    await deleteOwnedRow("User", userId);
   }
   await createTestUser(ids.user, "Attendance User", "USER");
   await createTestUser(ids.lead, "Attendance Lead", "RAID_LEAD");
@@ -307,21 +347,22 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
+  assertIsolatedTestDatabase();
   for (const runId of createdRunIds) {
     await cleanupRun(runId);
   }
   for (const id of createdSignupIds) {
     const offered = await orm.RunSignupRole.where({ signupId: id }).select("id").all();
     for (const offer of offered) {
-      await deleteIfPresent("RunSignupRole", (offer as { id: string }).id);
+      await deleteOwnedRow("RunSignupRole", (offer as { id: string }).id);
     }
-    await deleteIfPresent("RunSignup", id);
+    await deleteOwnedRow("RunSignup", id);
   }
   for (const id of createdCharacterIds) {
-    await deleteIfPresent("Character", id);
+    await deleteOwnedRow("Character", id);
   }
   for (const id of createdUserIds) {
-    await deleteIfPresent("User", id);
+    await deleteOwnedRow("User", id);
   }
 }, 60_000);
 
@@ -364,12 +405,12 @@ async function publishedRunWithRoster() {
 describe("start run authorization and preconditions", () => {
   it("rejects USER, other RAID_LEAD, and non-published runs", async () => {
     const { runId } = await publishedRunWithRoster();
-    await expectDomainCode(runService.startRun(user, { runId: runId }), "RUN_NOT_MANAGEABLE");
-    await expectDomainCode(runService.startRun(otherLead, { runId: runId }), "RUN_NOT_MANAGEABLE");
+    await expectDomainError(runService.startRun(user, { runId: runId }), "RUN_NOT_MANAGEABLE");
+    await expectDomainError(runService.startRun(otherLead, { runId: runId }), "RUN_NOT_MANAGEABLE");
 
     const openId = await createDraft(lead, { title: "Attendance still open" });
     await runService.openRun(lead, openId);
-    await expectDomainCode(runService.startRun(lead, { runId: openId }), "RUN_NOT_PUBLISHED");
+    await expectDomainError(runService.startRun(lead, { runId: openId }), "RUN_NOT_PUBLISHED");
   });
 
   it("lets the assigned RAID_LEAD start a published run with selected participants", async () => {
@@ -399,7 +440,7 @@ describe("start run authorization and preconditions", () => {
     const { runId } = await publishedRunWithRoster();
     await runService.startRun(admin, { runId: runId });
     expect((await runRepository.findById(runId))?.status).toBe("IN_PROGRESS");
-    await expectDomainCode(runService.startRun(admin, { runId: runId }), "RUN_ALREADY_STARTED");
+    await expectDomainError(runService.startRun(admin, { runId: runId }), "RUN_ALREADY_STARTED");
     const manager = await attendanceService.getManagerAttendance(admin, runId);
     expect(manager.rows).toHaveLength(3);
   });
@@ -414,7 +455,7 @@ describe("start run authorization and preconditions", () => {
       state: "PUBLISHED",
       updatedAt: new Date().toISOString(),
     });
-    await expectDomainCode(runService.startRun(lead, { runId: runId }), "RUN_CANNOT_START");
+    await expectDomainError(runService.startRun(lead, { runId: runId }), "RUN_CANNOT_START");
   });
 
   it("creates an immutable RunStartSnapshot with startedAt and startedBy", async () => {
@@ -436,11 +477,11 @@ describe("attendance mutation and bulk present", () => {
     const rows = (await attendanceService.getManagerAttendance(lead, runId)).rows;
     const target = rows[0];
 
-    await expectDomainCode(
+    await expectDomainError(
       attendanceService.setStatus(user, { attendanceId: target.id, expectedStatus: "UNMARKED", status: "PRESENT" }),
       "ATTENDANCE_NOT_MANAGEABLE",
     );
-    await expectDomainCode(
+    await expectDomainError(
       attendanceService.setStatus(otherLead, { attendanceId: target.id, expectedStatus: "UNMARKED", status: "PRESENT" }),
       "ATTENDANCE_NOT_MANAGEABLE",
     );
@@ -543,7 +584,7 @@ describe("attendance mutation and bulk present", () => {
       await attendanceService.setStatus(lead, { attendanceId: row.id, expectedStatus: "UNMARKED", status: "PRESENT" });
     }
     await runService.completeRun(lead, runId);
-    await expectDomainCode(
+    await expectDomainError(
       attendanceService.setStatus(lead, { attendanceId: rows[0].id, expectedStatus: "PRESENT", status: "LATE" }),
       "ATTENDANCE_NOT_MANAGEABLE",
     );
@@ -642,9 +683,9 @@ describe("attendance concurrency", () => {
     const { runId, rows, target } = await runningRun();
     const release = await holdRosterLock(runId);
     const individual = attendanceService.setStatus(admin, { attendanceId: target.id, expectedStatus: "UNMARKED", status: "NO_SHOW" });
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await waitForLockWaiter();
     const markAll = attendanceService.markAllUnmarkedPresent(lead, runId);
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await waitForLockWaiter();
     await release();
     await individual;
 
@@ -659,9 +700,9 @@ describe("attendance concurrency", () => {
     const { runId, rows, target } = await runningRun();
     const release = await holdRosterLock(runId);
     const markAll = attendanceService.markAllUnmarkedPresent(lead, runId);
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await waitForLockWaiter();
     const individual = attendanceService.setStatus(admin, { attendanceId: target.id, expectedStatus: "UNMARKED", status: "NO_SHOW" });
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await waitForLockWaiter();
     await release();
 
     expect(await markAll).toBe(rows.length);
@@ -698,9 +739,9 @@ describe("complete run", () => {
   it("blocks completion while unmarked attendance remains and allows it when fully marked", async () => {
     const { runId } = await publishedRunWithRoster();
     await runService.startRun(lead, { runId: runId });
-    await expectDomainCode(runService.completeRun(lead, runId), "ATTENDANCE_INCOMPLETE");
-    await expectDomainCode(runService.completeRun(user, runId), "RUN_NOT_MANAGEABLE");
-    await expectDomainCode(runService.completeRun(otherLead, runId), "RUN_NOT_MANAGEABLE");
+    await expectDomainError(runService.completeRun(lead, runId), "ATTENDANCE_INCOMPLETE");
+    await expectDomainError(runService.completeRun(user, runId), "RUN_NOT_MANAGEABLE");
+    await expectDomainError(runService.completeRun(otherLead, runId), "RUN_NOT_MANAGEABLE");
 
     await attendanceService.markAllUnmarkedPresent(lead, runId);
     const beforeComplete = Date.now();
@@ -715,7 +756,7 @@ describe("complete run", () => {
     const manager = await attendanceService.getManagerAttendance(admin, runId);
     expect(manager.rows).toHaveLength(3);
     expect(manager.canMutate).toBe(false);
-    await expectDomainCode(runService.completeRun(admin, runId), "RUN_CANNOT_COMPLETE");
+    await expectDomainError(runService.completeRun(admin, runId), "RUN_CANNOT_COMPLETE");
   });
 });
 
@@ -724,8 +765,8 @@ describe("roster freeze after start", () => {
     const { runId, pending } = await publishedRunWithRoster();
     await runService.startRun(lead, { runId: runId });
     const inProgress = await rosterService.getRosterManagementView(lead, runId);
-    await expectDomainCode(
-      rosterService.setDraftSelection(lead, {
+    await expectDomainError(
+      setDraftSelection(lead, {
         runId,
         signupId: pending,
         selected: true,
@@ -733,7 +774,7 @@ describe("roster freeze after start", () => {
       }),
       "INVALID_ROSTER_SELECTION",
     );
-    await expectDomainCode(
+    await expectDomainError(
       rosterService.publishRoster(lead, {
         runId,
         version: inProgress.roster.version,
@@ -741,7 +782,7 @@ describe("roster freeze after start", () => {
       }),
       "INVALID_ROSTER_SELECTION",
     );
-    await expectDomainCode(
+    await expectDomainError(
       rosterService.preparePublishedRosterForEditing(lead, {
         runId,
         version: inProgress.roster.version,
@@ -755,8 +796,8 @@ describe("roster freeze after start", () => {
     }
     await runService.completeRun(lead, runId);
     const completed = await rosterService.getRosterManagementView(lead, runId);
-    await expectDomainCode(
-      rosterService.setDraftSelection(lead, {
+    await expectDomainError(
+      setDraftSelection(lead, {
         runId,
         signupId: pending,
         selected: true,
@@ -817,7 +858,7 @@ describe("roster freeze after start", () => {
     // Start uses the published roster — a saved but unpublished change is refused, not ignored.
     view = await rosterService.getRosterManagementView(lead, runId);
     expect(view.roster.hasUnpublishedChanges).toBe(true);
-    await expectDomainCode(runService.startRun(lead, { runId }), "ROSTER_UNPUBLISHED_CHANGES");
+    await expectDomainError(runService.startRun(lead, { runId }), "ROSTER_UNPUBLISHED_CHANGES");
     expect((await runRepository.findById(runId))?.status).toBe("PUBLISHED");
     expect(await orm.RunAttendance.where({ runId }).all()).toHaveLength(0);
 
@@ -913,11 +954,11 @@ describe("post-completion attendance correction", () => {
 
   it("denies USER and a RAID_LEAD not assigned to the Run", async () => {
     const { runId, boosterRow } = await completedRun();
-    await expectDomainCode(
+    await expectDomainError(
       attendanceService.correctCompletedAttendance(user, correction(runId, boosterRow.id, "PRESENT", "NO_SHOW")),
       "ATTENDANCE_NOT_MANAGEABLE",
     );
-    await expectDomainCode(
+    await expectDomainError(
       attendanceService.correctCompletedAttendance(otherLead, correction(runId, boosterRow.id, "PRESENT", "NO_SHOW")),
       "ATTENDANCE_NOT_MANAGEABLE",
     );
@@ -926,13 +967,13 @@ describe("post-completion attendance correction", () => {
 
   it("rejects IN_PROGRESS and PUBLISHED Runs through the correction path", async () => {
     const { runId } = await publishedRunWithRoster();
-    await expectDomainCode(
+    await expectDomainError(
       attendanceService.correctCompletedAttendance(lead, correction(runId, crypto.randomUUID(), "PRESENT", "NO_SHOW")),
       "ATTENDANCE_CORRECTION_NOT_ALLOWED",
     );
     await runService.startRun(lead, { runId });
     const inProgressRow = (await attendanceService.getManagerAttendance(lead, runId)).rows[0]!;
-    await expectDomainCode(
+    await expectDomainError(
       attendanceService.correctCompletedAttendance(lead, correction(runId, inProgressRow.id, "UNMARKED", "PRESENT")),
       "ATTENDANCE_CORRECTION_NOT_ALLOWED",
     );
@@ -941,27 +982,27 @@ describe("post-completion attendance correction", () => {
 
   it("rejects no-ops, short reasons, UNMARKED targets and rows of another Run", async () => {
     const { runId, boosterRow } = await completedRun();
-    await expectDomainCode(
+    await expectDomainError(
       attendanceService.correctCompletedAttendance(lead, correction(runId, boosterRow.id, "PRESENT", "PRESENT")),
       "ATTENDANCE_CORRECTION_NOOP",
     );
     expect(correctAttendanceSchema.safeParse(correction(runId, boosterRow.id, "PRESENT", "NO_SHOW", "   ")).success).toBe(false);
     expect(correctAttendanceSchema.safeParse(correction(runId, boosterRow.id, "PRESENT", "NO_SHOW", "abc")).success).toBe(false);
     expect(correctAttendanceSchema.safeParse(correction(runId, boosterRow.id, "PRESENT", "UNMARKED")).success).toBe(false);
-    await expectDomainCode(
+    await expectDomainError(
       attendanceService.correctCompletedAttendance(lead, correction(runId, boosterRow.id, "PRESENT", "NO_SHOW", "  ab  ")),
       "VALIDATION_FAILED",
     );
-    await expectDomainCode(
+    await expectDomainError(
       attendanceService.correctCompletedAttendance(lead, correction(runId, boosterRow.id, "PRESENT", "UNMARKED")),
       "ATTENDANCE_INVALID_STATUS",
     );
     const other = await completedRun();
-    await expectDomainCode(
+    await expectDomainError(
       attendanceService.correctCompletedAttendance(lead, correction(runId, other.boosterRow.id, "PRESENT", "NO_SHOW")),
       "ATTENDANCE_NOT_FOUND",
     );
-    await expectDomainCode(
+    await expectDomainError(
       attendanceService.correctCompletedAttendance(lead, correction(runId, crypto.randomUUID(), "PRESENT", "NO_SHOW")),
       "ATTENDANCE_NOT_FOUND",
     );
@@ -999,7 +1040,7 @@ describe("post-completion attendance correction", () => {
   it("rejects a stale expected status instead of overwriting a newer correction", async () => {
     const { runId, boosterRow } = await completedRun();
     await attendanceService.correctCompletedAttendance(lead, correction(runId, boosterRow.id, "PRESENT", "LATE"));
-    await expectDomainCode(
+    await expectDomainError(
       attendanceService.correctCompletedAttendance(admin, correction(runId, boosterRow.id, "PRESENT", "NO_SHOW")),
       "ATTENDANCE_CORRECTION_STALE",
     );
@@ -1070,7 +1111,7 @@ describe("post-completion attendance correction", () => {
     // Participants and other Raid Leads never get the manager attendance view (no correction action).
     const userView = await runDetailService.getRunDetail(user, runId);
     expect(userView.attendance.manager).toBeNull();
-    await expectDomainCode(
+    await expectDomainError(
       attendanceService.setStatus(lead, { attendanceId: leadView.attendance.manager!.rows[0]!.id, expectedStatus: "PRESENT", status: "NO_SHOW" }),
       "ATTENDANCE_NOT_MANAGEABLE",
     );
