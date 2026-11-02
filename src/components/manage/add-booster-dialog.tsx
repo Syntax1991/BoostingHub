@@ -19,6 +19,7 @@ import {
   formatWarningContentProgress,
   type RosterSelectionWarning,
 } from "@/domain/roster-selection-risk";
+import { useModalDialog } from "@/hooks/use-modal-dialog";
 
 type PlayerMatch = NonNullable<Awaited<ReturnType<typeof searchRosterPlayersAction>>["data"]>[number];
 type ManualAddOptions = NonNullable<Awaited<ReturnType<typeof getRosterManualAddOptionsAction>>["data"]>;
@@ -67,14 +68,7 @@ export function AddBoosterDialog({
     warnings: RosterSelectionWarning[];
   } | null>(null);
 
-  useEffect(() => {
-    dialogRef.current?.showModal();
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    const onDialogClose = () => onClose();
-    dialog.addEventListener("close", onDialogClose);
-    return () => dialog.removeEventListener("close", onDialogClose);
-  }, [onClose]);
+  useModalDialog(dialogRef, onClose);
 
   // Debounced server-side search; results are bounded by the server.
   useEffect(() => {

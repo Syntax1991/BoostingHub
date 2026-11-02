@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, useTransition, type ReactNode } from "react";
+import { useId, useRef, useState, useTransition, type ReactNode } from "react";
 import { saveExternalBoostersAction } from "@/controllers/roster.actions";
 import { Button } from "@/components/ui/button";
 import { ClassIcon } from "@/components/ui/badges";
@@ -24,6 +24,7 @@ import {
 } from "@/lib/external-booster-staging";
 import { rolesForClass } from "@/lib/wow-specializations";
 import { WOW_CLASSES, type CharacterRole, type ParticipationType, type WowClass } from "@/models/enums";
+import { useModalDialog } from "@/hooks/use-modal-dialog";
 
 type EditDraft = {
   name: string;
@@ -66,14 +67,7 @@ export function ExternalBoostersDialog({
   const classRoles = rolesForClass(wowClass);
   const editClassRoles = editDraft ? rolesForClass(editDraft.wowClass) : [];
 
-  useEffect(() => {
-    dialogRef.current?.showModal();
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    const onDialogClose = () => onClose();
-    dialog.addEventListener("close", onDialogClose);
-    return () => dialog.removeEventListener("close", onDialogClose);
-  }, [onClose]);
+  useModalDialog(dialogRef, onClose);
 
   function close() {
     dialogRef.current?.close();

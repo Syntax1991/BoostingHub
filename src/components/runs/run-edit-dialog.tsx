@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
+import { useId, useMemo, useRef, useState, useTransition } from "react";
 import { updateRunAction } from "@/controllers/run.actions";
 import { Button } from "@/components/ui/button";
 import { fromDatetimeLocalValue, toDatetimeLocalValue } from "@/lib/datetime";
@@ -12,6 +12,7 @@ import { buildRunTitle } from "@/lib/run-title";
 import { isLootTypeAllowedForDifficulty } from "@/domain/run-state";
 import { RAID_DIFFICULTIES, RUN_LOOT_TYPES, type RaidDifficulty, type RunLootType } from "@/models/enums";
 import type { RunDetailView } from "@/services/run-detail.service";
+import { useModalDialog } from "@/hooks/use-modal-dialog";
 
 export function RunEditDialog({
   run,
@@ -49,14 +50,7 @@ export function RunEditDialog({
   const raidLeadName =
     editor.raidLeads.find((lead) => lead.id === raidLeadId)?.displayName ?? run.raidLeadDisplayName;
 
-  useEffect(() => {
-    dialogRef.current?.showModal();
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    const onDialogClose = () => onClose();
-    dialog.addEventListener("close", onDialogClose);
-    return () => dialog.removeEventListener("close", onDialogClose);
-  }, [onClose]);
+  useModalDialog(dialogRef, onClose);
 
   function close() {
     dialogRef.current?.close();

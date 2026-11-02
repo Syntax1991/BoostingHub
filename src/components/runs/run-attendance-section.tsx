@@ -38,6 +38,7 @@ import {
   type AttendanceFilters,
   type AttendanceSort,
 } from "@/lib/attendance-view";
+import { useModalDialog } from "@/hooks/use-modal-dialog";
 
 const SUMMARY_ORDER: AttendanceStatus[] = [
   "PRESENT",
@@ -566,14 +567,7 @@ function ReplaceParticipantDialog({
   );
   const [formError, setFormError] = useState<string | null>(null);
 
-  useEffect(() => {
-    dialogRef.current?.showModal();
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    const onDialogClose = () => onClose();
-    dialog.addEventListener("close", onDialogClose);
-    return () => dialog.removeEventListener("close", onDialogClose);
-  }, [onClose]);
+  useModalDialog(dialogRef, onClose);
 
   if (!row) {
     return null;
