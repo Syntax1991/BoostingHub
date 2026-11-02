@@ -487,6 +487,10 @@ Backups are stored on the production host only. An off-site copy is not document
 - After a Discord-bot deploy, confirm rate-limit waits with
   `journalctl -u boostinghub-discord-bot --since "1 hour ago" | grep 'rate limited'`.
   The bot logs each Discord REST rate-limit wait; absence of lines does not prove the sync is fast, only that no wait was observed in that window.
+  Write-free CURRENT/NEXT position passes no longer call `GET /guilds/:id/channels` every poll
+  (fresh verify runs after real `setPositions` writes, plus at most one bounded out-of-band
+  refresh per five minutes). A steady ~1/minute `rate limited` on that route after deploy is a
+  regression — see [DEVELOPER.md](DEVELOPER.md) position settle consistency model.
 
 ## Content Security Policy
 

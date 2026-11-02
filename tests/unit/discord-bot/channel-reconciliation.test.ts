@@ -894,14 +894,15 @@ describe("reconcileWeekSectionPositionsUntilSettled — fresh verify + bounded r
     errorSpy.mockRestore();
   });
 
-  it("does not write when already correct and fresh agrees", async () => {
+  it("does not write and skips fresh REST verify when already correct (write-free)", async () => {
     const live = [child(CURRENT_MARKER, 0), child("chan-1", 1), child(NEXT_MARKER, 2)];
     const setPositions = vi.fn().mockResolvedValue(undefined) as PositionSetter;
+    const listFresh = vi.fn(async () => live);
     const sleep = vi.fn().mockResolvedValue(undefined);
 
     const result = await reconcileWeekSectionPositionsUntilSettled(
       listerFor(live),
-      listerFor(live),
+      listFresh,
       setPositions,
       weekEnv,
       [weekItem({ targetBucket: "CURRENT", existingRunChannelId: "chan-1" })],
@@ -910,6 +911,7 @@ describe("reconcileWeekSectionPositionsUntilSettled — fresh verify + bounded r
 
     expect(result).toEqual({ status: "ok", moved: 0, attempts: 1, verified: true });
     expect(setPositions).not.toHaveBeenCalled();
+    expect(listFresh).not.toHaveBeenCalled();
     expect(sleep).not.toHaveBeenCalled();
   });
 
@@ -924,12 +926,13 @@ describe("reconcileWeekSectionPositionsUntilSettled — fresh verify + bounded r
       child(NEXT_MARKER, 3),
     ];
     const setPositions = vi.fn().mockResolvedValue(undefined) as PositionSetter;
+    const listFresh = vi.fn(async () => live);
     const sleep = vi.fn().mockResolvedValue(undefined);
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
     const result = await reconcileWeekSectionPositionsUntilSettled(
       listerFor(live),
-      listerFor(live),
+      listFresh,
       setPositions,
       weekEnv,
       [weekItem({ targetBucket: "CURRENT", existingRunChannelId: "chan-1" })],
@@ -938,9 +941,204 @@ describe("reconcileWeekSectionPositionsUntilSettled — fresh verify + bounded r
 
     expect(result).toEqual({ status: "ok", moved: 0, attempts: 1, verified: true });
     expect(setPositions).not.toHaveBeenCalled();
+    expect(listFresh).not.toHaveBeenCalled();
     expect(sleep).not.toHaveBeenCalled();
     expect(warnSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
+  });
+});
+
+describe("reconcileWeekSectionPositionsUntilSettled — REST budget + out-of-band refresh", () => {
+  it("real position changes still trigger fresh verification", async () => {
+    let live = [child(CURRENT_MARKER, 0), child(NEXT_MARKER, 1), child("chan-1", 2)];
+    const setPositions = vi.fn(async (moves: Array<{ channelId: string; position: number }>) => {
+      live = [...moves]
+        .sort((a, b) => a.position - b.position)
+        .map((move) => child(move.channelId, move.position));
+    }) as unknown as PositionSetter;
+    const listFresh = vi.fn(async () => live);
+
+    const result = await reconcileWeekSectionPositionsUntilSettled(
+      listerFor([child(CURRENT_MARKER, 0), child(NEXT_MARKER, 1), child("chan-1", 2)]),
+      listFresh,
+      setPositions,
+      weekEnv,
+      [weekItem({ targetBucket: "CURRENT", existingRunChannelId: "chan-1" })],
+      { sleep: async () => undefined },
+    );
+
+    expect(result).toEqual({ status: "ok", moved: 2, attempts: 1, verified: true });
+    expect(setPositions).toHaveBeenCalledTimes(1);
+    expect(listFresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("failed writes preserve retry behavior with fresh planning", async () => {
+    let cacheView = [child(CURRENT_MARKER, 0), child(NEXT_MARKER, 1), child("chan-1", 2)];
+    let freshView = [child(CURRENT_MARKER, 0), child(NEXT_MARKER, 1), child("chan-1", 2)];
+    let writes = 0;
+    const setPositions = vi.fn(async (moves: Array<{ channelId: string; position: number }>) => {
+      writes += 1;
+      const next = [...moves]
+        .sort((a, b) => a.position - b.position)
+        .map((move) => child(move.channelId, move.position));
+      cacheView = next;
+      if (writes >= 2) freshView = next;
+    }) as unknown as PositionSetter;
+    const listFresh = vi.fn(async () => freshView);
+    const sleep = vi.fn().mockResolvedValue(undefined);
+
+    const result = await reconcileWeekSectionPositionsUntilSettled(
+      async () => cacheView,
+      listFresh,
+      setPositions,
+      weekEnv,
+      [weekItem({ targetBucket: "CURRENT", existingRunChannelId: "chan-1" })],
+      { sleep, retryDelayMs: 5 },
+    );
+
+    expect(result.status).toBe("ok");
+    expect(setPositions).toHaveBeenCalledTimes(2);
+    expect(listFresh.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(sleep).toHaveBeenCalled();
+  });
+
+  it("stale cache that needs a write still converges via fresh verify retries", async () => {
+    // Cache thinks order is wrong (will write); fresh lags once then catches up.
+    let cacheView = [child(CURRENT_MARKER, 0), child(NEXT_MARKER, 1), child("chan-1", 2)];
+    let freshView = [child(CURRENT_MARKER, 0), child(NEXT_MARKER, 1), child("chan-1", 2)];
+    let writes = 0;
+    const setPositions = vi.fn(async (moves: Array<{ channelId: string; position: number }>) => {
+      writes += 1;
+      const next = [...moves]
+        .sort((a, b) => a.position - b.position)
+        .map((move) => child(move.channelId, move.position));
+      cacheView = next;
+      if (writes >= 1) freshView = next;
+    }) as unknown as PositionSetter;
+
+    const result = await reconcileWeekSectionPositionsUntilSettled(
+      async () => cacheView,
+      async () => freshView,
+      setPositions,
+      weekEnv,
+      [weekItem({ targetBucket: "CURRENT", existingRunChannelId: "chan-1" })],
+      { sleep: async () => undefined },
+    );
+
+    expect(result).toEqual({ status: "ok", moved: expect.any(Number), attempts: 1, verified: true });
+    expect(setPositions).toHaveBeenCalled();
+    expect(freshView.map((c) => c.id)).toEqual([CURRENT_MARKER, "chan-1", NEXT_MARKER]);
+  });
+
+  it("same-pass channel creation overlay still plans and verifies after write", async () => {
+    // Cache listing omits the brand-new channel; overlay supplies it for planning.
+    const baseChildren = [child(CURRENT_MARKER, 0), child(NEXT_MARKER, 1)];
+    let live = [...baseChildren, child("chan-new", 2)];
+    const listForPlan: CategoryChannelLister = async () => [
+      ...baseChildren,
+      // Overlay as sync-loop does for newlyProvisionedSections:
+      child("chan-new", 2),
+    ];
+    const listFresh = vi.fn(async () => live);
+    const setPositions = vi.fn(async (moves: Array<{ channelId: string; position: number }>) => {
+      live = [...moves]
+        .sort((a, b) => a.position - b.position)
+        .map((move) => child(move.channelId, move.position));
+    }) as unknown as PositionSetter;
+
+    const result = await reconcileWeekSectionPositionsUntilSettled(
+      listForPlan,
+      listFresh,
+      setPositions,
+      weekEnv,
+      [weekItem({ targetBucket: "CURRENT", existingRunChannelId: "chan-new" })],
+      { sleep: async () => undefined },
+    );
+
+    expect(result.status).toBe("ok");
+    expect(setPositions).toHaveBeenCalled();
+    expect(listFresh).toHaveBeenCalled();
+    expect(live.map((c) => c.id)).toEqual([CURRENT_MARKER, "chan-new", NEXT_MARKER]);
+  });
+
+  it("multiple consecutive write-free passes do not repeat full-guild REST fetches", async () => {
+    const live = [child(CURRENT_MARKER, 0), child("chan-1", 1), child(NEXT_MARKER, 2)];
+    const listFresh = vi.fn(async () => live);
+    const setPositions = vi.fn().mockResolvedValue(undefined) as PositionSetter;
+    const outOfBandState = { lastFreshVerifyAt: 1_000 };
+    const now = vi.fn(() => 1_000 + 30_000); // 30s later — inside 5min window
+
+    for (let i = 0; i < 5; i++) {
+      const result = await reconcileWeekSectionPositionsUntilSettled(
+        listerFor(live),
+        listFresh,
+        setPositions,
+        weekEnv,
+        [weekItem({ targetBucket: "CURRENT", existingRunChannelId: "chan-1" })],
+        { outOfBandState, now, outOfBandRefreshMs: 5 * 60_000 },
+      );
+      expect(result).toEqual({ status: "ok", moved: 0, attempts: 1, verified: true });
+    }
+
+    expect(listFresh).not.toHaveBeenCalled();
+    expect(setPositions).not.toHaveBeenCalled();
+  });
+
+  it("bounded out-of-band refresh detects genuine Discord drift and reconciles", async () => {
+    // Cache still shows correct order; Discord was reordered manually.
+    const cacheView = [child(CURRENT_MARKER, 0), child("chan-1", 1), child(NEXT_MARKER, 2)];
+    let freshView = [child(CURRENT_MARKER, 0), child(NEXT_MARKER, 1), child("chan-1", 2)];
+    const listFresh = vi.fn(async () => freshView);
+    const setPositions = vi.fn(async (moves: Array<{ channelId: string; position: number }>) => {
+      freshView = [...moves]
+        .sort((a, b) => a.position - b.position)
+        .map((move) => child(move.channelId, move.position));
+    }) as unknown as PositionSetter;
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const outOfBandState = { lastFreshVerifyAt: 0 };
+    const clock = 5 * 60_000; // due immediately
+
+    const result = await reconcileWeekSectionPositionsUntilSettled(
+      listerFor(cacheView),
+      listFresh,
+      setPositions,
+      weekEnv,
+      [weekItem({ targetBucket: "CURRENT", existingRunChannelId: "chan-1" })],
+      {
+        outOfBandState,
+        now: () => clock,
+        outOfBandRefreshMs: 5 * 60_000,
+        sleep,
+        retryDelayMs: 1,
+      },
+    );
+
+    expect(result.status).toBe("ok");
+    expect(result.status === "ok" && result.verified).toBe(true);
+    expect(listFresh).toHaveBeenCalled();
+    expect(setPositions).toHaveBeenCalled();
+    expect(freshView.map((c) => c.id)).toEqual([CURRENT_MARKER, "chan-1", NEXT_MARKER]);
+    expect(outOfBandState.lastFreshVerifyAt).toBe(clock);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("out-of-band fresh verify"));
+    warnSpy.mockRestore();
+  });
+
+  it("outOfBandRefreshMs 0 disables write-free REST even when state is shared", async () => {
+    const live = [child(CURRENT_MARKER, 0), child("chan-1", 1), child(NEXT_MARKER, 2)];
+    const listFresh = vi.fn(async () => live);
+    const outOfBandState = { lastFreshVerifyAt: 0 };
+
+    await reconcileWeekSectionPositionsUntilSettled(
+      listerFor(live),
+      listFresh,
+      vi.fn().mockResolvedValue(undefined) as PositionSetter,
+      weekEnv,
+      [weekItem({ targetBucket: "CURRENT", existingRunChannelId: "chan-1" })],
+      { outOfBandState, outOfBandRefreshMs: 0, now: () => 1_000_000 },
+    );
+
+    expect(listFresh).not.toHaveBeenCalled();
   });
 });
 
