@@ -56,8 +56,8 @@ Confirmed by import analysis of all non-test files. Severity is about real impac
 | # | Sev | Where | Evidence | Action |
 | --- | --- | --- | --- | --- |
 | A1 | Medium | `src/controllers/*.actions.ts` | 8 exported server actions had no caller | Removed in PR "remove dead code" |
-| A2 | Medium | `next.config.ts` | Production sends no HSTS, nosniff, frame or referrer header, and sends `X-Powered-By` | Security PR |
-| A3 | Low | `src/discord-bot/bot-api-client.ts:55` | Logs up to 500 characters of a non-JSON body | Security PR |
+| A2 | Done | `next.config.ts` | Production sends no HSTS, nosniff, frame or referrer header, and sends `X-Powered-By` | Security PR |
+| A3 | Done | `src/discord-bot/bot-api-client.ts:55` | Logs up to 500 characters of a non-JSON body | Security PR |
 | A4 | Medium | `src/components/manage/*`, `src/services/*` | 16 component-to-service value imports, mostly pure rules or constants | Boundary PR |
 | A5 | Low | `src/app/(app)/*/page.tsx`, `layout.tsx` | 6 pages and the layout read `settingsRepository` directly | Boundary PR |
 | A6 | Low | `src/app/(app)/runs/[runId]/archive-transcript/route.ts` | Route calls `runRepository` and decides permission itself | Boundary PR |
@@ -65,7 +65,7 @@ Confirmed by import analysis of all non-test files. Severity is about real impac
 | A8 | Low | `src/services/*` (32 files), `repositories`, `validators`, `lib` | Pure rules live in `services`, so 38 imports point the wrong way | Decide after A4 |
 | A9 | Low | `src/guides/*-publisher.ts`, `scripts/publish-*.mts` | Legacy retirement and key rename code; no live message needs them now | Guide PR |
 | A10 | Low | `src/guides`, `scripts` | Two publishers and two scripts are near copies | Guide PR |
-| A11 | Medium | `src/app` | No `error.tsx`, `loading.tsx` or `not-found.tsx` anywhere | Frontend PR |
+| A11 | Done | `src/app` | No `error.tsx`, `loading.tsx` or `not-found.tsx` anywhere | Frontend PR |
 | A12 | Low | `src/components` | 12 `window.location.reload` calls next to 42 files using `router.refresh` | Frontend PR |
 | A13 | Low | `src/components` | 13 identical dialog effects | Frontend PR |
 | A14 | Medium | `src/components/manage/roster-builder.tsx` | 2471 lines, 23 state hooks, 54 functions | Only with tests first |
@@ -357,7 +357,7 @@ Found while moving, not changed (feature freeze): four production modules are im
 | 1 | Centralized test structure | DONE | [PHASE-1.md](reports/PHASE-1.md) |
 | 2 | Test quality audit | DONE | [PHASE-2.md](reports/PHASE-2.md) |
 | 3 | Production refactoring / code quality | DONE | [PHASE-3.md](reports/PHASE-3.md) |
-| 4 | Performance, security, reliability | NOT STARTED | — |
+| 4 | Performance, security, reliability | DONE | [PHASE-4.md](reports/PHASE-4.md) |
 | 5 | UX and documentation | NOT STARTED | — |
 | 6 | Final validation and readiness | NOT STARTED | — |
 
