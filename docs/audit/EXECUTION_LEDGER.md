@@ -131,7 +131,7 @@ Order follows the assignment. Each line is one PR, stacked on the one before.
 | 4 | MVCS boundaries: app and controllers no longer import repositories; lib no longer imports components | PR #326, awaiting review |
 | 4b | Move pure rules from `src/services` to `src/domain` | PR #327, awaiting review |
 | 5 | Guide code: drop legacy paths, share publisher code | PR #328, awaiting review |
-| 6 | Test cleanup by module | In progress on `test/audit-batch-a`: 316 of 341 files decided, 2999 of 3825 tests (25 files left) |
+| 6 | Test cleanup by module | In progress on `test/audit-batch-a`: 320 of 341 files decided, 3066 of ~3824 tests (22 files left) |
 | 7 | Frontend: error, loading and not-found pages; shared dialog effect | PR #329, awaiting review |
 | 8 | Performance, measured: run detail payload, event purge, rate-limit log | PR #330, awaiting review |
 | 9 | Dependencies and final verification | Dependencies audited, no change; TruffleHog scan still invalid |
@@ -351,11 +351,13 @@ Found while moving, not changed (feature freeze): four production modules are im
 
 ## Continuation point
 
+Handover to Cursor (2026-11-02): Claude left branch `test/audit-batch-a` at local `af6bb59` (1 commit ahead of origin `95c2eaf`, `setDraftSelection`→`saveDraftSelection` for six audited suites) plus uncommitted fixture isolation rewrites for three remaining suites. Cursor recovered that work, fixed one TDZ shadowing bug in `roster-pre-start-replacements`, validated 67/67 twice on `boostting_bot_test_audit` without reset, and recorded the decisions below.
+
 The test audit is not complete. Order for the rest, smallest risk first:
 
 1. Done on branch `test/audit-batch-a`: `src/repositories` (11 files), `src/components` (39), `src/discord-bot` (37), `src/lib` (88), `src/domain` (22), `src/guides`, `src/services` batches 1–11. All tests now live under `tests/` (see above); paths below that still name `src/...test.ts` are as they were at the time.
-2. Next: the 25 remaining `src/services` files, smallest first; `test-decisions.json` lists what is decided. `run-warcraft-logs-auto` writes on seeded Runs and needs its own fixtures; `roster.service` passes only on a freshly reset DB. A test file without an entry in `test-decisions.json` is unreviewed. Each file now also gets the fixture rules above; files already audited get a fixture sweep afterwards (local `asUser`, `expectDomainCode`, fixed-id pre-cleans, swallowed `.catch(() => {})` cleanups).
-3. Done: `signupService.createBoosterSignup` is removed with `persistSignup`, `signupRepository.create` / `findDuplicate`, `isBlockingDuplicate` and `boosterSignupSchema`. All 13 suites offer through `offerCharacters` / `offerCharacter` in `src/test/signup-offers.ts`, which calls the production `setCharacterOffers`. `signup.service.test.ts` is rewritten.
+2. Phase 2 batch (Cursor): `character-run-commitments`, `roster-pre-start-replacements`, `run-warcraft-logs-auto` rewritten for own fixtures / no seed mutation / `waitForLockWaiter`. **22 files left** (see unreviewed list in git status of `test-decisions.json`). `roster.service` still passes only on a freshly reset DB. A test file without an entry in `test-decisions.json` is unreviewed. Each file now also gets the fixture rules above; files already audited get a fixture sweep afterwards (local `asUser`, `expectDomainCode`, fixed-id pre-cleans, swallowed `.catch(() => {})` cleanups).
+3. Done: `signupService.createBoosterSignup` is removed with `persistSignup`, `signupRepository.create` / `findDuplicate`, `isBlockingDuplicate` and `boosterSignupSchema`. All 13 suites offer through `offerCharacters` / `offerCharacter` in `tests/helpers/signup-offers.ts`, which calls the production `setCharacterOffers`. `signup.service.test.ts` is rewritten.
 
 Services batch 2 notes worth keeping:
 
@@ -365,7 +367,7 @@ Services batch 2 notes worth keeping:
 - `warcraft-logs-discovery.test.ts` and `discord-member-name-sync.service.test.ts` used real-looking Discord snowflakes (log channel, log bot, guild, role ids). They are now synthetic per run.
 - Bulk refresh markers (resolved in batch 6): the cooldown stays community-wide in production, which is the intended behaviour. Suites now start bulk runs with their own admin, remove only that admin's markers (`src/test/bulk-force-refresh.ts`), and fail with the marker's id when a foreign marker is still inside the cooldown. No suite deletes another suite's markers any more.
 3. For each file: read every test, record a decision in `docs/audit/test-decisions.json`, change what the decision says, then rebuild `docs/audit/test-ledger.tsv` from `vitest list --json`.
-4. Next test-only method: `rosterService.setDraftSelection`. It skips the production rule "one selected Booster offer per User" (found in `notification-raid-invite`), so suites built on it can test rosters production cannot produce. Move its callers to `saveDraftSelection`, then remove it.
+4. Next test-only method: `rosterService.setDraftSelection`. Six audited callers moved in `af6bb59`; remaining callers are in still-unreviewed suites (`attendance.service`, `discord-sync.service`, `notification-roster-events`, `roster.service`, `signup-offers.service`). Move those with their file audits, then remove the method.
 5. Then shared helpers for `createTestUser` (36 copies), `createCharacter` (29) and `createUser` (26), and `restoreMocks` for the 52 files that never reset mocks.
 
 Not started: renames from the naming table, other than the move to `src/domain`.
@@ -374,4 +376,4 @@ Owner decision (2026-11-02), done in the move above: every test moves to a root-
 
 Open tracked items: A18 and A19 (one commit each), the multi-row `.delete()` cleanups in tests, removing `rosterService.setDraftSelection` once its last caller has moved to `saveDraftSelection`.
 
-Order from here (owner master plan, 2026-11-02): phase 2 finishes the test audit (25 suites; `setDraftSelection`; the multi-row `.delete()` cleanups, each checked for intended cardinality and ownership before any change); phase 3 does A18, A19, the four dead-code candidates and a naming review in rename-only commits (no public fields, columns, persisted keys or Discord payloads); then performance, security and reliability with measured before/after; then UX and documentation; then the final validation matrix.
+Order from here (owner master plan, 2026-11-02): phase 2 finishes the test audit (22 suites remaining after this batch; `setDraftSelection` with the remaining callers; the multi-row `.delete()` cleanups, each checked for intended cardinality and ownership before any change); phase 3 does A18, A19, the four dead-code candidates and a naming review in rename-only commits (no public fields, columns, persisted keys or Discord payloads); then performance, security and reliability with measured before/after; then UX and documentation; then the final validation matrix.

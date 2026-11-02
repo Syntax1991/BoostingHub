@@ -1,7 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
-import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
 import { venomousCreateInput } from "@tests/fixtures/test-run-input";
 import { raidRepository } from "@/repositories/raid.repository";
@@ -17,50 +15,25 @@ import {
 } from "@/services/character-run-commitment";
 import { regionalWeeklyResetStart } from "@/lib/wow-weekly-reset";
 import type { WowRegion } from "@/models/enums";
-import { boostingRoleService } from "@/services/boosting-role.service";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
+import { testActor } from "@tests/fixtures/actors";
+import {
+  assertIsolatedTestDatabase,
+  createTestCharacter,
+  createTestUser,
+  deleteCreatedRows,
+} from "@tests/fixtures/db-fixtures";
+import { expectDomainError } from "@tests/helpers/domain-error";
 import { offerCharacter } from "@tests/helpers/signup-offers";
 
-const ids = {
-  lead: "cccccccc-cccc-4ccc-8ccc-crc000000001",
-  owner: "cccccccc-cccc-4ccc-8ccc-crc000000002",
-  admin: "cccccccc-cccc-4ccc-8ccc-crc000000003",
-  other: "cccccccc-cccc-4ccc-8ccc-crc000000004",
-};
-
-const createdRunIds: string[] = [];
-const createdCharacterIds: string[] = [];
-
-function asUser(
-  id: string,
-  name: string,
-  accountRole: AuthenticatedUser["accountRole"] = "USER",
-): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@crc.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
-
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    if (error instanceof Error && error.message === `Expected domain error ${code}`) {
-      throw error;
-    }
-    expect(isDomainError(error) && error.code).toBe(code);
-  }
-}
+const created = { runIds: [] as string[], characterIds: [] as string[], userIds: [] as string[] };
+let lead: AuthenticatedUser;
+/** Booster who owns every Character whose commitments are inspected. */
+let owner: AuthenticatedUser;
+/** Second Booster, for rosters that need another User's Character. */
+let other: AuthenticatedUser;
 
 const HOUR = 60 * 60 * 1000;
 /**
@@ -75,58 +48,25 @@ function futureIso(hoursIntoWeek: number) {
   return new Date(EU_WEEK + hoursIntoWeek * HOUR).toISOString();
 }
 
-async function ensureUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"]) {
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@crc.boostting.local`,
-    emailVerified: true,
-    accountRole,
-    accountStatus: "ACTIVE",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }).catch(() => {});
-}
-
+/** A Melee DPS Warrior; every commitment here is about one such Character. */
 async function createCharacter(userId: string, name: string, region: WowRegion = "EU") {
-  const id = crypto.randomUUID();
-  createdCharacterIds.push(id);
-  await orm.Character.create({
-    id,
+  const id = await createTestCharacter({
     userId,
     name,
     realm: "Commitment Lab",
-    normalizedName: normalizeCharacterIdentity(name),
-    normalizedRealm: normalizeCharacterIdentity("Commitment Lab"),
-    region,
     wowClass: "WARRIOR",
     specialization: "Arms",
     primaryRole: "MELEE_DPS",
-    itemLevel: 700,
-    isActive: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    region,
   });
+  created.characterIds.push(id);
   return id;
 }
 
-async function cleanupRun(runId: string) {
-  const roster = await orm.RunRoster.where({ runId }).first();
-  if (roster) {
-    const rosterId = (roster as { id: string }).id;
-    const entries = await orm.RunRosterEntry.where({ rosterId }).all();
-    for (const entry of entries) {
-      await orm.RunRosterEntry.where({ id: (entry as { id: string }).id }).delete();
-    }
-    await orm.RunRoster.where({ id: rosterId }).delete();
-  }
-  const signups = await orm.RunSignup.where({ runId }).select("id").all();
-  for (const row of signups) {
-    await orm.RunSignupRole.where({ signupId: (row as { id: string }).id }).delete().catch(() => {});
-    await orm.RunSignup.where({ id: (row as { id: string }).id }).delete().catch(() => {});
-  }
-  await orm.RunRaidContent.where({ runId }).delete().catch(() => {});
-  await orm.Run.where({ id: runId }).delete().catch(() => {});
+async function createUser(name: string, accountRole: AuthenticatedUser["accountRole"], isBooster: boolean) {
+  const id = await createTestUser({ name, accountRole, isBooster });
+  created.userIds.push(id);
+  return testActor(id, accountRole);
 }
 
 async function createOpenRun(lead: AuthenticatedUser, scheduledStartAt: string) {
@@ -139,34 +79,24 @@ async function createOpenRun(lead: AuthenticatedUser, scheduledStartAt: string) 
       desiredDpsCount: 1,
     }),
   );
-  createdRunIds.push(run.id);
+  created.runIds.push(run.id);
   await runService.openRun(lead, run.id);
   return run;
 }
 
-const lead = asUser(ids.lead, "CRC Lead", "RAID_LEAD");
-const owner = asUser(ids.owner, "CRC Owner", "USER");
-const admin = asUser(ids.admin, "CRC Admin", "ADMIN");
-const other = asUser(ids.other, "CRC Other", "USER");
-
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   await raidRepository.ensureReferenceRaids();
-  await ensureUser(ids.lead, "CRC Lead", "RAID_LEAD");
-  await ensureUser(ids.owner, "CRC Owner", "USER");
-  await ensureUser(ids.admin, "CRC Admin", "ADMIN");
-  await ensureUser(ids.other, "CRC Other", "USER");
-  await boostingRoleService.setRole(admin, { userId: ids.owner, role: "BOOSTER", enabled: true }).catch(() => {});
-  await boostingRoleService.setRole(admin, { userId: ids.other, role: "BOOSTER", enabled: true }).catch(() => {});
+  lead = await createUser("Commitment Lead", "RAID_LEAD", false);
+  owner = await createUser("Commitment Owner", "USER", true);
+  other = await createUser("Commitment Other", "USER", true);
+}, 60_000);
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
-afterAll(async () => {
-  for (const runId of createdRunIds.splice(0)) {
-    await cleanupRun(runId);
-  }
-  for (const id of createdCharacterIds.splice(0)) {
-    await orm.Character.where({ id }).delete().catch(() => {});
-  }
-});
+afterAll(() => deleteCreatedRows(created), 60_000);
 
 describe("deriveCharacterRunCommitmentState", () => {
   it("maps SELECTED to COMMITTED and draft-only to RESERVED", () => {
@@ -180,7 +110,7 @@ describe("deriveCharacterRunCommitmentState", () => {
 
 describe("character run commitments (roster informational)", () => {
   it("exposes RESERVED for draft selection and COMMITTED for published SELECTED / IN_PROGRESS", async () => {
-    const characterId = await createCharacter(ids.owner, "Crcdraft");
+    const characterId = await createCharacter(owner.id, "Crcdraft");
     const runDraft = await createOpenRun(lead, futureIso(48));
     const runPub = await createOpenRun(lead, futureIso(72));
     const runTarget = await createOpenRun(lead, futureIso(96));
@@ -225,7 +155,7 @@ describe("character run commitments (roster informational)", () => {
   });
 
   it("hides COMPLETED and CANCELLED commitments", async () => {
-    const characterId = await createCharacter(ids.owner, "Crcterm");
+    const characterId = await createCharacter(owner.id, "Crcterm");
     const runDone = await createOpenRun(lead, futureIso(40));
     const runCancel = await createOpenRun(lead, futureIso(44));
     const runTarget = await createOpenRun(lead, futureIso(100));
@@ -247,7 +177,8 @@ describe("character run commitments (roster informational)", () => {
     }
 
     await runService.cancelRun(lead, runCancel.id);
-    await orm.Run.where({ id: runDone.id }).update({ status: "COMPLETED" });
+    // Completing needs a started Run in the past; the projection only reads status.
+    await orm.Run.where({ id: runDone.id }).update({ status: "COMPLETED", completedAt: new Date().toISOString() });
 
     await offerCharacter(owner, runTarget.id, characterId, "MELEE_DPS");
     const targetView = await rosterService.getRosterManagementView(lead, runTarget.id);
@@ -257,7 +188,7 @@ describe("character run commitments (roster informational)", () => {
 
   it("shows non-conflicting commitments without schedule conflict and keeps selection allowed", async () => {
     expect(CROSS_RUN_RESERVATION_MIN_GAP_MS).toBe(2 * 60 * 60 * 1000);
-    const characterId = await createCharacter(ids.owner, "Crcgap");
+    const characterId = await createCharacter(owner.id, "Crcgap");
     const t0 = EU_WEEK + 50 * HOUR;
     const runA = await createOpenRun(lead, new Date(t0).toISOString());
     const runB = await createOpenRun(lead, new Date(t0 + 3 * 60 * 60 * 1000).toISOString());
@@ -293,7 +224,7 @@ describe("character run commitments (roster informational)", () => {
   });
 
   it("allows exactly 2h gap with commitment visible and no schedule conflict", async () => {
-    const characterId = await createCharacter(ids.owner, "Crc2h");
+    const characterId = await createCharacter(owner.id, "Crc2h");
     const t0 = EU_WEEK + 55 * HOUR;
     const runA = await createOpenRun(lead, new Date(t0).toISOString());
     const runB = await createOpenRun(lead, new Date(t0 + CROSS_RUN_RESERVATION_MIN_GAP_MS).toISOString());
@@ -317,10 +248,12 @@ describe("character run commitments (roster informational)", () => {
       version: viewB.roster.version,
       selections: [{ signupId: rowB.id, selectedRole: "MELEE_DPS" }],
     });
+    const saved = await rosterService.getRosterManagementView(lead, runB.id);
+    expect(saved.boosters.find((item) => item.id === rowB.id)?.draftSelected).toBe(true);
   });
 
   it("keeps schedule conflict blocking when another commitment is within 2h", async () => {
-    const characterId = await createCharacter(ids.owner, "Crc1h");
+    const characterId = await createCharacter(owner.id, "Crc1h");
     const t0 = EU_WEEK + 60 * HOUR;
     const runA = await createOpenRun(lead, new Date(t0).toISOString());
     const runB = await createOpenRun(lead, new Date(t0 + 60 * 60 * 1000).toISOString());
@@ -343,7 +276,7 @@ describe("character run commitments (roster informational)", () => {
     expect(rowB.runCommitments).toHaveLength(1);
     expect(rowB.scheduleConflicts.some((c) => c.source === "RUN_RESERVATION")).toBe(true);
 
-    await expectDomainCode(
+    await expectDomainError(
       rosterService.saveDraftSelection(lead, {
         runId: runB.id,
         version: viewB.roster.version,
@@ -354,7 +287,7 @@ describe("character run commitments (roster informational)", () => {
   });
 
   it("returns multiple commitments in deterministic order", async () => {
-    const characterId = await createCharacter(ids.owner, "Crcmulti");
+    const characterId = await createCharacter(owner.id, "Crcmulti");
     const t0 = EU_WEEK + 70 * HOUR;
     const runLate = await createOpenRun(lead, new Date(t0 + 6 * 60 * 60 * 1000).toISOString());
     const runEarly = await createOpenRun(lead, new Date(t0).toISOString());
@@ -389,7 +322,7 @@ describe("character run commitments (roster informational)", () => {
   });
 
   it("keeps published COMMITTED while a replacement draft deselects the Character", async () => {
-    const characterId = await createCharacter(ids.owner, "Crcpubdraft");
+    const characterId = await createCharacter(owner.id, "Crcpubdraft");
     const runA = await createOpenRun(lead, futureIso(85));
     const runTarget = await createOpenRun(lead, futureIso(110));
 
@@ -429,8 +362,8 @@ describe("character run commitments (roster informational)", () => {
   });
 
   it("drops the commitment after republish without the Character", async () => {
-    const characterId = await createCharacter(ids.owner, "Crcgone");
-    const otherChar = await createCharacter(ids.other, "Crcfill");
+    const characterId = await createCharacter(owner.id, "Crcgone");
+    const otherChar = await createCharacter(other.id, "Crcfill");
     const runA = await createOpenRun(lead, futureIso(90));
     const runTarget = await createOpenRun(lead, futureIso(120));
 
@@ -474,8 +407,8 @@ describe("character run commitments (roster informational)", () => {
   });
 
   it("batches commitment lookup once for multiple Characters (no N+1)", async () => {
-    const charA = await createCharacter(ids.owner, "Crcn1a");
-    const charB = await createCharacter(ids.other, "Crcn1b");
+    const charA = await createCharacter(owner.id, "Crcn1a");
+    const charB = await createCharacter(other.id, "Crcn1b");
     const runOther = await createOpenRun(lead, futureIso(130));
     const runTarget = await createOpenRun(lead, futureIso(150));
 
@@ -501,7 +434,6 @@ describe("character run commitments (roster informational)", () => {
     expect(spy).toHaveBeenCalledTimes(1);
     expect(targetView.boosters.find((row) => row.character?.id === charA)?.runCommitments).toHaveLength(1);
     expect(targetView.boosters.find((row) => row.character?.id === charB)?.runCommitments).toHaveLength(1);
-    spy.mockRestore();
   });
 });
 
@@ -550,7 +482,7 @@ describe("commitments are scoped to the target Run's raid ID (not the 2h conflic
    * optionally published (COMMITTED); returns the Character's row on the target roster.
    */
   async function rowOnTarget(input: { name: string; otherAt: number; targetAt: number; publish?: boolean; region?: WowRegion }) {
-    const characterId = await createCharacter(ids.owner, input.name, input.region);
+    const characterId = await createCharacter(owner.id, input.name, input.region);
     const runOther = await createOpenRun(lead, new Date(input.otherAt).toISOString());
     const runTarget = await createOpenRun(lead, new Date(input.targetAt).toISOString());
     for (const runId of [runOther.id, runTarget.id]) {
@@ -585,7 +517,7 @@ describe("commitments are scoped to the target Run's raid ID (not the 2h conflic
   });
 
   it("C: other Run in the current raid ID, target in the next (production: Tue 21:30 UTC reserved, target Mon next week)", async () => {
-    // Testmist: reserved Tue 29/09 23:30 CEST (21:30 UTC, before Wed 04:00 UTC reset); target roster Mon 05/10 17:30 UTC.
+    // Reported in production: reserved Tue 21:30 UTC (before the Wed 04:00 UTC reset); target roster the next Monday 17:30 UTC.
     const otherAt = EU_WEEK + (6 * 24 + 17.5) * HOUR; // Tuesday 21:30 UTC
     const targetAt = EU_WEEK + (7 * 24 + 5 * 24 + 13.5) * HOUR; // next Monday 17:30 UTC
     const { row } = await rowOnTarget({ name: "Crcidc", otherAt, targetAt });
@@ -612,7 +544,7 @@ describe("commitments are scoped to the target Run's raid ID (not the 2h conflic
     const { row, runTarget } = await rowOnTarget({ name: "Crcidf", otherAt: reset - HOUR, targetAt: reset + 30 * 60 * 1000 });
     expect(row.runCommitments).toEqual([]);
     expect(row.scheduleConflicts.some((c) => c.source === "RUN_RESERVATION")).toBe(true);
-    await expectDomainCode(
+    await expectDomainError(
       rosterService.saveDraftSelection(lead, {
         runId: runTarget.id,
         version: (await rosterService.getRosterManagementView(lead, runTarget.id)).roster.version,
@@ -634,7 +566,7 @@ describe("commitments are scoped to the target Run's raid ID (not the 2h conflic
   });
 
   it("H: the target Run is never its own commitment", async () => {
-    const { runTarget, characterId } = await rowOnTarget({ name: "Crcidh", otherAt: EU_WEEK + 20 * HOUR, targetAt: EU_WEEK + 80 * HOUR });
+    const { runOther, runTarget, characterId } = await rowOnTarget({ name: "Crcidh", otherAt: EU_WEEK + 20 * HOUR, targetAt: EU_WEEK + 80 * HOUR });
     const targetView = await rosterService.getRosterManagementView(lead, runTarget.id);
     await rosterService.saveDraftSelection(lead, {
       runId: runTarget.id,
@@ -646,7 +578,8 @@ describe("commitments are scoped to the target Run's raid ID (not the 2h conflic
       excludeRunId: runTarget.id,
       targetScheduledStartAt: new Date(EU_WEEK + 80 * HOUR).toISOString(),
     });
-    expect(map.get(characterId)?.map((c) => c.runId)).not.toContain(runTarget.id);
+    // Draft-selected on both Runs, yet only the other Run is listed.
+    expect(map.get(characterId)?.map((c) => c.runId)).toEqual([runOther.id]);
   });
 
   it("reads all Characters' commitments in one repository call", async () => {
@@ -660,7 +593,6 @@ describe("commitments are scoped to the target Run's raid ID (not the 2h conflic
       targetScheduledStartAt: new Date(EU_WEEK).toISOString(),
     });
     expect(spy).toHaveBeenCalledTimes(1);
-    spy.mockRestore();
   });
 });
 
@@ -669,7 +601,7 @@ describe("isSameRaidIdForCharacter", () => {
     // EU: Tue 23:00 UTC and Wed 03:59 UTC share a raid ID; Wed 04:00 starts the next.
     expect(isSameRaidIdForCharacter("EU", "2026-09-29T23:00:00.000Z", "2026-09-30T03:59:00.000Z")).toBe(true);
     expect(isSameRaidIdForCharacter("EU", "2026-09-30T03:59:00.000Z", "2026-09-30T04:00:00.000Z")).toBe(false);
-    // Testmist production case: Tue 29/09 21:30 UTC vs Mon 05/10 17:30 UTC.
+    // The production case: Tue 29/09 21:30 UTC vs Mon 05/10 17:30 UTC.
     expect(isSameRaidIdForCharacter("EU", "2026-09-29T21:30:00.000Z", "2026-10-05T17:30:00.000Z")).toBe(false);
     // Same calendar week (Mon + Thu) but across the Wednesday reset → different raid IDs.
     expect(isSameRaidIdForCharacter("EU", "2026-09-28T20:00:00.000Z", "2026-10-01T20:00:00.000Z")).toBe(false);

@@ -1,8 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { db, orm } from "@/lib/prisma";
-import { venomousCreateInput } from "@tests/fixtures/test-run-input";
 import type { CharacterRole } from "@/models/enums";
 import { raidRepository } from "@/repositories/raid.repository";
 import { lockRosterInTx, rosterRepository } from "@/repositories/roster.repository";
@@ -15,6 +13,16 @@ import { lockoutService } from "@/services/lockout.service";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
+import { testActor } from "@tests/fixtures/actors";
+import {
+  assertIsolatedTestDatabase,
+  createTestCharacter,
+  createTestUser,
+  deleteCreatedRows,
+  waitForLockWaiter,
+} from "@tests/fixtures/db-fixtures";
+import { venomousCreateInput } from "@tests/fixtures/test-run-input";
+import { offerCharacter } from "@tests/helpers/signup-offers";
 
 /** Commitments of one Character as seen from a Run in the same raid ID as `runId` (excluding `excludeRunId`). */
 async function commitmentsInRaidIdOf(runId: string, characterId: string, excludeRunId: string) {
@@ -29,135 +37,67 @@ async function commitmentsInRaidIdOf(runId: string, characterId: string, exclude
   ).get(characterId);
 }
 
-
 /**
  * Pre-start roster replacements: PUBLISHED stays editable, Add Player rosters
  * registered players atomically, Start Run is the (race-safe) lock point, and
  * Attendance Replace remains the post-start workflow.
  */
 
-const P = "aaaaaaaa-aaaa-4aaa-8aaa-pr";
-const ids = {
-  lead: `${P}0000000001`,
-  otherLead: `${P}0000000002`,
-  a: `${P}0000000003`,
-  b: `${P}0000000004`,
-  c: `${P}0000000005`,
-  noAccess: `${P}0000000006`,
-  plainUser: `${P}0000000007`,
-  disabled: `${P}0000000008`,
-  discordOnly: `${P}0000000009`,
-};
-const searchUserIds = Array.from({ length: 12 }, (_, index) => `${P}10000000${String(index).padStart(2, "0")}`);
-const allUserIds = [...Object.values(ids), ...searchUserIds];
+/** Distinct per suite run, so the player search sees only this run's users. */
+const SEARCH_TOKEN = `Srch${crypto.randomUUID().slice(0, 6)}`;
+const created = { runIds: [] as string[], characterIds: [] as string[], userIds: [] as string[] };
+let lead: AuthenticatedUser;
+let otherLead: AuthenticatedUser;
+let plainUser: AuthenticatedUser;
+/** Booster players: A and C are on every published roster, B is added by the Raid Lead. */
+let playerA: AuthenticatedUser;
+let playerB: AuthenticatedUser;
+let playerC: AuthenticatedUser;
+let noAccess: AuthenticatedUser;
+let disabledId = "";
+let discordOnlyId = "";
 
-function asUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"]): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@prestart.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
-
-const lead = asUser(ids.lead, "PreStart Lead", "RAID_LEAD");
-const otherLead = asUser(ids.otherLead, "PreStart Other Lead", "RAID_LEAD");
-const plainUser = asUser(ids.plainUser, "PreStart Plain", "USER");
-
-async function createTestUser(
-  id: string,
+async function createUser(
   name: string,
-  opts: { role?: AuthenticatedUser["accountRole"]; discordUsername?: string | null; status?: "ACTIVE" | "DISABLED" } = {},
+  options: { role?: AuthenticatedUser["accountRole"]; isBooster?: boolean; discordUsername?: string; disabled?: boolean } = {},
 ) {
-  const now = new Date().toISOString();
-  await orm.User.create({
-    id,
+  const accountRole = options.role ?? "USER";
+  const id = await createTestUser({
     name,
-    email: `${id}@prestart.boostting.local`,
-    emailVerified: true,
-    discordUserId: null,
-    discordUsername: opts.discordUsername ?? null,
-    accountRole: opts.role ?? "USER",
-    accountStatus: opts.status ?? "ACTIVE",
-    createdAt: now,
-    updatedAt: now,
+    accountRole,
+    isBooster: options.isBooster,
+    discordUsername: options.discordUsername,
+    accountStatus: options.disabled ? "DISABLED" : "ACTIVE",
   });
+  created.userIds.push(id);
+  return testActor(id, accountRole);
 }
 
-async function approveHeroic(userId: string) {
-  await orm.User.where({ id: userId }).update({ isBooster: true });
-}
+const CLASS_SPECS = {
+  PRIEST: { specialization: "Holy", primaryRole: "HEALER", offSpec: "Shadow" },
+  PALADIN: { specialization: "Protection", primaryRole: "TANK", offSpec: null },
+  SHAMAN: { specialization: "Restoration", primaryRole: "HEALER", offSpec: "Elemental" },
+} as const;
 
 let characterSeq = 0;
-async function createCharacter(userId: string, wowClass: "PRIEST" | "PALADIN" | "WARRIOR" | "SHAMAN" = "PRIEST") {
-  const id = crypto.randomUUID();
-  const name = `Prst${userId.slice(-4)}${characterSeq++}`;
-  const now = new Date().toISOString();
-  const spec = { PRIEST: ["Holy", "HEALER"], PALADIN: ["Protection", "TANK"], WARRIOR: ["Arms", "MELEE_DPS"], SHAMAN: ["Restoration", "HEALER"] }[wowClass];
-  await orm.Character.create({
-    id,
+async function createCharacter(userId: string, wowClass: keyof typeof CLASS_SPECS = "PRIEST") {
+  const spec = CLASS_SPECS[wowClass];
+  const id = await createTestCharacter({
     userId,
-    name,
+    name: `Prestart${characterSeq++}`,
     realm: "PreStart",
-    normalizedName: normalizeCharacterIdentity(name),
-    normalizedRealm: normalizeCharacterIdentity("PreStart"),
-    region: "EU",
     wowClass,
-    specialization: spec[0],
-    primaryRole: spec[1] as CharacterRole,
-    itemLevel: 700,
-    isActive: true,
-    createdAt: now,
-    updatedAt: now,
+    specialization: spec.specialization,
+    primaryRole: spec.primaryRole,
   });
-  if (wowClass === "PRIEST") {
+  created.characterIds.push(id);
+  if (spec.offSpec) {
     await orm.CharacterPlayableSpec.create({
       id: crypto.randomUUID(),
       characterId: id,
-      specialization: "Shadow",
-      createdAt: now,
+      specialization: spec.offSpec,
+      createdAt: new Date().toISOString(),
     });
-  }
-  if (wowClass === "SHAMAN") {
-    await orm.CharacterPlayableSpec.create({
-      id: crypto.randomUUID(),
-      characterId: id,
-      specialization: "Elemental",
-      createdAt: now,
-    });
-  }
-  return id;
-}
-
-async function createSignup(input: {
-  runId: string;
-  userId: string;
-  characterId: string;
-  roles: CharacterRole[];
-  status?: "PENDING" | "WITHDRAWN";
-}) {
-  const id = crypto.randomUUID();
-  const now = new Date().toISOString();
-  await orm.RunSignup.create({
-    id,
-    runId: input.runId,
-    userId: input.userId,
-    characterId: input.characterId,
-    participationType: "BOOSTER",
-    isBackup: false,
-    status: input.status ?? "PENDING",
-    publishedRole: null,
-    lootbuddyMode: null,
-    lootbuddyVerification: null,
-    createdAt: now,
-    updatedAt: now,
-  });
-  for (const role of input.roles) {
-    await orm.RunSignupRole.create({ id: crypto.randomUUID(), signupId: id, role, createdAt: now });
   }
   return id;
 }
@@ -173,8 +113,16 @@ async function createOpenRun(actor: AuthenticatedUser = lead, scheduledStartAt =
     actor,
     venomousCreateInput({ scheduledStartAt, desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1 }),
   );
+  created.runIds.push(run.id);
   await runService.openRun(actor, run.id);
   return { runId: run.id, scheduledStartAt };
+}
+
+/** Deletes this test's Runs: attendance first (it references roster entries with RESTRICT), the rest cascades. */
+async function deleteRuns() {
+  const runIds = created.runIds.splice(0);
+  for (const runId of runIds) await orm.RunAttendance.where({ runId }).deleteAndCount();
+  await deleteCreatedRows({ runIds });
 }
 
 async function view(runId: string, actor: AuthenticatedUser = lead) {
@@ -207,8 +155,8 @@ async function signupsFor(runId: string, userId: string) {
 /** Published run: A selected as HEALER, C selected as TANK. */
 async function publishedRun() {
   const { runId, scheduledStartAt } = await createOpenRun();
-  const aSignup = await createSignup({ runId, userId: ids.a, characterId: aChar, roles: ["HEALER"] });
-  const cSignup = await createSignup({ runId, userId: ids.c, characterId: cChar, roles: ["TANK"] });
+  const aSignup = await offerCharacter(playerA, runId, aChar, "HEALER");
+  const cSignup = await offerCharacter(playerC, runId, cChar, "TANK");
   await saveDraft(runId, [
     { signupId: aSignup, selectedRole: "HEALER" },
     { signupId: cSignup, selectedRole: "TANK" },
@@ -217,110 +165,71 @@ async function publishedRun() {
   return { runId, scheduledStartAt, aSignup, cSignup };
 }
 
-async function cleanupRuns() {
-  for (const raidLeadId of [ids.lead, ids.otherLead]) {
-    const runs = await orm.Run.where({ raidLeadId }).select("id").all();
-    for (const row of runs as Array<{ id: string }>) {
-      const runId = row.id;
-      await orm.UserNotification.where({ runId }).delete().catch(() => {});
-      await orm.RunAttendance.where({ runId }).delete().catch(() => {});
-      await orm.RunStartSnapshot.where({ runId }).delete().catch(() => {});
-      await orm.RunDiscordPost.where({ runId }).delete().catch(() => {});
-      const roster = (await orm.RunRoster.where({ runId }).first()) as { id: string } | null;
-      if (roster) {
-        await orm.RunRosterEntry.where({ rosterId: roster.id }).delete().catch(() => {});
-        await orm.RunExternalBooster.where({ rosterId: roster.id }).delete().catch(() => {});
-        await orm.RunRoster.where({ id: roster.id }).delete().catch(() => {});
-      }
-      const signups = await orm.RunSignup.where({ runId }).select("id").all();
-      for (const signup of signups as Array<{ id: string }>) {
-        await orm.RunSignupRole.where({ signupId: signup.id }).delete().catch(() => {});
-      }
-      await orm.RunSignup.where({ runId }).delete().catch(() => {});
-      await orm.Run.where({ id: runId }).delete().catch(() => {});
-    }
-  }
-}
-
-async function cleanupAll() {
-  await cleanupRuns();
-  for (const userId of allUserIds) {
-    await orm.UserNotification.where({ userId }).delete().catch(() => {});
-    await orm.ActivityEvent.where({ userId }).delete().catch(() => {});
-    await orm.CharacterWeeklyUnavailability.where((row) => row.characterId.in(characterIds)).delete().catch(() => {});
-    await orm.Character.where({ userId }).delete().catch(() => {});
-    await orm.User.where({ id: userId }).delete().catch(() => {});
-  }
-}
-
 let aChar = "";
 let bChar = "";
 let bChar2 = "";
 let cChar = "";
 let noAccessChar = "";
-const characterIds: string[] = [];
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   await raidRepository.ensureReferenceRaids();
-  await cleanupAll();
-  await createTestUser(ids.lead, "PreStart Lead", { role: "RAID_LEAD" });
-  await createTestUser(ids.otherLead, "PreStart Other Lead", { role: "RAID_LEAD" });
-  await createTestUser(ids.a, "PreStart Player A");
-  await createTestUser(ids.b, "PreStart Player B");
-  await createTestUser(ids.c, "PreStart Player C");
-  await createTestUser(ids.noAccess, "PreStart No Access");
-  await createTestUser(ids.plainUser, "PreStart Plain");
-  await createTestUser(ids.disabled, "Srchzq Disabled", { status: "DISABLED" });
-  await createTestUser(ids.discordOnly, "Unrelated Name", { discordUsername: "srchzq_discord" });
-  for (const [index, id] of searchUserIds.entries()) {
-    await createTestUser(id, `Srchzq ${String(index).padStart(2, "0")}`);
+  lead = await createUser("PreStart Lead", { role: "RAID_LEAD" });
+  otherLead = await createUser("PreStart Other Lead", { role: "RAID_LEAD" });
+  playerA = await createUser("PreStart Player A", { isBooster: true });
+  playerB = await createUser("PreStart Player B", { isBooster: true });
+  playerC = await createUser("PreStart Player C", { isBooster: true });
+  noAccess = await createUser("PreStart No Access");
+  plainUser = await createUser("PreStart Plain");
+  disabledId = (await createUser(`${SEARCH_TOKEN} Disabled`, { disabled: true })).id;
+  discordOnlyId = (await createUser("Unrelated Name", { discordUsername: `${SEARCH_TOKEN.toLowerCase()}_discord` })).id;
+  for (let index = 0; index < 12; index += 1) {
+    await createUser(`${SEARCH_TOKEN} ${String(index).padStart(2, "0")}`);
   }
-  for (const userId of [ids.a, ids.b, ids.c]) await approveHeroic(userId);
-  aChar = await createCharacter(ids.a, "PRIEST");
-  bChar = await createCharacter(ids.b, "PRIEST");
-  bChar2 = await createCharacter(ids.b, "SHAMAN");
-  cChar = await createCharacter(ids.c, "PALADIN");
-  noAccessChar = await createCharacter(ids.noAccess, "PRIEST");
-  characterIds.push(aChar, bChar, bChar2, cChar, noAccessChar);
+  aChar = await createCharacter(playerA.id, "PRIEST");
+  bChar = await createCharacter(playerB.id, "PRIEST");
+  bChar2 = await createCharacter(playerB.id, "SHAMAN");
+  cChar = await createCharacter(playerC.id, "PALADIN");
+  noAccessChar = await createCharacter(noAccess.id, "PRIEST");
 }, 60_000);
 
 afterEach(async () => {
   vi.restoreAllMocks();
-  await cleanupRuns();
-  await orm.CharacterWeeklyUnavailability.where((row) => row.characterId.in(characterIds)).delete().catch(() => {});
+  await deleteRuns();
+  await orm.CharacterWeeklyUnavailability.where((row) => row.characterId.in(created.characterIds)).deleteAndCount();
 });
 
-afterAll(cleanupAll, 60_000);
+afterAll(() => deleteCreatedRows(created), 60_000);
 
 describe("manual registered participant (Add Player)", () => {
   it("B. a player who never signed up becomes a normal draft-selected BOOSTER signup — not an External Booster", async () => {
     const { runId } = await createOpenRun();
 
-    const result = await addPlayer(runId, ids.b, bChar, "HEALER");
+    const result = await addPlayer(runId, playerB.id, bChar, "HEALER");
 
     expect(result.created).toBe(true);
-    const signups = await signupsFor(runId, ids.b);
+    const signups = await signupsFor(runId, playerB.id);
     expect(signups).toHaveLength(1);
     expect(signups[0]).toMatchObject({ id: result.signupId, participationType: "BOOSTER", status: "PENDING", characterId: bChar });
     const current = await view(runId);
     const slot = current.boosters.find((row) => row.id === result.signupId);
-    expect(slot).toMatchObject({ draftSelected: true, selectedRole: "HEALER", userId: ids.b });
+    expect(slot).toMatchObject({ draftSelected: true, selectedRole: "HEALER", userId: playerB.id });
     expect(current.roster.externalBoosters).toHaveLength(0);
     expect(current.run.status).toBe("ROSTERING");
-    const activity = await orm.ActivityEvent.where({ userId: ids.lead, type: "ROSTER_PLAYER_ADDED" }).all();
-    expect(activity.length).toBeGreaterThan(0);
+    const activity = await orm.ActivityEvent.where({ userId: lead.id, type: "ROSTER_PLAYER_ADDED" }).all();
+    expect(activity).toHaveLength(1);
   });
 
   it("D. an existing suitable signup is reused (no duplicate) and gains the assigned role when missing", async () => {
     const { runId } = await createOpenRun();
-    const existing = await createSignup({ runId, userId: ids.b, characterId: bChar, roles: ["HEALER"] });
+    const existing = await offerCharacter(playerB, runId, bChar, "HEALER");
 
-    const same = await addPlayer(runId, ids.b, bChar, "HEALER");
+    const same = await addPlayer(runId, playerB.id, bChar, "HEALER");
     expect(same).toEqual({ signupId: existing, created: false });
 
-    const extended = await addPlayer(runId, ids.b, bChar, "RANGED_DPS");
+    const extended = await addPlayer(runId, playerB.id, bChar, "RANGED_DPS");
     expect(extended).toEqual({ signupId: existing, created: false });
-    const signups = await signupsFor(runId, ids.b);
+    const signups = await signupsFor(runId, playerB.id);
     expect(signups).toHaveLength(1);
     const roles = (signups[0].offeredRoles as Array<{ role: string }>).map((row) => row.role).sort();
     expect(roles).toEqual(["HEALER", "RANGED_DPS"]);
@@ -329,20 +238,21 @@ describe("manual registered participant (Add Player)", () => {
 
   it("E. a WITHDRAWN signup is never revived; the character is listed as not eligible", async () => {
     const { runId } = await createOpenRun();
-    const withdrawn = await createSignup({ runId, userId: ids.b, characterId: bChar, roles: ["HEALER"], status: "WITHDRAWN" });
+    const withdrawn = await offerCharacter(playerB, runId, bChar, "HEALER");
+    await signupService.withdrawSignup(playerB, withdrawn);
 
-    await expectCode(addPlayer(runId, ids.b, bChar, "HEALER"), "SIGNUP_WITHDRAWN");
-    const signups = await signupsFor(runId, ids.b);
+    await expectCode(addPlayer(runId, playerB.id, bChar, "HEALER"), "SIGNUP_WITHDRAWN");
+    const signups = await signupsFor(runId, playerB.id);
     expect(signups.map((row) => [row.id, row.status])).toEqual([[withdrawn, "WITHDRAWN"]]);
-    const options = await rosterService.getManualAddOptions(lead, { runId, userId: ids.b });
+    const options = await rosterService.getManualAddOptions(lead, { runId, userId: playerB.id });
     expect(options.eligible.map((row) => row.characterId)).not.toContain(bChar);
     expect(options.ineligible.find((row) => row.characterId === bChar)?.message).toMatch(/Withdrew/);
   });
 
   it("F. missing Booster Access blocks (no Raid Lead bypass)", async () => {
     const { runId } = await createOpenRun();
-    await expectCode(addPlayer(runId, ids.noAccess, noAccessChar, "HEALER"), "BOOSTER_ACCESS_REQUIRED");
-    expect(await signupsFor(runId, ids.noAccess)).toHaveLength(0);
+    await expectCode(addPlayer(runId, noAccess.id, noAccessChar, "HEALER"), "BOOSTER_ACCESS_REQUIRED");
+    expect(await signupsFor(runId, noAccess.id)).toHaveLength(0);
   });
 
   it("G. a Character marked unavailable for this difficulty and reset blocks", async () => {
@@ -356,27 +266,27 @@ describe("manual registered participant (Add Player)", () => {
       createdAt: now,
       updatedAt: now,
     });
-    await expectCode(addPlayer(runId, ids.b, bChar, "HEALER"), "CHARACTER_UNAVAILABLE");
-    expect(await signupsFor(runId, ids.b)).toHaveLength(0);
+    await expectCode(addPlayer(runId, playerB.id, bChar, "HEALER"), "CHARACTER_UNAVAILABLE");
+    expect(await signupsFor(runId, playerB.id)).toHaveLength(0);
   });
 
   it("H. a cross-Run reservation conflict blocks", async () => {
     const { runId, scheduledStartAt } = await createOpenRun();
     const other = await createOpenRun(otherLead, scheduledStartAt);
-    const otherSignup = await createSignup({ runId: other.runId, userId: ids.b, characterId: bChar, roles: ["HEALER"] });
+    const otherSignup = await offerCharacter(playerB, other.runId, bChar, "HEALER");
     await saveDraft(other.runId, [{ signupId: otherSignup, selectedRole: "HEALER" }], otherLead);
 
-    await expectCode(addPlayer(runId, ids.b, bChar, "HEALER"), "CHARACTER_ALREADY_SELECTED_OTHER_RUN");
-    expect(await signupsFor(runId, ids.b)).toHaveLength(0);
+    await expectCode(addPlayer(runId, playerB.id, bChar, "HEALER"), "CHARACTER_ALREADY_SELECTED_OTHER_RUN");
+    expect(await signupsFor(runId, playerB.id)).toHaveLength(0);
   });
 
   it("I. one selected BOOSTER per User: adding a second Character replaces the first slot", async () => {
     const { runId } = await createOpenRun();
-    const first = await addPlayer(runId, ids.b, bChar, "HEALER");
-    const second = await addPlayer(runId, ids.b, bChar2, "HEALER");
+    const first = await addPlayer(runId, playerB.id, bChar, "HEALER");
+    const second = await addPlayer(runId, playerB.id, bChar2, "HEALER");
 
     const current = await view(runId);
-    const selectedForB = current.boosters.filter((row) => row.userId === ids.b && row.draftSelected);
+    const selectedForB = current.boosters.filter((row) => row.userId === playerB.id && row.draftSelected);
     expect(selectedForB.map((row) => row.id)).toEqual([second.signupId]);
     // The first offer stays a normal (unselected) signup, like any swapped-out offer.
     expect(current.boosters.find((row) => row.id === first.signupId)?.draftSelected).toBe(false);
@@ -394,9 +304,9 @@ describe("manual registered participant (Add Player)", () => {
     });
     const before = await view(runId);
 
-    await expectCode(addPlayer(runId, ids.b, bChar, "HEALER"), "ROSTER_ALREADY_CHANGED");
+    await expectCode(addPlayer(runId, playerB.id, bChar, "HEALER"), "ROSTER_ALREADY_CHANGED");
 
-    expect(await signupsFor(runId, ids.b)).toHaveLength(0);
+    expect(await signupsFor(runId, playerB.id)).toHaveLength(0);
     const after = await view(runId);
     expect(after.roster.version).toBe(before.roster.version + 1); // only the concurrent change
     expect(after.boosters.some((row) => row.draftSelected)).toBe(false);
@@ -404,7 +314,7 @@ describe("manual registered participant (Add Player)", () => {
 
   it("C. atomic failure — role extension is rolled back with the rest", async () => {
     const { runId } = await createOpenRun();
-    const existing = await createSignup({ runId, userId: ids.b, characterId: bChar, roles: ["HEALER"] });
+    const existing = await offerCharacter(playerB, runId, bChar, "HEALER");
     const validate = signupService.validateManagedBoosterCandidate.bind(signupService);
     vi.spyOn(signupService, "validateManagedBoosterCandidate").mockImplementation(async (input) => {
       const result = await validate(input);
@@ -413,9 +323,9 @@ describe("manual registered participant (Add Player)", () => {
       return result;
     });
 
-    await expectCode(addPlayer(runId, ids.b, bChar, "RANGED_DPS"), "ROSTER_ALREADY_CHANGED");
+    await expectCode(addPlayer(runId, playerB.id, bChar, "RANGED_DPS"), "ROSTER_ALREADY_CHANGED");
 
-    const signups = await signupsFor(runId, ids.b);
+    const signups = await signupsFor(runId, playerB.id);
     expect(signups.map((row) => row.id)).toEqual([existing]);
     expect((signups[0].offeredRoles as Array<{ role: string }>).map((row) => row.role)).toEqual(["HEALER"]);
     expect((await view(runId)).boosters.find((row) => row.id === existing)?.draftSelected).toBe(false);
@@ -424,7 +334,7 @@ describe("manual registered participant (Add Player)", () => {
   it("C. atomic failure — the Character is reserved elsewhere meanwhile: everything rolls back", async () => {
     const { runId, scheduledStartAt } = await createOpenRun();
     const other = await createOpenRun(otherLead, scheduledStartAt);
-    const otherSignup = await createSignup({ runId: other.runId, userId: ids.b, characterId: bChar, roles: ["HEALER"] });
+    const otherSignup = await offerCharacter(playerB, other.runId, bChar, "HEALER");
     const validate = signupService.validateManagedBoosterCandidate.bind(signupService);
     let raced = false;
     vi.spyOn(signupService, "validateManagedBoosterCandidate").mockImplementation(async (input) => {
@@ -436,39 +346,41 @@ describe("manual registered participant (Add Player)", () => {
       return result;
     });
 
-    await expect(addPlayer(runId, ids.b, bChar, "HEALER")).rejects.toMatchObject({
+    await expect(addPlayer(runId, playerB.id, bChar, "HEALER")).rejects.toMatchObject({
       code: expect.stringMatching(/CHARACTER_ALREADY_SELECTED_OTHER_RUN|SCHEDULE_CONFLICT/),
     });
-    expect(await signupsFor(runId, ids.b)).toHaveLength(0);
+    expect(await signupsFor(runId, playerB.id)).toHaveLength(0);
     expect((await view(runId)).boosters).toHaveLength(0);
   });
 
   it("U. player search: server-side, ACTIVE only, max 10, name or Discord username, no sensitive fields", async () => {
     const { runId } = await createOpenRun();
-    const matches = await rosterService.searchPlayers(lead, { runId, query: "srchzq" });
+    const matches = await rosterService.searchPlayers(lead, { runId, query: SEARCH_TOKEN.toLowerCase() });
     expect(matches).toHaveLength(10);
-    expect(matches.some((row) => row.id === ids.disabled)).toBe(false);
+    expect(matches.some((row) => row.id === disabledId)).toBe(false);
     for (const row of matches) {
       expect(Object.keys(row).sort()).toEqual(["discordUsername", "id", "name"]);
     }
-    const byDiscord = await rosterService.searchPlayers(lead, { runId, query: "zq_disc" });
-    expect(byDiscord.map((row) => row.id)).toEqual([ids.discordOnly]);
-    await expect(rosterService.searchPlayers(plainUser, { runId, query: "srchzq" })).rejects.toBeTruthy();
-    await expect(
-      rosterService.addRegisteredParticipant(plainUser, { runId, version: 1, userId: ids.b, characterId: bChar, role: "HEALER" }),
-    ).rejects.toBeTruthy();
+    const byDiscord = await rosterService.searchPlayers(lead, { runId, query: `${SEARCH_TOKEN.slice(4).toLowerCase()}_disc` });
+    expect(byDiscord.map((row) => row.id)).toEqual([discordOnlyId]);
+    await expectCode(rosterService.searchPlayers(plainUser, { runId, query: SEARCH_TOKEN }), "RUN_NOT_MANAGEABLE");
+    await expectCode(
+      rosterService.addRegisteredParticipant(plainUser, { runId, version: 1, userId: playerB.id, characterId: bChar, role: "HEALER" }),
+      "RUN_NOT_MANAGEABLE",
+    );
+    expect(await signupsFor(runId, playerB.id)).toHaveLength(0);
   });
 
   it("Character options: eligible characters with class roles, ineligible ones with a reason — nothing private", async () => {
     const { runId } = await createOpenRun();
-    const options = await rosterService.getManualAddOptions(lead, { runId, userId: ids.b });
-    expect(options.player).toEqual({ id: ids.b, name: "PreStart Player B" });
+    const options = await rosterService.getManualAddOptions(lead, { runId, userId: playerB.id });
+    expect(options.player).toEqual({ id: playerB.id, name: "PreStart Player B" });
     const priest = options.eligible.find((row) => row.characterId === bChar);
     expect(priest?.roles.sort()).toEqual(["HEALER", "RANGED_DPS"]);
     expect(Object.keys(priest!).sort()).toEqual(["characterId", "characterName", "defaultRole", "realm", "roles", "selectionRisk", "specialization", "wowClass"]);
-    const noAccess = await rosterService.getManualAddOptions(lead, { runId, userId: ids.noAccess });
-    expect(noAccess.eligible).toHaveLength(0);
-    expect(noAccess.ineligible).toHaveLength(1);
+    const noAccessOptions = await rosterService.getManualAddOptions(lead, { runId, userId: noAccess.id });
+    expect(noAccessOptions.eligible).toHaveLength(0);
+    expect(noAccessOptions.ineligible).toHaveLength(1);
   });
 });
 
@@ -482,11 +394,11 @@ describe("published roster replacement and the Start lock", () => {
     const publishedVersion = current.roster.version;
     const notesBefore = async (userId: string) =>
       (await userNotificationRepository.listForUser(userId, 100)).filter((note) => note.runId === runId);
-    const cNotesBefore = (await notesBefore(ids.c)).length;
+    const cNotesBefore = (await notesBefore(playerC.id)).length;
 
     // Raid Lead removes A from the draft and adds B (never signed up) as HEALER.
     await saveDraft(runId, [{ signupId: cSignup, selectedRole: "TANK" }]);
-    const added = await addPlayer(runId, ids.b, bChar, "HEALER");
+    const added = await addPlayer(runId, playerB.id, bChar, "HEALER");
     current = await view(runId);
     expect(current.run.status).toBe("PUBLISHED");
     expect(current.roster.hasUnpublishedChanges).toBe(true);
@@ -509,11 +421,11 @@ describe("published roster replacement and the Start lock", () => {
     expect(current.roster.hasUnpublishedChanges).toBe(false);
 
     // T. Notifications: B selected once, A removed once (visible), C untouched.
-    const bNotes = await notesBefore(ids.b);
+    const bNotes = await notesBefore(playerB.id);
     expect(bNotes.filter((note) => note.type === "ROSTER_SELECTED")).toHaveLength(1);
-    const aNotes = await notesBefore(ids.a);
+    const aNotes = await notesBefore(playerA.id);
     expect(aNotes.filter((note) => note.type === "ROSTER_REMOVED" && note.visibleInApp)).toHaveLength(1);
-    expect((await notesBefore(ids.c)).length).toBe(cNotesBefore);
+    expect((await notesBefore(playerC.id)).length).toBe(cNotesBefore);
 
     // N. Start with a clean published roster freezes B (and C), not A.
     await runService.startRun(lead, { runId });
@@ -528,7 +440,7 @@ describe("published roster replacement and the Start lock", () => {
   it("commitments: a manually added player is RESERVED while draft-selected and COMMITTED once published", async () => {
     const { runId } = await publishedRun();
     const other = await createOpenRun(otherLead);
-    await addPlayer(runId, ids.b, bChar, "RANGED_DPS");
+    await addPlayer(runId, playerB.id, bChar, "RANGED_DPS");
     const reserved = (await commitmentsInRaidIdOf(runId, bChar, other.runId));
     expect(reserved?.find((row) => row.runId === runId)?.state).toBe("RESERVED");
     await publish(runId);
@@ -544,7 +456,7 @@ describe("published roster replacement and the Start lock", () => {
     expect(work.roster.some((item) => item.runId === runId)).toBe(false);
 
     await saveDraft(runId, [{ signupId: cSignup, selectedRole: "TANK" }]);
-    await addPlayer(runId, ids.b, bChar, "HEALER");
+    await addPlayer(runId, playerB.id, bChar, "HEALER");
     await publish(runId);
 
     work = await discordSyncService.listSyncWork();
@@ -562,9 +474,8 @@ describe("published roster replacement and the Start lock", () => {
     const version = current.roster.version;
 
     const blocked: Array<() => Promise<unknown>> = [
-      () => rosterService.addRegisteredParticipant(lead, { runId, version, userId: ids.b, characterId: bChar, role: "HEALER" }),
+      () => rosterService.addRegisteredParticipant(lead, { runId, version, userId: playerB.id, characterId: bChar, role: "HEALER" }),
       () => rosterService.saveDraftSelection(lead, { runId, version, selections: [] }),
-      () => rosterService.setDraftSelection(lead, { runId, signupId: current.boosters[0]!.id, selected: false, version }),
       () =>
         rosterService.saveExternalBoosters(lead, {
           runId,
@@ -577,7 +488,7 @@ describe("published roster replacement and the Start lock", () => {
     for (const call of blocked) {
       await expectCode(call(), "INVALID_ROSTER_SELECTION");
     }
-    expect(await signupsFor(runId, ids.b)).toHaveLength(0);
+    expect(await signupsFor(runId, playerB.id)).toHaveLength(0);
 
     // Attendance Replace: the post-start operational substitution.
     const rows = (await attendanceService.getManagerAttendance(lead, runId)).rows;
@@ -599,14 +510,14 @@ describe("published roster replacement and the Start lock", () => {
       await saveDraft(runId, [
         { signupId: cSignup, selectedRole: "TANK" },
         ...(await view(runId)).boosters
-          .filter((row) => row.userId === ids.a)
+          .filter((row) => row.userId === playerA.id)
           .map((row) => ({ signupId: row.id, selectedRole: "HEALER" as const })),
       ]);
       const version = (await view(runId)).roster.version;
 
       const [started, changed] = await Promise.allSettled([
         runService.startRun(lead, { runId }),
-        rosterService.addRegisteredParticipant(lead, { runId, version, userId: ids.b, characterId: bChar, role: "MELEE_DPS" }),
+        rosterService.addRegisteredParticipant(lead, { runId, version, userId: playerB.id, characterId: bChar, role: "MELEE_DPS" }),
       ]);
       const run = await runRepository.findById(runId);
       const selected = ((await orm.RunSignup.where({ runId, status: "SELECTED" }).select("id").all()) as Array<{ id: string }>)
@@ -620,7 +531,7 @@ describe("published roster replacement and the Start lock", () => {
         expect(attended).toEqual(selected);
         // A roster change that lost the race did not slip in afterwards.
         if (changed.status === "rejected") {
-          expect(await signupsFor(runId, ids.b)).toHaveLength(0);
+          expect(await signupsFor(runId, playerB.id)).toHaveLength(0);
         } else {
           // It committed first, so Start must have refused it … which contradicts IN_PROGRESS.
           throw new Error("roster change and Start both succeeded");
@@ -631,7 +542,7 @@ describe("published roster replacement and the Start lock", () => {
         expect(started).toMatchObject({ status: "rejected", reason: { code: "ROSTER_UNPUBLISHED_CHANGES" } });
         expect(await orm.RunAttendance.where({ runId }).all()).toHaveLength(0);
       }
-      await cleanupRuns();
+      await deleteRuns();
     }
   });
 });
@@ -647,7 +558,7 @@ describe("Start lock ordering", () => {
 
     // Stand-in for Start: holds the roster lock, then commits IN_PROGRESS.
     const startTx = db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: typeof orm }).public ?? (tx.orm as unknown as typeof orm)) as typeof orm;
+      const txOrm = tx.orm.public;
       await lockRosterInTx(txOrm, roster!.id);
       signalLocked();
       await startMayCommit;
@@ -656,21 +567,13 @@ describe("Start lock ordering", () => {
     await lockHeld;
 
     // The service pre-checks still see PUBLISHED; the write then queues on the lock.
-    const atomic = rosterRepository.addManagedBoosterAtomic.bind(rosterRepository);
-    let reachedWrite!: () => void;
-    const writeQueued = new Promise<void>((resolve) => (reachedWrite = resolve));
-    vi.spyOn(rosterRepository, "addManagedBoosterAtomic").mockImplementation((input) => {
-      reachedWrite();
-      return atomic(input);
-    });
-    const add = addPlayer(runId, ids.b, bChar, "HEALER");
-    await writeQueued;
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    const add = addPlayer(runId, playerB.id, bChar, "HEALER");
+    await waitForLockWaiter();
     releaseStart();
     await startTx;
 
     await expectCode(add, "INVALID_ROSTER_SELECTION");
-    expect(await signupsFor(runId, ids.b)).toHaveLength(0);
+    expect(await signupsFor(runId, playerB.id)).toHaveLength(0);
   });
 });
 

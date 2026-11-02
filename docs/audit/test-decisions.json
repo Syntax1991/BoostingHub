@@ -1267,6 +1267,18 @@
     "tests/unit/lib/test-database-guard.test.ts": [
       "KEEP",
       "New in this audit: first tests of the test-database guard (valid URL; missing, development and non-test names refused; TEST_DATABASE_EXPECTED_NAME pin)"
+    ],
+    "tests/integration/services/character-run-commitments.test.ts": [
+      "REWRITE",
+      "Fresh users via createTestUser/createTestCharacter and verified deleteCreatedRows instead of fixed ids with a hand-written delete chain; production saveDraftSelection; expectDomainError; completedAt set with COMPLETED status; stronger target-own-commitment assertion"
+    ],
+    "tests/integration/services/roster-pre-start-replacements.test.ts": [
+      "REWRITE",
+      "Fresh users and Characters, offerCharacter instead of raw signup inserts, production saveDraftSelection path already used; waitForLockWaiter replaces sleep; deleteAndCount for unavailability and attendance; dropped setDraftSelection from the post-start lock matrix; unique SEARCH_TOKEN per suite run"
+    ],
+    "tests/integration/services/run-warcraft-logs-auto.test.ts": [
+      "REWRITE",
+      "Owns its Runs through the production lifecycle instead of mutating seeded Runs; synthetic Discord ids; frozen clock for exact start/complete stamps; removed the manager-already-analyzed skip case that only flipped auto flags on a row; encounter ids match Venomous content"
     ]
   },
   "tests": {
@@ -1453,6 +1465,10 @@
     "tests/integration/services/raid-lockout-informational.test.ts::raid lockouts are informational — full signup/roster/publish chain > a fully-saved Character (HC 8/8) is eligible, offerable, and confirms successfully — no LOCKOUT_CONFLICT": [
       "REWRITE",
       "Offer result exact (one created) instead of greater than zero"
+    ],
+    "tests/integration/services/run-warcraft-logs-auto.test.ts::automatic Consumables Audit after completion > skips Runs a manager already analyzed (while no newer report is linked)": [
+      "REMOVE",
+      "Only flipped autoAttempts/autoAnalyzed on an already-analyzed row to re-enter the due queue; proved nothing about manager-vs-auto ownership once the suite stopped mutating seed Runs"
     ]
   },
   "removed": {

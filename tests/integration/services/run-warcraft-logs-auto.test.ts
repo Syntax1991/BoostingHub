@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { NextRequest } from "next/server";
+import type { AuthenticatedUser } from "@/auth/authorization";
 import { orm } from "@/lib/prisma";
 import {
   warcraftLogsApiClient,
@@ -23,29 +24,56 @@ import { POST as attachPost } from "@/app/api/bot/runs/[runId]/warcraft-logs/rou
 import { POST as autoAuditPost } from "@/app/api/bot/warcraft-logs/auto-audit/route";
 import { PUT as discordStatePut } from "@/app/api/bot/runs/[runId]/discord-state/route";
 import { snowflakeAtTime } from "@/lib/discord-snowflake";
+import { raidRepository } from "@/repositories/raid.repository";
+import { attendanceService } from "@/services/attendance.service";
+import { rosterService } from "@/services/roster.service";
+import { runService } from "@/services/run.service";
+import { testActor } from "@tests/fixtures/actors";
+import {
+  assertIsolatedTestDatabase,
+  createTestCharacter,
+  createTestUser,
+  deleteCreatedRows,
+  syntheticDiscordId,
+} from "@tests/fixtures/db-fixtures";
+import { freezeSystemTime, restoreSystemTime } from "@tests/fixtures/time";
+import { venomousCreateInput } from "@tests/fixtures/test-run-input";
+import { offerCharacter } from "@tests/helpers/signup-offers";
 
 /**
  * Log bot → Run channel → report auto-linked → Run COMPLETED → automatic audit.
- * Uses the seeded COMPLETED "Large Completed" Run (window 14:00–15:20) and the
- * seeded IN_PROGRESS Run; writes only Discord post / association / audit rows,
- * one start snapshot and completedAt, all restored afterwards.
+ * The suite builds its own Runs through the production lifecycle on one day:
+ * RUN started 14:00 and completed 15:20 with three present Boosters (enough
+ * for roster evidence, see rosterMinKnown), IN_PROGRESS_RUN with three others
+ * started 16:30, OPEN_RUN still open. The wall clock (Date
+ * only) stays frozen on that day, so run creation, start and completion stamp
+ * exactly these instants.
  */
-const RUN = "r9999996-9996-4996-8996-999999999996";
-const IN_PROGRESS_RUN = "r9999991-9991-4991-8991-999999999991";
-const OPEN_RUN = "r1111111-1111-4111-8111-111111111111";
+let RUN = "";
+let IN_PROGRESS_RUN = "";
+let OPEN_RUN = "";
 const REPORT = "TestReportCode01";
 /** A second report of the same Run (e.g. the log bot started a new one mid-run). */
 const REPORT_2 = "TestReportCode04";
 const TOKEN = "bot-api-test-token-wcl-0123456789";
-const LOG_BOT = "111111111111111111";
-const STRANGER = "222222222222222222";
-const RUN_CHANNEL = "333333333333333333";
-const IN_PROGRESS_CHANNEL = "444444444444444444";
-const OTHER_CHANNEL = "555555555555555555";
-const MESSAGE = "666666666666666666";
+const LOG_BOT = syntheticDiscordId();
+const STRANGER = syntheticDiscordId();
+const RUN_CHANNEL = syntheticDiscordId();
+const IN_PROGRESS_CHANNEL = syntheticDiscordId();
+const OTHER_CHANNEL = syntheticDiscordId();
+const MESSAGE = syntheticDiscordId();
+/** The log bot's message for REPORT_2. */
+const SECOND_MESSAGE = syntheticDiscordId();
+/** WCL encounter of The Venomous Abyss's first boss (Nek'zali the Soulcoiler). */
+const ENCOUNTER_ID = 3470;
 
 const at = (hhmm: string) => new Date(`2026-09-20T${hhmm}:00.000Z`);
 const REPORT_START = at("14:05").getTime();
+
+const created = { runIds: [] as string[], characterIds: [] as string[], userIds: [] as string[] };
+let lead: AuthenticatedUser;
+let admin: AuthenticatedUser;
+let user: AuthenticatedUser;
 
 let roster: Array<Extract<ConsumableAuditParticipant, { source: "ATTENDANCE" }>> = [];
 
@@ -55,8 +83,8 @@ function metadata(code: string = REPORT): WarcraftLogsReportMetadata {
     const startTime = at(clock).getTime() - REPORT_START;
     return {
       id,
-      encounterId: 3129,
-      name: "Plexus Sentinel",
+      encounterId: ENCOUNTER_ID,
+      name: "Nek'zali the Soulcoiler",
       startTime,
       endTime: startTime + 300_000,
       kill,
@@ -66,7 +94,7 @@ function metadata(code: string = REPORT): WarcraftLogsReportMetadata {
   };
   return {
     code,
-    title: "PhoenixStar run",
+    title: "Test raid night",
     startTime: REPORT_START,
     endTime: at("15:30").getTime(),
     regionSlug: "EU",
@@ -96,8 +124,6 @@ const body = (overrides: Record<string, unknown> = {}) => ({
 
 let metadataSpy: MockInstance<typeof warcraftLogsApiClient.fetchReportMetadata>;
 let eventsSpy: MockInstance<typeof warcraftLogsApiClient.fetchReportConsumableEvents>;
-const createdPostRunIds: string[] = [];
-let createdSnapshotId: string | null = null;
 
 async function clear() {
   await orm.RunConsumableAudit.where((row) => row.runId.in([RUN, IN_PROGRESS_RUN])).deleteAndCount();
@@ -105,7 +131,77 @@ async function clear() {
   await orm.WarcraftLogsReport.where((row) => row.code.in([REPORT, REPORT_2])).deleteAndCount();
 }
 
+async function createUser(name: string, accountRole: AuthenticatedUser["accountRole"], isBooster = false) {
+  const id = await createTestUser({ name, accountRole, isBooster });
+  created.userIds.push(id);
+  return testActor(id, accountRole);
+}
+
+/** An open Venomous Run at `startClock` whose roster of `boosterNames` (one Frost Mage each) is published. */
+async function publishedRun(startClock: string, boosterNames: string[]) {
+  const run = await runService.createRun(
+    lead,
+    venomousCreateInput({ scheduledStartAt: at(startClock).toISOString(), desiredTankCount: 0, desiredHealerCount: 0, desiredDpsCount: boosterNames.length }),
+  );
+  created.runIds.push(run.id);
+  await runService.openRun(lead, run.id);
+  const signupIds: string[] = [];
+  for (const name of boosterNames) {
+    const booster = await createUser(`${name} Player`, "USER", true);
+    const characterId = await createTestCharacter({
+      userId: booster.id,
+      name,
+      realm: "Wcl Auto",
+      wowClass: "MAGE",
+      specialization: "Frost",
+      primaryRole: "RANGED_DPS",
+    });
+    created.characterIds.push(characterId);
+    signupIds.push(await offerCharacter(booster, run.id, characterId, "RANGED_DPS"));
+  }
+  const draft = await rosterService.getRosterManagementView(lead, run.id);
+  await rosterService.saveDraftSelection(lead, {
+    runId: run.id,
+    version: draft.roster.version,
+    selections: signupIds.map((signupId) => ({ signupId, selectedRole: "RANGED_DPS" as const })),
+  });
+  const ready = await rosterService.getRosterManagementView(lead, run.id);
+  await rosterService.publishRoster(lead, { runId: run.id, version: ready.roster.version, acknowledgeWarnings: true });
+  return run.id;
+}
+
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
+  await raidRepository.ensureReferenceRaids();
+  freezeSystemTime(at("10:00"), { advance: true });
+  lead = await createUser("Wcl Auto Lead", "RAID_LEAD");
+  admin = await createUser("Wcl Auto Admin", "ADMIN");
+  user = await createUser("Wcl Auto User", "USER");
+
+  RUN = await publishedRun("14:00", ["Wclfrosta", "Wclfrostb", "Wclfrostc"]);
+  IN_PROGRESS_RUN = await publishedRun("16:00", ["Wclfrostd", "Wclfroste", "Wclfrostf"]);
+  const open = await runService.createRun(lead, venomousCreateInput({ scheduledStartAt: at("20:00").toISOString() }));
+  created.runIds.push(open.id);
+  await runService.openRun(lead, open.id);
+  OPEN_RUN = open.id;
+
+  // Exact, non-advancing instants while stamping: start and completion are asserted to the millisecond.
+  // Re-freezing alone would keep the previous advancing clock running.
+  const stampAt = (clock: string) => {
+    restoreSystemTime();
+    freezeSystemTime(at(clock));
+  };
+  stampAt("14:00");
+  await runService.startRun(lead, { runId: RUN });
+  await attendanceService.markAllUnmarkedPresent(lead, RUN);
+  stampAt("15:20");
+  await runService.completeRun(lead, RUN);
+  stampAt("16:30");
+  await runService.startRun(lead, { runId: IN_PROGRESS_RUN });
+  // From here on "now" is after both starts and RUN's completion.
+  restoreSystemTime();
+  freezeSystemTime(at("16:40"), { advance: true });
+
   roster = (await runConsumableAuditRepository.listParticipants(RUN)).filter(
     (row): row is Extract<ConsumableAuditParticipant, { source: "ATTENDANCE" }> => row.source === "ATTENDANCE",
   );
@@ -121,33 +217,16 @@ beforeAll(async () => {
     [RUN, RUN_CHANNEL],
     [IN_PROGRESS_RUN, IN_PROGRESS_CHANNEL],
   ] as const) {
-    if (!(await runDiscordPostRepository.findByRunId(runId))) createdPostRunIds.push(runId);
     await runDiscordPostRepository.recordRunChannel({ runId, channelId });
   }
-  if (!(await orm.RunStartSnapshot.where({ runId: RUN }).first())) {
-    createdSnapshotId = crypto.randomUUID();
-    const now = new Date().toISOString();
-    await orm.RunStartSnapshot.create({
-      id: createdSnapshotId,
-      runId: RUN,
-      startedAt: at("14:00").toISOString(),
-      startedById: "33333333-3333-4333-8333-333333333333",
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
-  await orm.Run.where({ id: RUN }).update({ completedAt: at("15:20").toISOString() });
-});
+}, 120_000);
 
+// Runs cascade their Discord posts, start snapshots, attendance, report links, fights and audits.
 afterAll(async () => {
+  restoreSystemTime();
   await clear();
-  for (const runId of createdPostRunIds) await orm.RunDiscordPost.where({ runId }).deleteAndCount();
-  for (const runId of [RUN, IN_PROGRESS_RUN]) {
-    if (!createdPostRunIds.includes(runId)) await runDiscordPostRepository.clearRunChannel(runId);
-  }
-  if (createdSnapshotId) await orm.RunStartSnapshot.where({ id: createdSnapshotId }).deleteAndCount();
-  await orm.Run.where({ id: RUN }).update({ completedAt: null });
-});
+  await deleteCreatedRows(created);
+}, 60_000);
 
 beforeEach(async () => {
   await clear();
@@ -287,7 +366,7 @@ describe("automatic Consumables Audit after completion", () => {
     expect(before).toEqual({ status: "COMPLETED", due: 0, runs: [] });
 
     const view = await runConsumableAuditService.getAuditView(
-      { id: "44444444-4444-4444-8444-444444444444", name: "A", email: null, image: null, discordUserId: null, discordUsername: null, accountRole: "ADMIN", accountStatus: "ACTIVE" },
+      admin,
       RUN,
     );
     expect(view.autoAudit).toEqual({ state: "SCHEDULED", dueAt: at("15:35").toISOString(), reason: "FIRST" });
@@ -304,7 +383,7 @@ describe("automatic Consumables Audit after completion", () => {
 
     // Food and gear facts survive the database round trip.
     const analyzed = await runConsumableAuditService.getAuditView(
-      { id: "44444444-4444-4444-8444-444444444444", name: "A", email: null, image: null, discordUserId: null, discordUsername: null, accountRole: "ADMIN", accountStatus: "ACTIVE" },
+      admin,
       RUN,
     );
     const first = analyzed.snapshot!.players.find((row) => row.hasLogData)!;
@@ -387,7 +466,7 @@ describe("automatic Consumables Audit after completion", () => {
 
     // 16:00 a second report appears, after the 15:36 analysis.
     await runWarcraftLogsService.attachFromDiscord(
-      { runId: RUN, reportCode: REPORT_2, channelId: RUN_CHANNEL, messageId: "777777777777777777", authorId: LOG_BOT },
+      { runId: RUN, reportCode: REPORT_2, channelId: RUN_CHANNEL, messageId: SECOND_MESSAGE, authorId: LOG_BOT },
       at("16:00"),
     );
     const scheduled = autoAuditState({
@@ -402,17 +481,10 @@ describe("automatic Consumables Audit after completion", () => {
     expect(pass).toEqual({ status: "COMPLETED", due: 1, runs: [{ runId: RUN, status: "ANALYZED", fights: 3 }] });
     const audit = (await runConsumableAuditRepository.findByRunId(RUN))!;
     expect(audit).toMatchObject({ autoAnalyzed: true, autoAttempts: 1, lastFailure: null });
-    const view = await runConsumableAuditService.getAuditView({ id: "44444444-4444-4444-8444-444444444444", name: "A", email: null, image: null, discordUserId: null, discordUsername: null, accountRole: "ADMIN", accountStatus: "ACTIVE" }, RUN);
+    const view = await runConsumableAuditService.getAuditView(admin, RUN);
     expect(view.stale).toBe(false);
     expect(view.snapshot?.fights.map((fight) => fight.reportCode).sort()).toEqual([REPORT, REPORT, REPORT_2].sort());
     expect(await runConsumableAutoAuditService.runDuePass(at("17:00"))).toEqual({ status: "COMPLETED", due: 0, runs: [] });
-  });
-
-  it("skips Runs a manager already analyzed (while no newer report is linked)", async () => {
-    await botAttach();
-    await runConsumableAutoAuditService.runDuePass(at("15:36"));
-    await orm.RunConsumableAudit.where({ runId: RUN }).update({ autoAttempts: 0, autoAnalyzed: false });
-    expect(await runConsumableAutoAuditService.runDuePass(at("16:30"))).toEqual({ status: "COMPLETED", due: 0, runs: [] });
   });
 
   it("never runs two passes at once", async () => {
@@ -578,17 +650,9 @@ describe("automatic audit failure safety", () => {
   });
 
   it("ambiguous fights stay NEEDS_REVIEW and are excluded from the automatic audit", async () => {
-    // Another started Run with the same content overlaps the second fight.
-    const snapshotId = crypto.randomUUID();
-    const now = new Date().toISOString();
-    await orm.RunStartSnapshot.create({
-      id: snapshotId,
-      runId: IN_PROGRESS_RUN,
-      startedAt: at("14:15").toISOString(),
-      startedById: "33333333-3333-4333-8333-333333333333",
-      createdAt: now,
-      updatedAt: now,
-    });
+    // Another started Run with the same content overlaps the second fight: IN_PROGRESS_RUN, moved to a 14:15 start.
+    const snapshot = (await orm.RunStartSnapshot.where({ runId: IN_PROGRESS_RUN }).first()) as { id: string; startedAt: string };
+    await orm.RunStartSnapshot.where({ id: snapshot.id }).update({ startedAt: at("14:15").toISOString() });
     // Unknown participants on the overlapping fight: roster evidence cannot decide.
     metadataSpy.mockImplementation(async () => {
       const report = metadata();
@@ -606,7 +670,7 @@ describe("automatic audit failure safety", () => {
       ]);
       expect(eventsSpy.mock.calls.at(-1)![0].fightIds).toEqual([1]);
     } finally {
-      await orm.RunStartSnapshot.where({ id: snapshotId }).deleteAndCount();
+      await orm.RunStartSnapshot.where({ id: snapshot.id }).update({ startedAt: snapshot.startedAt });
     }
   });
 
@@ -619,18 +683,6 @@ describe("automatic audit failure safety", () => {
 });
 
 describe("manual fallback converges with the Discord path", () => {
-  const admin = {
-    id: "44444444-4444-4444-8444-444444444444",
-    name: "Aelira",
-    email: null,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole: "ADMIN" as const,
-    accountStatus: "ACTIVE" as const,
-  };
-  const user = { ...admin, id: "11111111-1111-4111-8111-111111111111", accountRole: "USER" as const };
-
   it("a manager can link the same report manually; both paths share one report, association and audit", async () => {
     await runWarcraftLogsService.attachFromDiscord(
       { runId: RUN, reportCode: REPORT, channelId: RUN_CHANNEL, messageId: MESSAGE, authorId: LOG_BOT },
@@ -666,7 +718,7 @@ describe("manual fallback converges with the Discord path", () => {
 
     // A different report is added next to it; the manual one and its fight assignment stay untouched.
     const other = await runWarcraftLogsService.attachFromDiscord(
-      { runId: RUN, reportCode: REPORT_2, channelId: RUN_CHANNEL, messageId: "777777777777777777", authorId: LOG_BOT },
+      { runId: RUN, reportCode: REPORT_2, channelId: RUN_CHANNEL, messageId: SECOND_MESSAGE, authorId: LOG_BOT },
       at("15:46"),
     );
     expect(other).toEqual({ status: "ATTACHED" });

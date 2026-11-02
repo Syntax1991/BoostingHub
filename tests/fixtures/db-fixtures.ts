@@ -2,7 +2,7 @@ import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { pgConnectionConfig, pgPool } from "@/lib/pg-pool";
 import { orm } from "@/lib/prisma";
 import { isTestRuntime, resolveTestDatabaseUrl } from "@/lib/test-database-guard";
-import type { AccountRole, AccountStatus, CharacterRole, WowClass } from "@/models/enums";
+import type { AccountRole, AccountStatus, CharacterRole, WowClass, WowRegion } from "@/models/enums";
 
 /**
  * Row fixtures for DB suites. Every id is fresh per call, so a suite never
@@ -58,6 +58,7 @@ export async function createTestUser(options: {
   accountRole?: AccountRole;
   accountStatus?: AccountStatus;
   discordUserId?: string | null;
+  discordUsername?: string | null;
   isBooster?: boolean;
 }): Promise<string> {
   const id = crypto.randomUUID();
@@ -68,6 +69,7 @@ export async function createTestUser(options: {
     email: `${id}@test.boostting.local`,
     emailVerified: true,
     discordUserId: options.discordUserId ?? null,
+    discordUsername: options.discordUsername ?? null,
     accountRole: options.accountRole ?? "USER",
     accountStatus: options.accountStatus ?? "ACTIVE",
     isBooster: options.isBooster ?? false,
@@ -87,6 +89,7 @@ export async function createTestCharacter(options: {
   itemLevel?: number;
   isActive?: boolean;
   lastSyncedAt?: string | null;
+  region?: WowRegion;
 }): Promise<string> {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -97,7 +100,7 @@ export async function createTestCharacter(options: {
     realm: options.realm,
     normalizedName: normalizeCharacterIdentity(options.name),
     normalizedRealm: normalizeCharacterIdentity(options.realm),
-    region: "EU",
+    region: options.region ?? "EU",
     wowClass: options.wowClass,
     specialization: options.specialization,
     primaryRole: options.primaryRole,
