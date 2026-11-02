@@ -1291,6 +1291,10 @@
     "tests/integration/services/raid-catalog.service.test.ts": [
       "REWRITE",
       "Fresh users via createTestUser (OWNER actor over ADMIN row), verified deleteAndCount cleanup for created raids/products/lockouts, expectDomainError; seed catalog restore contract kept"
+    ],
+    "tests/integration/services/run-lifecycle-notifications.test.ts": [
+      "REWRITE",
+      "Fresh users/Characters via shared fixtures with synthetic Discord ids and DM prefs; frozen RAID_WEEK_TEST_CLOCK; verified deleteCreatedRows; expectDomainError for idempotent cancel (RUN_CANNOT_CANCEL) instead of swallowed rejection"
     ]
   },
   "tests": {

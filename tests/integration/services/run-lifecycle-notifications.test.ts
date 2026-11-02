@@ -1,6 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
 import { venomousCreateInput, seededProductSelection } from "@tests/fixtures/test-run-input";
 import { ACTIVE_SIGNUP_STATUSES } from "@/models/enums";
@@ -26,17 +25,24 @@ import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
 import type { CharacterRole } from "@/models/enums";
 import { offerCharacter, offerCharacters } from "@tests/helpers/signup-offers";
+import { testActor } from "@tests/fixtures/actors";
+import {
+  assertIsolatedTestDatabase,
+  createTestCharacter,
+  createTestUser,
+  deleteCreatedRows,
+  syntheticDiscordId,
+} from "@tests/fixtures/db-fixtures";
+import { freezeSystemTime, RAID_WEEK_TEST_CLOCK, restoreSystemTime } from "@tests/fixtures/time";
+import { expectDomainError } from "@tests/helpers/domain-error";
 
-const ids = {
-  lead: "n3333333-3333-4333-8333-333333333301",
-  admin: "n3333333-3333-4333-8333-333333333302",
-  player: "n3333333-3333-4333-8333-333333333303",
-  multi: "n3333333-3333-4333-8333-333333333304",
-};
+const owned = { runIds: [] as string[], characterIds: [] as string[], userIds: [] as string[] };
+const playerDiscordId = syntheticDiscordId();
+const multiDiscordId = syntheticDiscordId();
 
-const createdRunIds: string[] = [];
-const createdCharacterIds: string[] = [];
-const createdAccessIds: string[] = [];
+let lead: AuthenticatedUser;
+let player: AuthenticatedUser;
+let multi: AuthenticatedUser;
 
 let scheduleSlot = 0;
 function futureIso(days = 14) {
@@ -44,39 +50,20 @@ function futureIso(days = 14) {
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000 + slot * 3 * 60 * 60 * 1000).toISOString();
 }
 
-function asUser(
-  id: string,
-  name: string,
-  accountRole: AuthenticatedUser["accountRole"] = "USER",
-  discordUserId: string | null = null,
-): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@nlifecycle.boostting.local`,
-    image: null,
-    discordUserId,
-    discordUsername: discordUserId ? `u${discordUserId}` : null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
-
-async function createTestUser(
-  id: string,
+async function createUser(
   name: string,
   accountRole: AuthenticatedUser["accountRole"],
-  opts: { discordUserId?: string | null } = {},
+  options: { discordUserId?: string; isBooster?: boolean } = {},
 ) {
-  await orm.User.create({
-    id,
+  const id = await createTestUser({
     name,
-    email: `${id}@nlifecycle.boostting.local`,
-    emailVerified: true,
-    discordUserId: opts.discordUserId ?? null,
-    discordUsername: opts.discordUserId ? `u${opts.discordUserId}` : null,
     accountRole,
-    accountStatus: "ACTIVE",
+    discordUserId: options.discordUserId ?? null,
+    discordUsername: options.discordUserId ? `u${options.discordUserId}` : null,
+    isBooster: options.isBooster ?? false,
+  });
+  owned.userIds.push(id);
+  await orm.User.where({ id }).update({
     discordDmEnabled: true,
     dmRosterSelectedEnabled: true,
     dmRaidInviteEnabled: true,
@@ -84,8 +71,11 @@ async function createTestUser(
     dmRunRescheduledEnabled: true,
     dmRosterRemovedEnabled: true,
     timeZone: "Europe/Berlin",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+  });
+  return testActor(id, accountRole, {
+    name,
+    discordUserId: options.discordUserId ?? null,
+    discordUsername: options.discordUserId ? `u${options.discordUserId}` : null,
   });
 }
 
@@ -96,82 +86,29 @@ async function createCharacter(input: {
   specialization: string;
   primaryRole: CharacterRole;
 }) {
-  const id = crypto.randomUUID();
-  createdCharacterIds.push(id);
-  await orm.Character.create({
-    id,
+  const id = await createTestCharacter({
     userId: input.userId,
     name: input.name,
     realm: "Notify Lifecycle",
-    normalizedName: normalizeCharacterIdentity(input.name),
-    normalizedRealm: normalizeCharacterIdentity("Notify Lifecycle"),
-    region: "EU",
     wowClass: input.wowClass,
     specialization: input.specialization,
     primaryRole: input.primaryRole,
-    itemLevel: 700,
-    isActive: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
   });
+  owned.characterIds.push(id);
   return id;
 }
 
 /** The Raid Lead's Characters are signed up automatically when a Run is created. */
 async function leadSignup(runId: string, characterId: string): Promise<{ id: string }> {
-  const row = (await orm.RunSignup.where({ runId, userId: ids.lead, characterId, participationType: "BOOSTER" }).first()) as {
-    id: string;
-  } | null;
+  const row = (await orm.RunSignup.where({
+    runId,
+    userId: lead.id,
+    characterId,
+    participationType: "BOOSTER",
+  }).first()) as { id: string } | null;
   if (!row) throw new Error("expected the Raid Lead bootstrap signup");
   return { id: row.id };
 }
-
-async function approveAccess(userId: string) {
-  await orm.User.where({ id: userId }).update({ isBooster: true });
-}
-
-async function cleanupAll() {
-  for (const runId of createdRunIds.splice(0)) {
-    const notes = await orm.UserNotification.where({ runId }).select("id").all();
-    for (const row of notes) {
-      await orm.UserNotification.where({ id: (row as { id: string }).id }).delete();
-    }
-    try {
-      await orm.Run.where({ id: runId }).delete();
-    } catch {
-      // gone
-    }
-  }
-  for (const characterId of createdCharacterIds.splice(0)) {
-    try {
-      await orm.Character.where({ id: characterId }).delete();
-    } catch {
-      // gone
-    }
-  }
-  for (const accessId of createdAccessIds.splice(0)) {
-    try {
-      await orm.BoosterAccess.where({ id: accessId }).delete();
-    } catch {
-      // gone
-    }
-  }
-  for (const userId of Object.values(ids)) {
-    const notes = await orm.UserNotification.where({ userId }).select("id").all();
-    for (const row of notes) {
-      await orm.UserNotification.where({ id: (row as { id: string }).id }).delete();
-    }
-    try {
-      await orm.User.where({ id: userId }).delete();
-    } catch {
-      // gone
-    }
-  }
-}
-
-const lead = asUser(ids.lead, "Lifecycle Lead", "RAID_LEAD");
-const player = asUser(ids.player, "Lifecycle Player", "USER", "920000000000000001");
-const multi = asUser(ids.multi, "Lifecycle Multi", "USER", "920000000000000002");
 
 let charPlayer = "";
 let charMultiA = "";
@@ -179,56 +116,63 @@ let charMultiB = "";
 let charLeadTank = "";
 let charLeadDps = "";
 
+beforeAll(() => freezeSystemTime(RAID_WEEK_TEST_CLOCK, { advance: true }));
+afterAll(() => restoreSystemTime());
+
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   await raidRepository.ensureReferenceRaids();
-  await cleanupAll();
-  await createTestUser(ids.lead, "Lifecycle Lead", "RAID_LEAD");
-  await createTestUser(ids.admin, "Lifecycle Admin", "ADMIN");
-  await createTestUser(ids.player, "Lifecycle Player", "USER", { discordUserId: "920000000000000001" });
-  await createTestUser(ids.multi, "Lifecycle Multi", "USER", { discordUserId: "920000000000000002" });
-  await approveAccess(ids.lead);
-  await approveAccess(ids.player);
-  await approveAccess(ids.multi);
+  lead = await createUser("Lifecycle Lead", "RAID_LEAD", { isBooster: true });
+  player = await createUser("Lifecycle Player", "USER", {
+    discordUserId: playerDiscordId,
+    isBooster: true,
+  });
+  multi = await createUser("Lifecycle Multi", "USER", {
+    discordUserId: multiDiscordId,
+    isBooster: true,
+  });
   charPlayer = await createCharacter({
-    userId: ids.player,
+    userId: player.id,
     name: "LifeA",
     wowClass: "SHAMAN",
     specialization: "Restoration",
     primaryRole: "HEALER",
   });
   charMultiA = await createCharacter({
-    userId: ids.multi,
+    userId: multi.id,
     name: "LifeB",
     wowClass: "PALADIN",
     specialization: "Holy",
     primaryRole: "HEALER",
   });
   charMultiB = await createCharacter({
-    userId: ids.multi,
+    userId: multi.id,
     name: "LifeC",
     wowClass: "PRIEST",
     specialization: "Holy",
     primaryRole: "HEALER",
   });
   charLeadTank = await createCharacter({
-    userId: ids.lead,
+    userId: lead.id,
     name: "LifeTank",
     wowClass: "PALADIN",
     specialization: "Protection",
     primaryRole: "TANK",
   });
   charLeadDps = await createCharacter({
-    userId: ids.lead,
+    userId: lead.id,
     name: "LifeDps",
     wowClass: "HUNTER",
     specialization: "Beast Mastery",
     primaryRole: "RANGED_DPS",
   });
+}, 60_000);
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
-afterAll(async () => {
-  await cleanupAll();
-});
+afterAll(() => deleteCreatedRows(owned), 60_000);
 
 describe("run lifecycle notifications", () => {
   it("notifies PENDING/SELECTED once per user on cancel; skips WITHDRAWN/NOT_SELECTED", async () => {
@@ -244,7 +188,7 @@ describe("run lifecycle notifications", () => {
         desiredDpsCount: 1,
       }),
     );
-    createdRunIds.push(created.id);
+    owned.runIds.push(created.id);
     await runService.openRun(lead, created.id);
 
     // The Raid Lead's two Characters were signed up when the Run was created.
@@ -256,7 +200,7 @@ describe("run lifecycle notifications", () => {
       { characterId: charMultiB, roles: ["HEALER"] },
     ]);
 
-    const multiSignups = await orm.RunSignup.where({ runId: created.id, userId: ids.multi }).all();
+    const multiSignups = await orm.RunSignup.where({ runId: created.id, userId: multi.id }).all();
     expect(multiSignups.length).toBe(2);
     for (const row of multiSignups) {
       expect((ACTIVE_SIGNUP_STATUSES as readonly string[]).includes(String((row as { status: string }).status))).toBe(
@@ -266,20 +210,20 @@ describe("run lifecycle notifications", () => {
 
     await runService.cancelRun(lead, created.id);
 
-    const playerNotes = (await userNotificationRepository.listForUser(ids.player, 20)).filter(
+    const playerNotes = (await userNotificationRepository.listForUser(player.id, 20)).filter(
       (row) => row.runId === created.id && row.type === "RUN_CANCELLED",
     );
     expect(playerNotes).toHaveLength(1);
-    expect(playerNotes[0].sourceKey).toBe(runCancelledSourceKey(created.id, 1, ids.player));
+    expect(playerNotes[0].sourceKey).toBe(runCancelledSourceKey(created.id, 1, player.id));
     expect(playerNotes[0].discordDeliveryStatus).toBe("PENDING");
 
-    const multiNotes = (await userNotificationRepository.listForUser(ids.multi, 20)).filter(
+    const multiNotes = (await userNotificationRepository.listForUser(multi.id, 20)).filter(
       (row) => row.runId === created.id && row.type === "RUN_CANCELLED",
     );
     expect(multiNotes).toHaveLength(1);
 
-    await runService.cancelRun(lead, created.id).catch(() => undefined);
-    const retry = (await userNotificationRepository.listForUser(ids.player, 20)).filter(
+    await expectDomainError(runService.cancelRun(lead, created.id), "RUN_CANNOT_CANCEL");
+    const retry = (await userNotificationRepository.listForUser(player.id, 20)).filter(
       (row) => row.runId === created.id && row.type === "RUN_CANCELLED",
     );
     expect(retry).toHaveLength(1);
@@ -298,7 +242,7 @@ describe("run lifecycle notifications", () => {
         desiredDpsCount: 1,
       }),
     );
-    createdRunIds.push(created.id);
+    owned.runIds.push(created.id);
     await runService.openRun(lead, created.id);
     await offerCharacter(player, created.id, charPlayer, "HEALER");
 
@@ -320,11 +264,11 @@ describe("run lifecycle notifications", () => {
 
     const after = await runRepository.findById(created.id);
     expect(after?.scheduleRevision).toBe(1);
-    const notes = (await userNotificationRepository.listForUser(ids.player, 20)).filter(
+    const notes = (await userNotificationRepository.listForUser(player.id, 20)).filter(
       (row) => row.runId === created.id && row.type === "RUN_RESCHEDULED",
     );
     expect(notes).toHaveLength(1);
-    expect(notes[0].sourceKey).toBe(runRescheduledSourceKey(created.id, 1, ids.player));
+    expect(notes[0].sourceKey).toBe(runRescheduledSourceKey(created.id, 1, player.id));
     expect(notes[0].message).toMatch(/moved from/);
 
     // Unrelated edit must not notify / bump revision — reuse persisted schedule.
@@ -343,7 +287,7 @@ describe("run lifecycle notifications", () => {
     const still = await runRepository.findById(created.id);
     expect(still?.scheduleRevision).toBe(1);
     expect(
-      (await userNotificationRepository.listForUser(ids.player, 20)).filter(
+      (await userNotificationRepository.listForUser(player.id, 20)).filter(
         (row) => row.runId === created.id && row.type === "RUN_RESCHEDULED",
       ),
     ).toHaveLength(1);
@@ -363,7 +307,7 @@ describe("run lifecycle notifications", () => {
     const again = await runRepository.findById(created.id);
     expect(again?.scheduleRevision).toBe(2);
     expect(
-      (await userNotificationRepository.listForUser(ids.player, 20)).filter(
+      (await userNotificationRepository.listForUser(player.id, 20)).filter(
         (row) => row.runId === created.id && row.type === "RUN_RESCHEDULED",
       ),
     ).toHaveLength(2);
@@ -394,7 +338,7 @@ describe("run scope change notifications", () => {
         desiredDpsCount: 1,
       }),
     );
-    createdRunIds.push(created.id);
+    owned.runIds.push(created.id);
     const runId = created.id;
     await runService.openRun(lead, runId);
 
@@ -417,8 +361,8 @@ describe("run scope change notifications", () => {
     view = await rosterService.getRosterManagementView(lead, runId);
     await rosterService.publishRoster(lead, { runId, version: view.roster.version, acknowledgeWarnings: true });
     const statuses = (await orm.RunSignup.where({ runId }).all()) as Array<{ userId: string; status: string }>;
-    expect(statuses.find((row) => row.userId === ids.player)?.status).toBe("NOT_SELECTED");
-    expect(statuses.filter((row) => row.userId === ids.multi).map((row) => row.status).sort()).toEqual([
+    expect(statuses.find((row) => row.userId === player.id)?.status).toBe("NOT_SELECTED");
+    expect(statuses.filter((row) => row.userId === multi.id).map((row) => row.status).sort()).toEqual([
       "NOT_SELECTED",
       "SELECTED",
     ]);
@@ -439,15 +383,15 @@ describe("run scope change notifications", () => {
 
     const after = await runRepository.findById(runId);
     expect(after?.contentRevision).toBe(1);
-    for (const userId of [ids.lead, ids.player, ids.multi]) {
+    for (const userId of [lead.id, player.id, multi.id]) {
       const notes = await scopeNotes(runId, userId);
       expect(notes).toHaveLength(1);
       expect(notes[0].sourceKey).toBe(runScopeChangedSourceKey(runId, 1, userId));
       expect(notes[0].message).toMatch(/8\/8 → 6\/8 bosses/);
     }
     // Player + multi have a Discord id → DM queued; lead has none → SKIPPED.
-    expect((await scopeNotes(runId, ids.player))[0].discordDeliveryStatus).toBe("PENDING");
-    expect((await scopeNotes(runId, ids.lead))[0].discordDeliveryStatus).toBe("SKIPPED");
+    expect((await scopeNotes(runId, player.id))[0].discordDeliveryStatus).toBe("PENDING");
+    expect((await scopeNotes(runId, lead.id))[0].discordDeliveryStatus).toBe("SKIPPED");
 
     const announcements = await scopeAnnouncements(runId);
     expect(announcements).toHaveLength(1);
@@ -460,7 +404,7 @@ describe("run scope change notifications", () => {
     // Bot work: the DM carries the structured change; the channel item too.
     const work = await discordSyncService.listSyncWork();
     const dm = work.notificationDms.find(
-      (item) => item.type === "RUN_SCOPE_CHANGED" && item.runId === runId && item.discordUserId === "920000000000000001",
+      (item) => item.type === "RUN_SCOPE_CHANGED" && item.runId === runId && item.discordUserId === playerDiscordId,
     );
     expect(dm?.scopeChanges).toEqual(changes);
     expect(work.runAnnouncements.find((item) => item.runId === runId && item.type === "RUN_SCOPE_CHANGED")?.scopeChanges).toEqual(
@@ -483,7 +427,7 @@ describe("run scope change notifications", () => {
       });
     }
     expect((await runRepository.findById(runId))?.contentRevision).toBe(1);
-    expect(await scopeNotes(runId, ids.player)).toHaveLength(1);
+    expect(await scopeNotes(runId, player.id)).toHaveLength(1);
     expect(await scopeAnnouncements(runId)).toHaveLength(1);
 
     // 6/8 → 8/8 is a new logical change.
@@ -499,13 +443,13 @@ describe("run scope change notifications", () => {
       ...seededProductSelection("VENOMOUS_ABYSS", 8),
     });
     expect((await runRepository.findById(runId))?.contentRevision).toBe(2);
-    const playerNotes = await scopeNotes(runId, ids.player);
+    const playerNotes = await scopeNotes(runId, player.id);
     expect(playerNotes).toHaveLength(2);
     expect(playerNotes.some((row) => /6\/8 → 8\/8 bosses/.test(row.message))).toBe(true);
 
     // Retrying the notify step for the same revision creates nothing new.
     await runLifecycleRetry(runId, 2, changes);
-    expect(await scopeNotes(runId, ids.player)).toHaveLength(2);
+    expect(await scopeNotes(runId, player.id)).toHaveLength(2);
   });
 
   it("OPEN Run: draft-picked PENDING signup is notified, WITHDRAWN User is not, multi-content reports only the changed raid", async () => {
@@ -520,7 +464,7 @@ describe("run scope change notifications", () => {
         desiredDpsCount: 1,
       }),
     );
-    createdRunIds.push(created.id);
+    owned.runIds.push(created.id);
     const runId = created.id;
     await runService.openRun(lead, runId);
     const pickedId = await offerCharacter(player, runId, charPlayer, "HEALER");
@@ -570,8 +514,8 @@ describe("run scope change notifications", () => {
     expect(changes).toHaveLength(1);
     expect(changes[0]).toMatchObject({ kind: "CHANGED", beforePlannedBossCount: 8, afterPlannedBossCount: 7 });
 
-    expect(await scopeNotes(runId, ids.player)).toHaveLength(2);
-    expect(await scopeNotes(runId, ids.multi)).toHaveLength(0);
+    expect(await scopeNotes(runId, player.id)).toHaveLength(2);
+    expect(await scopeNotes(runId, multi.id)).toHaveLength(0);
   });
 
   it("DRAFT Run: scope edit bumps nothing user-facing (no audience, no announcement)", async () => {
@@ -586,7 +530,7 @@ describe("run scope change notifications", () => {
         desiredDpsCount: 1,
       }),
     );
-    createdRunIds.push(created.id);
+    owned.runIds.push(created.id);
     const draft = await runRepository.findById(created.id);
     expect(draft?.status).toBe("DRAFT");
     await runService.updateRun(lead, {
@@ -618,7 +562,7 @@ describe("Run edit notification atomicity", () => {
         desiredDpsCount: 1,
       }),
     );
-    createdRunIds.push(created.id);
+    owned.runIds.push(created.id);
     await runService.openRun(lead, created.id);
     // Only player + multi signed up: the Raid Lead withdraws the offers created with the Run.
     for (const characterId of [charLeadTank, charLeadDps]) {
@@ -681,7 +625,7 @@ describe("Run edit notification atomicity", () => {
     ]);
     const notes = await notesOf(runId, "RUN_RESCHEDULED");
     // One per User (multi has two Characters), same revision as the announcement.
-    expect(notes.map((row) => row.userId).sort()).toEqual([ids.multi, ids.player].sort());
+    expect(notes.map((row) => row.userId).sort()).toEqual([multi.id, player.id].sort());
     expect(notes.every((row) => row.sourceKey.startsWith(`run-rescheduled:${runId}:1:`))).toBe(true);
 
     // Repeat the same request (no schedule change) → nothing new.
@@ -708,7 +652,7 @@ describe("Run edit notification atomicity", () => {
       runScopeChangedChannelSourceKey(runId, 1),
     ]);
     const notes = await notesOf(runId, "RUN_SCOPE_CHANGED");
-    expect(notes.map((row) => row.userId).sort()).toEqual([ids.multi, ids.player].sort());
+    expect(notes.map((row) => row.userId).sort()).toEqual([multi.id, player.id].sort());
     expect(notes.every((row) => row.sourceKey.startsWith(`run-scope-changed:${runId}:1:`))).toBe(true);
 
     // 6/8 → 6/8: nothing created.
@@ -743,20 +687,20 @@ describe("Run edit notification atomicity", () => {
     const before = await runRepository.findById(runId);
     await edit(runId, before!.scheduledStartAt, 7);
     expect((await notesOf(runId, "RUN_SCOPE_CHANGED")).map((row) => row.userId).sort()).toEqual(
-      [ids.multi, ids.player].sort(),
+      [multi.id, player.id].sort(),
     );
 
-    const playerSignup = (await orm.RunSignup.where({ runId, userId: ids.player }).first()) as { id: string };
+    const playerSignup = (await orm.RunSignup.where({ runId, userId: player.id }).first()) as { id: string };
     await signupService.withdrawSignup(player, playerSignup.id);
     await offerCharacter(lead, runId, charLeadTank, "TANK");
 
     const notes = await notesOf(runId, "RUN_SCOPE_CHANGED");
-    expect(notes.map((row) => row.userId).sort()).toEqual([ids.multi, ids.player].sort());
+    expect(notes.map((row) => row.userId).sort()).toEqual([multi.id, player.id].sort());
   });
 
   it("preferences and Quiet Hours are snapshotted exactly as before", async () => {
-    await orm.User.where({ id: ids.player }).update({ dmRunRescheduledEnabled: false });
-    await orm.User.where({ id: ids.multi }).update({
+    await orm.User.where({ id: player.id }).update({ dmRunRescheduledEnabled: false });
+    await orm.User.where({ id: multi.id }).update({
       discordDmQuietHoursEnabled: true,
       discordDmQuietHoursStart: "00:00",
       discordDmQuietHoursEnd: "23:59",
@@ -766,14 +710,14 @@ describe("Run edit notification atomicity", () => {
       const before = await runRepository.findById(runId);
       await edit(runId, before!.scheduledStartAt, 5);
       const notes = await notesOf(runId, "RUN_SCOPE_CHANGED");
-      const playerNote = notes.find((row) => row.userId === ids.player);
-      const multiNote = notes.find((row) => row.userId === ids.multi);
+      const playerNote = notes.find((row) => row.userId === player.id);
+      const multiNote = notes.find((row) => row.userId === multi.id);
       expect(playerNote?.discordDeliveryStatus).toBe("SKIPPED");
       expect(multiNote?.discordDeliveryStatus).toBe("PENDING");
       expect(multiNote?.discordDeliverAfter).not.toBeNull();
     } finally {
-      await orm.User.where({ id: ids.player }).update({ dmRunRescheduledEnabled: true });
-      await orm.User.where({ id: ids.multi }).update({
+      await orm.User.where({ id: player.id }).update({ dmRunRescheduledEnabled: true });
+      await orm.User.where({ id: multi.id }).update({
         discordDmQuietHoursEnabled: false,
         discordDmQuietHoursStart: null,
         discordDmQuietHoursEnd: null,
@@ -799,7 +743,7 @@ describe("Cancel / Reactivate notification atomicity", () => {
         desiredDpsCount: 1,
       }),
     );
-    createdRunIds.push(created.id);
+    owned.runIds.push(created.id);
     const runId = created.id;
     await runService.openRun(lead, runId);
     const tank = await leadSignup(runId, charLeadTank);
@@ -856,7 +800,7 @@ describe("Cancel / Reactivate notification atomicity", () => {
   });
 
   it("cancel success commits CANCELLED + announcement + one RUN_CANCELLED per active User; preferences / Quiet Hours unchanged", async () => {
-    await orm.User.where({ id: ids.player }).update({
+    await orm.User.where({ id: player.id }).update({
       discordDmQuietHoursEnabled: true,
       discordDmQuietHoursStart: "00:00",
       discordDmQuietHoursEnd: "23:59",
@@ -872,17 +816,17 @@ describe("Cancel / Reactivate notification atomicity", () => {
       ]);
       const rows = await notes(runId, "RUN_CANCELLED");
       // SELECTED lead + player; multi is NOT_SELECTED → not in the cancel audience (unchanged).
-      expect(rows.map((row) => row.userId).sort()).toEqual([ids.lead, ids.player].sort());
+      expect(rows.map((row) => row.userId).sort()).toEqual([lead.id, player.id].sort());
       expect(rows.map((row) => row.sourceKey).sort()).toEqual(
-        [runCancelledSourceKey(runId, 1, ids.lead), runCancelledSourceKey(runId, 1, ids.player)].sort(),
+        [runCancelledSourceKey(runId, 1, lead.id), runCancelledSourceKey(runId, 1, player.id)].sort(),
       );
-      const playerRow = rows.find((row) => row.userId === ids.player)!;
+      const playerRow = rows.find((row) => row.userId === player.id)!;
       expect(playerRow.discordDeliveryStatus).toBe("PENDING");
       expect(playerRow.discordDeliverAfter).not.toBeNull();
       // Lead has no Discord identity → SKIPPED, as before.
-      expect(rows.find((row) => row.userId === ids.lead)?.discordDeliveryStatus).toBe("SKIPPED");
+      expect(rows.find((row) => row.userId === lead.id)?.discordDeliveryStatus).toBe("SKIPPED");
     } finally {
-      await orm.User.where({ id: ids.player }).update({
+      await orm.User.where({ id: player.id }).update({
         discordDmQuietHoursEnabled: false,
         discordDmQuietHoursStart: null,
         discordDmQuietHoursEnd: null,
@@ -894,7 +838,7 @@ describe("Cancel / Reactivate notification atomicity", () => {
     const runId = await publishedRun(130);
     await runService.cancelRun(lead, runId);
     const cancelBefore = await notes(runId, "RUN_CANCELLED");
-    expect(cancelBefore.find((row) => row.userId === ids.player)?.discordDeliveryStatus).toBe("PENDING");
+    expect(cancelBefore.find((row) => row.userId === player.id)?.discordDeliveryStatus).toBe("PENDING");
 
     const spy = vi.spyOn(userNotificationRepository, "createInTx").mockRejectedValueOnce(new Error("NOTIFICATION_WRITE_FAILED"));
     try {
@@ -908,7 +852,7 @@ describe("Cancel / Reactivate notification atomicity", () => {
     expect(await announcements(runId, "RUN_REACTIVATED")).toHaveLength(0);
     expect(await notes(runId, "RUN_REACTIVATED")).toHaveLength(0);
     expect((await announcements(runId, "RUN_CANCELLED"))[0]?.status).toBe("PENDING");
-    expect((await notes(runId, "RUN_CANCELLED")).find((row) => row.userId === ids.player)?.discordDeliveryStatus).toBe(
+    expect((await notes(runId, "RUN_CANCELLED")).find((row) => row.userId === player.id)?.discordDeliveryStatus).toBe(
       "PENDING",
     );
   });
@@ -924,17 +868,17 @@ describe("Cancel / Reactivate notification atomicity", () => {
       runReactivatedChannelSourceKey(runId, 1),
     ]);
     const reactivated = await notes(runId, "RUN_REACTIVATED");
-    expect(reactivated.map((row) => row.userId).sort()).toEqual([ids.lead, ids.player].sort());
-    expect(reactivated.find((row) => row.userId === ids.player)?.sourceKey).toBe(
-      runReactivatedSourceKey(runId, 1, ids.player),
+    expect(reactivated.map((row) => row.userId).sort()).toEqual([lead.id, player.id].sort());
+    expect(reactivated.find((row) => row.userId === player.id)?.sourceKey).toBe(
+      runReactivatedSourceKey(runId, 1, player.id),
     );
-    expect((await notes(runId, "RUN_CANCELLED")).find((row) => row.userId === ids.player)?.discordDeliveryStatus).toBe(
+    expect((await notes(runId, "RUN_CANCELLED")).find((row) => row.userId === player.id)?.discordDeliveryStatus).toBe(
       "SKIPPED",
     );
 
     // Cancel again (revision 2): the still-PENDING reactivate DM is retired, new cancel rows use revision 2.
     await runService.cancelRun(lead, runId);
-    expect((await notes(runId, "RUN_REACTIVATED")).find((row) => row.userId === ids.player)?.discordDeliveryStatus).toBe(
+    expect((await notes(runId, "RUN_REACTIVATED")).find((row) => row.userId === player.id)?.discordDeliveryStatus).toBe(
       "SKIPPED",
     );
     const cancelled = await notes(runId, "RUN_CANCELLED");
