@@ -26,7 +26,7 @@ describe("UserAccessDialog", () => {
     expect(html).toContain("Read-only from active Characters");
   });
 
-  it("renders Access trigger for OWNER (protection enforced inside dialog)", () => {
+  it("renders the Access trigger for an OWNER", () => {
     const html = renderToStaticMarkup(
       createElement(UserAccessDialog, {
         userId: "owner",

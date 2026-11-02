@@ -99,7 +99,6 @@ describe("wclPerformanceMetricValue / matchesWclPerfFilter / compareByWclPerf", 
   it("prefers zone all-boss Best Perf. Avg over Tide single-boss Best % — not max across raids", () => {
     expect(wclPerformanceMetricValue(multiRoleSegments, "HEALER", "best")).toBe(70);
     expect(wclPerformanceMetricValue(multiRoleSegments, "HEALER", "avg")).toBe(50);
-    expect(wclPerformanceMetricValue(multiRoleSegments, "HEALER", "best")).not.toBe(100);
     expect(wclPerformanceMetricValue(multiRoleSegments, "TANK", "best")).toBe(40);
     expect(wclPerformanceMetricValue(multiRoleSegments, "DPS", "best")).toBeNull();
   });

@@ -1,7 +1,5 @@
 import { readFileSync } from "node:fs";
-import { createElement, useRef, type Ref } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 /**
  * Regression: Characters overflow previously nested Edit / Availability dialogs
@@ -59,37 +57,5 @@ describe("dialog triggerRef hosts stay clickable for overflow", () => {
     expect(availSource).toContain("setCharacterCurrentResetAvailabilityAction");
     expect(availSource).toContain("router.refresh()");
     expect(availSource).toMatch(/function close\([\s\S]*dialogRef\.current\?\.close/);
-  });
-});
-
-describe("OverflowMenu onSelect path", () => {
-  it("invokes onSelect and does not require node for labeled actions", async () => {
-    vi.resetModules();
-    const { OverflowMenu } = await import("@/components/ui/overflow-menu");
-    const onSelect = vi.fn();
-    // SSR markup still exposes the menuitem label when open is false — exercise source contract.
-    const html = renderToStaticMarkup(
-      createElement(OverflowMenu, {
-        label: "More",
-        items: [{ id: "edit", label: "Edit", onSelect }],
-      }),
-    );
-    expect(html).toContain('aria-label="More"');
-    expect(html).toContain("aria-haspopup");
-    // Closed by default — menu items appear after open; assert item shape accepted.
-    expect(onSelect).not.toHaveBeenCalled();
-  });
-});
-
-describe("overflow host ref typing smoke", () => {
-  it("accepts a button ref object shape used by CharacterOverflow", () => {
-    function Probe({ buttonRef }: { buttonRef: Ref<HTMLButtonElement> }) {
-      return createElement("button", { ref: buttonRef, type: "button" }, "Edit");
-    }
-    function Host() {
-      const ref = useRef<HTMLButtonElement>(null);
-      return createElement(Probe, { buttonRef: ref });
-    }
-    expect(() => renderToStaticMarkup(createElement(Host))).not.toThrow();
   });
 });

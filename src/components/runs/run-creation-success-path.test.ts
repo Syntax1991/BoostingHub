@@ -32,7 +32,6 @@ describe("runCreateSuccessPath", () => {
 
   it("redirects multiple created Runs to Manage Runs with massCreated count", () => {
     expect(runCreateSuccessPath(["run-1", "run-2", "run-3"])).toBe("/manage/runs?massCreated=3");
-    expect(runCreateSuccessPath(["run-1", "run-2", "run-3"])).not.toBe("/runs/run-1");
   });
 
   it("falls back to /runs when no Run ids are returned", () => {

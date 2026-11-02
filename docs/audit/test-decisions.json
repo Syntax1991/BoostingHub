@@ -155,6 +155,206 @@
     "src/next-config.test.ts": [
       "KEEP",
       "New in batch 3"
+    ],
+    "src/repositories/auth-session.repository.test.ts": [
+      "KEEP",
+      "Real DB: expired and foreign sessions are never returned; protects session revocation ownership"
+    ],
+    "src/repositories/character-weekly-availability.repository.test.ts": [
+      "KEEP",
+      "Real DB plus query-count guards against per-Character fan-out; the conflict test checks semantics survive batching"
+    ],
+    "src/repositories/character.repository.multi-delete.test.ts": [
+      "KEEP",
+      "Regression: Collection.delete() removed only the first row; re-saving specs or roles hit unique constraints"
+    ],
+    "src/repositories/community-stats.repository.test.ts": [
+      "KEEP",
+      "Real DB eligibility filter (disabled, non-booster, retired) and service wiring"
+    ],
+    "src/repositories/content-catalog.test.ts": [
+      "KEEP",
+      "DB catalog parity with the fixture and insert-only bootstrap; restores seeded values afterwards"
+    ],
+    "src/repositories/integration-event.repository.test.ts": [
+      "KEEP",
+      "Sanitized metadata, purge and failure recording. Two fixes: the cap test passed with any row count below 100 and now inserts 101 rows; a duplicated assertion was dropped"
+    ],
+    "src/repositories/lockout.repository.test.ts": [
+      "KEEP",
+      "Per-raid replace keeps other raids; empty tracked set is never authoritative. The third test relies on the second test's rows"
+    ],
+    "src/repositories/roster.repository.clear-draft.test.ts": [
+      "KEEP",
+      "Regression: clearing several draft selections left all but one behind"
+    ],
+    "src/repositories/run-domain-event.repository.test.ts": [
+      "KEEP",
+      "Payload sanitizing, ordering and the USER actor guard"
+    ],
+    "src/repositories/run-list-bounds.test.ts": [
+      "KEEP",
+      "Bounded list queries return the same subsets as the unbounded ones"
+    ],
+    "src/repositories/run-template.repository.test.ts": [
+      "KEEP",
+      "CRUD, joined reads and audit fields. One fix: updatedAt check used >= after a 5 ms wait and now requires a later value"
+    ],
+    "src/components/runs/signup-dialog.quick-signup.test.ts": [
+      "KEEP",
+      "Source scan for a product decision (Quick Signup removed from the web dialog). The presence check is weak but the only guard for the offer controls"
+    ],
+    "src/components/manage/roster-slot-warning.test.ts": [
+      "KEEP",
+      "Pure function, names each warning reason"
+    ],
+    "src/components/auth/discord-sign-in-button.test.ts": [
+      "KEEP",
+      "One click starts Discord sign-in with the callback; real component, auth client mocked"
+    ],
+    "src/components/auth/login-view.test.ts": [
+      "KEEP",
+      "No implementation details on the login page"
+    ],
+    "src/components/runs/run-preflight-panel.test.ts": [
+      "KEEP",
+      "Warning to action mapping, including checks with no action"
+    ],
+    "src/components/manage/user-access-dialog.test.ts": [
+      "KEEP",
+      "Trigger renders with role context. One title claimed OWNER protection the test never checked; retitled"
+    ],
+    "src/components/runs/runs-view.create-cta.test.ts": [
+      "KEEP",
+      "Create Run shown only with canCreate"
+    ],
+    "src/components/ui/wcl-best-link.test.ts": [
+      "KEEP",
+      "Link only with a Warcraft Logs id"
+    ],
+    "src/components/manage/add-booster-entry-dialog.test.ts": [
+      "KEEP",
+      "Registered and External modes"
+    ],
+    "src/components/runs/run-creation-success-path.test.ts": [
+      "KEEP",
+      "Redirect after create and the mass-created banner. Dropped an assertion that repeated the one before it"
+    ],
+    "src/components/manage/roster-boss-plan-panel.test.ts": [
+      "KEEP",
+      "Boss chips, exception and warning markers"
+    ],
+    "src/components/runs/run-roster-config-admin.test.ts": [
+      "KEEP",
+      "Managers see actions, viewers only notes"
+    ],
+    "src/components/runs/run-warcraft-logs-panel.test.ts": [
+      "KEEP",
+      "Regression: only Link & analyze may submit the form"
+    ],
+    "src/components/manage/roster-actions.test.ts": [
+      "KEEP",
+      "Roster action matrix. One test repeated the published-and-clean case with the same input; removed"
+    ],
+    "src/components/characters/battle-net-panel.test.ts": [
+      "KEEP",
+      "Account profile denied callout never leaks codes; other errors unchanged"
+    ],
+    "src/components/runs/run-creation-form.defaults.test.ts": [
+      "KEEP",
+      "Opt-in defaults unchecked; duplicate limit. One title claimed a recurring-mode check it never made; retitled"
+    ],
+    "src/components/characters/characters-view.overflow-actions.test.ts": [
+      "KEEP",
+      "Regression: dialogs nested in menu items unmounted on close. Two tests removed: one claimed to test onSelect but asserted it was not called; one only exercised React refs"
+    ],
+    "src/components/manage/choose-spec-option.test.ts": [
+      "KEEP",
+      "WCL link per spec, not nested in the select button. One test repeated the URL check of the first test and warcraft-logs.test.ts; removed"
+    ],
+    "src/components/runs/run-attendance-section.sort-filter.test.ts": [
+      "KEEP",
+      "Default order, filter options and unmarked count"
+    ],
+    "src/components/runs/runs-view.timezone.test.ts": [
+      "KEEP",
+      "Viewer timezone and instant ordering"
+    ],
+    "src/components/layout/app-shell.mobile-nav.test.ts": [
+      "KEEP",
+      "Source scan for the mobile drawer wiring. Removed pure styling assertions (backdrop colour, widths, active styling classes) and the desktop sidebar class-string test"
+    ],
+    "src/components/manage/roster-builder-layout.test.ts": [
+      "KEEP",
+      "Section order of the Roster tab"
+    ],
+    "src/components/characters/character-details-view.wcl.test.ts": [
+      "KEEP",
+      "WCL link safety attributes and repair hint"
+    ],
+    "src/components/layout/narrow-screen-layout.test.ts": [
+      "KEEP",
+      "Class decisions that fixed horizontal overflow on phones. The drawer test repeated app-shell.mobile-nav.test.ts; removed"
+    ],
+    "src/components/manage/manage-users-view.test.ts": [
+      "KEEP",
+      "Directory columns. One title promised an em dash it never checked; the assertion is added"
+    ],
+    "src/lib/wcl-performance-display.test.ts": [
+      "KEEP",
+      "Moved from src/components/manage/roster-wcl-performance.test.ts because it tests lib/wcl-performance-display. Dropped one assertion that repeated the one before it"
+    ],
+    "src/components/runs/signup-dialog.wcl.test.ts": [
+      "KEEP",
+      "WCL links for eligible and ineligible characters. Two tests had the same title and scenario; merged"
+    ],
+    "src/components/manage/roster-signup-grouping.test.ts": [
+      "KEEP",
+      "Group by None, Player, Role and the stored preference"
+    ],
+    "src/components/manage/roster-staged-selection.test.ts": [
+      "KEEP",
+      "Role-copy toggle rules. One test repeated the reassign test without calling any toggle; removed"
+    ],
+    "src/components/characters/characters-view.desktop-grid.test.ts": [
+      "KEEP",
+      "Regression: arbitrary Tailwind grid tracks never compiled"
+    ],
+    "src/components/characters/characters-view.weekly-availability.test.ts": [
+      "KEEP",
+      "Availability labels and removed features stay absent. Dropped a border class assertion"
+    ],
+    "src/components/dashboard/dashboard-view.test.ts": [
+      "KEEP",
+      "Personal, operations and empty states"
+    ],
+    "src/components/characters/characters-view.wcl.test.ts": [
+      "KEEP",
+      "WCL link or Find WCL, bulk action only when needed"
+    ],
+    "src/components/manage/roster-run-commitments.test.ts": [
+      "KEEP",
+      "Commitment chips and conflict alert. Two tests removed: one checked that a component without conflict input shows no conflict, one only placed two components side by side. Spec-letter prefixes dropped from titles"
+    ],
+    "src/components/manage/raid-catalog/manage-raid-catalog-view.tabs.test.ts": [
+      "KEEP",
+      "Tab and scope resolution and URL building"
+    ],
+    "src/components/characters/character-form-dialog.test.ts": [
+      "KEEP",
+      "normalizeCreateRows rules and source wiring. Removed a test that re-implemented the readiness filter inside the test, a className pinning test and an implementation-detail test covered by the row tests"
+    ],
+    "src/components/manage/roster-boss-plan-editor.test.ts": [
+      "KEEP",
+      "Range picker, choices, payload and live warnings"
+    ],
+    "src/components/manage/manage-community-schedule-view.test.ts": [
+      "KEEP",
+      "Admin and read-only views, empty state"
+    ],
+    "src/components/characters/character-offspec-display.test.ts": [
+      "KEEP",
+      "Offspec display across user, detail and admin views. One test compared a pure function with itself around a render; removed. Numbering dropped from titles"
     ]
   },
   "tests": {
@@ -185,6 +385,108 @@
     "src/services/discord-booster-role-sync.service.test.ts::discord-booster-role-sync compatibility re-exports > aliases syncDiscordBoosterRole to syncDiscordRoleAccess": [
       "REMOVE",
       "Done in batch 2. Only compared an alias with itself; the alias is gone. Real coverage: discord-role-access-sync.service.test.ts"
+    ],
+    "src/repositories/integration-event.repository.test.ts::integrationEventRepository / service > caps listRecent limit at 100": [
+      "REWRITE",
+      "Passed with any table under 100 rows; now inserts 101 rows and expects exactly 100"
+    ],
+    "src/repositories/integration-event.repository.test.ts::integrationEventRepository / service > purgeExpired deletes events older than 30 days": [
+      "REWRITE",
+      "Same deletion asserted twice; one copy removed"
+    ],
+    "src/repositories/run-template.repository.test.ts::runTemplateRepository — CRUD and joined reads > update mutates planning fields and bumps updatedById/updatedAt": [
+      "REWRITE",
+      "updatedAt check accepted an unchanged value"
+    ],
+    "src/components/manage/user-access-dialog.test.ts::UserAccessDialog > renders the Access trigger for an OWNER": [
+      "REWRITE",
+      "Retitled: the old title claimed protection the test never checked"
+    ],
+    "src/components/runs/run-creation-form.defaults.test.ts::RunCreationForm opt-in defaults > one-time rows carry compact copy / +1h / +2h controls for that row": [
+      "REWRITE",
+      "Retitled; the recurring-mode claim was never tested"
+    ],
+    "src/components/manage/manage-users-view.test.ts::ManageUsersView directory UX > shows the pending count and an em dash for a user without boosting access": [
+      "REWRITE",
+      "Adds the em dash assertion its title promised"
+    ],
+    "src/components/layout/app-shell.mobile-nav.test.ts::AppShell mobile navigation drawer > marks active routes with aria-current": [
+      "REWRITE",
+      "Styling class assertions removed"
+    ],
+    "src/components/layout/app-shell.mobile-nav.test.ts::AppShell mobile navigation drawer > opens an off-canvas left drawer with backdrop, labeled dialog, and scrollable nav": [
+      "REWRITE",
+      "Backdrop colour and width assertions removed"
+    ],
+    "src/components/runs/signup-dialog.wcl.test.ts::BoosterCharacterChecklist Warcraft Logs links > still shows WCL for a reservation-blocked Booster Character with an id": [
+      "REWRITE",
+      "Absorbs the conflicting-run assertion of its duplicate"
+    ],
+    "src/components/characters/characters-view.weekly-availability.test.ts::CharactersView weekly availability > renders Availability as interactive button labels with difficulty summaries": [
+      "REWRITE",
+      "Border class assertion removed"
+    ],
+    "src/components/runs/run-creation-success-path.test.ts::runCreateSuccessPath > redirects multiple created Runs to Manage Runs with massCreated count": [
+      "REWRITE",
+      "Redundant negative assertion removed"
+    ]
+  },
+  "removed": {
+    "src/components/characters/characters-view.overflow-actions.test.ts::OverflowMenu onSelect path > invokes onSelect and does not require node for labeled actions": [
+      "REMOVE",
+      "Title claims onSelect runs; the test asserts it was not called"
+    ],
+    "src/components/characters/characters-view.overflow-actions.test.ts::overflow host ref typing smoke > accepts a button ref object shape used by CharacterOverflow": [
+      "REMOVE",
+      "Tests React refs, no project code"
+    ],
+    "src/components/characters/character-offspec-display.test.ts::character offspec display > 9. rendering offspecs does not change signup assignment": [
+      "REMOVE",
+      "Compares a pure function with itself; the render part repeats the Offspecs test"
+    ],
+    "src/components/manage/roster-run-commitments.test.ts::RosterScheduleConflictAlert > J/K: commitments without conflicts do not invent Schedule conflict copy": [
+      "REMOVE",
+      "The component has no conflict input, so the assertion cannot fail"
+    ],
+    "src/components/manage/roster-run-commitments.test.ts::RosterScheduleConflictAlert > N: commitment + conflict both render when composed": [
+      "REMOVE",
+      "Only places two components in one div; each is tested on its own"
+    ],
+    "src/components/manage/choose-spec-option.test.ts::ChooseSpecOption — multi-spec modal WCL links > Elemental and Restoration links use the same authoritative character destination": [
+      "MERGE",
+      "Covered by the first test and warcraft-logs.test.ts"
+    ],
+    "src/components/characters/character-form-dialog.test.ts::CharacterFormDialog — Raider.IO bulk Add Character > puts Raider.IO input and Remove on the same controls row under the label": [
+      "REMOVE",
+      "Pins exact className strings, no behaviour"
+    ],
+    "src/components/characters/character-form-dialog.test.ts::CharacterFormDialog — Raider.IO bulk Add Character > uses stable row ids and row-local invalidation": [
+      "REMOVE",
+      "Implementation strings; stable ids are tested through normalizeCreateRows"
+    ],
+    "src/components/characters/character-form-dialog.test.ts::trailing empty ignored by create readiness math > 3 resolved ready rows + trailing empty still count as 3 for Add N": [
+      "REMOVE",
+      "Re-implements the filter in the test and checks its own result"
+    ],
+    "src/components/layout/narrow-screen-layout.test.ts::mobile navigation drawer > replaces the bottom bar with a fixed left drawer that does not stay in the page flow": [
+      "MERGE",
+      "Same checks as app-shell.mobile-nav.test.ts"
+    ],
+    "src/components/layout/app-shell.mobile-nav.test.ts::AppShell mobile navigation drawer > keeps desktop SideNav architecture (md+ aside) unchanged": [
+      "REMOVE",
+      "Only a className string"
+    ],
+    "src/components/manage/roster-staged-selection.test.ts::role-copy toggle semantics > syncs dropdown reassignment with checked copies": [
+      "MERGE",
+      "Sets the map by hand and repeats the reassign test's checks"
+    ],
+    "src/components/manage/roster-actions.test.ts::resolveRosterActions > after Update (clean again) → Publish Roster available again": [
+      "MERGE",
+      "Same input as the published-and-clean test"
+    ],
+    "src/components/runs/signup-dialog.wcl.test.ts::BoosterCharacterChecklist Warcraft Logs links > still shows WCL for a reservation-blocked Booster Character with an id (second copy)": [
+      "MERGE",
+      "Duplicate title and scenario; its conflicting-run assertion moved into the first copy"
     ]
   }
 }

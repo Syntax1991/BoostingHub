@@ -11,21 +11,6 @@ function filled(id: string, url = `https://raider.io/characters/eu/antonidas/${i
   return { ...emptyRow(id), url };
 }
 
-function resolved(id: string, name: string): CreateRow {
-  return {
-    ...filled(id),
-    url: `https://raider.io/characters/eu/antonidas/${name}`,
-    resolvedUrl: `https://raider.io/characters/eu/antonidas/${name}`,
-    lookupStatus: "resolved",
-    name,
-    realm: "Antonidas",
-    region: "EU",
-    wowClass: "SHAMAN",
-    itemLevel: 300,
-    specialization: "Restoration",
-  };
-}
-
 describe("normalizeCreateRows", () => {
   it("keeps exactly one empty row when given none or only unused empties", () => {
     expect(normalizeCreateRows([])).toHaveLength(1);
@@ -175,31 +160,12 @@ describe("CharacterFormDialog — Raider.IO bulk Add Character", () => {
     expect(source).not.toContain("lookupCharacterAction");
   });
 
-  it("puts Raider.IO input and Remove on the same controls row under the label", () => {
-    // Number + content column; label above; input and Remove share one flex row.
-    expect(source).toContain('className="flex gap-2"');
-    expect(source).toContain("self-end");
-    expect(source).toContain('htmlFor={`raiderIoUrl-${row.id}`}');
-    expect(source).toContain('className="flex items-center gap-2"');
-    expect(source).toContain('className="h-9 min-w-0 flex-1 rounded-md border border-border bg-surface px-2"');
-    expect(source).toContain('className="h-9 shrink-0"');
-    expect(source).not.toMatch(/flex items-(start|end) gap-2[\s\S]{0,400}Remove/);
-  });
-
   it("auto-grows rows via normalizeCreateRows and never allows an 11th row", () => {
     expect(source).toContain("function normalizeCreateRows");
     expect(source).toContain("return normalizeCreateRows(updated)");
     expect(source).toContain("normalizeCreateRows(current.filter");
     expect(source).toContain("RAIDER_IO_BULK_MAX");
     expect(source).toContain("kept.slice(0, RAIDER_IO_BULK_MAX)");
-  });
-
-  it("uses stable row ids and row-local invalidation", () => {
-    expect(source).toContain("crypto.randomUUID()");
-    expect(source).toContain("key={row.id}");
-    expect(source).toContain("function changeRowUrl");
-    expect(source).toContain("clearRowPreview(row)");
-    expect(source).toMatch(/if \(row\.id !== id\) return row/);
   });
 
   it("retries only unresolved/changed rows on lookup", () => {
@@ -239,25 +205,5 @@ describe("CharacterFormDialog — Raider.IO bulk Add Character", () => {
     expect(source).toContain("Save changes");
     expect(source).toContain('name="name"');
     expect(source).toContain('name="realm"');
-  });
-});
-
-describe("trailing empty ignored by create readiness math", () => {
-  it("3 resolved ready rows + trailing empty still count as 3 for Add N", () => {
-    const rows = [
-      resolved("a", "Alpha"),
-      resolved("b", "Bravo"),
-      resolved("c", "Charlie"),
-      emptyRow("trail"),
-    ];
-    const pending = rows.filter(
-      (row) =>
-        row.lookupStatus === "resolved" &&
-        row.createStatus !== "added" &&
-        Boolean(row.specialization) &&
-        !row.alreadyOwned,
-    );
-    expect(pending).toHaveLength(3);
-    expect(`Add ${pending.length} characters`).toBe("Add 3 characters");
   });
 });

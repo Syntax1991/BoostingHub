@@ -126,7 +126,7 @@ describe("runTemplateRepository — CRUD and joined reads", () => {
     expect(after?.updatedById).toBe(ids.admin);
     // createdById/createdBy never change on update — only updatedById does.
     expect(after?.createdById).toBe(before?.createdById);
-    expect(new Date(after!.updatedAt).getTime()).toBeGreaterThanOrEqual(new Date(before!.updatedAt).getTime());
+    expect(new Date(after!.updatedAt).getTime()).toBeGreaterThan(new Date(before!.updatedAt).getTime());
   });
 
   it("round-trips COMMUNITY lootType on create", async () => {

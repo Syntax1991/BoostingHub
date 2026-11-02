@@ -62,7 +62,7 @@ describe("getRunCommitmentPresentation", () => {
 });
 
 describe("RosterRunCommitmentsBlock", () => {
-  it("A–C: RESERVED renders Other run · Draft roster with danger styling and no Reserved elsewhere", () => {
+  it("RESERVED renders Other run · Draft roster with danger styling and no Reserved elsewhere", () => {
     const html = renderToStaticMarkup(createElement(RosterRunCommitmentsBlock, { commitments: [reserved] }));
     expect(html).toContain("Other run");
     expect(html).toContain("Draft roster");
@@ -74,7 +74,7 @@ describe("RosterRunCommitmentsBlock", () => {
     expect(html).toMatch(/<a[^>]*href="\/runs\/run-draft-other"[^>]*>[\s\S]*Season 2 Bundle[\s\S]*Heroic[\s\S]*<\/a>/);
   });
 
-  it("D–I: COMMITTED renders Other run · Published roster with warning styling and run details", () => {
+  it("COMMITTED renders Other run · Published roster with warning styling and run details", () => {
     const html = renderToStaticMarkup(createElement(RosterRunCommitmentsBlock, { commitments: [committed] }));
     expect(html).toContain("Other run");
     expect(html).toContain("Published roster");
@@ -85,7 +85,7 @@ describe("RosterRunCommitmentsBlock", () => {
     expect(html).toContain("Heroic");
   });
 
-  it("O/Q: multiple commitments keep Draft and Published independently identifiable with visible text", () => {
+  it("multiple commitments keep Draft and Published independently identifiable with visible text", () => {
     const html = renderToStaticMarkup(
       createElement(RosterRunCommitmentsBlock, { commitments: [reserved, committed] }),
     );
@@ -122,7 +122,7 @@ const scheduleConflict = {
 };
 
 describe("RosterScheduleConflictAlert", () => {
-  it("L/M: renders Schedule conflict with strong danger alert treatment", () => {
+  it("renders Schedule conflict with strong danger alert treatment", () => {
     const html = renderToStaticMarkup(
       createElement(RosterScheduleConflictAlert, { conflicts: [scheduleConflict] }),
     );
@@ -137,7 +137,7 @@ describe("RosterScheduleConflictAlert", () => {
     expect(html).toMatch(/<svg[\s>]/i);
   });
 
-  it("htmlFor: label targets checkbox without nesting a div inside the label", () => {
+  it("label targets checkbox without nesting a div inside the label", () => {
     const html = renderToStaticMarkup(
       createElement(RosterScheduleConflictAlert, {
         conflicts: [scheduleConflict],
@@ -175,42 +175,5 @@ describe("RosterScheduleConflictAlert", () => {
     expect(html).toContain("Testlight is marked unavailable for Heroic during this reset (2026-W40).");
     expect(html).not.toContain("<a ");
     expect(html).not.toContain('href=');
-  });
-
-  it("J/K: commitments without conflicts do not invent Schedule conflict copy", () => {
-    const reservedHtml = renderToStaticMarkup(
-      createElement(RosterRunCommitmentsBlock, { commitments: [reserved] }),
-    );
-    const committedHtml = renderToStaticMarkup(
-      createElement(RosterRunCommitmentsBlock, { commitments: [committed] }),
-    );
-    expect(reservedHtml).not.toContain("Schedule conflict");
-    expect(committedHtml).not.toContain("Schedule conflict");
-  });
-
-  it("N: commitment + conflict both render when composed", () => {
-    const html = renderToStaticMarkup(
-      createElement(
-        "div",
-        null,
-        createElement(RosterRunCommitmentsBlock, { commitments: [committed] }),
-        createElement(RosterScheduleConflictAlert, {
-          conflicts: [
-            {
-              ...scheduleConflict,
-              conflictingRunId: committed.runId,
-              conflictingRunTitle: committed.runTitle,
-              conflictingScheduledStartAt: committed.scheduledStartAt,
-            },
-          ],
-          htmlFor: "signup-checkbox-composed",
-        }),
-      ),
-    );
-    expect(html).toContain("Published roster");
-    expect(html).toContain("Schedule conflict");
-    expect(html).toContain("The Venomous Abyss");
-    expect(html).toContain('for="signup-checkbox-composed"');
-    expect(html).not.toMatch(/<label[^>]*>[\s\S]*?<div/i);
   });
 });

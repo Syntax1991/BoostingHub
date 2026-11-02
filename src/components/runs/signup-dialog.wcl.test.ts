@@ -88,6 +88,7 @@ describe("BoosterCharacterChecklist Warcraft Logs links", () => {
     );
     expect(html).toContain("https://www.warcraftlogs.com/character/id/87654321");
     expect(html).toContain("Unavailable — already selected for another run");
+    expect(html).toContain("Other Run");
   });
 
   it("still shows WCL for other rendered ineligible Booster Characters with an id", () => {
@@ -113,31 +114,5 @@ describe("BoosterCharacterChecklist Warcraft Logs links", () => {
     );
     expect(html).toContain("https://www.warcraftlogs.com/character/id/11223344");
     expect(html).toContain("No approved booster access.");
-  });
-
-  it("still shows WCL for a reservation-blocked Booster Character with an id", () => {
-    const html = renderToStaticMarkup(
-      createElement(BoosterCharacterChecklist, {
-        groups: [],
-        ineligible: [
-          {
-            characterId: "char-4",
-            characterName: "Busy",
-            realm: "Silvermoon",
-            warcraftLogsId: "99887766",
-            reason: "ALREADY_SELECTED_OTHER_RUN",
-            message: "Already selected for another run.",
-            conflictingRunTitle: "Friday Heroic",
-          },
-        ],
-        selected: emptySelected,
-        rolesByCharacterId: {},
-        onToggle: noop,
-        onRoleToggle: noop,
-        onSelectAll: noop,
-      }),
-    );
-    expect(html).toContain("https://www.warcraftlogs.com/character/id/99887766");
-    expect(html).toContain("Friday Heroic");
   });
 });

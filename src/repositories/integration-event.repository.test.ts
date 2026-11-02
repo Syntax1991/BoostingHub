@@ -92,8 +92,12 @@ describe("integrationEventRepository / service", () => {
   });
 
   it("caps listRecent limit at 100", async () => {
-    const rows = await integrationEventRepository.listRecent({ limit: 10_000 });
-    expect(rows.length).toBeLessThanOrEqual(100);
+    const createdAt = new Date().toISOString();
+    for (let i = 0; i < 101; i += 1) {
+      await integrationEventRepository.create({ provider: "SYSTEM", operation: "RETENTION_TEST_NEW", status: "SUCCESS", createdAt });
+    }
+    const rows = await integrationEventRepository.listRecent({ operation: "RETENTION_TEST_NEW", limit: 10_000 });
+    expect(rows).toHaveLength(100);
   });
 
   it("purgeExpired deletes events older than 30 days", async () => {
@@ -138,7 +142,6 @@ describe("integrationEventRepository / service", () => {
       limit: 10,
     });
     expect(remaining.some((row) => row.id === IDS[1])).toBe(true);
-    await expect(orm.IntegrationEvent.where({ id: IDS[0] }).first()).resolves.toBeNull();
 
     const oldGone = await orm.IntegrationEvent.where({ id: IDS[0] }).first();
     expect(oldGone).toBeNull();

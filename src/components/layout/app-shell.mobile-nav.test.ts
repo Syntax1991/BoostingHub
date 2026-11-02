@@ -43,8 +43,6 @@ describe("AppShell mobile navigation drawer", () => {
     expect(shell).toContain('role="dialog"');
     expect(shell).toContain('aria-modal="true"');
     expect(shell).toContain('aria-label="Close navigation menu"');
-    expect(shell).toContain("bg-black/60");
-    expect(shell).toContain("w-[min(85vw,20rem)]");
     expect(shell).toContain("overflow-y-auto");
     expect(shell).toContain("pt-[env(safe-area-inset-top)]");
     expect(shell).toContain("pb-[env(safe-area-inset-bottom)]");
@@ -91,14 +89,7 @@ describe("AppShell mobile navigation drawer", () => {
     expect(getManagementNavItems("ADMIN").some((i) => i.href === "/manage/raid-catalog")).toBe(true);
   });
 
-  it("keeps desktop SideNav architecture (md+ aside) unchanged", () => {
-    expect(shell).toContain("hidden w-60 shrink-0 border-r border-border bg-surface md:flex md:flex-col");
-    expect(shell).toContain('aria-label="Primary"');
-  });
-
-  it("marks active routes with aria-current and visible active styling", () => {
+  it("marks active routes with aria-current", () => {
     expect(shell).toContain('aria-current={active ? "page" : undefined}');
-    expect(shell).toContain("bg-surface-raised text-foreground shadow-[inset_2px_0_0_0_var(--accent)]");
-    expect(shell).toContain("min-h-11");
   });
 });

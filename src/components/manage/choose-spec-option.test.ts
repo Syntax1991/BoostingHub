@@ -54,13 +54,6 @@ describe("ChooseSpecOption — multi-spec modal WCL links", () => {
     expect(restoration).toContain("Open Stormhowl Restoration on Warcraft Logs");
   });
 
-  it("Elemental and Restoration links use the same authoritative character destination", () => {
-    const destination = getWarcraftLogsCharacterUrl(wclId);
-    expect(destination).toBe(`https://www.warcraftlogs.com/character/id/${encodeURIComponent(wclId)}`);
-    expect(renderOption({ name: "Elemental", role: "RANGED_DPS" })).toContain(destination!);
-    expect(renderOption({ name: "Restoration", role: "HEALER" })).toContain(destination!);
-  });
-
   it("keeps the WCL control as an <a> outside the select <button>", () => {
     const html = renderOption({ name: "Elemental", role: "RANGED_DPS" });
     expect(html).toMatch(/<a[^>]*href="https:\/\/www\.warcraftlogs\.com\/character\/id\//);

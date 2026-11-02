@@ -9,7 +9,6 @@ import {
   formatCharacterPageSpecLine,
   formatCharacterRosterMetadata,
 } from "@/lib/character-roster-metadata";
-import { resolveSignupAssignableRoles } from "@/lib/signup-assignable-roles";
 
 vi.mock("next/link", () => ({
   default: ({ href, children, ...props }: { href: string; children?: React.ReactNode }) =>
@@ -265,7 +264,7 @@ function renderAdminDetail(row: AdminPage["rows"][number]): string {
 }
 
 describe("character offspec display", () => {
-  it("1. user list hides the offspec label when none are configured", () => {
+  it("user list hides the offspec label when none are configured", () => {
     const html = renderUserList(
       userCharacter({
         name: "Glesien",
@@ -283,7 +282,7 @@ describe("character offspec display", () => {
     expect(html).not.toMatch(/Offspec:/);
   });
 
-  it("2. user list shows one offspec", () => {
+  it("user list shows one offspec", () => {
     const html = renderUserList(
       userCharacter({
         name: "Testblast",
@@ -298,7 +297,7 @@ describe("character offspec display", () => {
     expect(html).toContain("Offspec");
   });
 
-  it("3. user list uses Offspecs and catalog order", () => {
+  it("user list uses Offspecs and catalog order", () => {
     const html = renderUserList(
       userCharacter({
         name: "Testvoid",
@@ -316,7 +315,7 @@ describe("character offspec display", () => {
     expect(html).toContain("Also: Shadow");
   });
 
-  it("4. character detail lists every additional spec in catalog order", () => {
+  it("character detail lists every additional spec in catalog order", () => {
     const html = renderToStaticMarkup(
       createElement(CharacterDetailsView, {
         data: details({
@@ -330,7 +329,7 @@ describe("character offspec display", () => {
     expect(html).not.toContain("Augmentation, Devastation");
   });
 
-  it("5. admin list shows playable specs without an edit control", () => {
+  it("admin list shows playable specs without an edit control", () => {
     const html = renderAdminList(
       adminRow({
         name: "Testblast",
@@ -344,7 +343,7 @@ describe("character offspec display", () => {
     expect(html).not.toContain("Edit");
   });
 
-  it("6. admin detail shows the same configured offspecs", () => {
+  it("admin detail shows the same configured offspecs", () => {
     const html = renderAdminDetail(
       adminRow({
         name: "Testvoid",
@@ -358,7 +357,7 @@ describe("character offspec display", () => {
     expect(html).toContain("Discipline, Shadow");
   });
 
-  it("7. a playable row that repeats the primary spec is omitted", () => {
+  it("a playable row that repeats the primary spec is omitted", () => {
     const character = userCharacter({
       name: "Testblast",
       wowClass: "SHAMAN",
@@ -375,7 +374,7 @@ describe("character offspec display", () => {
     expect(detail).not.toContain("Restoration, Elemental");
   });
 
-  it("8. character pages and roster cards order the same playable specs", () => {
+  it("character pages and roster cards order the same playable specs", () => {
     const input = {
       itemLevel: 321,
       specialization: "Preservation",
@@ -390,33 +389,7 @@ describe("character offspec display", () => {
     expect(roster).toBe("321 ilvl · Preservation · Offspecs: Devastation, Augmentation");
   });
 
-  it("9. rendering offspecs does not change signup assignment", () => {
-    const signup = {
-      offeredRoles: ["HEALER", "RANGED_DPS"] as const,
-      characterClass: "SHAMAN" as const,
-      primarySpecialization: "Restoration",
-      playableSpecs: ["Elemental", "Enhancement"],
-    };
-    const before = resolveSignupAssignableRoles(signup);
-    const html = renderUserList(
-      userCharacter({
-        name: "Testblast",
-        wowClass: "SHAMAN",
-        specialization: "Restoration",
-        primaryRole: "HEALER",
-        playableSpecs: ["Enhancement", "Elemental"],
-      }),
-    );
-    expect(html).toContain("Restoration");
-    expect(html).toContain("Elemental");
-    expect(html).toContain("(+1)");
-    expect(html).toContain("Also: Enhancement");
-    expect(resolveSignupAssignableRoles(signup)).toEqual(before);
-    expect(before).toEqual(["HEALER", "RANGED_DPS"]);
-    expect(signup.offeredRoles).toEqual(["HEALER", "RANGED_DPS"]);
-  });
-
-  it("10. roster metadata stays the deployed offspec line", () => {
+  it("roster metadata stays the deployed offspec line", () => {
     expect(
       formatCharacterRosterMetadata({
         itemLevel: 327,

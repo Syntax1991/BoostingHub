@@ -73,16 +73,13 @@ describe("RunCreationForm opt-in defaults", () => {
     expect(pingInput).not.toContain("checked");
   });
 
-  it("one-time rows carry compact copy / +1h / +2h controls for that row; recurring mode has no rows", () => {
+  it("one-time rows carry compact copy / +1h / +2h controls for that row", () => {
     const html = renderToStaticMarkup(createElement(RunCreationForm, { form: minimalForm() }));
     expect(html).toContain('aria-label="Duplicate run (run 1)"');
     expect(html).toContain('aria-label="Duplicate run +1 hour (run 1)"');
     expect(html).toContain('aria-label="Duplicate run +2 hours (run 1)"');
     expect(html).toContain("+1h");
     expect(html).toContain("+2h");
-    // The rows (and their duplicate controls) only exist in the one-time branch; the
-    // recurring branch renders the single Weekly schedule card instead.
-    expect(html).not.toContain("Weekly schedule");
   });
 
   it("disables duplication at the 25-run limit", () => {

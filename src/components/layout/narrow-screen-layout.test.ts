@@ -82,15 +82,6 @@ describe("Characters table", () => {
   });
 });
 
-describe("mobile navigation drawer", () => {
-  it("replaces the bottom bar with a fixed left drawer that does not stay in the page flow", () => {
-    const shell = read("components/layout/app-shell.tsx");
-    expect(shell).not.toMatch(/sticky bottom-0/);
-    expect(shell).toContain("fixed inset-0 z-40 md:hidden");
-    expect(shell).toContain("w-[min(85vw,20rem)]");
-  });
-});
-
 describe("form controls inside narrow dialogs", () => {
   it("never widen their container: globals.css caps select / textarea / input width in @layer base", () => {
     // A long option (Run label) or a number input's intrinsic width otherwise sized the

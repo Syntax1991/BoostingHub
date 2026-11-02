@@ -59,12 +59,6 @@ describe("resolveRosterActions", () => {
     expect(actions).toMatchObject({ update: true, save: false, publish: false, repost: false, discard: false });
   });
 
-  it("after Update (clean again) → Publish Roster available again", () => {
-    const actions = resolveRosterActions({ ...base, runStatus: "PUBLISHED", isPublished: true });
-    expect(actions.repost).toBe(true);
-    expect(actions.update).toBe(false);
-  });
-
   it("legacy unseeded published roster: seed button; clean → repost available", () => {
     expect(
       resolveRosterActions({ ...base, runStatus: "PUBLISHED", isPublished: true, needsPublishSeed: true }),

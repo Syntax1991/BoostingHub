@@ -151,7 +151,6 @@ describe("CharactersView weekly availability", () => {
     expect(html).toContain(">Unavailable · HC<");
     expect(html).toContain(">Unavailable · All<");
     expect(html).toContain("<button");
-    expect(html).toContain("border border-");
     expect(html).not.toContain("Availability check");
     expect(html).not.toContain("Check availability");
     expect(html).not.toContain("checkAt");

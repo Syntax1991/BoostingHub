@@ -119,19 +119,12 @@ describe("role-copy toggle semantics", () => {
     const payload = [...staged].map(([id, selectedRole]) => ({ signupId: id, selectedRole }));
     expect(payload).toEqual([{ signupId, selectedRole: "MELEE_DPS" }]);
   });
-
-  it("syncs dropdown reassignment with checked copies", () => {
-    const staged: Map<string, CharacterRole | null> = new Map([[signupId, "TANK"]]);
-    staged.set(signupId, "HEALER");
-    expect(isRoleCopyChecked({ stagedRole: staged.get(signupId), groupRole: "TANK" })).toBe(false);
-    expect(isRoleCopyChecked({ stagedRole: staged.get(signupId), groupRole: "HEALER" })).toBe(true);
-  });
 });
 
 describe("unassigned historic DPS toggle", () => {
   const signupId = "signup-shaman";
 
-  it("17. checks an ambiguous historic DPS row without inventing a subtype", () => {
+  it("checks an ambiguous historic DPS row without inventing a subtype", () => {
     const staged = applyUnassignedDpsToggle({
       staged: new Map(),
       signupId,

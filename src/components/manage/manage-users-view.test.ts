@@ -114,12 +114,13 @@ describe("ManageUsersView directory UX", () => {
     expect(html).not.toContain("1 pending request");
   });
 
-  it("keeps Pending count and empty boosting access as em dash", () => {
+  it("shows the pending count and an em dash for a user without boosting access", () => {
     const html = renderToStaticMarkup(
       createElement(ManageUsersView, { data: samplePage() as never }),
     );
     expect(html).toContain("Plain User");
     expect(html).toMatch(/Pending[\s\S]*?>1</);
+    expect(html).toContain('<span class="text-xs text-muted">—</span>');
   });
 
   it("still passes Character roles into Access dialog context", () => {
