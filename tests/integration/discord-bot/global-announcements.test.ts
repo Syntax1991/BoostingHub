@@ -189,7 +189,6 @@ describe("syncOnce — announcement failure does not block Discord sync", () => 
       signups: [],
       roster: [],
       start: [],
-      raidInvites: [],
       notificationDms: [],
       runAnnouncements: [],
     });

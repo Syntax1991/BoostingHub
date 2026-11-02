@@ -158,7 +158,6 @@ describe("GET /api/bot/discord/sync — channel reconciliation contract", () => 
     const work = await sync();
     expect(Array.isArray(work.data.channels)).toBe(true);
     expect(Array.isArray(work.data.start)).toBe(true);
-    expect(Array.isArray(work.data.raidInvites)).toBe(true);
     expect(Array.isArray(work.data.notificationDms)).toBe(true);
     expect(Array.isArray(work.data.runAnnouncements)).toBe(true);
     const item = work.data.channels.find((entry: { runId: string }) => entry.runId === runId);

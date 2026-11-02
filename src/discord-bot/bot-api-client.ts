@@ -132,34 +132,6 @@ export class BotApiClient {
         /** Persisted voice channel; the bot prefers its same-pass voice outcome. */
         voiceChannelId?: string | null;
       }>;
-      raidInvites: Array<{
-        runId: string;
-        signupId: string;
-        discordUserId: string;
-        runChannelId: string | null;
-        productLabel: string;
-        scheduledStartAt: string;
-        difficulty: RaidDifficulty;
-        lootType: RunLootType;
-        participationType: "BOOSTER" | "LOOTBUDDY";
-        selectedRole: "TANK" | "HEALER" | "DPS" | null;
-        characterName: string | null;
-        wowClass:
-          | "DEATH_KNIGHT"
-          | "DEMON_HUNTER"
-          | "DRUID"
-          | "EVOKER"
-          | "HUNTER"
-          | "MAGE"
-          | "MONK"
-          | "PALADIN"
-          | "PRIEST"
-          | "ROGUE"
-          | "SHAMAN"
-          | "WARLOCK"
-          | "WARRIOR"
-          | null;
-      }>;
       notificationDms: Array<{
         notificationId: string;
         type:
@@ -349,7 +321,6 @@ export class BotApiClient {
           transcriptHtml: string;
           transcriptFilename: string;
         }
-      | { kind: "raid-invite"; signupId: string }
       | {
           kind: "notification-dm";
           notificationId: string;

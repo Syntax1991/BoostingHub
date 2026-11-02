@@ -194,7 +194,7 @@ Require the service token only.
 | `signups` | Signup posts to create or refresh, each with its `embed` DTO |
 | `roster` | Roster posts, mode `POST` or `REFRESH` |
 | `start` | Final Setup posts |
-| `raidInvites` | Always empty; legacy field. Invites come through `notificationDms` |
+| ~~`raidInvites`~~ | Removed (A19). Raid Invites travel only as `notificationDms` |
 | `notificationDms` | Pending Run DMs that are due |
 | `accountNotificationDms` | Pending account-level DMs |
 | `runAnnouncements` | Pending channel announcements, oldest first |

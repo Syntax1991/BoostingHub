@@ -42,7 +42,6 @@ export const runDiscordStateUpdateSchema = z.discriminatedUnion("kind", [
     transcriptHtml: z.string().min(1).max(5_000_000),
     transcriptFilename: z.string().min(1).max(200),
   }),
-  z.object({ kind: z.literal("raid-invite"), signupId: z.string().uuid() }),
   /** Warcraft Logs link scan progress: newest fully processed message in the Run channel. */
   z.object({
     kind: z.literal("wcl-scan-cursor"),
@@ -77,7 +76,6 @@ export type RunDiscordStateUpdate = z.infer<typeof runDiscordStateUpdateSchema>;
  * Channel) that the bot may not replace; identity stored in it is dropped.
  * `voice-channel` records the Run's temporary voice channel;
  * `clear-voice-channel` drops it only while it still equals that id.
- * `raid-invite` appends a signup id to the Apex Raid Invite sent list.
  * `notification-dm` updates UserNotification.discordDeliveryStatus (and on
  * SENT RAID_INVITE also appends the legacy raidInviteSentSignupIds list).
  * `run-announcement` updates RunDiscordAnnouncement delivery status.
@@ -128,8 +126,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         channelId: runDiscordStateUpdate.channelId,
         messageId: runDiscordStateUpdate.messageId,
       });
-    } else if (runDiscordStateUpdate.kind === "raid-invite") {
-      await discordSyncService.recordRaidInviteSent({ runId, signupId: runDiscordStateUpdate.signupId });
     } else if (runDiscordStateUpdate.kind === "notification-dm") {
       await discordSyncService.recordNotificationDmDelivery({
         notificationId: runDiscordStateUpdate.notificationId,

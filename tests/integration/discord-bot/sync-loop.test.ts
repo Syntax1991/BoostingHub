@@ -1117,111 +1117,6 @@ describe("syncOnce — same-pass first-channel positioning", () => {
   });
 });
 
-describe("syncOnce — Apex-style Raid Invite DMs", () => {
-  it("DMs each pending invite once with a real channel mention and records raid-invite state", async () => {
-    const children = new Map<string, Child>([
-      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
-      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
-      ["run-chan", { id: "run-chan", name: "tue-1800-hc-vip-lead", parentId: CATEGORY_ID, position: 2, type: ChannelType.GuildText }],
-    ]);
-    const sendDm = vi.fn().mockResolvedValue({ id: "dm-1" });
-    const { client } = makeDiscordClient(children);
-    (client as { users: { fetch: ReturnType<typeof vi.fn> } }).users = {
-      fetch: vi.fn().mockResolvedValue({ id: "discord-user-1", send: sendDm }),
-    };
-    const api = makeApi({
-      channels: [],
-      signups: [],
-      roster: [],
-    });
-    (api.listSyncWork as ReturnType<typeof vi.fn>).mockResolvedValue({
-      channels: [],
-      signups: [],
-      roster: [],
-      start: [],
-      raidInvites: [
-        {
-          runId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
-          signupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
-          discordUserId: "discord-user-1",
-          runChannelId: "run-chan",
-          productLabel: "Venom & Tide",
-          scheduledStartAt: "2026-09-16T13:30:00.000Z",
-          previousScheduledStartAt: null,
-          difficulty: "HEROIC",
-          lootType: "VIP",
-          participationType: "BOOSTER",
-          selectedRole: "HEALER",
-          characterName: "Testmist",
-          wowClass: "MONK",
-        },
-      ],
-      notificationDms: [],
-    });
-
-    await syncOnce(client as never, botEnv(), api);
-
-    expect(sendDm).toHaveBeenCalledTimes(1);
-    const content = sendDm.mock.calls[0][0].content as string;
-    expect(content).toContain("📣 **Raid Invite**");
-    expect(content).toContain("Healer · Testmist (Monk)");
-    expect(content).toContain(" · HEROIC · VIP");
-    expect(content).toContain("Channel: <#run-chan>");
-    expect(content).not.toMatch(/unknown/i);
-    expect((content.match(/VIP/g) ?? []).length).toBe(1);
-    expect(content).toContain("Please be online 10 minutes before start.");
-    expect(api.recordDiscordState).toHaveBeenCalledWith("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", {
-      kind: "raid-invite",
-      signupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
-    });
-  });
-
-  it("still records raid-invite when Discord rejects the DM (closed DMs)", async () => {
-    const children = new Map<string, Child>([
-      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
-      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
-    ]);
-    const sendDm = vi.fn().mockRejectedValue({ code: 50007, message: "Cannot send messages to this user" });
-    const { client } = makeDiscordClient(children);
-    (client as { users: { fetch: ReturnType<typeof vi.fn> } }).users = {
-      fetch: vi.fn().mockResolvedValue({ id: "discord-user-2", send: sendDm }),
-    };
-    const api = makeApi({ channels: [], signups: [], roster: [] });
-    (api.listSyncWork as ReturnType<typeof vi.fn>).mockResolvedValue({
-      channels: [],
-      signups: [],
-      roster: [],
-      start: [],
-      raidInvites: [
-        {
-          runId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2",
-          signupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2",
-          discordUserId: "discord-user-2",
-          runChannelId: null,
-          productLabel: "Venom & Tide",
-          scheduledStartAt: "2026-09-16T13:30:00.000Z",
-          previousScheduledStartAt: null,
-          difficulty: "HEROIC",
-          lootType: "VIP",
-          participationType: "BOOSTER",
-          selectedRole: "HEALER",
-          characterName: "Testmist",
-          wowClass: "MONK",
-        },
-      ],
-      notificationDms: [],
-    });
-
-    await syncOnce(client as never, botEnv(), api);
-
-    expect(sendDm).toHaveBeenCalledTimes(1);
-    expect(api.recordDiscordState).toHaveBeenCalledWith("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2", {
-      kind: "raid-invite",
-      signupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2",
-    });
-  });
-});
-
 describe("syncOnce — UserNotification DMs", () => {
   it("sends roster pick DM and records SENT", async () => {
     const children = new Map<string, Child>([
@@ -1239,7 +1134,6 @@ describe("syncOnce — UserNotification DMs", () => {
       signups: [],
       roster: [],
       start: [],
-      raidInvites: [],
       notificationDms: [
         {
           notificationId: "cccccccc-cccc-4ccc-8ccc-ccccccccccc1",
@@ -1290,7 +1184,6 @@ describe("syncOnce — UserNotification DMs", () => {
       signups: [],
       roster: [],
       start: [],
-      raidInvites: [],
       notificationDms: [
         {
           notificationId: "cccccccc-cccc-4ccc-8ccc-ccccccccccc9",
@@ -1376,7 +1269,6 @@ describe("syncOnce — UserNotification DMs", () => {
       signups: [],
       roster: [],
       start: [],
-      raidInvites: [],
       notificationDms: [
         { ...base, notificationId: "cccccccc-cccc-4ccc-8ccc-cccccccccc01", characterSaved: saved("player") },
         { ...base, notificationId: "cccccccc-cccc-4ccc-8ccc-cccccccccc02", characterSaved: saved("lead") },
@@ -1429,7 +1321,6 @@ describe("syncOnce — UserNotification DMs", () => {
       signups: [],
       roster: [],
       start: [],
-      raidInvites: [],
       notificationDms: [],
       accountNotificationDms: [accountDm],
     });
@@ -1470,7 +1361,6 @@ describe("syncOnce — UserNotification DMs", () => {
       signups: [],
       roster: [],
       start: [],
-      raidInvites: [],
       notificationDms: [
         {
           notificationId: "cccccccc-cccc-4ccc-8ccc-ccccccccccc3",
@@ -1514,7 +1404,6 @@ describe("syncOnce — notification DM failure classification", () => {
       signups: [],
       roster: [],
       start: [],
-      raidInvites: [],
       notificationDms: [
         {
           notificationId: "cccccccc-cccc-4ccc-8ccc-ccccccccccc6",
@@ -1697,7 +1586,6 @@ describe("syncOnce — Run scope change", () => {
       signups: [],
       roster: [],
       start: [],
-      raidInvites: [],
       notificationDms: [
         {
           notificationId: "cccccccc-cccc-4ccc-8ccc-ccccccccccc7",
@@ -2403,7 +2291,6 @@ describe("syncOnce — app-archive transcript artifacts", () => {
       signups: [],
       roster: [],
       start: [],
-      raidInvites: [],
       notificationDms: [
         {
           notificationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa80",
@@ -2935,7 +2822,6 @@ function makeApi(input: {
     desiredChannelName: string;
     targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
   }>;
-  raidInvites?: Array<Record<string, unknown>>;
   notificationDms?: Array<Record<string, unknown>>;
   runAnnouncements?: Array<Record<string, unknown>>;
   schedules?: Array<{
@@ -2964,7 +2850,6 @@ function makeApi(input: {
       signups: input.signups,
       roster: input.roster,
       start: input.start ?? [],
-      raidInvites: input.raidInvites ?? [],
       notificationDms: input.notificationDms ?? [],
       runAnnouncements: input.runAnnouncements ?? [],
       schedules: input.schedules ?? [],

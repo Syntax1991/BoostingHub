@@ -52,7 +52,6 @@ function makeApi(voiceChannels: VoiceItem[], notificationDms: Array<Record<strin
       signups: [],
       roster: [],
       start: [],
-      raidInvites: [],
       notificationDms,
       runAnnouncements: [],
     }),

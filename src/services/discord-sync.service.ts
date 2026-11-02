@@ -486,23 +486,6 @@ export type RunStartSyncWorkItem = {
   voiceChannelId: string | null;
 };
 
-/** Apex-style Raid Invite DM — kept for bot/API backward compatibility; listSyncWork returns []. */
-export type RaidInviteWorkItem = {
-  runId: string;
-  signupId: string;
-  discordUserId: string;
-  /** Persisted RunDiscordPost.runChannelId — null when the Run has no dedicated channel yet. */
-  runChannelId: string | null;
-  productLabel: string;
-  scheduledStartAt: string;
-  difficulty: RaidDifficulty;
-  lootType: RunLootType;
-  participationType: "BOOSTER" | "LOOTBUDDY";
-  selectedRole: CharacterRole | null;
-  characterName: string | null;
-  wowClass: WowClass | null;
-};
-
 /** Unified Discord DM work from pending UserNotification rows. */
 export type NotificationDmWorkItem = {
   notificationId: string;
@@ -1406,8 +1389,6 @@ export const discordSyncService = {
     signups: SignupSyncWorkItem[];
     roster: RosterSyncWorkItem[];
     start: RunStartSyncWorkItem[];
-    /** Always empty — Raid Invite DMs come from notificationDms (PENDING UserNotification). */
-    raidInvites: RaidInviteWorkItem[];
     notificationDms: NotificationDmWorkItem[];
     /** PENDING account-level UserNotification DMs (no Run), e.g. CHARACTER_BATTLENET_REPAIR. */
     accountNotificationDms: AccountNotificationDmWorkItem[];
@@ -1467,7 +1448,6 @@ export const discordSyncService = {
     const signups: SignupSyncWorkItem[] = [];
     const roster: RosterSyncWorkItem[] = [];
     const start: RunStartSyncWorkItem[] = [];
-    const raidInvites: RaidInviteWorkItem[] = [];
     const classEmojiFingerprint = options.classEmojiFingerprint ?? "";
 
     const pendingAnnouncementRunIds = new Set(pendingAnnouncements.map((row) => row.runId));
@@ -1744,7 +1724,6 @@ export const discordSyncService = {
       signups,
       roster,
       start,
-      raidInvites,
       notificationDms,
       accountNotificationDms,
       runAnnouncements,

@@ -33,7 +33,6 @@ export async function GET(request: NextRequest) {
       signups,
       roster: work.roster,
       start: work.start,
-      raidInvites: work.raidInvites,
       notificationDms: work.notificationDms,
       accountNotificationDms: work.accountNotificationDms,
       runAnnouncements: work.runAnnouncements,

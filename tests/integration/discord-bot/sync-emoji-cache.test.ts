@@ -43,7 +43,6 @@ function makeApi() {
       signups: [],
       roster: [],
       start: [],
-      raidInvites: [],
       notificationDms: [],
       runAnnouncements: [],
     })),

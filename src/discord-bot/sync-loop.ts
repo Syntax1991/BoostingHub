@@ -116,7 +116,6 @@ type ChannelLaneItem = SyncWork["channels"][number];
 type SignupLaneItem = SyncWork["signups"][number];
 type RosterLaneItem = SyncWork["roster"][number];
 type StartLaneItem = NonNullable<SyncWork["start"]>[number];
-type RaidInviteLaneItem = NonNullable<SyncWork["raidInvites"]>[number];
 type NotificationDmLaneItem = NonNullable<SyncWork["notificationDms"]>[number];
 type AccountNotificationDmLaneItem = NonNullable<SyncWork["accountNotificationDms"]>[number];
 type RunAnnouncementLaneItem = NonNullable<SyncWork["runAnnouncements"]>[number];
@@ -626,26 +625,6 @@ async function syncOnceInner(
           entityId: item.runId,
         });
         messagePhaseError ??= error;
-      }
-    }
-
-    if ((work.raidInvites ?? []).length > 0) {
-      for (const item of work.raidInvites ?? []) {
-        try {
-          await syncRaidInvite(client, api, item);
-        } catch (error) {
-          console.error(
-            `[discord-bot] raid invite DM failed for signup ${item.signupId} on run ${item.runId}`,
-            error,
-          );
-          await recordDiscordLaneFailure(pass, {
-            operation: "RAID_INVITE_DM",
-            error,
-            messageKind: "dm",
-            entityId: item.runId,
-          });
-          messagePhaseError ??= error;
-        }
       }
     }
 
@@ -1277,42 +1256,6 @@ function dmRunContext(item: {
     difficulty: item.difficulty,
     lootType: item.lootType,
   };
-}
-
-/**
- * Apex-style Raid Invite DM (legacy lane). Always records the signup id after
- * an attempt (including closed-DM failures) so the bot does not retry forever.
- */
-async function syncRaidInvite(
-  client: Client,
-  api: BotApiClient,
-  item: RaidInviteLaneItem,
-): Promise<void> {
-  const content = buildRaidInviteMessage({
-    run: dmRunContext(item),
-    participationType: item.participationType,
-    selectedRole: item.selectedRole,
-    characterName: item.characterName,
-    wowClass: item.wowClass,
-    runChannelId: item.runChannelId,
-    // Legacy lane (listSyncWork always returns [] for it) — no voice link.
-    voiceChannelId: null,
-  });
-
-  try {
-    const user = await client.users.fetch(item.discordUserId);
-    await user.send({ content });
-  } catch (error) {
-    if (isDiscordPermanentDmError(error)) {
-      console.warn(
-        `[discord-bot] cannot DM raid invite to ${item.discordUserId} for signup ${item.signupId} (Discord ${extractDiscordApiCode(error) ?? "unknown"}) — marking sent to avoid retry loop`,
-      );
-    } else {
-      throw error;
-    }
-  }
-
-  await api.recordDiscordState(item.runId, { kind: "raid-invite", signupId: item.signupId });
 }
 
 /**
