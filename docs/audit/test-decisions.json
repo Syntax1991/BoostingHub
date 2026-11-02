@@ -1283,6 +1283,10 @@
     "tests/integration/services/run-reactivate.test.ts": [
       "REWRITE",
       "Fresh users via createTestUser with DM prefs and synthetic Discord ids; lootbuddy rows through setLootbuddies instead of raw inserts; verified deleteCreatedRows; expectDomainError; channel ids synthetic"
+    ],
+    "tests/integration/services/signup-quick-signup.service.test.ts": [
+      "REWRITE",
+      "Fresh users and Characters via shared fixtures, frozen RAID_WEEK_TEST_CLOCK, verified deleteCreatedRows and deleteAndCount for lockouts/unavailability, expectDomainError, restoreMocks"
     ]
   },
   "tests": {
