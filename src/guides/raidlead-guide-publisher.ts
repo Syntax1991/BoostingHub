@@ -82,6 +82,8 @@ export type GuideDiscordClient = {
     embed: ReturnType<typeof buildRaidleadGuideEmbed>;
     components?: unknown[];
     files: Array<{ name: string; data: Buffer }>;
+    /** Replace mode only: makes a repeated create return the first message. */
+    nonce?: string;
   }): Promise<{ id: string }>;
   editMessage(input: {
     channelId: string;
@@ -329,8 +331,8 @@ export function validateRaidleadGuideCards(cards: readonly RaidleadGuideCard[] =
     errors.push("create-run card must document Community run type");
   }
   const rosterCard = cards.find((c) => c.key === "build-roster");
-  if (rosterCard && !/Publish Roster/i.test(JSON.stringify(rosterCard))) {
-    errors.push("build-roster card must mention Publish Roster");
+  if (rosterCard && !/\*\*Publish\*\*/.test(JSON.stringify(rosterCard))) {
+    errors.push("build-roster card must mention the Publish button");
   }
   // BoostingHub has no financial workflow: no card may describe payouts or settlements.
   if (cards.some((c) => /payout|settlement|mark paid/i.test(JSON.stringify(c)))) {

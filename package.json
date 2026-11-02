@@ -28,8 +28,14 @@
     "guide:screenshots": "tsx scripts/capture-guide-screenshots.mts",
     "guide:booster:preview": "tsx --env-file=.env scripts/publish-booster-guide.mts",
     "guide:booster:publish": "tsx --env-file=.env scripts/publish-booster-guide.mts --publish",
+    "guide:booster:replace:plan": "tsx --env-file=.env scripts/publish-booster-guide.mts --replace",
+    "guide:booster:replace:publish": "tsx --env-file=.env scripts/publish-booster-guide.mts --replace --publish",
+    "guide:booster:replace:retire": "tsx --env-file=.env scripts/publish-booster-guide.mts --replace --retire-old",
     "guide:raidlead:preview": "tsx --env-file=.env scripts/publish-raidlead-guide.mts",
     "guide:raidlead:publish": "tsx --env-file=.env scripts/publish-raidlead-guide.mts --publish",
+    "guide:raidlead:replace:plan": "tsx --env-file=.env scripts/publish-raidlead-guide.mts --replace",
+    "guide:raidlead:replace:publish": "tsx --env-file=.env scripts/publish-raidlead-guide.mts --replace --publish",
+    "guide:raidlead:replace:retire": "tsx --env-file=.env scripts/publish-raidlead-guide.mts --replace --retire-old",
     "guide:raidlead:screenshots": "tsx scripts/capture-raidlead-guide-screenshots.mts"
   },
   "dependencies": {

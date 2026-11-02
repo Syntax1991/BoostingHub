@@ -122,10 +122,10 @@ describe("booster guide v2 content", () => {
     ]);
   });
 
-  it("highlights Discord Quick Signup and does not claim a Web Quick Signup button", () => {
+  it("highlights Discord Quick Sign and does not claim a Web Quick Signup button", () => {
     const discord = BOOSTER_GUIDE_CARDS.find((c) => c.key === "discord-signups")!;
     const web = BOOSTER_GUIDE_CARDS.find((c) => c.key === "signing-up")!;
-    expect(JSON.stringify(discord)).toMatch(/Quick Signup/);
+    expect(JSON.stringify(discord)).toMatch(/Quick Sign/);
     expect(JSON.stringify(web)).not.toMatch(/Web Quick Signup/);
     expect(web.description).toMatch(/Save Booster Offers/);
   });
@@ -145,9 +145,8 @@ describe("booster guide v2 content", () => {
       "Add / Edit Note",
     ]);
     const quick = embed.fields?.find((f) => f.name === "Quick Sign")?.value ?? "";
-    expect(quick).toMatch(/offers/i);
-    expect(quick).toMatch(/does \*\*not\*\* put you on the Roster/i);
-    expect(quick).toMatch(/Raid Lead selects separately/i);
+    expect(quick).toMatch(/signs up all your available characters/i);
+    expect(quick).toMatch(/Raid Lead still picks the team/i);
   });
 
   it("stays within Discord embed size limits", () => {
