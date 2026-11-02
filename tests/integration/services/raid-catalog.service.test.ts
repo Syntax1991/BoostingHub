@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { blizzardApiClient } from "@/integrations/blizzard/blizzard-api-client";
 import { canManageRaidCatalog, getManagementNavItems, type AuthenticatedUser } from "@/auth/authorization";
 import { deriveCurrentResetLockouts } from "@/lib/blizzard/raid-lockout-derivation";
-import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
 import {
   MIDNIGHT_S2_BUNDLE_PRODUCT_ID,
@@ -23,6 +22,13 @@ import { productRepository } from "@/repositories/product.repository";
 import { raidRepository } from "@/repositories/raid.repository";
 import { raidCatalogService } from "@/services/raid-catalog.service";
 import type { ProductContentInput } from "@/validators/raid-catalog";
+import { testActor } from "@tests/fixtures/actors";
+import {
+  assertIsolatedTestDatabase,
+  createTestUser,
+  deleteCreatedRows,
+} from "@tests/fixtures/db-fixtures";
+import { expectDomainError } from "@tests/helpers/domain-error";
 
 // No live Warcraft Logs: WCL zone discovery (on raid / encounter writes) sees an empty zone list.
 vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOriginal) => ({
@@ -39,44 +45,22 @@ vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOr
  * Runs or Run Setups; the insert-only bootstrap never overwrites admin edits.
  */
 
-const ids = {
-  admin: "c0a7e000-0000-4000-8000-000000000001",
-  owner: "c0a7e000-0000-4000-8000-000000000002",
-  lead: "c0a7e000-0000-4000-8000-000000000003",
-  user: "c0a7e000-0000-4000-8000-000000000004",
-};
-
-function actor(id: string, accountRole: AccountRole): AuthenticatedUser {
-  return {
-    id,
-    name: `Content ${accountRole}`,
-    email: `${id}@content.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
-
-const admin = actor(ids.admin, "ADMIN");
-// OWNER is a single-row role; the stored row stays ADMIN and the actor carries OWNER.
-const owner = actor(ids.owner, "OWNER");
-const lead = actor(ids.lead, "RAID_LEAD");
-const user = actor(ids.user, "USER");
-
+const created = { userIds: [] as string[] };
 const createdRaidIds: string[] = [];
 const createdProductIds: string[] = [];
 const createdLockoutIds: string[] = [];
 
-async function expectCode(promise: Promise<unknown>, code: string) {
-  let caught: unknown;
-  try {
-    await promise;
-  } catch (error) {
-    caught = error;
-  }
-  expect(isDomainError(caught) ? caught.code : caught).toBe(code);
+let admin: AuthenticatedUser;
+let owner: AuthenticatedUser;
+let lead: AuthenticatedUser;
+let user: AuthenticatedUser;
+
+async function createUser(name: string, accountRole: AccountRole) {
+  // OWNER is a single-row role; the stored row stays ADMIN and the actor carries OWNER.
+  const storedRole = accountRole === "OWNER" ? "ADMIN" : accountRole;
+  const id = await createTestUser({ name, accountRole: storedRole });
+  created.userIds.push(id);
+  return testActor(id, accountRole, { name });
 }
 
 async function newRaid(name: string, overrides: Partial<Parameters<typeof raidCatalogService.createRaid>[1]> = {}) {
@@ -170,7 +154,6 @@ async function restoreSeededCatalog() {
   }
 }
 
-
 // No live Battle.net: Blizzard journal discovery (on raid / encounter writes) sees an empty journal.
 beforeAll(() => {
   vi.spyOn(blizzardApiClient, "getJournalInstanceIndex").mockResolvedValue([]);
@@ -178,37 +161,23 @@ beforeAll(() => {
 });
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   await raidRepository.ensureReferenceRaids();
-  const now = new Date().toISOString();
-  for (const [id, role] of [
-    [ids.admin, "ADMIN"],
-    [ids.owner, "ADMIN"],
-    [ids.lead, "RAID_LEAD"],
-    [ids.user, "USER"],
-  ] as const) {
-    await orm.User.where({ id }).delete().catch(() => {});
-    await orm.User.create({
-      id,
-      name: `Content ${role}`,
-      email: `${id}@content.boostting.local`,
-      emailVerified: true,
-      accountRole: role,
-      accountStatus: "ACTIVE",
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
-});
+  admin = await createUser("Content ADMIN", "ADMIN");
+  owner = await createUser("Content OWNER", "OWNER");
+  lead = await createUser("Content RAID_LEAD", "RAID_LEAD");
+  user = await createUser("Content USER", "USER");
+}, 60_000);
 
 afterAll(async () => {
-  for (const id of createdLockoutIds) await orm.CharacterRaidLockout.where({ id }).delete().catch(() => {});
-  for (const id of createdProductIds) await orm.Product.where({ id }).delete().catch(() => {});
-  for (const id of createdRaidIds) await orm.Raid.where({ id }).delete().catch(() => {});
+  for (const id of createdLockoutIds) await orm.CharacterRaidLockout.where({ id }).deleteAndCount();
+  for (const id of createdProductIds) await orm.Product.where({ id }).deleteAndCount();
+  for (const id of createdRaidIds) await orm.Raid.where({ id }).deleteAndCount();
   await restoreSeededCatalog();
-  for (const id of Object.values(ids)) await orm.User.where({ id }).delete().catch(() => {});
+  await deleteCreatedRows(created);
   // Canonical catalog for later test files.
   expect(await productRepository.listAll()).toEqual(PRODUCT_CATALOG_FIXTURE);
-});
+}, 60_000);
 
 /* ------------------------------------------------------------------ auth */
 
@@ -226,9 +195,9 @@ describe("authorization", () => {
 
   it("refuses USER and RAID_LEAD for reads and every mutation", async () => {
     for (const denied of [user, lead]) {
-      await expectCode(raidCatalogService.getPage(denied), "NOT_AUTHORIZED");
-      await expectCode(raidCatalogService.getRaidDetail(denied, VENOMOUS_ABYSS_RAID_ID), "NOT_AUTHORIZED");
-      await expectCode(
+      await expectDomainError(raidCatalogService.getPage(denied), "NOT_AUTHORIZED");
+      await expectDomainError(raidCatalogService.getRaidDetail(denied, VENOMOUS_ABYSS_RAID_ID), "NOT_AUTHORIZED");
+      await expectDomainError(
         raidCatalogService.createRaid(denied, {
           name: "Denied",
           season: "QA",
@@ -238,8 +207,8 @@ describe("authorization", () => {
         }),
         "NOT_AUTHORIZED",
       );
-      await expectCode(raidCatalogService.deleteRaid(denied, MANAFORGE_OMEGA_RAID_ID), "NOT_AUTHORIZED");
-      await expectCode(
+      await expectDomainError(raidCatalogService.deleteRaid(denied, MANAFORGE_OMEGA_RAID_ID), "NOT_AUTHORIZED");
+      await expectDomainError(
         raidCatalogService.updateEncounter(denied, {
           bossId: NYMRISSA_WAVECALLER_BOSS_ID,
           name: "x",
@@ -247,8 +216,8 @@ describe("authorization", () => {
         }),
         "NOT_AUTHORIZED",
       );
-      await expectCode(raidCatalogService.setProductActive(denied, VENOMOUS_ABYSS_PRODUCT_ID, false), "NOT_AUTHORIZED");
-      await expectCode(raidCatalogService.deleteProduct(denied, VENOMOUS_ABYSS_PRODUCT_ID), "NOT_AUTHORIZED");
+      await expectDomainError(raidCatalogService.setProductActive(denied, VENOMOUS_ABYSS_PRODUCT_ID, false), "NOT_AUTHORIZED");
+      await expectDomainError(raidCatalogService.deleteProduct(denied, VENOMOUS_ABYSS_PRODUCT_ID), "NOT_AUTHORIZED");
     }
   });
 
@@ -414,10 +383,10 @@ describe("raids", () => {
     expect(detail).toMatchObject({ referenced: true, structureLocked: true });
     expect(detail.references.lockouts).toBe(1);
 
-    await expectCode(raidCatalogService.deleteRaid(admin, raidId), "CONTENT_RAID_IN_USE");
-    await expectCode(addEncounter(raidId, "New"), "CONTENT_ENCOUNTER_IN_USE");
-    await expectCode(raidCatalogService.deleteEncounter(admin, bossId), "CONTENT_ENCOUNTER_IN_USE");
-    await expectCode(raidCatalogService.moveEncounter(admin, { bossId, direction: "DOWN" }), "CONTENT_ENCOUNTER_IN_USE");
+    await expectDomainError(raidCatalogService.deleteRaid(admin, raidId), "CONTENT_RAID_IN_USE");
+    await expectDomainError(addEncounter(raidId, "New"), "CONTENT_ENCOUNTER_IN_USE");
+    await expectDomainError(raidCatalogService.deleteEncounter(admin, bossId), "CONTENT_ENCOUNTER_IN_USE");
+    await expectDomainError(raidCatalogService.moveEncounter(admin, { bossId, direction: "DOWN" }), "CONTENT_ENCOUNTER_IN_USE");
 
     // Identity-preserving edits stay allowed.
     await raidCatalogService.updateEncounter(admin, {
@@ -447,20 +416,20 @@ describe("raids", () => {
     const raidId = await newRaid("QA Product-Only Raid");
     const { bossId } = await addEncounter(raidId, "Solo");
     await newProduct("QA_PRODUCT_ONLY", [fixed(raidId, 1)]);
-    await expectCode(raidCatalogService.deleteRaid(admin, raidId), "CONTENT_RAID_IN_USE");
-    await expectCode(raidCatalogService.deleteEncounter(admin, bossId), "CONTENT_ENCOUNTER_IN_USE");
+    await expectDomainError(raidCatalogService.deleteRaid(admin, raidId), "CONTENT_RAID_IN_USE");
+    await expectDomainError(raidCatalogService.deleteEncounter(admin, bossId), "CONTENT_ENCOUNTER_IN_USE");
   });
 
   it("never deletes or restructures core (seeded) raids", async () => {
     for (const raidId of [MANAFORGE_OMEGA_RAID_ID, VENOMOUS_ABYSS_RAID_ID, TIDEBOUND_GROTTO_RAID_ID]) {
-      await expectCode(raidCatalogService.deleteRaid(admin, raidId), "CONTENT_RAID_IN_USE");
-      await expectCode(addEncounter(raidId, "Intruder"), "CONTENT_ENCOUNTER_IN_USE");
+      await expectDomainError(raidCatalogService.deleteRaid(admin, raidId), "CONTENT_RAID_IN_USE");
+      await expectDomainError(addEncounter(raidId, "Intruder"), "CONTENT_ENCOUNTER_IN_USE");
     }
-    await expectCode(
+    await expectDomainError(
       raidCatalogService.moveEncounter(admin, { bossId: NYMRISSA_WAVECALLER_BOSS_ID, direction: "DOWN" }),
       "CONTENT_ENCOUNTER_IN_USE",
     );
-    await expectCode(raidCatalogService.deleteEncounter(admin, NYMRISSA_WAVECALLER_BOSS_ID), "CONTENT_ENCOUNTER_IN_USE");
+    await expectDomainError(raidCatalogService.deleteEncounter(admin, NYMRISSA_WAVECALLER_BOSS_ID), "CONTENT_ENCOUNTER_IN_USE");
     expect(await bossesOf(TIDEBOUND_GROTTO_RAID_ID)).toHaveLength(1);
   });
 
@@ -611,18 +580,18 @@ describe("integration metadata", () => {
     const raidId = await newRaid("QA Ambiguity Raid");
     const { bossId } = await addEncounter(raidId, "Ambiguous", [990120]);
     // WCL 3379 already belongs to Nymrissa (fight assignment maps an encounter to one raid).
-    await expectCode(addEncounter(raidId, "Clash", [], [3379]), "CONTENT_WCL_ENCOUNTER_CONFLICT");
-    await expectCode(
+    await expectDomainError(addEncounter(raidId, "Clash", [], [3379]), "CONTENT_WCL_ENCOUNTER_CONFLICT");
+    await expectDomainError(
       raidCatalogService.updateEncounter(admin, { bossId, name: "Ambiguous", blizzardEncounterIds: [990120], wclEncounterIds: [3470] }),
       "CONTENT_WCL_ENCOUNTER_CONFLICT",
     );
     // Blizzard encounter ids are matched within a raid: no two bosses of one raid may share one.
-    await expectCode(addEncounter(raidId, "Twin", [990120]), "CONTENT_BLIZZARD_ENCOUNTER_CONFLICT");
+    await expectDomainError(addEncounter(raidId, "Twin", [990120]), "CONTENT_BLIZZARD_ENCOUNTER_CONFLICT");
     // The same Blizzard encounter id in ANOTHER raid is fine (separate instance payloads).
     await addEncounter(await newRaid("QA Other Raid"), "Elsewhere", [990120]);
     // Blizzard instance ids select the raid payload: one raid per instance.
-    await expectCode(newRaid("QA Instance Clash", { blizzardInstanceId: 1320 }), "CONTENT_BLIZZARD_INSTANCE_CONFLICT");
-    await expectCode(
+    await expectDomainError(newRaid("QA Instance Clash", { blizzardInstanceId: 1320 }), "CONTENT_BLIZZARD_INSTANCE_CONFLICT");
+    await expectDomainError(
       raidCatalogService.updateRaid(admin, {
         raidId,
         name: "QA Ambiguity Raid",
@@ -734,11 +703,11 @@ describe("products", () => {
       [fixed(emptyRaid, 1)],
     ];
     for (const contents of invalid) {
-      await expectCode(newProduct("QA_INVALID_COUNTS", contents), "CONTENT_INVALID_BOSS_COUNT");
+      await expectDomainError(newProduct("QA_INVALID_COUNTS", contents), "CONTENT_INVALID_BOSS_COUNT");
     }
-    await expectCode(newProduct("QA_DUPLICATE", [fixed(raidId, 1), variable(raidId, 1, 2)]), "CONTENT_DUPLICATE_PRODUCT_RAID");
-    await expectCode(newProduct("QA_EMPTY", []), "CONTENT_PRODUCT_EMPTY");
-    await expectCode(newProduct("QA_MISSING_RAID", [fixed("00000000-0000-4000-8000-000000000000", 1)]), "CONTENT_RAID_NOT_FOUND");
+    await expectDomainError(newProduct("QA_DUPLICATE", [fixed(raidId, 1), variable(raidId, 1, 2)]), "CONTENT_DUPLICATE_PRODUCT_RAID");
+    await expectDomainError(newProduct("QA_EMPTY", []), "CONTENT_PRODUCT_EMPTY");
+    await expectDomainError(newProduct("QA_MISSING_RAID", [fixed("00000000-0000-4000-8000-000000000000", 1)]), "CONTENT_RAID_NOT_FOUND");
     // Bounds are inclusive: fixed = total and min = default = total are valid.
     await newProduct("QA_VALID_BOUNDS", [fixed(raidId, 2)]);
     await newProduct("QA_VALID_VARIABLE", [variable(raidId, 2, 2)]);
@@ -748,8 +717,8 @@ describe("products", () => {
     // Collision against the seeded VENOMOUS_ABYSS key → deterministic suffix (no user prompt).
     const collidedId = await newProduct("Venomous Abyss", [variable(VENOMOUS_ABYSS_RAID_ID, 1, 8)]);
     expect((await productRepository.listAll()).find((product) => product.id === collidedId)?.key).toBe("VENOMOUS_ABYSS_2");
-    await expectCode(raidCatalogService.deleteProduct(admin, VENOMOUS_ABYSS_PRODUCT_ID), "CONTENT_PRODUCT_IN_USE");
-    await expectCode(raidCatalogService.deleteProduct(admin, MIDNIGHT_S2_BUNDLE_PRODUCT_ID), "CONTENT_PRODUCT_IN_USE");
+    await expectDomainError(raidCatalogService.deleteProduct(admin, VENOMOUS_ABYSS_PRODUCT_ID), "CONTENT_PRODUCT_IN_USE");
+    await expectDomainError(raidCatalogService.deleteProduct(admin, MIDNIGHT_S2_BUNDLE_PRODUCT_ID), "CONTENT_PRODUCT_IN_USE");
     // An update carries no key: the stored key never changes when the name does.
     await raidCatalogService.updateProduct(admin, {
       productId: VENOMOUS_ABYSS_PRODUCT_ID,

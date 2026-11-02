@@ -1287,6 +1287,10 @@
     "tests/integration/services/signup-quick-signup.service.test.ts": [
       "REWRITE",
       "Fresh users and Characters via shared fixtures, frozen RAID_WEEK_TEST_CLOCK, verified deleteCreatedRows and deleteAndCount for lockouts/unavailability, expectDomainError, restoreMocks"
+    ],
+    "tests/integration/services/raid-catalog.service.test.ts": [
+      "REWRITE",
+      "Fresh users via createTestUser (OWNER actor over ADMIN row), verified deleteAndCount cleanup for created raids/products/lockouts, expectDomainError; seed catalog restore contract kept"
     ]
   },
   "tests": {
