@@ -75,6 +75,86 @@
     "src/prisma/seed-wipe.test.ts": [
       "KEEP",
       "Runs the real seed; slow, but the only proof of a working reset"
+    ],
+    "src/validators/raid-catalog.test.ts": [
+      "KEEP",
+      "Input rules with negative cases"
+    ],
+    "src/validators/run-consumable-audit.test.ts": [
+      "KEEP",
+      "Rejects foreign hosts and malformed codes: security-relevant parsing"
+    ],
+    "src/validators/system-health.test.ts": [
+      "KEEP",
+      "Filter parsing with invalid values"
+    ],
+    "src/validators/user-management.test.ts": [
+      "KEEP",
+      "Filter parsing and the legacy alias"
+    ],
+    "src/integrations/blizzard/blizzard-api-client.test.ts": [
+      "KEEP",
+      "HTTP to error code mapping at the public boundary"
+    ],
+    "src/integrations/discord/discord-guild-member.client.test.ts": [
+      "KEEP",
+      "Real client against mocked fetch, token never in errors"
+    ],
+    "src/integrations/raider-io/raider-io-api-client.test.ts": [
+      "KEEP",
+      "Status mapping and item level source"
+    ],
+    "src/integrations/warcraft-logs/warcraft-logs-api-client.test.ts": [
+      "KEEP",
+      "Token cache, single flight, status mapping. Two fixes: a title claimed a rejection it never tested; a weak count became exact"
+    ],
+    "src/integrations/warcraft-logs/warcraft-logs-report-client.test.ts": [
+      "KEEP",
+      "Query batching and paging"
+    ],
+    "src/integrations/warcraft-logs/warcraft-logs-zone-scope.test.ts": [
+      "KEEP",
+      "Zone average rules"
+    ],
+    "src/guides/guide-content.test.ts": [
+      "KEEP",
+      "Reader-facing content rules; the repeated validator test moved to guide-publisher.test.ts"
+    ],
+    "src/guides/guide-publisher.test.ts": [
+      "KEEP",
+      "New in batch 5: every shared test runs against both guides"
+    ],
+    "src/guides/booster-guide.test.ts": [
+      "KEEP",
+      "Rewritten in batch 5: only booster-specific tests remain"
+    ],
+    "src/guides/raidlead-guide.test.ts": [
+      "KEEP",
+      "Rewritten in batch 5: only raid-lead-specific tests remain"
+    ],
+    "src/discord-bot/bot-api-client.test.ts": [
+      "KEEP",
+      "Real client against mocked fetch. Merged the instance check into the error test"
+    ],
+    "src/discord-bot/client-rate-limit.test.ts": [
+      "KEEP",
+      "New in batch 8"
+    ],
+    "src/app/(app)/runs/[runId]/archive-transcript/route.test.ts": [
+      "KEEP",
+      "New in batch 4; mutation-checked"
+    ],
+    "src/app/api/bot/bot-route-credentials.test.ts": [
+      "KEEP",
+      "New in batch 3; mutation-checked"
+    ],
+    "src/services/session-management-ownership.test.ts": [
+      "KEEP",
+      "New in batch 3; mutation-checked"
+    ],
+    "src/next-config.test.ts": [
+      "KEEP",
+      "New in batch 3"
     ]
   },
   "tests": {

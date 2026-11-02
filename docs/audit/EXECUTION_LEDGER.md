@@ -128,10 +128,10 @@ Order follows the assignment. Each line is one PR, stacked on the one before.
 | 4 | MVCS boundaries: app and controllers no longer import repositories; lib no longer imports components | PR #326, awaiting review |
 | 4b | Move pure rules from `src/services` to `src/domain` | PR #327, awaiting review |
 | 5 | Guide code: drop legacy paths, share publisher code | PR #328, awaiting review |
-| 6 | Test cleanup by module | Planned; 19 of 337 files read |
+| 6 | Test cleanup by module | Partial: flagged tests in PR open; 39 of 342 files read, 358 of 3933 tests decided |
 | 7 | Frontend: error, loading and not-found pages; shared dialog effect | PR #329, awaiting review |
-| 8 | Performance, measured: run detail payload, event purge, rate-limit log | PR open, awaiting review |
-| 9 | Dependencies and final verification | Planned |
+| 8 | Performance, measured: run detail payload, event purge, rate-limit log | PR #330, awaiting review |
+| 9 | Dependencies and final verification | Dependencies audited, no change; TruffleHog scan still invalid |
 | 10 | ManawyrmHub preparation | Needs approval |
 
 ## Decisions for the owner
@@ -143,6 +143,17 @@ Order follows the assignment. Each line is one PR, stacked on the one before.
 ## Change log
 
 Updated with every batch.
+
+### Batch 6: flagged tests (partial)
+
+- Removed: `auth-session-hardening` constants test, `manage/runs/create` path constant test, bot client instance test (merged into the error test).
+- Rewritten: three platform-owner tests, one misleading bot route title, one Warcraft Logs title that claimed a rejection it never tested, one weak token count.
+- Read in full, all kept: 4 validator files, 6 integration files.
+
+### Dependencies
+
+- `npm audit --omit=dev`: 1 high, `lodash` 4.17.21, indirect through discord.js. Only `get` and `uniqWith` are used there. No fix is available from discord.js. Accepted and reported.
+- Not updated: Prisma RCs (behind by several RCs), `vitest`, `typescript`, `eslint`, `dotenv` majors. A freeze is the wrong moment for them. The new owner decides.
 
 ### Batch 8: performance
 
@@ -210,4 +221,12 @@ Found with an AST scan for exports and object methods that nothing references, t
 
 ## Continuation point
 
-See the backlog table: the first line that is not done is the next step. Tools used for scans and validation are recreated easily: AST scans of exports, `vitest list --json`, and the commands in the baseline table.
+The test audit is not complete. Order for the rest, smallest risk first:
+
+1. `src/repositories` (11 files), then `src/components` (39), `src/discord-bot` (36, start with `sync-voice`, `voice-channels` and `sync-loop`, which hold most of the 98 tests with only mock-call assertions).
+2. `src/lib` (87), `src/domain` (22), `src/services` (108).
+3. For each file: read every test, record a decision in `docs/audit/test-decisions.json`, change what the decision says, then rebuild `docs/audit/test-ledger.tsv` from `vitest list --json`.
+4. After that, remove methods only tests call, such as `signupService.createBoosterSignup` (74 uses) and `rosterService.setDraftSelection` (78 uses). Move their tests to the production entry points first.
+5. Then shared helpers for `createTestUser` (36 copies), `createCharacter` (29) and `createUser` (26), and `restoreMocks` for the 52 files that never reset mocks.
+
+Not started: renames from the naming table, other than the move to `src/domain`.

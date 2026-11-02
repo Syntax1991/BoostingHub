@@ -30,7 +30,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("warcraftLogs region and slug mapping", () => {
-  it("maps EU/US and rejects inventing other regions", () => {
+  it("maps EU and US", () => {
     expect(toWarcraftLogsServerRegion("EU")).toBe("EU");
     expect(toWarcraftLogsServerRegion("US")).toBe("US");
   });
@@ -113,7 +113,8 @@ describe("warcraftLogsApiClient", () => {
     // Advance past skew window for 1s token (skew is 60s, so 1s token is immediately stale)
     await warcraftLogsApiClient.findCharacter({ name: "A", realm: "Kazzak", region: "EU" });
     const tokenCalls = fetchMock.mock.calls.filter((call) => call[0] === "https://www.warcraftlogs.com/oauth/token");
-    expect(tokenCalls.length).toBeGreaterThanOrEqual(2);
+    // token-1 from the first half, then token-short and its stale replacement token-2.
+    expect(tokenCalls).toHaveLength(3);
   });
 
   it("prefers canonicalID for the persisted profile identity", async () => {
