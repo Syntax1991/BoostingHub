@@ -1339,6 +1339,10 @@
     "tests/integration/services/character-blizzard-import.service.test.ts": [
       "REWRITE",
       "Owned users via createTestUser; verified BattleNet/lockout deleteAndCount cleanup; expectDomainError; suite tracker avoids created local shadowing"
+    ],
+    "tests/integration/services/notification-roster-events.test.ts": [
+      "REWRITE",
+      "Migrated setDraftSelection→saveDraftSelection adapter; fixtures respect one-booster-per-user; Save Roster notifies (production); assertIsolated + deleteAndCount cleanup"
     ]
   },
   "tests": {

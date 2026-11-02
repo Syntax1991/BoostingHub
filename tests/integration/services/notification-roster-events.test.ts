@@ -2,6 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
+import { testActor } from "@tests/fixtures/actors";
+import { assertIsolatedTestDatabase } from "@tests/fixtures/db-fixtures";
 import { venomousCreateInput } from "@tests/fixtures/test-run-input";
 import { raidRepository } from "@/repositories/raid.repository";
 import {
@@ -40,16 +42,37 @@ function asUser(
   accountRole: AuthenticatedUser["accountRole"] = "USER",
   discordUserId: string | null = null,
 ): AuthenticatedUser {
-  return {
-    id,
+  return testActor(id, accountRole, {
     name,
     email: `${id}@nroster.boostting.local`,
-    image: null,
     discordUserId,
     discordUsername: discordUserId ? `u${discordUserId}` : null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
+  });
+}
+
+/** Test-local adapter: production path is saveDraftSelection (full draft replace). */
+async function setDraftSelection(
+  actor: AuthenticatedUser,
+  input: {
+    runId: string;
+    signupId: string;
+    selected: boolean;
+    version: number;
+    selectedRole?: CharacterRole | null;
+  },
+) {
+  const view = await rosterService.getRosterManagementView(actor, input.runId);
+  const others = [...view.boosters, ...view.groups.lootbuddies]
+    .filter((row) => row.draftSelected && row.id !== input.signupId)
+    .map((row) => ({ signupId: row.id, selectedRole: row.selectedRole }));
+  const selections = input.selected
+    ? [...others, { signupId: input.signupId, selectedRole: input.selectedRole ?? null }]
+    : others;
+  await rosterService.saveDraftSelection(actor, {
+    runId: input.runId,
+    version: input.version,
+    selections,
+  });
 }
 
 async function createTestUser(
@@ -126,7 +149,7 @@ async function createSignup(input: {
     participationType: "BOOSTER",
   }).first()) as { id: string } | null;
   if (existing) {
-    await orm.RunSignupRole.where({ signupId: existing.id }).delete();
+    await orm.RunSignupRole.where({ signupId: existing.id }).deleteAndCount();
     await orm.RunSignupRole.create({
       id: crypto.randomUUID(),
       signupId: existing.id,
@@ -199,39 +222,41 @@ async function storedNotes(userId: string, runId: string) {
 }
 
 async function cleanupRun(runId: string) {
+  assertIsolatedTestDatabase();
   const notes = await orm.UserNotification.where({ runId }).select("id").all();
   for (const row of notes) {
-    await orm.UserNotification.where({ id: (row as { id: string }).id }).delete();
+    await orm.UserNotification.where({ id: (row as { id: string }).id }).deleteAndCount();
   }
   // Started Runs (external booster Final Setup test) carry attendance + a start snapshot.
   const attendance = await orm.RunAttendance.where({ runId }).select("id").all();
   for (const row of attendance) {
-    await orm.RunAttendance.where({ id: (row as { id: string }).id }).delete();
+    await orm.RunAttendance.where({ id: (row as { id: string }).id }).deleteAndCount();
   }
   const snapshot = await orm.RunStartSnapshot.where({ runId }).first();
-  if (snapshot) await orm.RunStartSnapshot.where({ runId }).delete();
+  if (snapshot) await orm.RunStartSnapshot.where({ runId }).deleteAndCount();
   const roster = await orm.RunRoster.where({ runId }).first();
   if (roster) {
     const rosterId = (roster as { id: string }).id;
     const entries = await orm.RunRosterEntry.where({ rosterId }).all();
     for (const entry of entries) {
-      await orm.RunRosterEntry.where({ id: (entry as { id: string }).id }).delete();
+      await orm.RunRosterEntry.where({ id: (entry as { id: string }).id }).deleteAndCount();
     }
-    await orm.RunRoster.where({ id: rosterId }).delete();
+    await orm.RunRoster.where({ id: rosterId }).deleteAndCount();
   }
   const signups = await orm.RunSignup.where({ runId }).select("id").all();
   for (const row of signups) {
     const signupId = (row as { id: string }).id;
     const offered = await orm.RunSignupRole.where({ signupId }).select("id").all();
     for (const offer of offered) {
-      await orm.RunSignupRole.where({ id: (offer as { id: string }).id }).delete();
+      await orm.RunSignupRole.where({ id: (offer as { id: string }).id }).deleteAndCount();
     }
-    await orm.RunSignup.where({ id: signupId }).delete();
+    await orm.RunSignup.where({ id: signupId }).deleteAndCount();
   }
-  await orm.Run.where({ id: runId }).delete();
+  await orm.Run.where({ id: runId }).deleteAndCount();
 }
 
 async function cleanupAll() {
+  assertIsolatedTestDatabase();
   for (const runId of [...createdRunIds]) {
     try {
       await cleanupRun(runId);
@@ -243,23 +268,23 @@ async function cleanupAll() {
   for (const userId of Object.values(ids)) {
     const notes = await orm.UserNotification.where({ userId }).select("id").all();
     for (const row of notes) {
-      await orm.UserNotification.where({ id: (row as { id: string }).id }).delete();
+      await orm.UserNotification.where({ id: (row as { id: string }).id }).deleteAndCount();
     }
     const signups = await orm.RunSignup.where({ userId }).select("id").all();
     for (const row of signups) {
       const signupId = (row as { id: string }).id;
       const offered = await orm.RunSignupRole.where({ signupId }).select("id").all();
       for (const offer of offered) {
-        await orm.RunSignupRole.where({ id: (offer as { id: string }).id }).delete();
+        await orm.RunSignupRole.where({ id: (offer as { id: string }).id }).deleteAndCount();
       }
-      await orm.RunSignup.where({ id: signupId }).delete();
+      await orm.RunSignup.where({ id: signupId }).deleteAndCount();
     }
     const chars = await orm.Character.where({ userId }).select("id").all();
     for (const row of chars) {
-      await orm.Character.where({ id: (row as { id: string }).id }).delete();
+      await orm.Character.where({ id: (row as { id: string }).id }).deleteAndCount();
     }
     try {
-      await orm.User.where({ id: userId }).delete();
+      await orm.User.where({ id: userId }).deleteAndCount();
     } catch {
       // ignore
     }
@@ -289,6 +314,7 @@ beforeAll(async () => {
   await approveAccess(ids.player);
   await approveAccess(ids.playerB);
   await approveAccess(ids.lead);
+  await approveAccess(ids.admin);
 
   charPlayer = await createCharacter({
     userId: ids.player,
@@ -311,9 +337,11 @@ beforeAll(async () => {
     specialization: "Protection",
     primaryRole: "TANK",
   });
+  // DPS belongs to ADMIN so a draft can select tank+dps without violating the
+  // production one-booster-per-user rule (old setDraftSelection silently replaced).
   charLeadDps = await createCharacter({
-    userId: ids.lead,
-    name: "NLeadDps",
+    userId: ids.admin,
+    name: "NAdminDps",
     wowClass: "HUNTER",
     specialization: "Beast Mastery",
     primaryRole: "RANGED_DPS",
@@ -342,10 +370,10 @@ async function createPublishedReadyRun(desiredHealerCount = 1) {
 }
 
 describe("notification roster publish events", () => {
-  it("does not notify on draft selection; notifies newly selected on publish with PENDING/SKIPPED", async () => {
+  it("Save Roster notifies newly selected with PENDING/SKIPPED; Publish afterwards does not repeat", async () => {
     const runId = await createPublishedReadyRun(2);
     const tank = await createSignup({ runId, userId: ids.lead, characterId: charLeadTank, role: "TANK" });
-    const dps = await createSignup({ runId, userId: ids.lead, characterId: charLeadDps, role: "RANGED_DPS" });
+    const dps = await createSignup({ runId, userId: ids.admin, characterId: charLeadDps, role: "RANGED_DPS" });
     const healer = await createSignup({
       runId,
       userId: ids.player,
@@ -360,18 +388,29 @@ describe("notification roster publish events", () => {
     });
 
     let view = await rosterService.getRosterManagementView(lead, runId);
-    for (const signupId of [tank, dps, healer, healerB]) {
-      view = await rosterService.getRosterManagementView(lead, runId);
-      await rosterService.setDraftSelection(lead, {
-        runId,
-        signupId,
-        selected: true,
-        version: view.roster.version,
-      });
-    }
+    await rosterService.saveDraftSelection(lead, {
+      runId,
+      version: view.roster.version,
+      selections: [
+        { signupId: tank, selectedRole: "TANK" },
+        { signupId: dps, selectedRole: "RANGED_DPS" },
+        { signupId: healer, selectedRole: "HEALER" },
+        { signupId: healerB, selectedRole: "HEALER" },
+      ],
+    });
 
-    const beforePublish = await orm.UserNotification.where({ runId }).all();
-    expect(beforePublish).toHaveLength(0);
+    const afterSave = await userNotificationRepository.listForUser(ids.player, 20);
+    const rosterNotes = afterSave.filter((row) => row.runId === runId && row.type === "ROSTER_SELECTED");
+    expect(rosterNotes).toHaveLength(1);
+    expect(rosterNotes[0].discordDeliveryStatus).toBe("PENDING");
+    expect(rosterNotes[0].discordUserId).toBe("900000000000000001");
+
+    const skipped = (await userNotificationRepository.listForUser(ids.playerB, 20)).filter(
+      (row) => row.runId === runId && row.type === "ROSTER_SELECTED",
+    );
+    expect(skipped).toHaveLength(1);
+    expect(skipped[0].discordDeliveryStatus).toBe("SKIPPED");
+    expect(skipped[0].discordUserId).toBeNull();
 
     view = await rosterService.getRosterManagementView(lead, runId);
     await rosterService.publishRoster(lead, {
@@ -380,27 +419,17 @@ describe("notification roster publish events", () => {
       acknowledgeWarnings: true,
     });
 
-    const after = await userNotificationRepository.listForUser(ids.player, 20);
-    const rosterNotes = after.filter((row) => row.runId === runId && row.type === "ROSTER_SELECTED");
-    expect(rosterNotes).toHaveLength(1);
-    expect(rosterNotes[0].discordDeliveryStatus).toBe("PENDING");
-    expect(rosterNotes[0].discordUserId).toBe("900000000000000001");
+    const afterPublish = await userNotificationRepository.listForUser(ids.player, 20);
+    expect(afterPublish.filter((row) => row.runId === runId && row.type === "ROSTER_SELECTED")).toHaveLength(1);
     expect(rosterNotes[0].sourceKey).toBe(
-      rosterSelectedSourceKey(runId, (await rosterService.getRosterManagementView(lead, runId)).roster.version, healer),
+      rosterSelectedSourceKey(runId, view.roster.version, healer),
     );
-
-    const skipped = (await userNotificationRepository.listForUser(ids.playerB, 20)).filter(
-      (row) => row.runId === runId && row.type === "ROSTER_SELECTED",
-    );
-    expect(skipped).toHaveLength(1);
-    expect(skipped[0].discordDeliveryStatus).toBe("SKIPPED");
-    expect(skipped[0].discordUserId).toBeNull();
   });
 
   it("dedupes republish for already-selected signups and notifies on reselection after drop", async () => {
     const runId = await createPublishedReadyRun(1);
     const tank = await createSignup({ runId, userId: ids.lead, characterId: charLeadTank, role: "TANK" });
-    const dps = await createSignup({ runId, userId: ids.lead, characterId: charLeadDps, role: "RANGED_DPS" });
+    const dps = await createSignup({ runId, userId: ids.admin, characterId: charLeadDps, role: "RANGED_DPS" });
     const healer = await createSignup({
       runId,
       userId: ids.player,
@@ -417,7 +446,7 @@ describe("notification roster publish events", () => {
     let view = await rosterService.getRosterManagementView(lead, runId);
     for (const signupId of [tank, dps, healer]) {
       view = await rosterService.getRosterManagementView(lead, runId);
-      await rosterService.setDraftSelection(lead, {
+      await setDraftSelection(lead, {
         runId,
         signupId,
         selected: true,
@@ -461,14 +490,14 @@ describe("notification roster publish events", () => {
       version: view.roster.version,
     });
     view = await rosterService.getRosterManagementView(lead, runId);
-    await rosterService.setDraftSelection(lead, {
+    await setDraftSelection(lead, {
       runId,
       signupId: healer,
       selected: false,
       version: view.roster.version,
     });
     view = await rosterService.getRosterManagementView(lead, runId);
-    await rosterService.setDraftSelection(lead, {
+    await setDraftSelection(lead, {
       runId,
       signupId: healerAlt,
       selected: true,
@@ -487,14 +516,14 @@ describe("notification roster publish events", () => {
       version: view.roster.version,
     });
     view = await rosterService.getRosterManagementView(lead, runId);
-    await rosterService.setDraftSelection(lead, {
+    await setDraftSelection(lead, {
       runId,
       signupId: healerAlt,
       selected: false,
       version: view.roster.version,
     });
     view = await rosterService.getRosterManagementView(lead, runId);
-    await rosterService.setDraftSelection(lead, {
+    await setDraftSelection(lead, {
       runId,
       signupId: healer,
       selected: true,
@@ -517,7 +546,7 @@ describe("notification roster publish events", () => {
   it("creates ROSTER_REMOVED when published SELECTED becomes NOT_SELECTED", async () => {
     const runId = await createPublishedReadyRun(1);
     const tank = await createSignup({ runId, userId: ids.lead, characterId: charLeadTank, role: "TANK" });
-    const dps = await createSignup({ runId, userId: ids.lead, characterId: charLeadDps, role: "RANGED_DPS" });
+    const dps = await createSignup({ runId, userId: ids.admin, characterId: charLeadDps, role: "RANGED_DPS" });
     const healer = await createSignup({
       runId,
       userId: ids.player,
@@ -534,7 +563,7 @@ describe("notification roster publish events", () => {
     let view = await rosterService.getRosterManagementView(lead, runId);
     for (const signupId of [tank, dps, healer]) {
       view = await rosterService.getRosterManagementView(lead, runId);
-      await rosterService.setDraftSelection(lead, {
+      await setDraftSelection(lead, {
         runId,
         signupId,
         selected: true,
@@ -553,9 +582,10 @@ describe("notification roster publish events", () => {
       runId,
       version: view.roster.version,
     });
-    // Draft deselection alone must not notify.
+    // Production saveDraftSelection notifies on drop of a published SELECTED
+    // player (the old setDraftSelection path stayed silent until Publish).
     view = await rosterService.getRosterManagementView(lead, runId);
-    await rosterService.setDraftSelection(lead, {
+    await setDraftSelection(lead, {
       runId,
       signupId: healer,
       selected: false,
@@ -564,10 +594,10 @@ describe("notification roster publish events", () => {
     const midDraft = (await userNotificationRepository.listForUser(ids.player, 50)).filter(
       (row) => row.runId === runId && row.type === "ROSTER_REMOVED",
     );
-    expect(midDraft).toHaveLength(0);
+    expect(midDraft).toHaveLength(1);
 
     view = await rosterService.getRosterManagementView(lead, runId);
-    await rosterService.setDraftSelection(lead, {
+    await setDraftSelection(lead, {
       runId,
       signupId: healerAlt,
       selected: true,
@@ -674,7 +704,7 @@ describe("notification roster publish events", () => {
     });
     const runId = await createPublishedReadyRun(1);
     const tank = await createSignup({ runId, userId: ids.lead, characterId: charLeadTank, role: "TANK" });
-    const dps = await createSignup({ runId, userId: ids.lead, characterId: charLeadDps, role: "RANGED_DPS" });
+    const dps = await createSignup({ runId, userId: ids.admin, characterId: charLeadDps, role: "RANGED_DPS" });
     const healer = await createSignup({
       runId,
       userId: ids.player,
@@ -684,7 +714,7 @@ describe("notification roster publish events", () => {
     let view = await rosterService.getRosterManagementView(lead, runId);
     for (const signupId of [tank, dps, healer]) {
       view = await rosterService.getRosterManagementView(lead, runId);
-      await rosterService.setDraftSelection(lead, {
+      await setDraftSelection(lead, {
         runId,
         signupId,
         selected: true,
@@ -922,6 +952,8 @@ describe("replace a participant after Start", () => {
     const tank = await createSignup({ runId, userId: ids.lead, characterId: charLeadTank, role: "TANK" });
     const healer = await createSignup({ runId, userId: ids.player, characterId: charPlayer, role: "HEALER" });
     const bench = await createSignup({ runId, userId: ids.playerB, characterId: charPlayerB, role: "HEALER" });
+    // Unpicked candidate from a different user (one-booster-per-user rule).
+    await createSignup({ runId, userId: ids.admin, characterId: charLeadDps, role: "RANGED_DPS" });
     let view = await rosterService.getRosterManagementView(lead, runId);
     await rosterService.saveDraftSelection(lead, {
       runId,
@@ -947,7 +979,7 @@ describe("replace a participant after Start", () => {
     const before = await attendanceService.getManagerAttendance(lead, runId);
     // Unselected signups are the candidates: the bench player and the Raid Lead's
     // own unpicked Character (signed up automatically when the Run was created).
-    const leadDpsOffer = (await orm.RunSignup.where({ runId, userId: ids.lead, characterId: charLeadDps }).first()) as {
+    const leadDpsOffer = (await orm.RunSignup.where({ runId, userId: ids.admin, characterId: charLeadDps }).first()) as {
       id: string;
     };
     expect(before.replacementCandidates.map((candidate) => candidate.signupId).sort()).toEqual([bench, leadDpsOffer.id].sort());
@@ -1198,7 +1230,7 @@ describe("character swap in the roster", () => {
     // Start from a clean slate for this player so the expectations are exact.
     const existing = await orm.UserNotification.where({ userId: ids.player }).select("id").all();
     for (const row of existing) {
-      await orm.UserNotification.where({ id: (row as { id: string }).id }).delete();
+      await orm.UserNotification.where({ id: (row as { id: string }).id }).deleteAndCount();
     }
     const {
       runId,
