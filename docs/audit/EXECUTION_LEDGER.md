@@ -123,9 +123,10 @@ Order follows the assignment. Each line is one PR, stacked on the one before.
 | # | Scope | State |
 | --- | --- | --- |
 | 1 | Documentation and restart plan | PR #323, awaiting review |
-| 2 | Remove dead code | PR open, awaiting review |
-| 3 | Security headers, bot log body, route-wide bot credential test, session ownership tests | PR open, awaiting review |
-| 4 | MVCS boundaries A4 to A7 | Planned |
+| 2 | Remove dead code | PR #324, awaiting review |
+| 3 | Security headers, bot log body, route-wide bot credential test, session ownership tests | PR #325, awaiting review |
+| 4 | MVCS boundaries: app and controllers no longer import repositories; lib no longer imports components | PR open, awaiting review |
+| 4b | Move pure rules from `src/services` to `src/domain` | Planned |
 | 5 | Guide code: drop legacy paths, share publisher code | Planned |
 | 6 | Test cleanup by module | Planned; 19 of 337 files read |
 | 7 | Frontend: error and loading states, reload consistency | Planned |
@@ -142,6 +143,15 @@ Order follows the assignment. Each line is one PR, stacked on the one before.
 ## Change log
 
 Updated with every batch.
+
+### Batch 4: MVCS boundaries
+
+- Six pages and the app layout read the time zone through `settingsController`.
+- `devIdentityService` replaces the direct repository call in `auth.actions` and `auth.controller`.
+- `listAttachCandidatesForSlot` owns the slot lookup that `community-schedule.actions` did.
+- The archive transcript route asks `runDetailService.canManageRunById`. New route tests: 4, a mutation that dropped the permission check made them fail.
+- `src/lib/schedule-start.ts` holds pure code that lived in a client component.
+- Accepted: `lib/discord/discord-integration-events`, `lib/blizzard/blizzard-integration-events` and `lib/integration-provider-events` call `integrationEventService`. They are thin adapters and moving them changes nothing for callers.
 
 ### Batch 3: security hardening
 
