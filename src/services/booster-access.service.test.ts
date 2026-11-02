@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
 import type { CharacterRole, RaidDifficulty, WowClass } from "@/models/enums";
 import { userRepository } from "@/repositories/user.repository";
@@ -9,6 +8,10 @@ import { canTransitionBoosterAccess, canRequestFromStatus } from "@/domain/boost
 import { signupService } from "@/services/signup.service";
 import { characterService } from "@/services/character.service";
 import { rolesForClass } from "@/lib/wow-specializations";
+import { SEED_IDS } from "@/prisma/seed-ids";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { expectDomainError } from "@/test/domain-error";
 
 // Warcraft Logs auto-link enrichment runs after Character writes/syncs; keep it
 // offline (a real WARCRAFT_LOGS_* in .env would otherwise hit the live API).
@@ -26,93 +29,18 @@ vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOr
  * approving one grants the account-level Booster role, and the request row keeps
  * the difficulty that was requested at the time.
  */
-const ids = {
-  owner: "aaaaaaaa-aaaa-4aaa-8aaa-ba0000000001",
-  other: "aaaaaaaa-aaaa-4aaa-8aaa-ba0000000002",
-  lead: "aaaaaaaa-aaaa-4aaa-8aaa-ba0000000003",
-  admin: "44444444-4444-4444-8444-444444444444",
-  heroicOpen: "r1111111-1111-4111-8111-111111111111",
-  mythicOpen: "r2222222-2222-4222-8222-222222222222",
-  normalOpen: "r4444444-4444-4444-8444-444444444444",
-};
+/** The seeded open Runs, one per difficulty, only read for eligibility. */
+const NORMAL_OPEN = SEED_IDS.runs.normalOpen;
+const HEROIC_OPEN = SEED_IDS.runs.heroicOpen;
+const MYTHIC_OPEN = SEED_IDS.runs.mythicOpen;
 
-const createdCharacterIds: string[] = [];
-const createdAccessIds: string[] = [];
-
-function asUser(
-  id: string,
-  name: string,
-  accountRole: AuthenticatedUser["accountRole"] = "USER",
-): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@batest.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
-
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    expect(isDomainError(error) && error.code).toBe(code);
-  }
-}
-
-async function createTestUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"] = "USER") {
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@batest.boostting.local`,
-    emailVerified: true,
-    accountRole,
-    accountStatus: "ACTIVE",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
-}
-
-async function deleteIfPresent(table: "User" | "Character" | "RunSignup" | "BoosterAccess", id: string) {
-  try {
-    if (table === "User") await orm.User.where({ id }).delete();
-    else if (table === "Character") await orm.Character.where({ id }).delete();
-    else if (table === "RunSignup") await orm.RunSignup.where({ id }).delete();
-    else await orm.BoosterAccess.where({ id }).delete();
-  } catch {
-    // Already gone.
-  }
-}
-
-async function cleanupOwnerDomain() {
-  paladinSerial = 0;
-  createdAccessIds.length = 0;
-  createdCharacterIds.length = 0;
-  for (const id of [ids.owner, ids.other, ids.lead]) {
-    for (const row of await orm.RunSignup.where({ userId: id }).all()) {
-      await deleteIfPresent("RunSignup", String(row.id));
-    }
-    for (const row of await orm.BoosterAccess.where({ userId: id }).all()) {
-      await deleteIfPresent("BoosterAccess", String(row.id));
-    }
-    for (const row of await orm.Character.where({ userId: id }).all()) {
-      await deleteIfPresent("Character", String(row.id));
-    }
-    await orm.User.where({ id }).update({ isBooster: false, isLootbuddy: false }).catch(() => {});
-  }
-}
-
-async function cleanupGeneratedRows() {
-  await cleanupOwnerDomain();
-  await deleteIfPresent("User", ids.owner);
-  await deleteIfPresent("User", ids.other);
-  await deleteIfPresent("User", ids.lead);
-}
+/** Access requests and Characters cascade with their User. */
+const created = { userIds: [] as string[] };
+let other: AuthenticatedUser;
+let lead: AuthenticatedUser;
+let admin: AuthenticatedUser;
+/** Fresh per test, since tests grant the Booster role and add requests and Characters. */
+let owner: AuthenticatedUser;
 
 async function createPendingAccess(
   userId: string,
@@ -134,7 +62,6 @@ async function createPendingAccess(
     createdAt: now,
     updatedAt: now,
   });
-  createdAccessIds.push(id);
   return id;
 }
 
@@ -151,7 +78,6 @@ async function createPaladin(owner: AuthenticatedUser) {
     specialization: "Holy",
     itemLevel: 640,
   });
-  createdCharacterIds.push(character.id);
   return character;
 }
 
@@ -160,19 +86,24 @@ async function isBooster(userId: string) {
 }
 
 beforeAll(async () => {
-  await cleanupGeneratedRows();
-  await createTestUser(ids.owner, "Access Owner");
-  await createTestUser(ids.other, "Access Other");
-  await createTestUser(ids.lead, "Access Lead", "RAID_LEAD");
-});
-
-afterAll(async () => {
-  await cleanupGeneratedRows();
+  assertIsolatedTestDatabase();
+  const otherId = await createTestUser({ name: "Access Other" });
+  const leadId = await createTestUser({ name: "Access Lead", accountRole: "RAID_LEAD" });
+  const adminId = await createTestUser({ name: "Access Admin", accountRole: "ADMIN" });
+  created.userIds.push(otherId, leadId, adminId);
+  other = testActor(otherId);
+  lead = testActor(leadId, "RAID_LEAD");
+  admin = testActor(adminId, "ADMIN");
 });
 
 beforeEach(async () => {
-  await cleanupOwnerDomain();
+  paladinSerial = 0;
+  const ownerId = await createTestUser({ name: "Access Owner" });
+  created.userIds.push(ownerId);
+  owner = testActor(ownerId);
 });
+
+afterAll(() => deleteCreatedRows(created));
 
 describe("booster access transitions", () => {
   it("allows pending to approve/reject, approved to revoke, and re-request from reject/revoke", () => {
@@ -194,12 +125,9 @@ describe("booster access transitions", () => {
 });
 
 describe("boosterAccessService request", () => {
-  const owner = asUser(ids.owner, "Access Owner");
-  const other = asUser(ids.other, "Access Other");
-
   it("disables self-service requests after ownership check", async () => {
     const character = await createPaladin(owner);
-    await expectDomainCode(
+    await expectDomainError(
       boosterAccessService.requestAccess(owner, {
         characterId: character.id,
       }),
@@ -209,7 +137,7 @@ describe("boosterAccessService request", () => {
 
   it("rejects another user's character before the disabled gate", async () => {
     const character = await createPaladin(owner);
-    await expectDomainCode(
+    await expectDomainError(
       boosterAccessService.requestAccess(other, {
         characterId: character.id,
       }),
@@ -219,34 +147,27 @@ describe("boosterAccessService request", () => {
 });
 
 describe("boosterAccessService legacy review authorization", () => {
-  const owner = asUser(ids.owner, "Access Owner");
-  const lead = asUser(ids.lead, "Access Lead", "RAID_LEAD");
-  const admin = asUser(ids.admin, "Aelira Nightwatch", "ADMIN");
-
   it("lets only ADMIN approve or reject historical requests", async () => {
     const character = await createPaladin(owner);
-    const pendingId = await createPendingAccess(ids.owner, character.id, "PALADIN", "TANK", "NORMAL");
+    const pendingId = await createPendingAccess(owner.id, character.id, "PALADIN", "TANK", "NORMAL");
 
-    await expectDomainCode(boosterAccessService.approveAccess(owner, pendingId), "NOT_AUTHORIZED");
-    await expectDomainCode(boosterAccessService.approveAccess(lead, pendingId), "NOT_AUTHORIZED");
-    await expectDomainCode(boosterAccessService.rejectAccess(lead, pendingId), "NOT_AUTHORIZED");
-    await expectDomainCode(boosterAccessService.listLegacyRequests(lead), "NOT_AUTHORIZED");
-    expect(await isBooster(ids.owner)).toBe(false);
+    await expectDomainError(boosterAccessService.approveAccess(owner, pendingId), "NOT_AUTHORIZED");
+    await expectDomainError(boosterAccessService.approveAccess(lead, pendingId), "NOT_AUTHORIZED");
+    await expectDomainError(boosterAccessService.rejectAccess(lead, pendingId), "NOT_AUTHORIZED");
+    await expectDomainError(boosterAccessService.listLegacyRequests(lead), "NOT_AUTHORIZED");
+    expect(await isBooster(owner.id)).toBe(false);
     await boosterAccessService.approveAccess(admin, pendingId);
-    expect(await isBooster(ids.owner)).toBe(true);
+    expect(await isBooster(owner.id)).toBe(true);
   });
 });
 
 describe("boosterAccessService approving a historical request", () => {
-  const owner = asUser(ids.owner, "Access Owner");
-  const admin = asUser(ids.admin, "Aelira Nightwatch", "ADMIN");
-
   it("grants the account-level Booster role, valid on every difficulty", async () => {
     const character = await createPaladin(owner); // specced Holy → HEALER
-    const pendingId = await createPendingAccess(ids.owner, character.id, "PALADIN", "HEALER", "HEROIC");
+    const pendingId = await createPendingAccess(owner.id, character.id, "PALADIN", "HEALER", "HEROIC");
     await boosterAccessService.approveAccess(admin, pendingId);
 
-    expect(await userRepository.findBoostingRoles(ids.owner)).toEqual({
+    expect(await userRepository.findBoostingRoles(owner.id)).toEqual({
       isBooster: true,
       isLootbuddy: false,
       discordRaidBooster: false,
@@ -254,7 +175,7 @@ describe("boosterAccessService approving a historical request", () => {
     });
     // A legacy request that named HEROIC unlocks Normal, Heroic and Mythic Runs alike;
     // the Character's specialization only determines the signup DEFAULT role.
-    for (const runId of [ids.normalOpen, ids.heroicOpen, ids.mythicOpen]) {
+    for (const runId of [NORMAL_OPEN, HEROIC_OPEN, MYTHIC_OPEN]) {
       const options = await signupService.getSignupOptions(owner, runId);
       expect(
         options.booster.eligible.some((item) => item.characterId === character.id && item.defaultRole === "HEALER"),
@@ -265,9 +186,9 @@ describe("boosterAccessService approving a historical request", () => {
 
   it("resolves every PENDING sibling and keeps each request's historical difficulty", async () => {
     const character = await createPaladin(owner);
-    const healer = await createPendingAccess(ids.owner, character.id, "PALADIN", "HEALER", "MYTHIC");
-    const tank = await createPendingAccess(ids.owner, character.id, "PALADIN", "TANK", "MYTHIC");
-    const normalDps = await createPendingAccess(ids.owner, character.id, "PALADIN", "DPS", "NORMAL");
+    const healer = await createPendingAccess(owner.id, character.id, "PALADIN", "HEALER", "MYTHIC");
+    const tank = await createPendingAccess(owner.id, character.id, "PALADIN", "TANK", "MYTHIC");
+    const normalDps = await createPendingAccess(owner.id, character.id, "PALADIN", "DPS", "NORMAL");
     await boosterAccessService.approveAccess(admin, healer);
 
     const expected = [
@@ -280,43 +201,40 @@ describe("boosterAccessService approving a historical request", () => {
       expect(String(row?.status)).toBe("APPROVED");
       expect(String(row?.difficulty)).toBe(difficulty);
     }
-    expect(await isBooster(ids.owner)).toBe(true);
+    expect(await isBooster(owner.id)).toBe(true);
   });
 
   it("is idempotent for a User who already holds the Booster role", async () => {
-    await orm.User.where({ id: ids.owner }).update({ isBooster: true });
+    await orm.User.where({ id: owner.id }).update({ isBooster: true });
     const character = await createPaladin(owner);
-    const pendingId = await createPendingAccess(ids.owner, character.id, "PALADIN", "HEALER", "NORMAL");
+    const pendingId = await createPendingAccess(owner.id, character.id, "PALADIN", "HEALER", "NORMAL");
     await boosterAccessService.approveAccess(admin, pendingId);
-    expect(await isBooster(ids.owner)).toBe(true);
+    expect(await isBooster(owner.id)).toBe(true);
     expect(String((await orm.BoosterAccess.where({ id: pendingId }).first())?.status)).toBe("APPROVED");
   });
 });
 
 describe("boosterAccessService rejecting and listing historical requests", () => {
-  const owner = asUser(ids.owner, "Access Owner");
-  const admin = asUser(ids.admin, "Aelira Nightwatch", "ADMIN");
-
   it("rejecting grants nothing and never changes Boosting Roles", async () => {
     const character = await createPaladin(owner);
-    const pendingId = await createPendingAccess(ids.owner, character.id, "PALADIN", "HEALER", "NORMAL");
+    const pendingId = await createPendingAccess(owner.id, character.id, "PALADIN", "HEALER", "NORMAL");
     await boosterAccessService.rejectAccess(admin, pendingId, "Need more experience.");
-    expect(await userRepository.findBoostingRoles(ids.owner)).toEqual({
+    expect(await userRepository.findBoostingRoles(owner.id)).toEqual({
       isBooster: false,
       isLootbuddy: false,
       discordRaidBooster: false,
       discordLootbuddy: false,
     });
-    const options = await signupService.getSignupOptions(owner, ids.heroicOpen);
+    const options = await signupService.getSignupOptions(owner, HEROIC_OPEN);
     expect(options.booster.eligible.some((item) => item.characterId === character.id)).toBe(false);
   });
 
   it("lists only PENDING requests and removes them once reviewed, preserving the rows", async () => {
     const character = await createPaladin(owner);
-    const approveId = await createPendingAccess(ids.owner, character.id, "PALADIN", "HEALER", "HEROIC");
-    const rejectId = await createPendingAccess(ids.owner, character.id, "PALADIN", "TANK", "NORMAL");
+    const approveId = await createPendingAccess(owner.id, character.id, "PALADIN", "HEALER", "HEROIC");
+    const rejectId = await createPendingAccess(owner.id, character.id, "PALADIN", "TANK", "NORMAL");
     const before = await boosterAccessService.listLegacyRequests(admin);
-    const mine = await boosterAccessService.listLegacyRequests(admin, { userId: ids.owner });
+    const mine = await boosterAccessService.listLegacyRequests(admin, { userId: owner.id });
     expect(mine.requests.map((row) => row.id).sort()).toEqual([approveId, rejectId].sort());
     expect(mine.requests.every((row) => row.status === "PENDING")).toBe(true);
 
@@ -339,10 +257,10 @@ describe("boosterAccessService rejecting and listing historical requests", () =>
 
   it("filters historical requests by what was requested", async () => {
     const character = await createPaladin(owner);
-    const heroic = await createPendingAccess(ids.owner, character.id, "PALADIN", "HEALER", "HEROIC");
-    await createPendingAccess(ids.owner, character.id, "PALADIN", "TANK", "MYTHIC");
+    const heroic = await createPendingAccess(owner.id, character.id, "PALADIN", "HEALER", "HEROIC");
+    await createPendingAccess(owner.id, character.id, "PALADIN", "TANK", "MYTHIC");
     const filtered = await boosterAccessService.listLegacyRequests(admin, {
-      userId: ids.owner,
+      userId: owner.id,
       difficulty: "HEROIC",
       role: "HEALER",
     });
@@ -352,10 +270,10 @@ describe("boosterAccessService rejecting and listing historical requests", () =>
   it("current eligibility never reads historical requests", async () => {
     const character = await createPaladin(owner);
     // An APPROVED historical row alone does not make the User a Booster.
-    const id = await createPendingAccess(ids.owner, character.id, "PALADIN", "HEALER", "HEROIC");
+    const id = await createPendingAccess(owner.id, character.id, "PALADIN", "HEALER", "HEROIC");
     await orm.BoosterAccess.where({ id }).update({ status: "APPROVED" });
-    expect(await isBooster(ids.owner)).toBe(false);
-    const options = await signupService.getSignupOptions(owner, ids.heroicOpen);
+    expect(await isBooster(owner.id)).toBe(false);
+    const options = await signupService.getSignupOptions(owner, HEROIC_OPEN);
     expect(options.booster.ineligible.find((item) => item.characterId === character.id)?.reason).toBe(
       "NO_BOOSTER_ACCESS",
     );

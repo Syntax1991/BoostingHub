@@ -1103,6 +1103,42 @@
     "src/services/discord-member-name-sync.service.test.ts": [
       "REWRITE",
       "Real-looking guild and role ids replaced by synthetic ones; fresh ids; later tests set up the names they start from instead of inheriting them"
+    ],
+    "src/services/multi-raid-foundation.test.ts": [
+      "REWRITE",
+      "Fresh lead and verified cleanup; mass-create counts asserted literally instead of compared with the same rows; a data-dependent migration check removed"
+    ],
+    "src/domain/roster-builder-optimizer-fill.test.ts": [
+      "KEEP",
+      "Moved from src/services (tests a pure domain module); fill-maximisation cases plus a seeded brute-force comparison"
+    ],
+    "src/services/user-management.service.test.ts": [
+      "REWRITE",
+      "Fresh target and Raid Lead per test instead of resetting fixed users; Runs through the service; the last-admin test documents its temporary demotion of other admins"
+    ],
+    "src/services/character-repair-notification.test.ts": [
+      "REWRITE",
+      "Refresh failures were swallowed, now asserted; Character names that looked like real players replaced; shared fixtures and verified cleanup"
+    ],
+    "src/services/boosting-role.service.test.ts": [
+      "REWRITE",
+      "Own acting admin instead of the seeded one (the no-audit-event count is now exact); seeded Runs via SEED_IDS; fresh users"
+    ],
+    "src/services/product-driven-planning.test.ts": [
+      "REWRITE",
+      "Fresh users, verified cleanup in dependency order, no swallowed deletes, redundant vi import removed"
+    ],
+    "src/services/booster-access.service.test.ts": [
+      "REWRITE",
+      "Fresh owner per test instead of per-test cleanup of fixed users; own admin; seeded Runs via SEED_IDS"
+    ],
+    "src/services/battle-net.service.test.ts": [
+      "REWRITE",
+      "Fresh users per test replace the after-each deletes; two local error helpers replaced (sync case uses toThrow with the code matcher)"
+    ],
+    "src/services/published-run-signups.test.ts": [
+      "REWRITE",
+      "Scenario kept as one test; fresh fixtures, frozen raid week, quick signup count exact (one Character)"
     ]
   },
   "tests": {
@@ -1277,6 +1313,14 @@
     "src/services/schedule-conflict-integrity.test.ts::schedule conflict integrity > surfaces reservation conflicts after a cross-run time edit and clears at exactly 2h": [
       "REWRITE",
       "Boundary from an explicit product value, not the implementation constant"
+    ],
+    "src/services/published-run-signups.test.ts::published-run signups > I–V: late offers stay PENDING; Start freezes; Discord buttons follow the window": [
+      "REWRITE",
+      "Quick signup now asserts exactly one added"
+    ],
+    "src/services/multi-raid-foundation.test.ts::RunRaidContent — contents authority > createManyDraftsAtomic writes one content per Run (contents-only Run row)": [
+      "REWRITE",
+      "Planned counts 4 and 5 asserted literally; before it compared two reads of the same rows"
     ]
   },
   "removed": {
@@ -1691,6 +1735,46 @@
     "src/services/signup-my-runs-terminal-filter.test.ts::signupService.getMyRuns — terminal Run filter > reuses UPCOMING_RUN_STATUSES for the active set": [
       "REWRITE",
       "Constant echo; replaced by the repository-call contract test"
+    ],
+    "src/services/multi-raid-foundation.test.ts::RunRaidContent — contents authority > migration backfill left existing Runs with matching sole content": [
+      "REMOVE",
+      "Sampled an arbitrary row from the shared DB and returned early when empty; it checked old data, not code"
+    ],
+    "src/services/roster-builder-optimizer-fill.test.ts::optimizeRosterProposal — fills the maximum number of slots > hybrids move to DPS so the healer-only players still fit (4/4 instead of 2/4)": [
+      "MERGE",
+      "Moved unchanged to src/domain/roster-builder-optimizer-fill.test.ts"
+    ],
+    "src/services/roster-builder-optimizer-fill.test.ts::optimizeRosterProposal — fills the maximum number of slots > quality still decides between equally complete rosters": [
+      "MERGE",
+      "Moved unchanged to src/domain/roster-builder-optimizer-fill.test.ts"
+    ],
+    "src/services/roster-builder-optimizer-fill.test.ts::optimizeRosterProposal — fills the maximum number of slots > does not force single-role players first when that would not fill more slots": [
+      "MERGE",
+      "Moved unchanged to src/domain/roster-builder-optimizer-fill.test.ts"
+    ],
+    "src/services/roster-builder-optimizer-fill.test.ts::optimizeRosterProposal — fills the maximum number of slots > one slot per User across Characters: an alt never takes a second slot": [
+      "MERGE",
+      "Moved unchanged to src/domain/roster-builder-optimizer-fill.test.ts"
+    ],
+    "src/services/roster-builder-optimizer-fill.test.ts::optimizeRosterProposal — fills the maximum number of slots > an incomplete roster stays as full as possible and reports the true remaining gap": [
+      "MERGE",
+      "Moved unchanged to src/domain/roster-builder-optimizer-fill.test.ts"
+    ],
+    "src/services/roster-builder-optimizer-fill.test.ts::optimizeRosterProposal — fills the maximum number of slots > Fill gaps: locked picks are never replaced and their Users are never reused": [
+      "MERGE",
+      "Moved unchanged to src/domain/roster-builder-optimizer-fill.test.ts"
+    ],
+    "src/services/roster-builder-optimizer-fill.test.ts::optimizeRosterProposal — fills the maximum number of slots > Lootbuddies fill their own bucket and never block Booster slots": [
+      "MERGE",
+      "Moved unchanged to src/domain/roster-builder-optimizer-fill.test.ts"
+    ],
+    "src/services/roster-builder-optimizer-fill.test.ts::optimizeRosterProposal — fills the maximum number of slots > is deterministic regardless of candidate input order": [
+      "MERGE",
+      "Moved unchanged to src/domain/roster-builder-optimizer-fill.test.ts"
+    ],
+    "src/services/roster-builder-optimizer-fill.test.ts::optimizeRosterProposal — fill count matches a brute-force optimum > fills exactly as many slots as the best possible assignment (300 random constellations)": [
+      "MERGE",
+      "Moved unchanged to src/domain/roster-builder-optimizer-fill.test.ts"
     ]
   }
 }

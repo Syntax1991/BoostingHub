@@ -1,322 +1,156 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
-import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
+import { anyContentRunInput } from "@/lib/test-run-input";
 import type { AccountRole, RunStatus } from "@/models/enums";
 import { raidRepository } from "@/repositories/raid.repository";
 import { userRepository } from "@/repositories/user.repository";
+import { runService } from "@/services/run.service";
 import { userManagementService } from "@/services/user-management.service";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { expectDomainError } from "@/test/domain-error";
+import { CURRENT_WEEK_RUN_START, HOUR_MS, RAID_WEEK_TEST_CLOCK, freezeSystemTime, restoreSystemTime } from "@/test/time";
 
-const raidId = WOW_RAID_CATALOG[0].id;
-
-const ids = {
-  user: "aaaaaaaa-aaaa-4aaa-8aaa-um0000000001",
-  lead: "aaaaaaaa-aaaa-4aaa-8aaa-um0000000002",
-  admin: "aaaaaaaa-aaaa-4aaa-8aaa-um0000000003",
-  adminTwo: "aaaaaaaa-aaaa-4aaa-8aaa-um0000000004",
-  target: "aaaaaaaa-aaaa-4aaa-8aaa-um0000000005",
-  runActive: "aaaaaaaa-aaaa-4aaa-8aaa-umr000000001",
-  runCompleted: "aaaaaaaa-aaaa-4aaa-8aaa-umr000000002",
-  runCancelled: "aaaaaaaa-aaaa-4aaa-8aaa-umr000000003",
-};
-
-const createdUserIds = [ids.user, ids.lead, ids.admin, ids.adminTwo, ids.target];
-const createdRunIds = [ids.runActive, ids.runCompleted, ids.runCancelled];
-const createdActivityIds: string[] = [];
-
-function asUser(
-  id: string,
-  name: string,
-  accountRole: AuthenticatedUser["accountRole"] = "USER",
-): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@umtest.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
-
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    expect(isDomainError(error) && error.code).toBe(code);
-  }
-}
-
-async function createTestUser(id: string, name: string, accountRole: AccountRole) {
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@umtest.boostting.local`,
-    emailVerified: true,
-    accountRole,
-    accountStatus: "ACTIVE",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
-}
-
-async function deleteIfPresent(table: "User" | "Run" | "ActivityEvent", id: string) {
-  try {
-    if (table === "User") await orm.User.where({ id }).delete();
-    else if (table === "Run") await orm.Run.where({ id }).delete();
-    else await orm.ActivityEvent.where({ id }).delete();
-  } catch {
-    // Already gone.
-  }
-}
+const created = { runIds: [] as string[], userIds: [] as string[] };
+let user: AuthenticatedUser;
+let admin: AuthenticatedUser;
+/** Fresh per test, since tests change their roles: a USER and a RAID_LEAD. */
+let targetId = "";
+let lead: AuthenticatedUser;
 
 async function setRole(userId: string, accountRole: AccountRole) {
-  await orm.User.where({ id: userId }).update({
-    accountRole,
-    updatedAt: new Date().toISOString(),
-  });
+  await orm.User.where({ id: userId }).update({ accountRole, updatedAt: new Date().toISOString() });
 }
 
-async function createRun(input: {
-  id: string;
-  title: string;
-  raidLeadId: string;
-  status: RunStatus;
-}) {
-  const now = new Date().toISOString();
-  await orm.Run.create({
-    id: input.id,
-    title: input.title,
-    difficulty: "HEROIC",
-    lootType: "UNSAVED",
-    scheduledStartAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-    status: input.status,
-    signupsOpen: input.status === "OPEN",
-    desiredTankCount: 2,
-    desiredHealerCount: 4,
-    desiredDpsCount: 14,
-    raidLeadId: input.raidLeadId,
-    notes: null,
-    createdAt: now,
-    updatedAt: now,
-  });
-  await orm.RunRaidContent.create({
-    id: crypto.randomUUID(),
-    runId: input.id,
-    raidId,
-    sortOrder: 1,
-    plannedBossCount: 8,
-    createdAt: now,
-  });
+/** A Run led by the per-test Raid Lead, moved straight to `status`. */
+async function leadRun(status: RunStatus) {
+  const scheduledStartAt = new Date(Date.parse(CURRENT_WEEK_RUN_START) + created.runIds.length * 3 * HOUR_MS).toISOString();
+  const run = await runService.createRun(lead, anyContentRunInput({ scheduledStartAt }));
+  created.runIds.push(run.id);
+  await orm.Run.where({ id: run.id }).update({ status, signupsOpen: status === "OPEN" });
 }
-
-async function cleanupDomain() {
-  for (const runId of createdRunIds) {
-    await deleteIfPresent("Run", runId);
-  }
-  for (const userId of createdUserIds) {
-    const activities = await orm.ActivityEvent.where({ userId }).all();
-    for (const row of activities) {
-      await deleteIfPresent("ActivityEvent", String(row.id));
-      createdActivityIds.push(String(row.id));
-    }
-    const leadRuns = await orm.Run.where({ raidLeadId: userId }).select("id").all();
-    for (const run of leadRuns) {
-      await deleteIfPresent("Run", String((run as { id: string }).id));
-    }
-    await deleteIfPresent("User", userId);
-  }
-  createdActivityIds.length = 0;
-}
-
-const user = asUser(ids.user, "UM User");
-const lead = asUser(ids.lead, "UM Lead", "RAID_LEAD");
-const admin = asUser(ids.admin, "UM Admin", "ADMIN");
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
+  freezeSystemTime(RAID_WEEK_TEST_CLOCK, { advance: true });
   await raidRepository.ensureReferenceRaids();
-  await cleanupDomain();
-  await createTestUser(ids.user, "UM User", "USER");
-  await createTestUser(ids.lead, "UM Lead", "RAID_LEAD");
-  await createTestUser(ids.admin, "UM Admin", "ADMIN");
-  await createTestUser(ids.adminTwo, "UM Admin Two", "ADMIN");
-  await createTestUser(ids.target, "UM Target", "USER");
-});
-
-afterAll(async () => {
-  await cleanupDomain();
+  const userId = await createTestUser({ name: "UM User" });
+  const adminId = await createTestUser({ name: "UM Admin", accountRole: "ADMIN" });
+  // A second admin, so demoting an admin is not blocked by the last-admin rule.
+  const adminTwoId = await createTestUser({ name: "UM Admin Two", accountRole: "ADMIN" });
+  created.userIds.push(userId, adminId, adminTwoId);
+  user = testActor(userId);
+  admin = testActor(adminId, "ADMIN");
 });
 
 beforeEach(async () => {
-  for (const runId of createdRunIds) {
-    await deleteIfPresent("Run", runId);
+  targetId = await createTestUser({ name: "UM Target" });
+  const leadId = await createTestUser({ name: "UM Lead", accountRole: "RAID_LEAD" });
+  created.userIds.push(targetId, leadId);
+  lead = testActor(leadId, "RAID_LEAD");
+});
+
+afterAll(async () => {
+  try {
+    await deleteCreatedRows(created);
+  } finally {
+    restoreSystemTime();
   }
-  for (const userId of createdUserIds) {
-    const activities = await orm.ActivityEvent.where({ userId }).all();
-    for (const row of activities) {
-      await deleteIfPresent("ActivityEvent", String(row.id));
-    }
-  }
-  await setRole(ids.user, "USER");
-  await setRole(ids.lead, "RAID_LEAD");
-  await setRole(ids.admin, "ADMIN");
-  await setRole(ids.adminTwo, "ADMIN");
-  await setRole(ids.target, "USER");
 });
 
 describe("userManagementService authorization", () => {
   it("blocks USER and RAID_LEAD from list, detail, and role changes", async () => {
-    await expectDomainCode(userManagementService.listUsers(user), "USER_MANAGEMENT_FORBIDDEN");
-    await expectDomainCode(userManagementService.listUsers(lead), "USER_MANAGEMENT_FORBIDDEN");
-    await expectDomainCode(userManagementService.getUserDetail(user, ids.target), "USER_MANAGEMENT_FORBIDDEN");
-    await expectDomainCode(userManagementService.getUserDetail(lead, ids.target), "USER_MANAGEMENT_FORBIDDEN");
-    await expectDomainCode(
-      userManagementService.changeAccountRole(user, { targetUserId: ids.target, nextRole: "RAID_LEAD" }),
-      "USER_MANAGEMENT_FORBIDDEN",
-    );
-    await expectDomainCode(
-      userManagementService.changeAccountRole(lead, { targetUserId: ids.target, nextRole: "RAID_LEAD" }),
-      "USER_MANAGEMENT_FORBIDDEN",
-    );
+    for (const actor of [user, lead]) {
+      await expectDomainError(userManagementService.listUsers(actor), "USER_MANAGEMENT_FORBIDDEN");
+      await expectDomainError(userManagementService.getUserDetail(actor, targetId), "USER_MANAGEMENT_FORBIDDEN");
+      await expectDomainError(
+        userManagementService.changeAccountRole(actor, { targetUserId: targetId, nextRole: "RAID_LEAD" }),
+        "USER_MANAGEMENT_FORBIDDEN",
+      );
+    }
+    expect((await userRepository.findAuthenticatedById(targetId))?.accountRole).toBe("USER");
   });
 
   it("lets ADMIN list users and load detail", async () => {
     const listed = await userManagementService.listUsers(admin, { query: "UM Target" });
-    expect(listed.some((row) => row.id === ids.target)).toBe(true);
-    const detail = await userManagementService.getUserDetail(admin, ids.target);
-    expect(detail.user.id).toBe(ids.target);
-    expect(detail.user.accountRole).toBe("USER");
+    expect(listed.some((row) => row.id === targetId)).toBe(true);
+    const detail = await userManagementService.getUserDetail(admin, targetId);
+    expect(detail.user).toMatchObject({ id: targetId, accountRole: "USER" });
   });
 });
 
 describe("userManagementService role transitions", () => {
   it("supports USER→RAID_LEAD, RAID_LEAD→ADMIN, and ADMIN→USER when another admin remains", async () => {
-    const toLead = await userManagementService.changeAccountRole(admin, {
-      targetUserId: ids.target,
-      nextRole: "RAID_LEAD",
-    });
-    expect(toLead.previousRole).toBe("USER");
-    expect(toLead.nextRole).toBe("RAID_LEAD");
-
-    const toAdmin = await userManagementService.changeAccountRole(admin, {
-      targetUserId: ids.target,
-      nextRole: "ADMIN",
-    });
-    expect(toAdmin.previousRole).toBe("RAID_LEAD");
-    expect(toAdmin.nextRole).toBe("ADMIN");
-
-    const toUser = await userManagementService.changeAccountRole(admin, {
-      targetUserId: ids.target,
-      nextRole: "USER",
-    });
-    expect(toUser.previousRole).toBe("ADMIN");
-    expect(toUser.nextRole).toBe("USER");
+    const change = (nextRole: AccountRole) => userManagementService.changeAccountRole(admin, { targetUserId: targetId, nextRole });
+    expect(await change("RAID_LEAD")).toMatchObject({ previousRole: "USER", nextRole: "RAID_LEAD" });
+    expect(await change("ADMIN")).toMatchObject({ previousRole: "RAID_LEAD", nextRole: "ADMIN" });
+    expect(await change("USER")).toMatchObject({ previousRole: "ADMIN", nextRole: "USER" });
   });
 
   it("rejects assigning the same role", async () => {
-    await expectDomainCode(
-      userManagementService.changeAccountRole(admin, { targetUserId: ids.target, nextRole: "USER" }),
+    await expectDomainError(
+      userManagementService.changeAccountRole(admin, { targetUserId: targetId, nextRole: "USER" }),
       "ROLE_ALREADY_ASSIGNED",
     );
   });
 
   it("rejects invalid account roles", async () => {
-    await expectDomainCode(
-      userManagementService.changeAccountRole(admin, {
-        targetUserId: ids.target,
-        nextRole: "BOOSTER",
-      }),
-      "INVALID_ACCOUNT_ROLE",
-    );
-    await expectDomainCode(
-      userManagementService.changeAccountRole(admin, {
-        targetUserId: ids.target,
-        nextRole: "not-a-role",
-      }),
-      "INVALID_ACCOUNT_ROLE",
-    );
+    for (const nextRole of ["BOOSTER", "not-a-role"]) {
+      await expectDomainError(
+        userManagementService.changeAccountRole(admin, { targetUserId: targetId, nextRole }),
+        "INVALID_ACCOUNT_ROLE",
+      );
+    }
   });
 
   it("blocks demoting the last remaining admin", async () => {
-    const otherAdmins = await orm.User.where({ accountRole: "ADMIN" }).select("id").all();
-    const parked: Array<{ id: string; previous: AccountRole }> = [];
+    // The rule counts admins community-wide, so every other admin in the test database is
+    // demoted for the duration of this test and restored afterwards.
+    const otherAdminIds = ((await orm.User.where({ accountRole: "ADMIN" }).select("id").all()) as Array<{ id: string }>)
+      .map((row) => row.id)
+      .filter((id) => id !== admin.id);
     try {
-      for (const row of otherAdmins) {
-        const id = String((row as { id: string }).id);
-        if (id === ids.admin) continue;
-        parked.push({ id, previous: "ADMIN" });
-        await setRole(id, "RAID_LEAD");
-      }
-      await expectDomainCode(
-        userManagementService.changeAccountRole(admin, { targetUserId: ids.admin, nextRole: "USER" }),
+      for (const id of otherAdminIds) await setRole(id, "RAID_LEAD");
+      await expectDomainError(
+        userManagementService.changeAccountRole(admin, { targetUserId: admin.id, nextRole: "USER" }),
         "LAST_ADMIN_REQUIRED",
       );
     } finally {
-      for (const entry of parked) {
-        await setRole(entry.id, entry.previous);
-      }
+      for (const id of otherAdminIds) await setRole(id, "ADMIN");
     }
+    expect((await userRepository.findAuthenticatedById(admin.id))?.accountRole).toBe("ADMIN");
   });
 });
 
 describe("userManagementService active run safety", () => {
   it("blocks demotion to USER while a non-terminal run is assigned", async () => {
-    await createRun({
-      id: ids.runActive,
-      title: "UM Active Lead Run",
-      raidLeadId: ids.lead,
-      status: "OPEN",
-    });
-    await expectDomainCode(
-      userManagementService.changeAccountRole(admin, { targetUserId: ids.lead, nextRole: "USER" }),
+    await leadRun("OPEN");
+    await expectDomainError(
+      userManagementService.changeAccountRole(admin, { targetUserId: lead.id, nextRole: "USER" }),
       "ROLE_CHANGE_BLOCKED_BY_ACTIVE_RUNS",
     );
   });
 
   it("allows demotion when only COMPLETED or CANCELLED runs remain", async () => {
-    await createRun({
-      id: ids.runCompleted,
-      title: "UM Completed Lead Run",
-      raidLeadId: ids.lead,
-      status: "COMPLETED",
-    });
-    await createRun({
-      id: ids.runCancelled,
-      title: "UM Cancelled Lead Run",
-      raidLeadId: ids.lead,
-      status: "CANCELLED",
-    });
-    const result = await userManagementService.changeAccountRole(admin, {
-      targetUserId: ids.lead,
-      nextRole: "USER",
-    });
+    await leadRun("COMPLETED");
+    await leadRun("CANCELLED");
+    const result = await userManagementService.changeAccountRole(admin, { targetUserId: lead.id, nextRole: "USER" });
     expect(result.nextRole).toBe("USER");
   });
 });
 
 describe("userManagementService audit and session freshness", () => {
   it("writes ACCOUNT_ROLE_CHANGED with actor id and targetUserId marker", async () => {
-    await userManagementService.changeAccountRole(admin, {
-      targetUserId: ids.target,
-      nextRole: "RAID_LEAD",
-    });
-    const events = await orm.ActivityEvent.where({ userId: ids.admin, type: "ACCOUNT_ROLE_CHANGED" }).all();
-    const match = events.find((row) => String((row as { message: string }).message).includes(`targetUserId=${ids.target}`));
-    expect(match).toBeTruthy();
-    expect(String((match as { type: string }).type)).toBe("ACCOUNT_ROLE_CHANGED");
-    expect(String((match as { userId: string }).userId)).toBe(ids.admin);
+    await userManagementService.changeAccountRole(admin, { targetUserId: targetId, nextRole: "RAID_LEAD" });
+    const events = (await orm.ActivityEvent.where({ userId: admin.id, type: "ACCOUNT_ROLE_CHANGED" }).all()) as Array<{
+      message: string;
+    }>;
+    expect(events.filter((row) => row.message.includes(`targetUserId=${targetId}`))).toHaveLength(1);
   });
 
   it("reloads the new role from the database via findAuthenticatedById", async () => {
-    await userManagementService.changeAccountRole(admin, {
-      targetUserId: ids.target,
-      nextRole: "RAID_LEAD",
-    });
-    const fresh = await userRepository.findAuthenticatedById(ids.target);
-    expect(fresh?.accountRole).toBe("RAID_LEAD");
+    await userManagementService.changeAccountRole(admin, { targetUserId: targetId, nextRole: "RAID_LEAD" });
+    expect((await userRepository.findAuthenticatedById(targetId))?.accountRole).toBe("RAID_LEAD");
   });
 });

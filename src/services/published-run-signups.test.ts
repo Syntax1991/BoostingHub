@@ -4,10 +4,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
-import { normalizeCharacterIdentity } from "@/lib/character-identity";
-import { orm } from "@/lib/prisma";
-import { venomousCreateInput } from "@/lib/test-run-input";
+import { anyContentRunInput } from "@/lib/test-run-input";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { signupRepository } from "@/repositories/signup.repository";
@@ -21,148 +18,53 @@ import {
   canToggleSignupWindow,
   isSignupWindowOpen,
 } from "@/domain/run-state";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestCharacter, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { expectDomainError } from "@/test/domain-error";
+import { CURRENT_WEEK_RUN_START, HOUR_MS, RAID_WEEK_TEST_CLOCK, freezeSystemTime, restoreSystemTime } from "@/test/time";
 
-const ids = {
-  lead: "aaaaaaaa-aaaa-4aaa-8aaa-ps0000000001",
-  early: "aaaaaaaa-aaaa-4aaa-8aaa-ps0000000002",
-  late: "aaaaaaaa-aaaa-4aaa-8aaa-ps0000000003",
-};
-const createdUserIds = Object.values(ids);
-const createdRunIds: string[] = [];
-const createdCharacterIds: string[] = [];
+/** Runs (signups, rosters, notifications) cascade; Characters go with their Users. */
+const created = { runIds: [] as string[], userIds: [] as string[] };
+let lead: AuthenticatedUser;
+let early: AuthenticatedUser;
+let late: AuthenticatedUser;
 
-function asUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"] = "USER"): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@pstest.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
+function hunter(userId: string, name: string) {
+  return createTestCharacter({ userId, name, realm: "Published Lab", wowClass: "HUNTER", specialization: "Beast Mastery", primaryRole: "RANGED_DPS" });
 }
 
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    if (error instanceof Error && error.message === `Expected domain error ${code}`) {
-      throw error;
-    }
-    expect(isDomainError(error) && error.code).toBe(code);
-  }
+/** An OPEN Run of the suite's Raid Lead, `hoursLater` after the frozen week's Saturday Run slot. */
+async function openRun(hoursLater: number) {
+  const scheduledStartAt = new Date(Date.parse(CURRENT_WEEK_RUN_START) + hoursLater * HOUR_MS).toISOString();
+  const run = await runService.createRun(lead, anyContentRunInput({ scheduledStartAt, desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1 }));
+  created.runIds.push(run.id);
+  await runService.openRun(lead, run.id);
+  return run.id;
 }
-
-async function createTestUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"]) {
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@pstest.boostting.local`,
-    emailVerified: true,
-    accountRole,
-    accountStatus: "ACTIVE",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
-}
-
-async function deleteIfPresent(table: string, id: string) {
-  try {
-    if (table === "User") await orm.User.where({ id }).delete();
-    else if (table === "Character") await orm.Character.where({ id }).delete();
-    else if (table === "RunSignupRole") await orm.RunSignupRole.where({ id }).delete();
-    else if (table === "RunSignup") await orm.RunSignup.where({ id }).delete();
-    else if (table === "Run") await orm.Run.where({ id }).delete();
-  } catch {
-    // Already gone.
-  }
-}
-
-async function createCharacter(userId: string, name: string) {
-  const id = crypto.randomUUID();
-  createdCharacterIds.push(id);
-  await orm.Character.create({
-    id,
-    userId,
-    name,
-    realm: "Published Lab",
-    normalizedName: normalizeCharacterIdentity(name),
-    normalizedRealm: normalizeCharacterIdentity("Published Lab"),
-    region: "EU",
-    wowClass: "HUNTER",
-    specialization: "Beast Mastery",
-    primaryRole: "RANGED_DPS",
-    itemLevel: 700,
-    isActive: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
-  return id;
-}
-
-async function cleanupRun(runId: string) {
-  await orm.UserNotification.where({ runId }).delete().catch(() => {});
-  await orm.RunAttendance.where({ runId }).delete().catch(() => {});
-  await orm.RunStartSnapshot.where({ runId }).delete().catch(() => {});
-  await orm.RunDiscordPost.where({ runId }).delete().catch(() => {});
-  const roster = await orm.RunRoster.where({ runId }).first();
-  if (roster) {
-    const rosterId = (roster as { id: string }).id;
-    await orm.RunRosterEntry.where({ rosterId }).delete().catch(() => {});
-    await orm.RunExternalBooster.where({ rosterId }).delete().catch(() => {});
-    await orm.RunRoster.where({ id: rosterId }).delete().catch(() => {});
-  }
-  const signups = await orm.RunSignup.where({ runId }).select("id").all();
-  for (const row of signups) {
-    const signupId = (row as { id: string }).id;
-    await orm.RunSignupRole.where({ signupId }).delete().catch(() => {});
-    await deleteIfPresent("RunSignup", signupId);
-  }
-  await deleteIfPresent("Run", runId);
-}
-
-const lead = asUser(ids.lead, "Published Signup Lead", "RAID_LEAD");
-const early = asUser(ids.early, "Early Signer", "USER");
-const late = asUser(ids.late, "Late Signer", "USER");
 
 let earlyChar = "";
 let lateChar = "";
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
+  freezeSystemTime(RAID_WEEK_TEST_CLOCK, { advance: true });
   await raidRepository.ensureReferenceRaids();
-  for (const userId of createdUserIds) {
-    const runs = await orm.Run.where({ raidLeadId: userId }).select("id").all();
-    for (const row of runs) {
-      await cleanupRun((row as { id: string }).id);
-    }
-    const chars = await orm.Character.where({ userId }).select("id").all();
-    for (const row of chars) {
-      await deleteIfPresent("Character", (row as { id: string }).id);
-    }
-    await deleteIfPresent("User", userId);
-  }
-
-  await createTestUser(ids.lead, "Published Signup Lead", "RAID_LEAD");
-  await createTestUser(ids.early, "Early Signer", "USER");
-  await createTestUser(ids.late, "Late Signer", "USER");
-  await orm.User.where({ id: ids.early }).update({ isBooster: true });
-  await orm.User.where({ id: ids.late }).update({ isBooster: true });
-  earlyChar = await createCharacter(ids.early, "Psearlyhunt");
-  lateChar = await createCharacter(ids.late, "Pslatehunt");
+  const leadId = await createTestUser({ name: "Published Signup Lead", accountRole: "RAID_LEAD" });
+  const earlyId = await createTestUser({ name: "Early Signer", isBooster: true });
+  const lateId = await createTestUser({ name: "Late Signer", isBooster: true });
+  created.userIds.push(leadId, earlyId, lateId);
+  lead = testActor(leadId, "RAID_LEAD");
+  early = testActor(earlyId);
+  late = testActor(lateId);
+  earlyChar = await hunter(earlyId, "Psearlyhunt");
+  lateChar = await hunter(lateId, "Pslatehunt");
 }, 60_000);
 
 afterAll(async () => {
-  for (const runId of createdRunIds) {
-    await cleanupRun(runId);
-  }
-  for (const id of createdCharacterIds) {
-    await deleteIfPresent("Character", id);
-  }
-  for (const id of createdUserIds) {
-    await deleteIfPresent("User", id);
+  try {
+    await deleteCreatedRows(created);
+  } finally {
+    restoreSystemTime();
   }
 }, 60_000);
 
@@ -185,28 +87,13 @@ describe("signup window matrix", () => {
 
 describe("published-run signups", () => {
   it("I–V: late offers stay PENDING; Start freezes; Discord buttons follow the window", async () => {
-    const runId = await runService
-      .createRun(
-        lead,
-        venomousCreateInput({
-          difficulty: "HEROIC",
-          lootType: "UNSAVED",
-          venomousPlannedBossCount: 8,
-          scheduledStartAt: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString(),
-          desiredTankCount: 1,
-          desiredHealerCount: 1,
-          desiredDpsCount: 1,
-        }),
-      )
-      .then((run) => run.id);
-    createdRunIds.push(runId);
-    await runService.openRun(lead, runId);
+    const runId = await openRun(0);
 
     await signupService.setCharacterOffers(early, {
       runId,
       offers: [{ characterId: earlyChar, offeredRoles: ["RANGED_DPS"] }],
     });
-    const earlyRows = await signupRepository.listByRunAndUser(runId, ids.early);
+    const earlyRows = await signupRepository.listByRunAndUser(runId, early.id);
     const earlySignupId = earlyRows.find((row) => row.status === "PENDING")!.id;
 
     let view = await rosterService.getRosterManagementView(lead, runId);
@@ -244,7 +131,7 @@ describe("published-run signups", () => {
       offers: [{ characterId: lateChar, offeredRoles: ["RANGED_DPS"] }],
     });
     expect(booster.created + booster.reactivated).toBe(1);
-    const lateBooster = (await signupRepository.listByRunAndUser(runId, ids.late)).find(
+    const lateBooster = (await signupRepository.listByRunAndUser(runId, late.id)).find(
       (row) => row.participationType === "BOOSTER" && row.status !== "WITHDRAWN",
     );
     expect(lateBooster?.status).toBe("PENDING");
@@ -264,36 +151,23 @@ describe("published-run signups", () => {
     expect(loot.created).toBe(1);
 
     // N — Quick Signup on a second published open run
-    const quickRunId = await runService
-      .createRun(
-        lead,
-        venomousCreateInput({
-          difficulty: "HEROIC",
-          lootType: "UNSAVED",
-          venomousPlannedBossCount: 8,
-          scheduledStartAt: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
-          desiredTankCount: 1,
-          desiredHealerCount: 1,
-          desiredDpsCount: 1,
-        }),
-      )
-      .then((run) => run.id);
-    createdRunIds.push(quickRunId);
-    await runService.openRun(lead, quickRunId);
+    // A day later: no reservation clash with the first Run.
+    const quickRunId = await openRun(24);
     await runRepository.updateFields(quickRunId, { status: "PUBLISHED", signupsOpen: true });
     const quick = await signupService.quickSignupBoosters(late, { runId: quickRunId });
-    expect(quick.added).toBeGreaterThan(0);
+    // The late signer's only Character.
+    expect(quick.added).toBe(1);
 
     // O — closed PUBLISHED rejects new offers
     await runService.setSignupWindow(lead, runId, false);
-    await expectDomainCode(
+    await expectDomainError(
       signupService.setLootbuddies(early, {
         runId,
         lootbuddies: [{ wowClass: "MAGE", mode: "LOOT_ONLY" }],
       }),
       "SIGNUP_CLOSED",
     );
-    await expectDomainCode(signupService.quickSignupBoosters(early, { runId }), "SIGNUP_CLOSED");
+    await expectDomainError(signupService.quickSignupBoosters(early, { runId }), "SIGNUP_CLOSED");
     await runService.setSignupWindow(lead, runId, true);
 
     // P — published lineup unchanged by the late PENDING offer
@@ -346,15 +220,15 @@ describe("published-run signups", () => {
     expect(run?.signupsOpen).toBe(false);
 
     // K / T — reopen and new offers rejected after Start
-    await expectDomainCode(runService.setSignupWindow(lead, runId, true), "RUN_INVALID_TRANSITION");
-    await expectDomainCode(
+    await expectDomainError(runService.setSignupWindow(lead, runId, true), "RUN_INVALID_TRANSITION");
+    await expectDomainError(
       signupService.setLootbuddies(early, {
         runId,
         lootbuddies: [{ wowClass: "PRIEST", mode: "PLAYING" }],
       }),
       "SIGNUP_CLOSED",
     );
-    await expectDomainCode(signupService.quickSignupBoosters(early, { runId }), "SIGNUP_CLOSED");
+    await expectDomainError(signupService.quickSignupBoosters(early, { runId }), "SIGNUP_CLOSED");
 
     // V — Discord buttons disabled after Start
     const closedEmbed = await discordSyncService.getSignupEmbedData(runId);

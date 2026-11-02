@@ -1,6 +1,5 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
 import type { OwnedBlizzardCharacter } from "@/lib/blizzard/types";
 
@@ -30,117 +29,15 @@ vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOr
 import { blizzardApiClient } from "@/integrations/blizzard/blizzard-api-client";
 import { battleNetService } from "@/services/battle-net.service";
 import { characterService } from "@/services/character.service";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { expectDomainError } from "@/test/domain-error";
 
-const ids = {
-  owner: "aaaaaaaa-aaaa-4aaa-8aaa-bn0000000001",
-  other: "aaaaaaaa-aaaa-4aaa-8aaa-bn0000000002",
-};
-
-const createdCharacterIds: string[] = [];
-
-function asUser(id: string, name = "BattleNet Owner"): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@bntest.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole: "USER",
-    accountStatus: "ACTIVE",
-  };
-}
-
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    if (error instanceof Error && error.message === `Expected domain error ${code}`) {
-      throw error;
-    }
-    expect(isDomainError(error) && error.code).toBe(code);
-  }
-}
-
-function expectDomainCodeSync(fn: () => unknown, code: string) {
-  try {
-    fn();
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    if (error instanceof Error && error.message === `Expected domain error ${code}`) {
-      throw error;
-    }
-    expect(isDomainError(error) && error.code).toBe(code);
-  }
-}
-
-async function createTestUser(id: string, name: string) {
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@bntest.boostting.local`,
-    emailVerified: true,
-    accountRole: "USER",
-    accountStatus: "ACTIVE",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
-}
-
-async function deleteIfPresent(
-  table: "User" | "Character" | "BattleNetConnection" | "BattleNetImportSession" | "ActivityEvent",
-  id: string,
-) {
-  try {
-    if (table === "User") {
-      await orm.User.where({ id }).delete();
-      return;
-    }
-    if (table === "Character") {
-      await orm.Character.where({ id }).delete();
-      return;
-    }
-    if (table === "BattleNetConnection") {
-      await orm.BattleNetConnection.where({ id }).delete();
-      return;
-    }
-    if (table === "BattleNetImportSession") {
-      await orm.BattleNetImportSession.where({ id }).delete();
-      return;
-    }
-    await orm.ActivityEvent.where({ id }).delete();
-  } catch {
-    // Already gone from a previous isolated run.
-  }
-}
-
-async function cleanupGeneratedRows() {
-  for (const userId of [ids.owner, ids.other]) {
-    const sessions = await orm.BattleNetImportSession.where({ userId }).all();
-    for (const row of sessions) {
-      await deleteIfPresent("BattleNetImportSession", String(row.id));
-    }
-    const connections = await orm.BattleNetConnection.where({ userId }).all();
-    for (const row of connections) {
-      await deleteIfPresent("BattleNetConnection", String(row.id));
-    }
-    const characters = await orm.Character.where({ userId }).all();
-    for (const row of characters) {
-      await deleteIfPresent("Character", String(row.id));
-    }
-    const activities = await orm.ActivityEvent.where({ userId }).all();
-    for (const row of activities) {
-      await deleteIfPresent("ActivityEvent", String(row.id));
-    }
-  }
-  for (const id of createdCharacterIds) {
-    await deleteIfPresent("Character", id);
-  }
-  createdCharacterIds.length = 0;
-  await deleteIfPresent("User", ids.owner);
-  await deleteIfPresent("User", ids.other);
-}
+/** Connections, import sessions, Characters and activity cascade with their User. */
+const created = { userIds: [] as string[] };
+/** Fresh per test, since tests count the owner's connections and sessions. */
+let owner: AuthenticatedUser;
+let other: AuthenticatedUser;
 
 function ownedCharacter(overrides: Partial<OwnedBlizzardCharacter> = {}): OwnedBlizzardCharacter {
   return {
@@ -162,19 +59,24 @@ function stubBlizzardEnv() {
   vi.stubEnv("BLIZZARD_REDIRECT_URI", "http://localhost:3000/api/integrations/battlenet/callback");
 }
 
-beforeAll(async () => {
-  stubBlizzardEnv();
-  await cleanupGeneratedRows();
-  await createTestUser(ids.owner, "BattleNet Owner");
-  await createTestUser(ids.other, "BattleNet Other");
+beforeAll(() => {
+  assertIsolatedTestDatabase();
 });
 
 afterAll(async () => {
-  await cleanupGeneratedRows();
-  vi.unstubAllEnvs();
+  try {
+    await deleteCreatedRows(created);
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });
 
-beforeEach(() => {
+beforeEach(async () => {
+  const ownerId = await createTestUser({ name: "BattleNet Owner" });
+  const otherId = await createTestUser({ name: "BattleNet Other" });
+  created.userIds.push(ownerId, otherId);
+  owner = testActor(ownerId, "USER", { name: "BattleNet Owner" });
+  other = testActor(otherId, "USER", { name: "BattleNet Other" });
   stubBlizzardEnv();
   vi.clearAllMocks();
   apiMocks.buildAuthorizationUrl.mockImplementation(
@@ -191,22 +93,7 @@ beforeEach(() => {
   apiMocks.getAccountProfile.mockResolvedValue([ownedCharacter()]);
 });
 
-afterEach(async () => {
-  for (const userId of [ids.owner, ids.other]) {
-    const sessions = await orm.BattleNetImportSession.where({ userId }).all();
-    for (const row of sessions) {
-      await deleteIfPresent("BattleNetImportSession", String(row.id));
-    }
-    const connections = await orm.BattleNetConnection.where({ userId }).all();
-    for (const row of connections) {
-      await deleteIfPresent("BattleNetConnection", String(row.id));
-    }
-  }
-});
-
 describe("battleNetService.beginConnect", () => {
-  const owner = asUser(ids.owner);
-
   it("requires a configured Battle.net integration and an authenticated user id", () => {
     const result = battleNetService.beginConnect(owner, "EU");
     expect(result.region).toBe("EU");
@@ -221,13 +108,11 @@ describe("battleNetService.beginConnect", () => {
     vi.stubEnv("BLIZZARD_CLIENT_SECRET", "");
     vi.stubEnv("BLIZZARD_REDIRECT_URI", "");
 
-    expectDomainCodeSync(() => battleNetService.beginConnect(owner, "EU"), "BATTLENET_NOT_CONFIGURED");
+    expect(() => battleNetService.beginConnect(owner, "EU")).toThrow(expect.objectContaining({ code: "BATTLENET_NOT_CONFIGURED" }));
   });
 });
 
 describe("battleNetService.handleCallback", () => {
-  const owner = asUser(ids.owner);
-
   it("creates EU and US connections independently for the same user", async () => {
     apiMocks.getUserInfo.mockResolvedValueOnce({ sub: "bn-eu", battletag: "Owner#EU" });
     apiMocks.getAccountProfile.mockResolvedValueOnce([ownedCharacter({ region: "EU" })]);
@@ -252,7 +137,7 @@ describe("battleNetService.handleCallback", () => {
     apiMocks.getUserInfo.mockResolvedValueOnce({ sub: "bn-eu-2", battletag: "Owner#9999" });
     await battleNetService.handleCallback({ user: owner, code: "code-2", region: "EU" });
 
-    const rows = await orm.BattleNetConnection.where({ userId: ids.owner, region: "EU" }).all();
+    const rows = await orm.BattleNetConnection.where({ userId: owner.id, region: "EU" }).all();
     expect(rows).toHaveLength(1);
     expect(String(rows[0]?.battleTag)).toBe("Owner#9999");
     expect(String(rows[0]?.battleNetAccountId)).toBe("bn-eu-2");
@@ -269,7 +154,7 @@ describe("battleNetService.handleCallback", () => {
     expect(session.region).toBe("EU");
     expect(session.characters).toHaveLength(1);
 
-    const connection = await orm.BattleNetConnection.where({ userId: ids.owner, region: "EU" }).first();
+    const connection = await orm.BattleNetConnection.where({ userId: owner.id, region: "EU" }).first();
     expect(connection).toBeTruthy();
     const keys = Object.keys(connection as Record<string, unknown>);
     expect(keys).not.toContain("accessToken");
@@ -297,7 +182,7 @@ describe("battleNetService.handleCallback", () => {
     vi.stubEnv("BLIZZARD_CLIENT_SECRET", "");
     vi.stubEnv("BLIZZARD_REDIRECT_URI", "");
 
-    await expectDomainCode(
+    await expectDomainError(
       battleNetService.handleCallback({ user: owner, code: "x", region: "EU" }),
       "BATTLENET_NOT_CONFIGURED",
     );
@@ -305,9 +190,6 @@ describe("battleNetService.handleCallback", () => {
 });
 
 describe("battleNetService import sessions", () => {
-  const owner = asUser(ids.owner);
-  const other = asUser(ids.other, "BattleNet Other");
-
   it("binds sessions to owner and region, and rejects expiry", async () => {
     const connected = await battleNetService.handleCallback({
       user: owner,
@@ -319,7 +201,7 @@ describe("battleNetService import sessions", () => {
     expect(live.region).toBe("EU");
     expect(live.characters[0]?.region).toBe("EU");
 
-    await expectDomainCode(
+    await expectDomainError(
       battleNetService.getImportSession(other, connected.importSessionId),
       "BATTLENET_IMPORT_SESSION_NOT_FOUND",
     );
@@ -327,7 +209,7 @@ describe("battleNetService import sessions", () => {
     const expiredId = crypto.randomUUID();
     await orm.BattleNetImportSession.create({
       id: expiredId,
-      userId: ids.owner,
+      userId: owner.id,
       region: "US",
       charactersJson: JSON.stringify([ownedCharacter({ region: "US" })]),
       expiresAt: new Date(Date.now() - 60_000).toISOString(),
@@ -335,7 +217,7 @@ describe("battleNetService import sessions", () => {
       createdAt: new Date().toISOString(),
     });
 
-    await expectDomainCode(
+    await expectDomainError(
       battleNetService.getImportSession(owner, expiredId),
       "BATTLENET_IMPORT_SESSION_EXPIRED",
     );
@@ -343,8 +225,6 @@ describe("battleNetService import sessions", () => {
 });
 
 describe("battleNetService.disconnect", () => {
-  const owner = asUser(ids.owner);
-
   it("removes the connection and import sessions but preserves characters", async () => {
     await battleNetService.handleCallback({ user: owner, code: "code-disc", region: "EU" });
 
@@ -356,13 +236,12 @@ describe("battleNetService.disconnect", () => {
       specialization: "Restoration",
       itemLevel: 640,
     });
-    createdCharacterIds.push(character.id);
 
     await battleNetService.disconnect(owner, "EU");
 
     const connections = await battleNetService.listConnections(owner);
     expect(connections.find((row) => row.region === "EU")).toBeUndefined();
-    const sessions = await orm.BattleNetImportSession.where({ userId: ids.owner, region: "EU" }).all();
+    const sessions = await orm.BattleNetImportSession.where({ userId: owner.id, region: "EU" }).all();
     expect(sessions).toHaveLength(0);
 
     const kept = await orm.Character.where({ id: character.id }).first();

@@ -1,11 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { blizzardApiClient } from "@/integrations/blizzard/blizzard-api-client";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
 import type { PlanningProduct } from "@/lib/product-selection";
 import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
-import type { AccountRole } from "@/models/enums";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { runTemplateRepository } from "@/repositories/run-template.repository";
@@ -15,6 +13,9 @@ import { productPlanningService } from "@/services/product-planning.service";
 import { runDetailService } from "@/services/run-detail.service";
 import { runService } from "@/services/run.service";
 import { runTemplateService } from "@/services/run-template.service";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { expectDomainError } from "@/test/domain-error";
 
 // No live Warcraft Logs: WCL zone discovery (on raid / encounter writes) sees an empty zone list.
 vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOriginal) => ({
@@ -33,26 +34,9 @@ vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOr
  * code change, no key allowlist and no bundle special case.
  */
 
-const ids = {
-  admin: "d1a0e000-0000-4000-8000-000000000001",
-  lead: "d1a0e000-0000-4000-8000-000000000002",
-};
-
-function actor(id: string, accountRole: AccountRole): AuthenticatedUser {
-  return {
-    id,
-    name: `Dynamic ${accountRole}`,
-    email: `${id}@dynamic.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
-
-const admin = actor(ids.admin, "ADMIN");
-const lead = actor(ids.lead, "RAID_LEAD");
+let admin: AuthenticatedUser;
+let lead: AuthenticatedUser;
+const userIds: string[] = [];
 
 const created = { raids: [] as string[], productId: "", runs: [] as string[], templates: [] as string[] };
 let raidA = "";
@@ -65,16 +49,6 @@ function futureIso(days: number) {
   const date = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
   date.setUTCMinutes(0, 0, 0);
   return date.toISOString();
-}
-
-async function expectCode(promise: Promise<unknown>, code: string) {
-  let caught: unknown;
-  try {
-    await promise;
-  } catch (error) {
-    caught = error;
-  }
-  expect(isDomainError(caught) ? caught.code : caught).toBe(code);
 }
 
 async function runContents(runId: string) {
@@ -109,24 +83,13 @@ beforeAll(() => {
 });
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   await raidRepository.ensureReferenceRaids();
-  const now = new Date().toISOString();
-  for (const [id, role] of [
-    [ids.admin, "ADMIN"],
-    [ids.lead, "RAID_LEAD"],
-  ] as const) {
-    await orm.User.where({ id }).delete().catch(() => {});
-    await orm.User.create({
-      id,
-      name: `Dynamic ${role}`,
-      email: `${id}@dynamic.boostting.local`,
-      emailVerified: true,
-      accountRole: role,
-      accountStatus: "ACTIVE",
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
+  const adminId = await createTestUser({ name: "Dynamic ADMIN", accountRole: "ADMIN" });
+  const leadId = await createTestUser({ name: "Dynamic RAID_LEAD", accountRole: "RAID_LEAD" });
+  userIds.push(adminId, leadId);
+  admin = testActor(adminId, "ADMIN");
+  lead = testActor(leadId, "RAID_LEAD");
 
   // Two new raids (not offered for new Runs on their own, like Tide / Kith'ix).
   const metadata = { season: "QA", sortOrder: 80, trackLockouts: false, blizzardInstanceId: null };
@@ -161,15 +124,16 @@ beforeAll(async () => {
   fixedAContentId = product.contents[1]!.productRaidContentId;
 });
 
+/** Runs first, then what they and the templates reference: slots, templates, the product, its raids, users. */
 afterAll(async () => {
-  for (const id of created.runs) await runRepository.deleteRun(id).catch(() => {});
+  await deleteCreatedRows({ runIds: created.runs });
   for (const id of created.templates) {
-    await orm.CommunityScheduleSlot.where({ runTemplateId: id }).delete().catch(() => {});
-    await orm.RunTemplate.where({ id }).delete().catch(() => {});
+    await orm.CommunityScheduleSlot.where({ runTemplateId: id }).deleteAndCount();
+    await orm.RunTemplate.where({ id }).deleteAndCount();
   }
-  if (created.productId) await orm.Product.where({ id: created.productId }).delete().catch(() => {});
-  for (const id of created.raids) await orm.Raid.where({ id }).delete().catch(() => {});
-  for (const id of Object.values(ids)) await orm.User.where({ id }).delete().catch(() => {});
+  if (created.productId) await orm.Product.where({ id: created.productId }).deleteAndCount();
+  for (const id of created.raids) await orm.Raid.where({ id }).deleteAndCount();
+  await deleteCreatedRows({ userIds });
 });
 
 describe("dynamic three-content product", () => {
@@ -211,9 +175,9 @@ describe("dynamic three-content product", () => {
 
   it("validates VARIABLE counts against the product minimum and the raid total", async () => {
     const base = { ...runFields, scheduledStartAt: futureIso(31), productId: product.id };
-    await expectCode(runService.createRun(lead, { ...base, contentBossCounts: { [venomousContentId]: 1 } }), "RUN_BOSS_COUNT_INVALID");
-    await expectCode(runService.createRun(lead, { ...base, contentBossCounts: { [venomousContentId]: 9 } }), "RUN_BOSS_COUNT_INVALID");
-    await expectCode(runService.createRun(lead, { ...base, contentBossCounts: { "not-a-content": 3 } }), "RUN_PRODUCT_SELECTION_INVALID");
+    await expectDomainError(runService.createRun(lead, { ...base, contentBossCounts: { [venomousContentId]: 1 } }), "RUN_BOSS_COUNT_INVALID");
+    await expectDomainError(runService.createRun(lead, { ...base, contentBossCounts: { [venomousContentId]: 9 } }), "RUN_BOSS_COUNT_INVALID");
+    await expectDomainError(runService.createRun(lead, { ...base, contentBossCounts: { "not-a-content": 3 } }), "RUN_PRODUCT_SELECTION_INVALID");
   });
 
   it("Mass Create accepts it for every row with per-row counts", async () => {
@@ -246,7 +210,7 @@ describe("dynamic three-content product", () => {
     expect((await runTemplateService.listUsableForCreation(lead)).some((row) => row.id === setup.id)).toBe(true);
 
     const plan = await communityScheduleService.createSchedulePlan(admin, {
-      raidLeadId: ids.lead,
+      raidLeadId: lead.id,
       runSetup: { mode: "create", name: "QA Dynamic Schedule Setup", ...runFields, desiredLootbuddyCount: 0, productId: product.id, notes: null },
       slots: [{ weekday: "SUNDAY", localStartTime: "06:15", runMode: "INHOUSE" }],
       autoCreateRun: false,
@@ -262,7 +226,7 @@ describe("dynamic three-content product", () => {
     const draft = await runService.prepareDraftFromTemplate({
       template: (await runTemplateRepository.findById(setup.id))!,
       scheduledStartAt: futureIso(34),
-      raidLeadId: ids.lead,
+      raidLeadId: lead.id,
     });
     expect(draft.contents.map((row) => [row.raidId, row.plannedBossCount])).toEqual([
       [VENOMOUS_ABYSS_RAID_ID, 4],
@@ -311,7 +275,7 @@ describe("dynamic three-content product", () => {
       expect(has((await runService.getCreateManyForm(lead)).products)).toBe(false);
       expect(has((await runTemplateService.getCreateFormData(admin)).products)).toBe(false);
       expect(has((await communityScheduleService.getPage(admin)).products)).toBe(false);
-      await expectCode(
+      await expectDomainError(
         runService.createRun(lead, { ...runFields, scheduledStartAt: futureIso(36), productId: product.id }),
         "RUN_PRODUCT_UNAVAILABLE",
       );
@@ -331,7 +295,6 @@ describe("dynamic three-content product", () => {
 
   it("loads the planning catalog in a bounded number of queries, independent of product count", async () => {
     const { Client } = await import("pg");
-    const { vi } = await import("vitest");
     const spy = vi.spyOn(Client.prototype, "query");
     try {
       await productPlanningService.listAll();

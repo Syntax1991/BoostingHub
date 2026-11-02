@@ -31,6 +31,8 @@ import { characterRepository } from "@/repositories/character.repository";
 import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
 import { characterBlizzardSyncService } from "@/services/character-blizzard-sync.service";
 import { discordSyncService } from "@/services/discord-sync.service";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows, syntheticDiscordId } from "@/test/db-fixtures";
 
 /**
  * One-time CHARACTER_BATTLENET_REPAIR notification (bell + Discord DM) when a
@@ -38,36 +40,13 @@ import { discordSyncService } from "@/services/discord-sync.service";
  * its account-level DM lane (no Run).
  */
 const TOKEN = "bot-api-test-token-repair-0123456789";
-/** Discord ids are unique per User — one per test owner. */
-const discordId = () => `9${String(Date.now()).slice(-9)}${Math.floor(Math.random() * 1e8)}`;
+/** Characters, notifications and connections cascade with their owner. */
 const createdUserIds: string[] = [];
-const createdCharacterIds: string[] = [];
 
 async function createUser(name: string, discordUserId: string | null): Promise<AuthenticatedUser> {
-  const id = crypto.randomUUID();
-  const now = new Date().toISOString();
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@repair.boostting.local`,
-    emailVerified: true,
-    accountRole: "USER",
-    accountStatus: "ACTIVE",
-    discordUserId,
-    createdAt: now,
-    updatedAt: now,
-  });
+  const id = await createTestUser({ name, discordUserId });
   createdUserIds.push(id);
-  return {
-    id,
-    name,
-    email: null,
-    image: null,
-    discordUserId,
-    discordUsername: null,
-    accountRole: "USER",
-    accountStatus: "ACTIVE",
-  };
+  return testActor(id, "USER", { name, discordUserId });
 }
 
 let nextBlizzardId = 183112661;
@@ -91,11 +70,10 @@ async function createLinkedCharacter(owner: AuthenticatedUser, name: string) {
     blizzardRealmId: "506",
     lastSyncedAt: new Date(Date.now() - 2 * 24 * 60 * 60_000).toISOString(),
   });
-  createdCharacterIds.push(record.id);
   return record;
 }
 
-/** Blizzard now reports another character id under this name (the Sharaleen case). */
+/** Blizzard now reports another character id under this name (a renamed or recreated Character). */
 function mockIdentityConflict() {
   apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: "190292456", isValid: true });
   apiMocks.getCharacterProfileSummary.mockImplementation(async (_region: string, _slug: string, name: string) => ({
@@ -114,8 +92,9 @@ function mockProfileUnavailable() {
   apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: undefined, isValid: false });
 }
 
+/** One manual refresh that must fail; the cooldown it starts is moved into the past. */
 async function failRefresh(owner: AuthenticatedUser, characterId: string) {
-  await characterBlizzardSyncService.refreshCharacter(owner, characterId).catch(() => {});
+  await expect(characterBlizzardSyncService.refreshCharacter(owner, characterId)).rejects.toThrow();
   // Move the manual cooldown (started by every attempt) into the past.
   await orm.Character.where({ id: characterId }).update({
     lastSyncAttemptAt: new Date(Date.now() - 120_000).toISOString(),
@@ -138,6 +117,7 @@ function deliveryRequest(notificationId: string, result: string) {
 }
 
 beforeAll(() => {
+  assertIsolatedTestDatabase();
   vi.stubEnv("BLIZZARD_CLIENT_ID", "test-client-id");
   vi.stubEnv("BLIZZARD_CLIENT_SECRET", "test-client-secret");
   vi.stubEnv("BLIZZARD_REDIRECT_URI", "http://localhost:3000/api/integrations/battlenet/callback");
@@ -151,24 +131,18 @@ beforeEach(() => {
 });
 
 afterAll(async () => {
-  for (const userId of createdUserIds) {
-    await orm.UserNotification.where({ userId }).delete();
+  try {
+    await deleteCreatedRows({ userIds: createdUserIds });
+  } finally {
+    vi.unstubAllEnvs();
   }
-  for (const id of createdCharacterIds) {
-    await orm.Character.where({ id }).delete();
-  }
-  for (const id of createdUserIds) {
-    await orm.ActivityEvent.where({ userId: id }).delete();
-    await orm.User.where({ id }).delete();
-  }
-  vi.unstubAllEnvs();
 });
 
 describe("CHARACTER_BATTLENET_REPAIR notification", () => {
   it("an identity conflict notifies the owner exactly once (bell + pending Discord DM), however often the sync fails", async () => {
-    const ownerDiscordId = discordId();
+    const ownerDiscordId = syntheticDiscordId();
     const owner = await createUser("Repair Owner", ownerDiscordId);
-    const character = await createLinkedCharacter(owner, "Sharaleen");
+    const character = await createLinkedCharacter(owner, "Repairmonk");
     mockIdentityConflict();
 
     await failRefresh(owner, character.id);
@@ -184,14 +158,14 @@ describe("CHARACTER_BATTLENET_REPAIR notification", () => {
     expect(String(notification.discordUserId)).toBe(ownerDiscordId);
     expect(notification.runId ?? null).toBeNull();
     expect(String(notification.href)).toBe(`/characters/${character.id}`);
-    expect(String(notification.message)).toContain("Sharaleen-Draenor (EU)");
+    expect(String(notification.message)).toContain("Repairmonk-Draenor (EU)");
     expect(String(notification.message)).toContain("No need to delete it.");
     expect(notification.visibleInApp).toBe(true);
   });
 
   it("a profile 404 notifies only once it repeats (a single 404 is usually Blizzard propagation lag)", async () => {
-    const owner = await createUser("Repair Owner 404", discordId());
-    const character = await createLinkedCharacter(owner, "Scalerry");
+    const owner = await createUser("Repair Owner 404", syntheticDiscordId());
+    const character = await createLinkedCharacter(owner, "Missingmonk");
     mockProfileUnavailable();
 
     await failRefresh(owner, character.id);
@@ -215,7 +189,7 @@ describe("CHARACTER_BATTLENET_REPAIR notification", () => {
   });
 
   it("the bot gets it as an account DM, acks it per notification, and a repaired Character is never DMed", async () => {
-    const ownerDiscordId = discordId();
+    const ownerDiscordId = syntheticDiscordId();
     const owner = await createUser("Repair Owner Bot", ownerDiscordId);
     const sent = await createLinkedCharacter(owner, "Botdm");
     const repaired = await createLinkedCharacter(owner, "Botfixed");
@@ -284,7 +258,7 @@ function rosterEntry(id: string, name: string): OwnedBlizzardCharacter {
 
 describe("repair lifecycle: failing sync → one notification → reconnect → sync resumes", () => {
   it("repairs only from the owner's roster, notifies once, resumes syncing, and a second reconnect changes nothing", async () => {
-    const owner = await createUser("Lifecycle Owner", discordId());
+    const owner = await createUser("Lifecycle Owner", syntheticDiscordId());
     const broken = await createLinkedCharacter(owner, "Lifecycle");
     const healthy = await createLinkedCharacter(owner, "Untouched");
     const healthyBefore = await characterRepository.findById(healthy.id);

@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
 import type { AccountRole } from "@/models/enums";
 import { userRepository } from "@/repositories/user.repository";
@@ -9,6 +8,10 @@ import { boostingRoleService } from "@/services/boosting-role.service";
 import { characterService } from "@/services/character.service";
 import { signupService } from "@/services/signup.service";
 import { userManagementService } from "@/services/user-management.service";
+import { SEED_IDS } from "@/prisma/seed-ids";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { expectDomainError } from "@/test/domain-error";
 
 // Warcraft Logs auto-link enrichment runs after Character writes/syncs; keep it
 // offline (a real WARCRAFT_LOGS_* in .env would otherwise hit the live API).
@@ -25,72 +28,22 @@ vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOr
  * capabilities, independent of each other and of accountRole. Booster is never
  * scoped by raid difficulty.
  */
-const ids = {
-  target: "aaaaaaaa-aaaa-4aaa-8aaa-bb0000000001",
-  adminTarget: "aaaaaaaa-aaaa-4aaa-8aaa-bb0000000002",
-  ownerTarget: "aaaaaaaa-aaaa-4aaa-8aaa-bb0000000003",
-  lead: "aaaaaaaa-aaaa-4aaa-8aaa-bb0000000004",
-  admin: "44444444-4444-4444-8444-444444444444",
-  heroicOpen: "r1111111-1111-4111-8111-111111111111",
-  mythicOpen: "r2222222-2222-4222-8222-222222222222",
-  normalOpen: "r4444444-4444-4444-8444-444444444444",
-};
-const TEST_USER_IDS = [ids.target, ids.adminTarget, ids.ownerTarget, ids.lead];
-const RUNS = [ids.normalOpen, ids.heroicOpen, ids.mythicOpen];
+/** The seeded open Runs, one per difficulty, used only to read eligibility and sign up a Lootbuddy. */
+const RUNS = [SEED_IDS.runs.normalOpen, SEED_IDS.runs.heroicOpen, SEED_IDS.runs.mythicOpen];
+const HEROIC_OPEN = SEED_IDS.runs.heroicOpen;
 
-function asUser(id: string, name: string, accountRole: AccountRole = "USER"): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@brtest.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
+/** Characters and signups (also on the seeded Runs) cascade with their User. */
+const created = { userIds: [] as string[] };
+const ids = { target: "", adminTarget: "", ownerTarget: "", lead: "", admin: "" };
+let admin: AuthenticatedUser;
+let owner: AuthenticatedUser;
+let lead: AuthenticatedUser;
+let target: AuthenticatedUser;
 
-const admin = asUser(ids.admin, "Aelira Nightwatch", "ADMIN");
-const owner = asUser(ids.ownerTarget, "Roles Owner", "OWNER");
-const lead = asUser(ids.lead, "Roles Lead", "RAID_LEAD");
-const target = asUser(ids.target, "Roles Target");
-
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    expect(isDomainError(error) && error.code).toBe(code);
-  }
-}
-
-// OWNER is a single-row role (partial unique index); this suite only needs an
-// OWNER-shaped actor, so the stored row stays ADMIN and the actor object carries OWNER.
-async function createTestUser(id: string, name: string, accountRole: AccountRole) {
-  const now = new Date().toISOString();
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@brtest.boostting.local`,
-    emailVerified: true,
-    accountRole: accountRole === "OWNER" ? "ADMIN" : accountRole,
-    accountStatus: "ACTIVE",
-    createdAt: now,
-    updatedAt: now,
-  });
-}
-
-async function cleanup() {
-  for (const id of TEST_USER_IDS) {
-    for (const row of await orm.RunSignup.where({ userId: id }).all()) {
-      await orm.RunSignup.where({ id: String(row.id) }).delete().catch(() => {});
-    }
-    for (const row of await orm.Character.where({ userId: id }).all()) {
-      await orm.Character.where({ id: String(row.id) }).delete().catch(() => {});
-    }
-    await orm.User.where({ id }).delete().catch(() => {});
-  }
+async function createUser(name: string, accountRole: AccountRole) {
+  const id = await createTestUser({ name, accountRole });
+  created.userIds.push(id);
+  return id;
 }
 
 async function roles(userId: string) {
@@ -103,19 +56,23 @@ async function accountRoleOf(userId: string) {
 }
 
 beforeAll(async () => {
-  await cleanup();
-  await createTestUser(ids.target, "Roles Target", "USER");
-  await createTestUser(ids.adminTarget, "Roles Admin", "ADMIN");
-  await createTestUser(ids.ownerTarget, "Roles Owner", "OWNER");
-  await createTestUser(ids.lead, "Roles Lead", "RAID_LEAD");
+  assertIsolatedTestDatabase();
+  ids.target = await createUser("Roles Target", "USER");
+  ids.adminTarget = await createUser("Roles Admin", "ADMIN");
+  // OWNER is a single-row role: the stored row stays ADMIN and only the actor carries OWNER.
+  ids.ownerTarget = await createUser("Roles Owner", "ADMIN");
+  ids.lead = await createUser("Roles Lead", "RAID_LEAD");
+  ids.admin = await createUser("Roles Acting Admin", "ADMIN");
+  admin = testActor(ids.admin, "ADMIN");
+  owner = testActor(ids.ownerTarget, "OWNER");
+  lead = testActor(ids.lead, "RAID_LEAD");
+  target = testActor(ids.target);
 });
 
-afterAll(async () => {
-  await cleanup();
-});
+afterAll(() => deleteCreatedRows(created));
 
 beforeEach(async () => {
-  for (const id of TEST_USER_IDS) {
+  for (const id of [ids.target, ids.adminTarget, ids.ownerTarget, ids.lead]) {
     await orm.User.where({ id }).update({ isBooster: false, isLootbuddy: false });
   }
 });
@@ -214,17 +171,17 @@ describe("Boosting Roles on User", () => {
   });
 
   it("refuses USER and RAID_LEAD, and unknown users", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       boostingRoleService.setRole(target, { userId: ids.target, role: "BOOSTER", enabled: true }),
       "NOT_AUTHORIZED",
     );
-    await expectDomainCode(
+    await expectDomainError(
       boostingRoleService.setRole(lead, { userId: ids.target, role: "LOOTBUDDY", enabled: true }),
       "NOT_AUTHORIZED",
     );
-    await expectDomainCode(
+    await expectDomainError(
       boostingRoleService.setRole(admin, {
-        userId: "aaaaaaaa-aaaa-4aaa-8aaa-bbffffffffff",
+        userId: crypto.randomUUID(),
         role: "BOOSTER",
         enabled: true,
       }),
@@ -306,7 +263,7 @@ describe("Booster eligibility follows User.isBooster on every difficulty", () =>
   it("a non-Booster is rejected on Normal, Heroic and Mythic with an account-level reason", async () => {
     for (const runId of RUNS) {
       expect(await eligibleOn(runId)).toEqual({ eligible: false, reason: "NO_BOOSTER_ACCESS" });
-      await expectDomainCode(
+      await expectDomainError(
         signupService.createBoosterSignup(target, { runId, characterId, role: "HEALER", isBackup: false }),
         "BOOSTER_ACCESS_REQUIRED",
       );
@@ -322,7 +279,7 @@ describe("Booster eligibility follows User.isBooster on every difficulty", () =>
 
   it("revoking the Booster role immediately fails the Booster-access check again", async () => {
     await boostingRoleService.setRole(admin, { userId: ids.target, role: "BOOSTER", enabled: true });
-    expect((await eligibleOn(ids.heroicOpen)).eligible).toBe(true);
+    expect((await eligibleOn(HEROIC_OPEN)).eligible).toBe(true);
     await boostingRoleService.setRole(admin, { userId: ids.target, role: "BOOSTER", enabled: false });
     for (const runId of RUNS) {
       expect(await eligibleOn(runId)).toEqual({ eligible: false, reason: "NO_BOOSTER_ACCESS" });
@@ -331,12 +288,12 @@ describe("Booster eligibility follows User.isBooster on every difficulty", () =>
 
   it("the Lootbuddy role neither grants Booster access nor gates Lootbuddy signups", async () => {
     await boostingRoleService.setRole(admin, { userId: ids.target, role: "LOOTBUDDY", enabled: true });
-    expect((await eligibleOn(ids.heroicOpen)).eligible).toBe(false);
+    expect((await eligibleOn(HEROIC_OPEN)).eligible).toBe(false);
 
     // Without the Lootbuddy role a User can still sign up as a Lootbuddy (no gate exists).
     await boostingRoleService.setRole(admin, { userId: ids.target, role: "LOOTBUDDY", enabled: false });
     const result = await signupService.setLootbuddies(target, {
-      runId: ids.heroicOpen,
+      runId: HEROIC_OPEN,
       lootbuddies: [{ wowClass: "SHAMAN", mode: "LOOT_ONLY", verification: "NONE" }],
     });
     expect(result.created).toBe(1);
