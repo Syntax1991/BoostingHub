@@ -72,7 +72,7 @@ None once this documentation update is merged. The last feature PR, #321, was me
 
 | Decision | State |
 | --- | --- |
-| Repository restart | Planned: new repository under the same name, existing one as private archive. **Not implemented and not approved.** Conditions in [DEPLOYMENT.md](DEPLOYMENT.md#planned-repository-restart) |
+| Repository restart | Planned: new repository `Syntax1991/ManawyrmHub` with one clean commit, after the planned refactoring. The existing repository is kept. **Not implemented and not approved.** Conditions in [DEPLOYMENT.md](DEPLOYMENT.md#planned-repository-restart) |
 | `production` branch | Planned, see below. Today everything deploys from `main` |
 | Secret rotation timing | Open; see below. Rotating `BETTER_AUTH_SECRET` ends sessions unless the old value stays configured as a legacy secret |
 | Enabling boss exceptions | Open; not needed for the freeze |
