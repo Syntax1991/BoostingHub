@@ -1363,6 +1363,10 @@
     "tests/integration/services/roster.service.test.ts": [
       "REWRITE",
       "SEED_IDS; restoreSeededRosterFixtures before/after for ×2 without reset; assertIsolated; verified deleteAndCount; testActor; expectDomainError; setDraftSelection→saveDraftSelection adapter (confirmedWarnings); unapproved booster via repo plant + Save rejects; activity via findLatestByType"
+    ],
+    "tests/integration/services/discord-sync.service.test.ts": [
+      "REWRITE",
+      "assertIsolatedTestDatabase; verified deleteAndCount cleanup (posts/attendance/events/roles); testActor; local setDraftSelection→saveDraftSelection; voice-lane timeouts 30s for publish+start fixtures"
     ]
   },
   "tests": {

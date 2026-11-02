@@ -19,6 +19,8 @@ import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import type { ParticipationType, CharacterRole } from "@/models/enums";
 import { currentWeekFutureIso } from "@tests/fixtures/time";
+import { testActor } from "@tests/fixtures/actors";
+import { assertIsolatedTestDatabase } from "@tests/fixtures/db-fixtures";
 import {
   contentLegacyUpdateInput,
   venomousCreateInput,
@@ -45,16 +47,45 @@ function rosterBoosters<T extends { id: string }>(view: { boosters: T[] }): T[] 
 }
 
 function asUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"] = "USER"): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@dstest.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
+  return testActor(id, accountRole, { name, email: `${id}@dstest.boostting.local` });
+}
+
+/** Test-local adapter: production path is saveDraftSelection (full draft replace). */
+async function setDraftSelection(
+  actor: AuthenticatedUser,
+  input: {
+    runId: string;
+    signupId: string;
+    selected: boolean;
+    version: number;
+    selectedRole?: CharacterRole | null;
+  },
+) {
+  const view = await rosterService.getRosterManagementView(actor, input.runId);
+  const all = [...view.boosters, ...view.groups.lootbuddies];
+  const target = all.find((row) => row.id === input.signupId);
+  const others = all
+    .filter((row) => {
+      if (!row.draftSelected || row.id === input.signupId) return false;
+      if (
+        input.selected &&
+        target?.participationType === "BOOSTER" &&
+        row.participationType === "BOOSTER" &&
+        row.userId === target.userId
+      ) {
+        return false;
+      }
+      return true;
+    })
+    .map((row) => ({ signupId: row.id, selectedRole: row.selectedRole }));
+  const selections = input.selected
+    ? [...others, { signupId: input.signupId, selectedRole: input.selectedRole ?? null }]
+    : others;
+  await rosterService.saveDraftSelection(actor, {
+    runId: input.runId,
+    version: input.version,
+    selections,
+  });
 }
 
 async function createTestUser(
@@ -76,15 +107,15 @@ async function createTestUser(
   });
 }
 
-async function deleteIfPresent(table: string, id: string) {
-  try {
-    if (table === "User") await orm.User.where({ id }).delete();
-    else if (table === "Character") await orm.Character.where({ id }).delete();
-    else if (table === "RunSignup") await orm.RunSignup.where({ id }).delete();
-    else if (table === "Run") await orm.Run.where({ id }).delete();
-    else if (table === "RunDiscordPost") await orm.RunDiscordPost.where({ id }).delete();
-  } catch {
-    // Already gone.
+async function deleteOwnedRow(
+  table: "User" | "Character" | "RunSignup" | "Run" | "RunDiscordPost" | "RunSignupRole" | "RunAttendance",
+  id: string,
+) {
+  assertIsolatedTestDatabase();
+  const model = orm[table];
+  const n = await model.where({ id }).deleteAndCount();
+  if (n !== 0 && n !== 1) {
+    throw new Error(`Expected 0 or 1 delete for ${table} ${id}, got ${n}`);
   }
 }
 
@@ -167,31 +198,40 @@ async function createSignup(input: {
 }
 
 async function cleanupRun(runId: string) {
-  await orm.RunDiscordPost.where({ runId }).delete().catch(() => {});
-  await orm.RunStartSnapshot.where({ runId }).delete().catch(() => {});
+  assertIsolatedTestDatabase();
+  const posts = await orm.RunDiscordPost.where({ runId }).select("id").all();
+  for (const row of posts) {
+    await deleteOwnedRow("RunDiscordPost", (row as { id: string }).id);
+  }
+  const snapshot = await orm.RunStartSnapshot.where({ runId }).first();
+  if (snapshot) await orm.RunStartSnapshot.where({ runId }).deleteAndCount();
   const attendance = await orm.RunAttendance.where({ runId }).select("id").all();
   for (const row of attendance) {
-    await orm.RunAttendance.where({ id: (row as { id: string }).id }).delete().catch(() => {});
+    await deleteOwnedRow("RunAttendance", (row as { id: string }).id);
+  }
+  const events = await orm.RunDomainEvent.where({ runId }).select("id").all();
+  for (const row of events) {
+    await orm.RunDomainEvent.where({ id: (row as { id: string }).id }).deleteAndCount();
   }
   const roster = await orm.RunRoster.where({ runId }).first();
   if (roster) {
     const rosterId = (roster as { id: string }).id;
     const entries = await orm.RunRosterEntry.where({ rosterId }).all();
     for (const entry of entries) {
-      await orm.RunRosterEntry.where({ id: (entry as { id: string }).id }).delete();
+      await orm.RunRosterEntry.where({ id: (entry as { id: string }).id }).deleteAndCount();
     }
-    await orm.RunRoster.where({ id: rosterId }).delete();
+    await orm.RunRoster.where({ id: rosterId }).deleteAndCount();
   }
   const signups = await orm.RunSignup.where({ runId }).select("id").all();
   for (const row of signups) {
     const signupId = (row as { id: string }).id;
     const offered = await orm.RunSignupRole.where({ signupId }).select("id").all();
     for (const offer of offered) {
-      await orm.RunSignupRole.where({ id: (offer as { id: string }).id }).delete().catch(() => {});
+      await deleteOwnedRow("RunSignupRole", (offer as { id: string }).id);
     }
-    await orm.RunSignup.where({ id: signupId }).delete().catch(() => {});
+    await deleteOwnedRow("RunSignup", signupId);
   }
-  await deleteIfPresent("Run", runId);
+  await deleteOwnedRow("Run", runId);
 }
 
 const lead = asUser(ids.lead, "Discord Lead", "RAID_LEAD");
@@ -206,6 +246,7 @@ let rangedChar = "";
 let lootChar = "";
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   await raidRepository.ensureReferenceRaids();
   for (const userId of createdUserIds) {
     const runs = await orm.Run.where({ raidLeadId: userId }).select("id").all();
@@ -214,9 +255,9 @@ beforeAll(async () => {
     }
     const chars = await orm.Character.where({ userId }).select("id").all();
     for (const row of chars) {
-      await deleteIfPresent("Character", (row as { id: string }).id);
+      await deleteOwnedRow("Character", (row as { id: string }).id);
     }
-    await deleteIfPresent("User", userId);
+    await deleteOwnedRow("User", userId);
   }
 
   await createTestUser(ids.lead, "Discord Lead", null, "RAID_LEAD");
@@ -268,14 +309,15 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
+  assertIsolatedTestDatabase();
   for (const id of createdRunIds) {
     await cleanupRun(id);
   }
   for (const id of createdCharacterIds) {
-    await deleteIfPresent("Character", id);
+    await deleteOwnedRow("Character", id);
   }
   for (const id of createdUserIds) {
-    await deleteIfPresent("User", id);
+    await deleteOwnedRow("User", id);
   }
 }, 60_000);
 
@@ -1095,7 +1137,7 @@ describe("discordSyncService.getRosterEmbedData", () => {
     const all = [...rosterBoosters(view), ...view.groups.lootbuddies];
     let version = view.roster.version;
     for (const signup of all) {
-      await rosterService.setDraftSelection(lead, { runId, signupId: signup.id, selected: true, version });
+      await setDraftSelection(lead, { runId, signupId: signup.id, selected: true, version });
       version = (await rosterService.getRosterManagementView(lead, runId)).roster.version;
     }
 
@@ -1588,7 +1630,7 @@ describe("discordSyncService — per-Run channel provisioning", () => {
 
     const view = await rosterService.getRosterManagementView(lead, orphanRunId);
     const tankSignup = rosterBoosters(view)[0];
-    await rosterService.setDraftSelection(lead, { runId: orphanRunId, signupId: tankSignup.id, selected: true, version: view.roster.version });
+    await setDraftSelection(lead, { runId: orphanRunId, signupId: tankSignup.id, selected: true, version: view.roster.version });
     const afterSelect = await rosterService.getRosterManagementView(lead, orphanRunId);
     await rosterService.publishRoster(lead, { runId: orphanRunId, version: afterSelect.roster.version, acknowledgeWarnings: true });
 
@@ -1972,7 +2014,7 @@ title: "Historical roster-invariant fixture",
 
     const view = await rosterService.getRosterManagementView(lead, publishedRunId);
     const tankSignup = rosterBoosters(view)[0];
-    await rosterService.setDraftSelection(lead, { runId: publishedRunId, signupId: tankSignup.id, selected: true, version: view.roster.version });
+    await setDraftSelection(lead, { runId: publishedRunId, signupId: tankSignup.id, selected: true, version: view.roster.version });
     const afterSelect = await rosterService.getRosterManagementView(lead, publishedRunId);
     await rosterService.publishRoster(lead, { runId: publishedRunId, version: afterSelect.roster.version, acknowledgeWarnings: true });
 
@@ -2554,7 +2596,7 @@ describe("discordSyncService — run start operational post", () => {
       for (const signup of group) {
         view = await rosterService.getRosterManagementView(lead, id);
         if (!signup.draftSelected) {
-          await rosterService.setDraftSelection(lead, {
+          await setDraftSelection(lead, {
             runId: id,
             signupId: signup.id,
             selected: true,
@@ -2615,7 +2657,7 @@ describe("Final Setup LFG footer uses Manawyrm branding", () => {
     let view = await rosterService.getRosterManagementView(lead, id);
     for (const signup of view.groups.lootbuddies) {
       view = await rosterService.getRosterManagementView(lead, id);
-      await rosterService.setDraftSelection(lead, { runId: id, signupId: signup.id, selected: true, version: view.roster.version });
+      await setDraftSelection(lead, { runId: id, signupId: signup.id, selected: true, version: view.roster.version });
     }
     view = await rosterService.getRosterManagementView(lead, id);
     await rosterService.publishRoster(lead, { runId: id, version: view.roster.version, acknowledgeWarnings: true });
@@ -2675,6 +2717,8 @@ describe("planRunVoiceChannel — temporary Run voice lifecycle decision", () =>
 });
 
 describe("listSyncWork — voiceChannels lane", () => {
+  // publish+start fixtures routinely exceed Vitest's 5s default under a full audit DB
+
   /** The Raid Lead's displayed name (User.name, resolved from Discord) — what the voice channel shows. */
   async function setLeadName(name: string) {
     await orm.User.where({ id: ids.lead }).update({ name, updatedAt: new Date().toISOString() });
@@ -2690,7 +2734,7 @@ describe("listSyncWork — voiceChannels lane", () => {
     let view = await rosterService.getRosterManagementView(lead, id);
     for (const signup of view.groups.lootbuddies) {
       view = await rosterService.getRosterManagementView(lead, id);
-      await rosterService.setDraftSelection(lead, { runId: id, signupId: signup.id, selected: true, version: view.roster.version });
+      await setDraftSelection(lead, { runId: id, signupId: signup.id, selected: true, version: view.roster.version });
     }
     view = await rosterService.getRosterManagementView(lead, id);
     await rosterService.publishRoster(lead, { runId: id, version: view.roster.version, acknowledgeWarnings: true });
@@ -2700,7 +2744,7 @@ describe("listSyncWork — voiceChannels lane", () => {
   const voiceItem = async (id: string) => (await discordSyncService.listSyncWork()).voiceChannels.find((entry) => entry.runId === id);
   const startItem = async (id: string) => (await discordSyncService.listSyncWork()).start.find((entry) => entry.runId === id);
 
-  describe("Final Setup Voice link: start work carries the persisted id and goes stale on voice changes", () => {
+  describe("Final Setup Voice link: start work carries the persisted id and goes stale on voice changes", { timeout: 30_000 }, () => {
     async function startedRunWithChannel(): Promise<string> {
       const id = await publishedRun();
       await discordSyncService.recordRunChannel({ runId: id, channelId: "text-chan-v" });
@@ -2804,7 +2848,7 @@ describe("listSyncWork — voiceChannels lane", () => {
     } finally {
       await setLeadName("Discord Lead");
     }
-  });
+  }, 30_000);
 
   it("a Run completed before the bot ever polled gets no voice channel", async () => {
     const id = await publishedRun();
