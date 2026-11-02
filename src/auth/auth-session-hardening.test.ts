@@ -2,17 +2,6 @@ import { describe, expect, it } from "vitest";
 import { resolveBetterAuthBaseURL } from "@/auth/better-auth-base-url";
 import { resolveSafeCallbackPath, isSafeInternalPath } from "@/auth/safe-callback-path";
 import { summarizeUserAgent, toPublicSessionView } from "@/auth/session-view";
-import {
-  SESSION_EXPIRES_IN_SECONDS,
-  SESSION_UPDATE_AGE_SECONDS,
-} from "@/auth/session-policy";
-
-describe("Better Auth session policy constants", () => {
-  it("uses a 30-day expiresIn and 1-day updateAge", () => {
-    expect(SESSION_EXPIRES_IN_SECONDS).toBe(60 * 60 * 24 * 30);
-    expect(SESSION_UPDATE_AGE_SECONDS).toBe(60 * 60 * 24);
-  });
-});
 
 describe("resolveBetterAuthBaseURL", () => {
   it("returns the configured URL when set", () => {

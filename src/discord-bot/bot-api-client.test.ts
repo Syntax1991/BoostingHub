@@ -81,22 +81,9 @@ describe("BotApiClient", () => {
     mockFetchOnce(404, { ok: false, code: "NOT_FOUND", message: "No Manawyrm Hub account is linked to this Discord user." });
     const client = new BotApiClient({ apiBaseUrl: "https://api.test", botApiToken: "secret-token" });
 
-    await expect(client.getSignupOptions("run-1", "unknown")).rejects.toMatchObject({
-      status: 404,
-      code: "NOT_FOUND",
-    });
-  });
-
-  it("is an instance of BotApiError specifically", async () => {
-    mockFetchOnce(401, { ok: false, code: "NOT_AUTHORIZED", message: "Invalid bot credential." });
-    const client = new BotApiClient({ apiBaseUrl: "https://api.test", botApiToken: "wrong" });
-
-    try {
-      await client.listSyncWork();
-      expect.unreachable();
-    } catch (error) {
-      expect(error).toBeInstanceOf(BotApiError);
-    }
+    const failure = client.getSignupOptions("run-1", "unknown");
+    await expect(failure).rejects.toBeInstanceOf(BotApiError);
+    await expect(failure).rejects.toMatchObject({ status: 404, code: "NOT_FOUND" });
   });
 
   it("logs (without leaking the token) and rethrows a transport-level failure (e.g. the API base URL unreachable)", async () => {

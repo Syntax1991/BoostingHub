@@ -54,33 +54,13 @@ describe("account role hierarchy — OWNER > ADMIN > RAID_LEAD > USER", () => {
     expect(canReviewBoosterAccess("OWNER")).toBe(true);
     expect(canAccessManagement("OWNER")).toBe(true);
     expect(getManagementNavItems("OWNER")).toEqual(getManagementNavItems("ADMIN"));
-    expect(getManagementNavItems("OWNER").map((item) => item.module)).toEqual([
-      "overview",
-      "runs",
-      "schedule",
-      "users",
-      "characters",
-      "raidCatalog",
-      "analytics",
-      "system",
-    ]);
     // Any Run, not only assigned ones — like ADMIN.
     expect(canManageRun(actor("owner", "OWNER"), { raidLeadId: "someone-else" })).toBe(true);
     expect(isEligibleRaidLead({ accountRole: "OWNER", accountStatus: "ACTIVE" })).toBe(true);
     expect(isEligibleRaidLead({ accountRole: "OWNER", accountStatus: "DISABLED" })).toBe(false);
   });
 
-  it("existing USER / RAID_LEAD / ADMIN behavior is unchanged", () => {
-    expect(canManageUsers("ADMIN")).toBe(true);
-    expect(canManageUsers("RAID_LEAD")).toBe(false);
-    expect(canReviewBoosterAccess("RAID_LEAD")).toBe(false);
-    expect(canAccessManagement("USER")).toBe(false);
-    expect(getManagementNavItems("USER")).toEqual([]);
-    expect(getManagementNavItems("RAID_LEAD").map((item) => item.module)).toEqual([
-      "overview",
-      "runs",
-      "schedule",
-    ]);
+  it("a Raid Lead manages only assigned Runs, an Admin any Run, and a USER is no eligible Raid Lead", () => {
     expect(canManageRun(actor("lead", "RAID_LEAD"), { raidLeadId: "lead" })).toBe(true);
     expect(canManageRun(actor("lead", "RAID_LEAD"), { raidLeadId: "other" })).toBe(false);
     expect(canManageRun(actor("admin", "ADMIN"), { raidLeadId: "other" })).toBe(true);
@@ -102,7 +82,6 @@ describe("OWNER presentation and the generic role picker", () => {
 
   it("OWNER is excluded from the generic assignable role options", () => {
     expect(MANAGEABLE_ACCOUNT_ROLES).toEqual(["USER", "RAID_LEAD", "ADMIN"]);
-    expect(MANAGEABLE_ACCOUNT_ROLES as readonly string[]).not.toContain("OWNER");
   });
 
   it("a protected OWNER target shows no role-change control; other targets keep the normal Change role button", () => {

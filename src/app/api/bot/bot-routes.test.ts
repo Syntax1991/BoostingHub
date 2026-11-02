@@ -569,7 +569,7 @@ describe("POST /api/bot/runs/:runId/signup/quick", () => {
     expect(noUser.status).toBe(401);
   });
 
-  it("calls signupService.quickSignupBoosters for the URL runId and returns the result DTO", async () => {
+  it("signs up the URL run and returns the result DTO", async () => {
     const res = await quickSignupPost(
       req(`/api/bot/runs/${runId}/signup/quick`, {
         method: "POST",

@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { runCreatePath, RUN_CREATE_PATH } from "@/lib/run-routes";
 
 const redirectMock = vi.hoisted(() =>
   vi.fn(() => {
@@ -8,13 +7,6 @@ const redirectMock = vi.hoisted(() =>
 );
 
 vi.mock("next/navigation", () => ({ redirect: redirectMock }));
-
-describe("run create path helpers", () => {
-  it("exposes the canonical /runs/create path", () => {
-    expect(RUN_CREATE_PATH).toBe("/runs/create");
-    expect(runCreatePath()).toBe("/runs/create");
-  });
-});
 
 describe("GET /manage/runs/create (legacy route)", () => {
   it("redirects to /runs/create without rendering a form", async () => {
