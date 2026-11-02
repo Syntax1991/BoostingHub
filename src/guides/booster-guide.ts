@@ -84,7 +84,7 @@ export const BOOSTER_GUIDE_CARDS: readonly BoosterGuideCard[] = [
       ``,
       `**Next:** add your characters.`,
     ].join("\n"),
-    imageFile: "bo-01-dashboard.png",
+    imageFile: "live-bo-01-dashboard.png",
     linkButton: { label: "Open Manawyrm Hub", url: APP_URL },
   },
   {
@@ -101,7 +101,7 @@ export const BOOSTER_GUIDE_CARDS: readonly BoosterGuideCard[] = [
       ``,
       `**Next:** sign up for a run.`,
     ].join("\n"),
-    imageFile: "bo-02-characters.png",
+    imageFile: "live-bo-02-characters.png",
   },
   {
     key: "signing-up",
@@ -117,7 +117,7 @@ export const BOOSTER_GUIDE_CARDS: readonly BoosterGuideCard[] = [
       ``,
       `**Next:** see what happens after you sign up. Prefer Discord? Read the next card first.`,
     ].join("\n"),
-    imageFile: "bo-04-signup.png",
+    imageFile: "live-bo-04-signup.png",
   },
   {
     key: "discord-signups",
@@ -166,7 +166,7 @@ export const BOOSTER_GUIDE_CARDS: readonly BoosterGuideCard[] = [
       ``,
       `**Next:** be ready when your run starts. Good luck!`,
     ].join("\n"),
-    imageFile: "bo-05-my-runs.png",
+    imageFile: "live-bo-05-my-runs.png",
   },
 ] as const;
 

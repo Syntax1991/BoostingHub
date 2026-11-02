@@ -75,7 +75,7 @@ export const RAIDLEAD_GUIDE_CARDS: readonly RaidleadGuideCard[] = [
       ``,
       `**Next:** create a run.`,
     ].join("\n"),
-    imageFile: "rl-01-dashboard.png",
+    imageFile: "live-rl-01-dashboard.png",
     linkButton: { label: "Open Manawyrm Hub", url: APP_URL },
   },
   {
@@ -91,7 +91,7 @@ export const RAIDLEAD_GUIDE_CARDS: readonly RaidleadGuideCard[] = [
       ``,
       `**Next:** open signups.`,
     ].join("\n"),
-    imageFile: "rl-04-create-run.png",
+    imageFile: "live-rl-04-create-run.png",
   },
   {
     key: "open-manage-signups",
@@ -105,7 +105,7 @@ export const RAIDLEAD_GUIDE_CARDS: readonly RaidleadGuideCard[] = [
       ``,
       `**Next:** build your roster.`,
     ].join("\n"),
-    imageFile: "rl-06-run-overview.png",
+    imageFile: "live-rl-06-run-overview.png",
   },
   {
     key: "build-roster",
@@ -123,7 +123,7 @@ export const RAIDLEAD_GUIDE_CARDS: readonly RaidleadGuideCard[] = [
       ``,
       `**Next:** start the run.`,
     ].join("\n"),
-    imageFile: "rl-05-roster.png",
+    imageFile: "live-rl-05-roster.png",
   },
   {
     key: "run-attendance",
@@ -137,7 +137,7 @@ export const RAIDLEAD_GUIDE_CARDS: readonly RaidleadGuideCard[] = [
       ``,
       `**Next:** finish the run.`,
     ].join("\n"),
-    imageFile: "rl-08-start-run.png",
+    imageFile: "live-rl-08-start-run.png",
   },
   {
     key: "complete-run",

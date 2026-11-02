@@ -59,6 +59,22 @@ describe("guide cards for new users", () => {
     }
   });
 
+  it("points every card at its approved image", () => {
+    expect(Object.fromEntries(ALL_CARDS.map((c) => [c.key, c.imageFile]))).toEqual({
+      "getting-started": "live-bo-01-dashboard.png",
+      characters: "live-bo-02-characters.png",
+      "signing-up": "live-bo-04-signup.png",
+      "discord-signups": null,
+      "after-signing-up": "live-bo-05-my-runs.png",
+      "raid-lead-basics": "live-rl-01-dashboard.png",
+      "create-run": "live-rl-04-create-run.png",
+      "open-manage-signups": "live-rl-06-run-overview.png",
+      "build-roster": "live-rl-05-roster.png",
+      "run-attendance": "live-rl-08-start-run.png",
+      "complete-run": "rl-09-finish-run.png",
+    });
+  });
+
   it("does not reuse a screenshot across the Raid Lead cards", () => {
     const images = RAIDLEAD_GUIDE_CARDS.map((c) => c.imageFile);
     expect(new Set(images).size).toBe(images.length);
