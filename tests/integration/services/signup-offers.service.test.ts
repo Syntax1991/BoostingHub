@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import type { CharacterRole } from "@/domain/run-types";
+import type { CharacterRole } from "@/models/enums";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
 import { raidRepository } from "@/repositories/raid.repository";
@@ -85,8 +85,24 @@ async function deleteOwnedRow(
   id: string,
 ) {
   assertIsolatedTestDatabase();
-  const model = orm[table];
-  const n = await model.where({ id }).deleteAndCount();
+  let n: number;
+  switch (table) {
+    case "User":
+      n = await orm.User.where({ id }).deleteAndCount();
+      break;
+    case "Character":
+      n = await orm.Character.where({ id }).deleteAndCount();
+      break;
+    case "RunSignupRole":
+      n = await orm.RunSignupRole.where({ id }).deleteAndCount();
+      break;
+    case "RunSignup":
+      n = await orm.RunSignup.where({ id }).deleteAndCount();
+      break;
+    case "Run":
+      n = await orm.Run.where({ id }).deleteAndCount();
+      break;
+  }
   if (n !== 0 && n !== 1) {
     throw new Error(`Expected 0 or 1 delete for ${table} ${id}, got ${n}`);
   }

@@ -112,8 +112,30 @@ async function deleteOwnedRow(
   id: string,
 ) {
   assertIsolatedTestDatabase();
-  const model = orm[table];
-  const n = await model.where({ id }).deleteAndCount();
+  let n: number;
+  switch (table) {
+    case "User":
+      n = await orm.User.where({ id }).deleteAndCount();
+      break;
+    case "Character":
+      n = await orm.Character.where({ id }).deleteAndCount();
+      break;
+    case "RunSignup":
+      n = await orm.RunSignup.where({ id }).deleteAndCount();
+      break;
+    case "Run":
+      n = await orm.Run.where({ id }).deleteAndCount();
+      break;
+    case "RunDiscordPost":
+      n = await orm.RunDiscordPost.where({ id }).deleteAndCount();
+      break;
+    case "RunSignupRole":
+      n = await orm.RunSignupRole.where({ id }).deleteAndCount();
+      break;
+    case "RunAttendance":
+      n = await orm.RunAttendance.where({ id }).deleteAndCount();
+      break;
+  }
   if (n !== 0 && n !== 1) {
     throw new Error(`Expected 0 or 1 delete for ${table} ${id}, got ${n}`);
   }

@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
 import { testActor } from "@tests/fixtures/actors";
@@ -40,15 +39,6 @@ function asUser(
   accountRole: AuthenticatedUser["accountRole"] = "USER",
 ): AuthenticatedUser {
   return testActor(id, accountRole, { name, email: `${id}@rmtest.boostting.local` });
-}
-
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    expect(isDomainError(error) && error.code).toBe(code);
-  }
 }
 
 async function createTestUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"]) {

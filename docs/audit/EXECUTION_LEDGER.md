@@ -132,7 +132,7 @@ Order follows the assignment. Each line is one PR, stacked on the one before.
 | 4 | MVCS boundaries: app and controllers no longer import repositories; lib no longer imports components | PR #326, awaiting review |
 | 4b | Move pure rules from `src/services` to `src/domain` | PR #327, awaiting review |
 | 5 | Guide code: drop legacy paths, share publisher code | PR #328, awaiting review |
-| 6 | Test cleanup by module | Phase 1 DONE ([PHASE-1.md](reports/PHASE-1.md)). Phase 2 in progress on `test/audit-batch-a`: 341 of 341 live files decided (+1 tombstone), 3825 of 3825 ledger tests reviewed, 0 UNREVIEWED |
+| 6 | Test cleanup by module | Phase 1 DONE ([PHASE-1.md](reports/PHASE-1.md)). Phase 2 DONE ([PHASE-2.md](reports/PHASE-2.md)): 341/341 live files decided (+1 tombstone), 0 UNREVIEWED; full suite 3824×2 on audit DB; `setDraftSelection` removed |
 | 7 | Frontend: error, loading and not-found pages; shared dialog effect | PR #329, awaiting review |
 | 8 | Performance, measured: run detail payload, event purge, rate-limit log | PR #330, awaiting review |
 | 9 | Dependencies and final verification | Dependencies audited, no change; TruffleHog scan still invalid |
@@ -355,7 +355,7 @@ Found while moving, not changed (feature freeze): four production modules are im
 | Phase | Name | Status | Report |
 | --- | --- | --- | --- |
 | 1 | Centralized test structure | DONE | [PHASE-1.md](reports/PHASE-1.md) |
-| 2 | Test quality audit | IN PROGRESS (setDraftSelection removal + Phase 2 gate) | — |
+| 2 | Test quality audit | DONE | [PHASE-2.md](reports/PHASE-2.md) |
 | 3 | Production refactoring / code quality | NOT STARTED | — |
 | 4 | Performance, security, reliability | NOT STARTED | — |
 | 5 | UX and documentation | NOT STARTED | — |
@@ -363,11 +363,7 @@ Found while moving, not changed (feature freeze): four production modules are im
 
 ### Phase 2 remaining (authoritative)
 
-HEAD at last ledger touch: see git. Still UNREVIEWED: none — all live test files decided.
-
-Remaining Phase 2 work: remove `rosterService.setDraftSelection`; full suite ×2 without reset; lint; typecheck; build; `PHASE-2.md`.
-
-Then: remove `rosterService.setDraftSelection` once callers are gone; full suite ×2 without reset; lint; typecheck; build; `PHASE-2.md`.
+Phase 2 complete. See [PHASE-2.md](reports/PHASE-2.md). Full suite 341 files / 3824 tests ×2 on `boostting_bot_test_audit` without reset; lint/typecheck/build pass; `setDraftSelection` removed from production.
 
 ## Continuation point
 
@@ -375,7 +371,7 @@ Handover to Cursor (2026-11-02): Claude left branch `test/audit-batch-a` at loca
 
 Mandatory phase reporting (2026-11-02): after each phase gate, write `docs/audit/reports/PHASE-<N>.md`, update this ledger, commit and push, then continue automatically. Phase 1 verified and reported; Phase 2 continues (no pause for owner ack).
 
-The test audit is not complete. Order for the rest, smallest risk first:
+The test audit (Phase 2) is complete. Order for the rest, smallest risk first:
 
 1. Done on branch `test/audit-batch-a`: `src/repositories` (11 files), `src/components` (39), `src/discord-bot` (37), `src/lib` (88), `src/domain` (22), `src/guides`, `src/services` batches 1–11. All tests now live under `tests/` (see above); paths below that still name `src/...test.ts` are as they were at the time.
 2. Phase 2 batch (Cursor): through `run-lifecycle-notifications`, plus `community-schedule-adoption` (REWRITE: owned users/slots/templates/runs, slots-before-templates FK cleanup, 24/24 ×2 on audit DB). **17 live files left** (ledger UNREVIEWED rows: 660). QC 2026-11-02: the prior "323/341 with 19 left" report was an off-by-one caused by a stale `src/services/management-hub.community-stats.test.ts` KEEP tombstone (suite was MERGED into overview and deleted); corrected to REMOVE tombstone → then 322 + lifecycle = 323 live decided + 18 remaining = 341; CSA brings live decided to 324. Full suite on audit DB (pre-CSA): 341 files / 3824 tests pass; lint/typecheck/build pass; five-commit suites repeatable without reset. `roster.service` still passes only on a freshly reset DB. A test file without an entry in `test-decisions.json` is unreviewed.
@@ -389,7 +385,7 @@ Services batch 2 notes worth keeping:
 - `warcraft-logs-discovery.test.ts` and `discord-member-name-sync.service.test.ts` used real-looking Discord snowflakes (log channel, log bot, guild, role ids). They are now synthetic per run.
 - Bulk refresh markers (resolved in batch 6): the cooldown stays community-wide in production, which is the intended behaviour. Suites now start bulk runs with their own admin, remove only that admin's markers (`src/test/bulk-force-refresh.ts`), and fail with the marker's id when a foreign marker is still inside the cooldown. No suite deletes another suite's markers any more.
 3. For each file: read every test, record a decision in `docs/audit/test-decisions.json`, change what the decision says, then rebuild `docs/audit/test-ledger.tsv` from `vitest list --json`.
-4. Next test-only method: `rosterService.setDraftSelection`. Six audited callers moved in `af6bb59`; all test callers migrated — remove production `setDraftSelection` next. Move those with their file audits, then remove the method.
+4. Done: `rosterService.setDraftSelection` removed (`8892f4f`); all suites use `saveDraftSelection` (local adapters where needed).
 5. Then shared helpers for `createTestUser` (36 copies), `createCharacter` (29) and `createUser` (26), and `restoreMocks` for the 52 files that never reset mocks.
 
 Not started: renames from the naming table, other than the move to `src/domain`.

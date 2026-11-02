@@ -62,7 +62,7 @@ const aelira = testActor("44444444-4444-4444-8444-444444444444", "ADMIN", {
   name: "Aelira Nightwatch",
   email: "44444444-4444-4444-8444-444444444444@dev.boostting.local",
 });
-let otherLead = testActor(OTHER_LEAD_ID, "RAID_LEAD", { name: "Other Lead" });
+const otherLead = testActor(OTHER_LEAD_ID, "RAID_LEAD", { name: "Other Lead" });
 
 type Attended = Extract<ConsumableAuditParticipant, { source: "ATTENDANCE" }>;
 let rosterA: Attended[] = [];

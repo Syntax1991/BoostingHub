@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import type { CharacterRole } from "@/domain/run-types";
+import type { ConfirmedRosterWarning } from "@/domain/roster-selection-risk";
 import { orm } from "@/lib/prisma";
+import type { CharacterRole } from "@/models/enums";
 import { SEED_IDS } from "@/prisma/seed-ids";
 import { activityRepository } from "@/repositories/activity.repository";
 import { rosterRepository } from "@/repositories/roster.repository";
@@ -89,7 +90,7 @@ async function setDraftSelection(
     selected: boolean;
     version: number;
     selectedRole?: CharacterRole | null;
-    confirmedWarnings?: Array<{ signupId: string; type: string; fingerprint: string }>;
+    confirmedWarnings?: ConfirmedRosterWarning[];
   },
 ) {
   const view = await rosterService.getRosterManagementView(actor, input.runId);

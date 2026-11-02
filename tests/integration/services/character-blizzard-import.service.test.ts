@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { DomainError, isDomainError } from "@/lib/errors";
+import { DomainError } from "@/lib/errors";
 import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { orm } from "@/lib/prisma";
 import type { OwnedBlizzardCharacter } from "@/lib/blizzard/types";
