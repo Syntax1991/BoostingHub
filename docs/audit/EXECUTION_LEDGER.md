@@ -129,8 +129,8 @@ Order follows the assignment. Each line is one PR, stacked on the one before.
 | 4b | Move pure rules from `src/services` to `src/domain` | PR #327, awaiting review |
 | 5 | Guide code: drop legacy paths, share publisher code | PR #328, awaiting review |
 | 6 | Test cleanup by module | Planned; 19 of 337 files read |
-| 7 | Frontend: error, loading and not-found pages; shared dialog effect | PR open, awaiting review |
-| 8 | Performance, measured: run detail payload, sync p95, event volume | Planned |
+| 7 | Frontend: error, loading and not-found pages; shared dialog effect | PR #329, awaiting review |
+| 8 | Performance, measured: run detail payload, event purge, rate-limit log | PR open, awaiting review |
 | 9 | Dependencies and final verification | Planned |
 | 10 | ManawyrmHub preparation | Needs approval |
 
@@ -143,6 +143,24 @@ Order follows the assignment. Each line is one PR, stacked on the one before.
 ## Change log
 
 Updated with every batch.
+
+### Batch 8: performance
+
+Measured locally: a production build on the seed database, 8 requests per page. Production was not changed. Before/after values for production can only be taken after a deploy.
+
+| Item | Before | After |
+| --- | --- | --- |
+| Run detail page data (RSC) | 91 KB | 66 KB |
+| Run detail HTML | 241 KB | 213 KB |
+| Run detail response time | about 122 ms | about 130 ms, no improvement |
+| Event purge, 5000 rows | about 15.8 s | about 15 ms |
+| Event purge, 200 rows | about 670 ms | about 2 ms |
+
+Slow sync pass, read from production, not fixed:
+
+- About 60 slow passes per hour, one a minute, 15 to 25 s each, no failures. Starts are exactly 60 s apart, and each end drifts about 330 ms later.
+- This points to a wait on a Discord rate-limit bucket. It is a hypothesis: discord.js waits silently, and the two scans that run once a minute both read channel history. The voice presence report makes no Discord request.
+- The batch adds a log line for each wait. After a deploy, `journalctl -u boostinghub-discord-bot | grep 'rate limited'` names the route. Effect today: Discord updates can wait up to about 25 s once a minute.
 
 ### Batch 7: frontend states
 

@@ -1818,4 +1818,14 @@ export const rosterService = {
 
 export type { RosterIssue };
 export type RosterManagementView = Awaited<ReturnType<typeof rosterService.getRosterManagementView>>;
+
+/**
+ * What a page sends to the browser. The role sections repeat the rows of
+ * `boosters`, and no client component reads them, so they stay on the server.
+ */
+export function toRosterClientView(view: RosterManagementView) {
+  const { groups, ...rest } = view;
+  return { ...rest, groups: { lootbuddies: groups.lootbuddies } };
+}
+export type RosterClientView = ReturnType<typeof toRosterClientView>;
 export type { ParticipationType, CharacterRole, SignupStatus };

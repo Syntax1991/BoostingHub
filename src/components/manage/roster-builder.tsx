@@ -96,7 +96,7 @@ import {
   type WclPerformanceRaidSegment,
 } from "@/lib/wcl-performance-display";
 import { buildRosterSavedSelectionKey, applyRoleCopyToggle, applyUnassignedDpsToggle, isRoleCopyChecked as roleCopyIsChecked, isUnassignedDpsCopyChecked } from "@/components/manage/roster-staged-selection";
-import type { rosterService } from "@/services/roster.service";
+import type { RosterClientView } from "@/services/roster.service";
 import type { CharacterRole, RaidDifficulty, WowClass } from "@/models/enums";
 import type { RaidBuffCoverage } from "@/domain/roster-raid-buffs";
 import {
@@ -117,12 +117,12 @@ import {
   type PendingRosterSelectionWarning,
 } from "@/domain/roster-selection-risk";
 
-type RosterView = Awaited<ReturnType<typeof rosterService.getRosterManagementView>>;
+type RosterView = RosterClientView;
 
 /** Dense responsive Signups grid — the same in every Group by mode. */
 const SIGNUP_GRID_CLASS =
   "grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 [&>li]:h-[54px]";
-type SignupRow = RosterView["groups"]["tanks"][number];
+type SignupRow = RosterView["boosters"][number];
 
 function lootbuddyDisplayClass(signup: SignupRow): WowClass | null {
   return signup.lootbuddyClass ?? signup.character?.wowClass ?? null;

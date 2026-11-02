@@ -23,7 +23,7 @@ import {
 } from "@/lib/run-start-message";
 import { finalSetupBossPlan } from "@/services/roster-boss-exceptions";
 import { rosterRepository } from "@/repositories/roster.repository";
-import { rosterService, type RosterManagementView } from "@/services/roster.service";
+import { rosterService, toRosterClientView, type RosterManagementView } from "@/services/roster.service";
 import { signupService } from "@/services/signup.service";
 import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
@@ -308,7 +308,7 @@ export const runDetailService = {
       editor,
       viewerSignups,
       publishedRoster,
-      manager,
+      manager: manager && toRosterClientView(manager),
       preflight,
       history,
       startSnapshot,
