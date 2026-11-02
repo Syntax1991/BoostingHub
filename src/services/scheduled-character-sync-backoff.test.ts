@@ -31,13 +31,12 @@ vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOr
 import { battleNetConnectionRepository } from "@/repositories/battle-net-connection.repository";
 import { characterRepository } from "@/repositories/character.repository";
 import { characterBlizzardSyncService } from "@/services/character-blizzard-sync.service";
-import {
-  BULK_FORCE_REFRESH_STARTED_EVENT,
-  characterOperationsService,
-  deriveOperationsRow,
-} from "@/services/character-operations.service";
+import { characterOperationsService, deriveOperationsRow } from "@/services/character-operations.service";
 import { characterService } from "@/services/character.service";
 import { scheduledCharacterSyncService } from "@/services/scheduled-character-sync.service";
+import { testActor } from "@/test/actors";
+import { deleteBulkRefreshMarkers, expectBulkRefreshCooldownElapsed } from "@/test/bulk-force-refresh";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
 
 /**
  * Scheduler-only failure backoff: a repeatedly failing Character is not
@@ -53,34 +52,10 @@ let admin: AuthenticatedUser;
 const fx = {} as Record<"P" | "L" | "R", { id: string; name: string }>;
 const PROFILE_IDS = { P: "780001", L: "780002", R: "780003" } as const;
 
-function asUser(id: string, accountRole: AuthenticatedUser["accountRole"]): AuthenticatedUser {
-  return {
-    id,
-    name: `Backoff ${accountRole} ${token}`,
-    email: `${id}@sync-backoff.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
-
 async function createUser(accountRole: AuthenticatedUser["accountRole"]) {
-  const id = crypto.randomUUID();
-  const now = new Date().toISOString();
-  await orm.User.create({
-    id,
-    name: `Backoff ${accountRole} ${token}`,
-    email: `${id}@sync-backoff.boostting.local`,
-    emailVerified: true,
-    accountRole,
-    accountStatus: "ACTIVE",
-    createdAt: now,
-    updatedAt: now,
-  });
+  const id = await createTestUser({ name: `Backoff ${accountRole} ${token}`, accountRole });
   userIds.push(id);
-  return asUser(id, accountRole);
+  return testActor(id, accountRole);
 }
 
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
@@ -106,6 +81,7 @@ function attempted(key: keyof typeof fx) {
 }
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   vi.stubEnv("BLIZZARD_CLIENT_ID", "test-client-id");
   vi.stubEnv("BLIZZARD_CLIENT_SECRET", "test-client-secret");
   vi.stubEnv("BLIZZARD_REDIRECT_URI", "http://localhost:3000/api/integrations/battlenet/callback");
@@ -134,12 +110,12 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  assertIsolatedTestDatabase();
   for (const userId of userIds) {
-    await orm.BattleNetConnection.where({ userId }).deleteAll();
-    await orm.Character.where({ userId }).deleteAll();
-    await orm.ActivityEvent.where({ userId }).deleteAll();
-    await orm.User.where({ id: userId }).delete();
+    await orm.BattleNetConnection.where({ userId }).deleteAndCount();
+    await orm.Character.where({ userId }).deleteAndCount();
   }
+  await deleteCreatedRows({ userIds });
   vi.unstubAllEnvs();
 });
 
@@ -254,10 +230,13 @@ describe("manual paths ignore the scheduler backoff", () => {
 
     await deepBackoff();
     vi.clearAllMocks();
-    await orm.ActivityEvent.where({ type: BULK_FORCE_REFRESH_STARTED_EVENT }).deleteAll();
-    await characterOperationsService.forceRefreshAll(admin);
+    await expectBulkRefreshCooldownElapsed();
+    try {
+      await characterOperationsService.forceRefreshAll(admin);
+    } finally {
+      await deleteBulkRefreshMarkers(admin.id);
+    }
     expect(attempted("P")).toBe(true);
-    await orm.ActivityEvent.where({ type: BULK_FORCE_REFRESH_STARTED_EVENT }).deleteAll();
   });
 });
 
@@ -368,11 +347,16 @@ describe("fairness: backoff is applied to the COMPLETE stale set (no bounded win
       throw new DomainError("BLIZZARD_CHARACTER_NOT_FOUND", "not a fairness fixture", 404);
     });
     const listSpy = vi.spyOn(characterRepository, "listScheduledSyncCandidates");
+    let result: Awaited<ReturnType<typeof scheduledCharacterSyncService.runOnce>>;
+    let candidateQueries: number;
+    try {
+      result = await scheduledCharacterSyncService.runOnce();
+    } finally {
+      candidateQueries = listSpy.mock.calls.length;
+      listSpy.mockRestore();
+    }
 
-    const result = await scheduledCharacterSyncService.runOnce();
-
-    expect(listSpy).toHaveBeenCalledTimes(1); // one query, no paging loop
-    listSpy.mockRestore();
+    expect(candidateQueries).toBe(1); // one query, no paging loop
     for (const character of later) expect(callsFor(character.name)).toBe(1);
     for (const character of early) expect(callsFor(character.name)).toBe(0);
     expect(callsFor(retired.name)).toBe(0);

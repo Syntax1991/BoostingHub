@@ -45,6 +45,14 @@ export const RAID_WEEK_TEST_CLOCK = "2027-03-04T12:00:00.000Z";
 /** Saturday evening of RAID_WEEK_TEST_CLOCK's week: a Run start that classifies CURRENT. */
 export const CURRENT_WEEK_RUN_START = "2027-03-06T19:00:00.000Z";
 
+/**
+ * Wall clock for the Discord Schedule lane suite, which classifies a week after
+ * it (so a Run in the PAST week was still creatable). Its empty-schedule
+ * assertions read every Run in the CURRENT and NEXT weeks (14 to 28 April
+ * 2027), so no other suite may schedule Runs there. Before FEED_TEST_CLOCK.
+ */
+export const DISCORD_SCHEDULE_TEST_CLOCK = "2027-04-08T12:00:00.000Z";
+
 export function restoreSystemTime(): void {
   vi.useRealTimers();
 }

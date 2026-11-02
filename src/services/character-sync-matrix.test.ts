@@ -30,13 +30,11 @@ vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOr
 import { battleNetConnectionRepository } from "@/repositories/battle-net-connection.repository";
 import { characterRepository } from "@/repositories/character.repository";
 import { characterBlizzardSyncService } from "@/services/character-blizzard-sync.service";
-import {
-  BULK_FORCE_REFRESH_STARTED_EVENT,
-  characterOperationsService,
-} from "@/services/character-operations.service";
+import { characterOperationsService } from "@/services/character-operations.service";
 import { characterService } from "@/services/character.service";
 import { scheduledCharacterSyncService } from "@/services/scheduled-character-sync.service";
 import { testActor } from "@/test/actors";
+import { deleteBulkRefreshMarkers, expectBulkRefreshCooldownElapsed } from "@/test/bulk-force-refresh";
 import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
 import { expectDomainError } from "@/test/domain-error";
 
@@ -240,12 +238,14 @@ describe("sync matrix: ACTIVE decides whether, linkage decides how", () => {
   });
 
   it("admin Force refresh all: eligible = every active Character (A/B/C), never retired D", async () => {
-    // The bulk cooldown is community-wide (latest marker of any admin). Earlier suites' markers
-    // are the only rows outside this suite it removes, so the run is not refused as too recent.
-    await orm.ActivityEvent.where({ type: BULK_FORCE_REFRESH_STARTED_EVENT }).deleteAll();
+    await expectBulkRefreshCooldownElapsed();
     const since = Date.now();
 
-    await characterOperationsService.forceRefreshAll(admin);
+    try {
+      await characterOperationsService.forceRefreshAll(admin);
+    } finally {
+      await deleteBulkRefreshMarkers(admin.id);
+    }
 
     for (const key of ["A", "B", "C"] as const) expect(await syncedSince(since)(key)).toBe(true);
     expect(await syncedSince(since)("D")).toBe(false);

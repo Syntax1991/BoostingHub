@@ -1098,7 +1098,7 @@
     ],
     "src/services/character-sync-matrix.test.ts": [
       "REWRITE",
-      "Shared fixtures and verified cleanup; the global bulk-cooldown marker clear is documented as the one justified outside-row delete"
+      "Shared fixtures and verified cleanup; the global bulk-cooldown marker clear is documented as the one justified outside-row delete; bulk marker: own admin only, foreign marker inside the cooldown fails (was a global delete)"
     ],
     "src/services/discord-member-name-sync.service.test.ts": [
       "REWRITE",
@@ -1175,6 +1175,22 @@
     "src/services/raid-catalog-lifecycle.test.ts": [
       "REWRITE",
       "Fresh users and verified cleanup in dependency order; the fixed f00dface ids stay because they are the mocked catalog entry under test"
+    ],
+    "src/services/platform-owner.test.ts": [
+      "REWRITE",
+      "Fresh users instead of fixed ids with a pre-clean; lock waits proven with waitForLockWaiter instead of 200 ms sleeps; the queued-demotion race now holds only the other admin row, which exposed the single-row update() lock (fixed in user.repository); bootstrap event counts scoped to suite users; the single-owner index asserted by SQLSTATE 23505 and constraint name; USER added to the below-Admin refusal its title claimed"
+    ],
+    "src/services/run-lootbuddy-target.test.ts": [
+      "REWRITE",
+      "Fresh users instead of invalid fixed ids with a pre-delete; templates (which restrict their creator) removed first, then verified cleanup with no swallowed errors; anyContentRunInput where the raid is not under test; three casts removed"
+    ],
+    "src/services/discord-schedule-sync.test.ts": [
+      "REWRITE",
+      "Frozen DISCORD_SCHEDULE_TEST_CLOCK instead of now+90 days (which drifted onto the Jan/Feb 2027 schedule fixtures); schedule post rows snapshotted and restored instead of deleted; fresh lead with a synthetic snowflake instead of a fixed id and a swallowed upsert; recordRunChannel instead of a fake raid-invite row; exact order, exact empty schedules and exact line shapes instead of not-contains and a lead-name substring"
+    ],
+    "src/services/scheduled-character-sync-backoff.test.ts": [
+      "REWRITE",
+      "Shared user fixtures and verified cleanup; Force refresh all removes only its own admin marker and fails on a foreign marker inside the cooldown instead of deleting every marker; the repository spy is restored even when the run throws"
     ]
   },
   "tests": {
@@ -1819,6 +1835,10 @@
     "src/services/dev-account-bootstrap.service.test.ts::bootstrapDevelopmentAccount — restoring the target account > never creates an ActivityEvent across any mutation scenario above": [
       "MERGE",
       "Depended on earlier tests' users; each restoring scenario now asserts zero activity itself"
+    ],
+    "src/services/discord-schedule-sync.test.ts::discord schedule lane — listSyncWork > signature matches pure builder for the rendered runs": [
+      "REMOVE",
+      "Never called the builder its title names; stability is already proven by the U/V/W and Z convergence tests"
     ]
   }
 }

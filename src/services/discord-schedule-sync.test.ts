@@ -1,60 +1,47 @@
 /**
  * Discord Schedule lane: listSyncWork produces CURRENT/NEXT desired state;
  * COMPLETED/CANCELLED drop immediately even while Run channels still exist.
+ *
+ * The two Schedule messages and their recorded state are community-wide, so the
+ * suite runs in raid weeks no other suite uses (DISCORD_SCHEDULE_TEST_CLOCK) and
+ * puts back the schedule post rows it found.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { orm } from "@/lib/prisma";
-import {
-  SCHEDULE_EMPTY_DESCRIPTION,
-  SCHEDULE_MESSAGE_FORMAT_VERSION,
-  buildScheduleSignature,
-} from "@/lib/discord-schedule";
-import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
+import { SCHEDULE_EMPTY_DESCRIPTION } from "@/lib/discord-schedule";
+import { anyContentRunInput } from "@/lib/test-run-input";
 import { classifyRunWeek } from "@/lib/wow-run-week";
 import type { RunStatus } from "@/models/enums";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { discordSyncService } from "@/services/discord-sync.service";
 import { runService } from "@/services/run.service";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows, syntheticDiscordId } from "@/test/db-fixtures";
+import { DAY_MS, DISCORD_SCHEDULE_TEST_CLOCK, HOUR_MS, freezeSystemTime, restoreSystemTime } from "@/test/time";
 
-const ids = {
-  lead: "aaaaaaaa-aaaa-4aaa-8aaa-sch000000001",
-};
-const lead: AuthenticatedUser = {
-  id: ids.lead,
-  name: "Schedule Lead",
-  email: `${ids.lead}@dsch.boostting.local`,
-  image: null,
-  discordUserId: "sch-lead-discord",
-  discordUsername: "ScheduleLead",
-  accountRole: "RAID_LEAD",
-  accountStatus: "ACTIVE",
-};
+const LEAD_NAME = "Schedule Lead";
+let lead: AuthenticatedUser;
+const created = { runIds: [] as string[], userIds: [] as string[] };
 
-/** Far-future classification clock so createRun stays in the real future. */
-const classificationNow = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+/** Runs are created at the frozen clock and classified a week later, so the PAST week is still creatable. */
+const classificationNow = new Date(Date.parse(DISCORD_SCHEDULE_TEST_CLOCK) + 7 * DAY_MS);
 const { currentStart, nextStart, followingStart } = classifyRunWeek({
   scheduledStartAt: classificationNow.toISOString(),
   now: classificationNow,
 });
 
-const createdRunIds: string[] = [];
+function hoursAfter(weekStart: string, hours: number): string {
+  return new Date(Date.parse(weekStart) + hours * HOUR_MS).toISOString();
+}
 
 async function createRunAt(scheduledStartAt: string, state: { status?: RunStatus; archived?: boolean } = {}) {
-  const id = await runService
-    .createRun(lead, {
-      raidId: VENOMOUS_ABYSS_RAID_ID,
-      difficulty: "HEROIC",
-      lootType: "VIP",
-      plannedBossCount: 8,
-      scheduledStartAt,
-      desiredTankCount: 1,
-      desiredHealerCount: 1,
-      desiredDpsCount: 2,
-    })
-    .then((run) => run.id);
-  createdRunIds.push(id);
+  const { id } = await runService.createRun(
+    lead,
+    anyContentRunInput({ lootType: "VIP", scheduledStartAt, desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 2 }),
+  );
+  created.runIds.push(id);
   if (state.status || state.archived) {
     const now = new Date().toISOString();
     await orm.Run.where({ id }).update({
@@ -66,25 +53,18 @@ async function createRunAt(scheduledStartAt: string, state: { status?: RunStatus
   return id;
 }
 
-async function setPost(runId: string, fields: Record<string, unknown>) {
-  await runDiscordPostRepository.recordRaidInviteSent({ runId, signupId: "seed-signup" });
-  await orm.RunDiscordPost.where({ runId }).update({ ...fields, updatedAt: new Date().toISOString() });
+async function setRunChannel(runId: string, channelId: string) {
+  await runDiscordPostRepository.recordRunChannel({ runId, channelId });
 }
 
-async function cleanupRun(runId: string) {
-  await orm.RunDiscordPost.where({ runId }).delete().catch(() => {});
-  await orm.RunStartSnapshot.where({ runId }).delete().catch(() => {});
-  const roster = await orm.RunRoster.where({ runId }).first();
-  if (roster) await orm.RunRoster.where({ runId }).delete().catch(() => {});
-  await orm.Run.where({ id: runId }).delete().catch(() => {});
-}
+type SchedulePostRow = Record<string, unknown>;
+let schedulePostsBefore: SchedulePostRow[] = [];
 
-async function cleanupAll() {
-  const runs = await orm.Run.where({ raidLeadId: ids.lead }).select("id").all();
-  for (const row of runs) await cleanupRun((row as { id: string }).id);
-  await orm.DiscordSchedulePost.where({ bucket: "CURRENT" }).delete().catch(() => {});
-  await orm.DiscordSchedulePost.where({ bucket: "NEXT" }).delete().catch(() => {});
-  createdRunIds.length = 0;
+/** Replaces the (at most two) community-wide schedule post rows with the ones the suite found. */
+async function restoreSchedulePosts() {
+  assertIsolatedTestDatabase();
+  for (const bucket of ["CURRENT", "NEXT"] as const) await orm.DiscordSchedulePost.where({ bucket }).deleteAndCount();
+  for (const row of schedulePostsBefore) await orm.DiscordSchedulePost.create(row as Parameters<typeof orm.DiscordSchedulePost.create>[0]);
 }
 
 function scheduleLineFor(work: Awaited<ReturnType<typeof discordSyncService.listSyncWork>>, bucket: "CURRENT" | "NEXT") {
@@ -96,37 +76,23 @@ function descriptionMentions(work: Awaited<ReturnType<typeof discordSyncService.
 }
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
+  freezeSystemTime(DISCORD_SCHEDULE_TEST_CLOCK, { advance: true });
   await raidRepository.ensureReferenceRaids();
-  await orm.User.create({
-    id: ids.lead,
-    name: lead.name,
-    email: lead.email!,
-    emailVerified: true,
-    discordUserId: lead.discordUserId,
-    discordUsername: lead.discordUsername,
-    accountRole: "RAID_LEAD",
-    accountStatus: "ACTIVE",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }).catch(async () => {
-    await orm.User.where({ id: ids.lead }).update({
-      name: lead.name,
-      discordUserId: lead.discordUserId,
-      discordUsername: lead.discordUsername,
-      accountRole: "RAID_LEAD",
-      accountStatus: "ACTIVE",
-      updatedAt: new Date().toISOString(),
-    });
-  });
+  schedulePostsBefore = (await orm.DiscordSchedulePost.all()) as SchedulePostRow[];
+  const leadId = await createTestUser({ name: LEAD_NAME, accountRole: "RAID_LEAD", discordUserId: syntheticDiscordId() });
+  created.userIds.push(leadId);
+  lead = testActor(leadId, "RAID_LEAD", { name: LEAD_NAME });
 });
 
 afterEach(async () => {
-  await cleanupAll();
+  await deleteCreatedRows({ runIds: created.runIds.splice(0) });
+  await restoreSchedulePosts();
 });
 
 afterAll(async () => {
-  await cleanupAll();
-  await orm.User.where({ id: ids.lead }).delete().catch(() => {});
+  await deleteCreatedRows(created);
+  restoreSystemTime();
 });
 
 describe("discord schedule lane — listSyncWork", () => {
@@ -139,7 +105,7 @@ describe("discord schedule lane — listSyncWork", () => {
   it("A–D: OPEN/ROSTERING/PUBLISHED/IN_PROGRESS CURRENT appear on CURRENT", async () => {
     const statuses = ["OPEN", "ROSTERING", "PUBLISHED", "IN_PROGRESS"] as const;
     for (let i = 0; i < statuses.length; i++) {
-      await createRunAt(new Date(Date.parse(currentStart) + (i + 2) * 3_600_000).toISOString(), {
+      await createRunAt(hoursAfter(currentStart, i + 2), {
         status: statuses[i],
       });
     }
@@ -155,17 +121,17 @@ describe("discord schedule lane — listSyncWork", () => {
   });
 
   it("E: DRAFT excluded from both schedules", async () => {
-    await createRunAt(new Date(Date.parse(currentStart) + 4 * 3_600_000).toISOString(), { status: "DRAFT" });
+    await createRunAt(hoursAfter(currentStart, 4), { status: "DRAFT" });
     const work = await discordSyncService.listSyncWork(classificationNow);
     expect(scheduleLineFor(work, "CURRENT").embed.description).toBe(SCHEDULE_EMPTY_DESCRIPTION);
     expect(scheduleLineFor(work, "NEXT").embed.description).toBe(SCHEDULE_EMPTY_DESCRIPTION);
   });
 
   it("F/S: COMPLETED excluded immediately even if Run channel still exists", async () => {
-    const id = await createRunAt(new Date(Date.parse(currentStart) + 5 * 3_600_000).toISOString(), {
+    const id = await createRunAt(hoursAfter(currentStart, 5), {
       status: "OPEN",
     });
-    await setPost(id, { runChannelId: "chan-still-alive" });
+    await setRunChannel(id, "chan-still-alive");
     let work = await discordSyncService.listSyncWork(classificationNow);
     expect(descriptionMentions(work, "CURRENT")).toContain("<#chan-still-alive>");
 
@@ -178,10 +144,10 @@ describe("discord schedule lane — listSyncWork", () => {
   });
 
   it("G/T: CANCELLED excluded immediately even if Run channel still exists", async () => {
-    const id = await createRunAt(new Date(Date.parse(currentStart) + 6 * 3_600_000).toISOString(), {
+    const id = await createRunAt(hoursAfter(currentStart, 6), {
       status: "OPEN",
     });
-    await setPost(id, { runChannelId: "chan-cancel-alive" });
+    await setRunChannel(id, "chan-cancel-alive");
     await orm.Run.where({ id }).update({ status: "CANCELLED", signupsOpen: false, updatedAt: new Date().toISOString() });
     const work = await discordSyncService.listSyncWork(classificationNow);
     expect(scheduleLineFor(work, "CURRENT").embed.description).not.toContain("<#chan-cancel-alive>");
@@ -189,83 +155,75 @@ describe("discord schedule lane — listSyncWork", () => {
   });
 
   it("H: NEXT active Runs only in NEXT", async () => {
-    const id = await createRunAt(new Date(Date.parse(nextStart) + 8 * 3_600_000).toISOString(), { status: "OPEN" });
-    await setPost(id, { runChannelId: "chan-next" });
+    const id = await createRunAt(hoursAfter(nextStart, 8), { status: "OPEN" });
+    await setRunChannel(id, "chan-next");
     const work = await discordSyncService.listSyncWork(classificationNow);
     expect(scheduleLineFor(work, "CURRENT").embed.description).toBe(SCHEDULE_EMPTY_DESCRIPTION);
     expect(scheduleLineFor(work, "NEXT").embed.description).toContain("<#chan-next>");
   });
 
   it("I/J: PAST and FUTURE beyond NEXT excluded", async () => {
-    const pastId = await createRunAt(new Date(Date.parse(currentStart) - 24 * 3_600_000).toISOString(), {
+    const pastId = await createRunAt(hoursAfter(currentStart, -24), {
       status: "OPEN",
     });
-    const futureId = await createRunAt(new Date(Date.parse(followingStart) + 8 * 3_600_000).toISOString(), {
+    const futureId = await createRunAt(hoursAfter(followingStart, 8), {
       status: "OPEN",
     });
-    await setPost(pastId, { runChannelId: "chan-past" });
-    await setPost(futureId, { runChannelId: "chan-future" });
+    await setRunChannel(pastId, "chan-past");
+    await setRunChannel(futureId, "chan-future");
     const work = await discordSyncService.listSyncWork(classificationNow);
-    expect(scheduleLineFor(work, "CURRENT").embed.description).not.toContain("chan-past");
-    expect(scheduleLineFor(work, "CURRENT").embed.description).not.toContain("chan-future");
-    expect(scheduleLineFor(work, "NEXT").embed.description).not.toContain("chan-past");
-    expect(scheduleLineFor(work, "NEXT").embed.description).not.toContain("chan-future");
+    expect(scheduleLineFor(work, "CURRENT").embed.description).toBe(SCHEDULE_EMPTY_DESCRIPTION);
+    expect(scheduleLineFor(work, "NEXT").embed.description).toBe(SCHEDULE_EMPTY_DESCRIPTION);
   });
 
   it("K/L: chronological ASC with run-id tie-break", async () => {
-    const t = Date.parse(currentStart) + 10 * 3_600_000;
-    const later = await createRunAt(new Date(t + 3_600_000).toISOString(), { status: "OPEN" });
-    const earlier = await createRunAt(new Date(t).toISOString(), { status: "OPEN" });
-    const tieA = await createRunAt(new Date(t + 2 * 3_600_000).toISOString(), { status: "OPEN" });
-    const tieB = await createRunAt(new Date(t + 2 * 3_600_000).toISOString(), { status: "OPEN" });
-    await setPost(later, { runChannelId: "chan-later" });
-    await setPost(earlier, { runChannelId: "chan-earlier" });
-    await setPost(tieA, { runChannelId: "chan-tie-a" });
-    await setPost(tieB, { runChannelId: "chan-tie-b" });
+    // Created out of order; the two tied starts are ordered by Run id.
+    const later = await createRunAt(hoursAfter(currentStart, 11), { status: "OPEN" });
+    const earlier = await createRunAt(hoursAfter(currentStart, 10), { status: "OPEN" });
+    const tieA = await createRunAt(hoursAfter(currentStart, 12), { status: "OPEN" });
+    const tieB = await createRunAt(hoursAfter(currentStart, 12), { status: "OPEN" });
+    const channelOf = new Map([
+      [later, "chan-later"],
+      [earlier, "chan-earlier"],
+      [tieA, "chan-tie-a"],
+      [tieB, "chan-tie-b"],
+    ]);
+    for (const [runId, channelId] of channelOf) await setRunChannel(runId, channelId);
     const work = await discordSyncService.listSyncWork(classificationNow);
     const lines = scheduleLineFor(work, "CURRENT").embed.description.split("\n");
-    const earlierIdx = lines.findIndex((l) => l.includes("chan-earlier"));
-    const laterIdx = lines.findIndex((l) => l.includes("chan-later"));
-    expect(earlierIdx).toBeGreaterThanOrEqual(0);
-    expect(laterIdx).toBeGreaterThan(earlierIdx);
-    const tieIdxA = lines.findIndex((l) => l.includes("chan-tie-a"));
-    const tieIdxB = lines.findIndex((l) => l.includes("chan-tie-b"));
-    // Stable by run id: whichever UUID sorts first appears first.
-    if (tieA.localeCompare(tieB) < 0) {
-      expect(tieIdxA).toBeLessThan(tieIdxB);
-    } else {
-      expect(tieIdxB).toBeLessThan(tieIdxA);
-    }
+    const ties = [tieA, tieB].sort();
+    expect(lines.map((line) => line.match(/<#([^>]+)>/)?.[1])).toEqual(
+      [earlier, later, ...ties].map((runId) => channelOf.get(runId)),
+    );
   });
 
   it("M/N: without channel still shown; with channel shows mention", async () => {
-    const noChan = await createRunAt(new Date(Date.parse(currentStart) + 12 * 3_600_000).toISOString(), {
+    await createRunAt(hoursAfter(currentStart, 12), {
       status: "OPEN",
     });
-    const withChan = await createRunAt(new Date(Date.parse(currentStart) + 13 * 3_600_000).toISOString(), {
+    const withChan = await createRunAt(hoursAfter(currentStart, 13), {
       status: "OPEN",
     });
-    await setPost(withChan, { runChannelId: "chan-visible" });
+    await setRunChannel(withChan, "chan-visible");
     const work = await discordSyncService.listSyncWork(classificationNow);
-    const desc = scheduleLineFor(work, "CURRENT").embed.description;
-    expect(desc).toContain("<#chan-visible>");
-    expect(desc.split("\n").length).toBe(2);
-    // noChan line has Raid Lead display but no channel mention of its own.
-    expect(desc).toContain("Schedule Lead");
-    void noChan;
+    const [withoutChannelLine, withChannelLine, ...rest] = scheduleLineFor(work, "CURRENT").embed.description.split("\n");
+    expect(rest).toEqual([]);
+    expect(withoutChannelLine).not.toContain("<#");
+    expect(withoutChannelLine).toMatch(new RegExp(`· ${LEAD_NAME}$`));
+    expect(withChannelLine).toMatch(new RegExp(`· <#chan-visible> · ${LEAD_NAME}$`));
   });
 
-  it("O/P/Q/R: reschedule same-bucket reorder and cross-bucket moves", async () => {
-    const id = await createRunAt(new Date(Date.parse(currentStart) + 14 * 3_600_000).toISOString(), {
+  it("O/P/Q/R: a reschedule moves the Run between CURRENT, NEXT and beyond", async () => {
+    const id = await createRunAt(hoursAfter(currentStart, 14), {
       status: "OPEN",
     });
-    await setPost(id, { runChannelId: "chan-move" });
+    await setRunChannel(id, "chan-move");
     let work = await discordSyncService.listSyncWork(classificationNow);
     expect(scheduleLineFor(work, "CURRENT").embed.description).toContain("chan-move");
 
     // CURRENT → NEXT
     await orm.Run.where({ id }).update({
-      scheduledStartAt: new Date(Date.parse(nextStart) + 4 * 3_600_000).toISOString(),
+      scheduledStartAt: hoursAfter(nextStart, 4),
       updatedAt: new Date().toISOString(),
     });
     work = await discordSyncService.listSyncWork(classificationNow);
@@ -274,7 +232,7 @@ describe("discord schedule lane — listSyncWork", () => {
 
     // NEXT → CURRENT
     await orm.Run.where({ id }).update({
-      scheduledStartAt: new Date(Date.parse(currentStart) + 15 * 3_600_000).toISOString(),
+      scheduledStartAt: hoursAfter(currentStart, 15),
       updatedAt: new Date().toISOString(),
     });
     work = await discordSyncService.listSyncWork(classificationNow);
@@ -283,7 +241,7 @@ describe("discord schedule lane — listSyncWork", () => {
 
     // Outside both → FUTURE
     await orm.Run.where({ id }).update({
-      scheduledStartAt: new Date(Date.parse(followingStart) + 4 * 3_600_000).toISOString(),
+      scheduledStartAt: hoursAfter(followingStart, 4),
       updatedAt: new Date().toISOString(),
     });
     work = await discordSyncService.listSyncWork(classificationNow);
@@ -316,7 +274,7 @@ describe("discord schedule lane — listSyncWork", () => {
     expect(scheduleLineFor(settled, "NEXT").needsUpdate).toBe(false);
 
     // W: adding a Run changes signature → needsUpdate true, same message identity.
-    await createRunAt(new Date(Date.parse(currentStart) + 16 * 3_600_000).toISOString(), { status: "OPEN" });
+    await createRunAt(hoursAfter(currentStart, 16), { status: "OPEN" });
     const changed = await discordSyncService.listSyncWork(classificationNow);
     const item = scheduleLineFor(changed, "CURRENT");
     expect(item.needsUpdate).toBe(true);
@@ -324,7 +282,7 @@ describe("discord schedule lane — listSyncWork", () => {
     expect(item.desiredSignature).not.toBe(current.desiredSignature);
   });
 
-  it("Z: format-version bump refreshes once and converges", async () => {
+  it("Z: a stale recorded signature (e.g. an older format) refreshes once and converges", async () => {
     const work = await discordSyncService.listSyncWork(classificationNow);
     const current = scheduleLineFor(work, "CURRENT");
     // Persist a stale signature that pretends an older format was recorded.
@@ -345,7 +303,6 @@ describe("discord schedule lane — listSyncWork", () => {
     const item = scheduleLineFor(refresh, "CURRENT");
     expect(item.needsUpdate).toBe(true);
     expect(item.existingMessageId).toBe("sched-msg-v0");
-    expect(SCHEDULE_MESSAGE_FORMAT_VERSION).toBe("v1");
     expect(item.desiredSignature).toBe(current.desiredSignature);
 
     await discordSyncService.recordSchedulePost({
@@ -358,28 +315,14 @@ describe("discord schedule lane — listSyncWork", () => {
     expect(scheduleLineFor(converged, "CURRENT").needsUpdate).toBe(false);
   });
 
-  it("signature matches pure builder for the rendered runs", async () => {
-    const id = await createRunAt(new Date(Date.parse(currentStart) + 17 * 3_600_000).toISOString(), {
-      status: "OPEN",
-    });
-    await setPost(id, { runChannelId: "chan-sig" });
-    const work = await discordSyncService.listSyncWork(classificationNow);
-    const item = scheduleLineFor(work, "CURRENT");
-    // Recompute from embed inputs is opaque; at least ensure non-empty and stable across two calls.
-    const again = await discordSyncService.listSyncWork(classificationNow);
-    expect(scheduleLineFor(again, "CURRENT").desiredSignature).toBe(item.desiredSignature);
-    expect(item.desiredSignature).toHaveLength(32);
-    void buildScheduleSignature;
-  });
-
   it("app-archived eligible statuses are excluded; non-archived equivalents remain", async () => {
     const statuses = ["OPEN", "ROSTERING", "PUBLISHED", "IN_PROGRESS"] as const;
     for (let i = 0; i < statuses.length; i++) {
-      await createRunAt(new Date(Date.parse(currentStart) + (20 + i) * 3_600_000).toISOString(), {
+      await createRunAt(hoursAfter(currentStart, 20 + i), {
         status: statuses[i],
         archived: true,
       });
-      await createRunAt(new Date(Date.parse(currentStart) + (30 + i) * 3_600_000).toISOString(), {
+      await createRunAt(hoursAfter(currentStart, 30 + i), {
         status: statuses[i],
       });
     }
@@ -394,10 +337,10 @@ describe("discord schedule lane — listSyncWork", () => {
   });
 
   it("setting archivedAt removes a visible CURRENT Run on the next listSyncWork", async () => {
-    const id = await createRunAt(new Date(Date.parse(currentStart) + 40 * 3_600_000).toISOString(), {
+    const id = await createRunAt(hoursAfter(currentStart, 40), {
       status: "OPEN",
     });
-    await setPost(id, { runChannelId: "chan-then-archive" });
+    await setRunChannel(id, "chan-then-archive");
     let work = await discordSyncService.listSyncWork(classificationNow);
     expect(scheduleLineFor(work, "CURRENT").embed.description).toContain("<#chan-then-archive>");
 
