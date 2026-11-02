@@ -1,0 +1,2920 @@
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import type { AuthenticatedUser } from "@/auth/authorization";
+import { normalizeCharacterIdentity } from "@/lib/character-identity";
+import { orm } from "@/lib/prisma";
+import { MANAFORGE_OMEGA_RAID_ID, VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
+import { classifyRunWeek } from "@/lib/wow-run-week";
+import { raidRepository } from "@/repositories/raid.repository";
+import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
+import { runRepository } from "@/repositories/run.repository";
+import { discordSyncService, planRunVoiceChannel, rosterEmbedRenderFingerprint, ROSTER_EMBED_FORMAT_VERSION, SIGNUP_MESSAGE_FORMAT_VERSION } from "@/services/discord-sync.service";
+import { buildSignupEmbed } from "@/discord-bot/embeds/signup-embed";
+import { buildRosterEmbed } from "@/discord-bot/embeds/roster-embed";
+import { runDetailService } from "@/services/run-detail.service";
+import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
+import { userNotificationRepository } from "@/repositories/user-notification.repository";
+import { formatFinalSetupLfgLine, renderFinalSetupText } from "@/lib/run-start-message";
+import { renderRunStartMessageText } from "@/discord-bot/messages/run-start-message";
+import { rosterService } from "@/services/roster.service";
+import { runService } from "@/services/run.service";
+import type { ParticipationType, CharacterRole } from "@/models/enums";
+import { currentWeekFutureIso } from "@tests/fixtures/time";
+import {
+  contentLegacyUpdateInput,
+  venomousCreateInput,
+  venomousUpdateInput,
+} from "@tests/fixtures/test-run-input";
+
+const raidId = VENOMOUS_ABYSS_RAID_ID;
+const ids = {
+  lead: "aaaaaaaa-aaaa-4aaa-8aaa-ds0000000001",
+  tank: "aaaaaaaa-aaaa-4aaa-8aaa-ds0000000002",
+  healer: "aaaaaaaa-aaaa-4aaa-8aaa-ds0000000003",
+  melee: "aaaaaaaa-aaaa-4aaa-8aaa-ds0000000004",
+  ranged: "aaaaaaaa-aaaa-4aaa-8aaa-ds0000000005",
+  loot: "aaaaaaaa-aaaa-4aaa-8aaa-ds0000000006",
+  extra: "aaaaaaaa-aaaa-4aaa-8aaa-ds0000000007",
+  admin: "aaaaaaaa-aaaa-4aaa-8aaa-ds0000000008",
+};
+const createdUserIds = Object.values(ids);
+const createdRunIds: string[] = [];
+const createdCharacterIds: string[] = [];
+
+function rosterBoosters<T extends { id: string }>(view: { boosters: T[] }): T[] {
+  return view.boosters;
+}
+
+function asUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"] = "USER"): AuthenticatedUser {
+  return {
+    id,
+    name,
+    email: `${id}@dstest.boostting.local`,
+    image: null,
+    discordUserId: null,
+    discordUsername: null,
+    accountRole,
+    accountStatus: "ACTIVE",
+  };
+}
+
+async function createTestUser(
+  id: string,
+  name: string,
+  discordUserId: string | null,
+  accountRole: AuthenticatedUser["accountRole"] = "USER",
+) {
+  await orm.User.create({
+    id,
+    name,
+    email: `${id}@dstest.boostting.local`,
+    emailVerified: true,
+    discordUserId,
+    accountRole,
+    accountStatus: "ACTIVE",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+async function deleteIfPresent(table: string, id: string) {
+  try {
+    if (table === "User") await orm.User.where({ id }).delete();
+    else if (table === "Character") await orm.Character.where({ id }).delete();
+    else if (table === "RunSignup") await orm.RunSignup.where({ id }).delete();
+    else if (table === "Run") await orm.Run.where({ id }).delete();
+    else if (table === "RunDiscordPost") await orm.RunDiscordPost.where({ id }).delete();
+  } catch {
+    // Already gone.
+  }
+}
+
+// Small default offset: usually CURRENT or NEXT (both eligible for first
+// channel provisioning). Near the end of a raid-ID week, +2 days can land in
+// NEXT — that is fine for most cases here. Tests that assert CURRENT must use
+// `currentWeekFutureIso()` instead.
+function futureIso(days = 2) {
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+async function grantQualification(userId: string) {
+  await orm.User.where({ id: userId }).update({ isBooster: true });
+}
+
+async function createCharacter(
+  userId: string,
+  name: string,
+  wowClass: "PALADIN" | "PRIEST" | "WARRIOR" | "MAGE" | "HUNTER",
+  specialization: string,
+  primaryRole: "TANK" | "HEALER" | "MELEE_DPS" | "RANGED_DPS" | "DPS",
+) {
+  const id = crypto.randomUUID();
+  createdCharacterIds.push(id);
+  await orm.Character.create({
+    id,
+    userId,
+    name,
+    realm: "Discord Lab",
+    normalizedName: normalizeCharacterIdentity(name),
+    normalizedRealm: normalizeCharacterIdentity("Discord Lab"),
+    region: "EU",
+    wowClass,
+    specialization,
+    primaryRole,
+    itemLevel: 700,
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  return id;
+}
+
+async function createSignup(input: {
+  runId: string;
+  userId: string;
+  characterId: string | null;
+  participationType: ParticipationType;
+  role: CharacterRole | null;
+  lootbuddyClass?: "MAGE" | "PRIEST" | null;
+  lootbuddyMode?: "LOOT_ONLY" | "PLAYING" | null;
+}) {
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await orm.RunSignup.create({
+    id,
+    runId: input.runId,
+    userId: input.userId,
+    characterId: input.characterId,
+    participationType: input.participationType,
+    isBackup: false,
+    status: "PENDING",
+    publishedRole: null,
+    lootbuddyClass: input.lootbuddyClass ?? null,
+    lootbuddyMode:
+      input.lootbuddyMode ?? (input.participationType === "LOOTBUDDY" ? "PLAYING" : null),
+    lootbuddyVerification: input.participationType === "LOOTBUDDY" ? "NONE" : null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  if (input.participationType === "BOOSTER" && input.role) {
+    await orm.RunSignupRole.create({
+      id: crypto.randomUUID(),
+      signupId: id,
+      role: input.role,
+      createdAt: now,
+    });
+  }
+  return id;
+}
+
+async function cleanupRun(runId: string) {
+  await orm.RunDiscordPost.where({ runId }).delete().catch(() => {});
+  await orm.RunStartSnapshot.where({ runId }).delete().catch(() => {});
+  const attendance = await orm.RunAttendance.where({ runId }).select("id").all();
+  for (const row of attendance) {
+    await orm.RunAttendance.where({ id: (row as { id: string }).id }).delete().catch(() => {});
+  }
+  const roster = await orm.RunRoster.where({ runId }).first();
+  if (roster) {
+    const rosterId = (roster as { id: string }).id;
+    const entries = await orm.RunRosterEntry.where({ rosterId }).all();
+    for (const entry of entries) {
+      await orm.RunRosterEntry.where({ id: (entry as { id: string }).id }).delete();
+    }
+    await orm.RunRoster.where({ id: rosterId }).delete();
+  }
+  const signups = await orm.RunSignup.where({ runId }).select("id").all();
+  for (const row of signups) {
+    const signupId = (row as { id: string }).id;
+    const offered = await orm.RunSignupRole.where({ signupId }).select("id").all();
+    for (const offer of offered) {
+      await orm.RunSignupRole.where({ id: (offer as { id: string }).id }).delete().catch(() => {});
+    }
+    await orm.RunSignup.where({ id: signupId }).delete().catch(() => {});
+  }
+  await deleteIfPresent("Run", runId);
+}
+
+const lead = asUser(ids.lead, "Discord Lead", "RAID_LEAD");
+const admin = asUser(ids.admin, "Discord Admin", "ADMIN");
+
+let runId = "";
+let draftRunId = "";
+let tankChar = "";
+let healerChar = "";
+let meleeChar = "";
+let rangedChar = "";
+let lootChar = "";
+
+beforeAll(async () => {
+  await raidRepository.ensureReferenceRaids();
+  for (const userId of createdUserIds) {
+    const runs = await orm.Run.where({ raidLeadId: userId }).select("id").all();
+    for (const row of runs) {
+      await cleanupRun((row as { id: string }).id);
+    }
+    const chars = await orm.Character.where({ userId }).select("id").all();
+    for (const row of chars) {
+      await deleteIfPresent("Character", (row as { id: string }).id);
+    }
+    await deleteIfPresent("User", userId);
+  }
+
+  await createTestUser(ids.lead, "Discord Lead", null, "RAID_LEAD");
+  await createTestUser(ids.tank, "Discord Tank", "111111111111111111");
+  await createTestUser(ids.healer, "Discord Healer", null);
+  await createTestUser(ids.melee, "Discord Melee", "222222222222222222");
+  await createTestUser(ids.ranged, "Discord Ranged", "333333333333333333");
+  await createTestUser(ids.loot, "Discord Loot", "444444444444444444");
+  await createTestUser(ids.extra, "Discord Extra", null);
+  await createTestUser(ids.admin, "Discord Admin", null, "ADMIN");
+
+  tankChar = await createCharacter(ids.tank, "Dstank", "PALADIN", "Protection", "TANK");
+  healerChar = await createCharacter(ids.healer, "Dsheal", "PRIEST", "Holy", "HEALER");
+  meleeChar = await createCharacter(ids.melee, "Dsmelee", "WARRIOR", "Fury", "MELEE_DPS");
+  rangedChar = await createCharacter(ids.ranged, "Dsranged", "MAGE", "Fire", "RANGED_DPS");
+  lootChar = await createCharacter(ids.loot, "Dsloot", "HUNTER", "Beast Mastery", "RANGED_DPS");
+
+  await grantQualification(ids.tank);
+  await grantQualification(ids.healer);
+  await grantQualification(ids.melee);
+  await grantQualification(ids.ranged);
+
+  runId = await runService
+    .createRun(
+      lead,
+      venomousCreateInput({
+        scheduledStartAt: futureIso(),
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      }),
+    )
+    .then((run) => run.id);
+  createdRunIds.push(runId);
+  await runService.openRun(lead, runId);
+
+  draftRunId = await runService
+    .createRun(
+      lead,
+      venomousCreateInput({
+        scheduledStartAt: futureIso(),
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      }),
+    )
+    .then((run) => run.id);
+  createdRunIds.push(draftRunId);
+}, 60_000);
+
+afterAll(async () => {
+  for (const id of createdRunIds) {
+    await cleanupRun(id);
+  }
+  for (const id of createdCharacterIds) {
+    await deleteIfPresent("Character", id);
+  }
+  for (const id of createdUserIds) {
+    await deleteIfPresent("User", id);
+  }
+}, 60_000);
+
+describe("discordSyncService.getSignupEmbedData", () => {
+  it("counts distinct Users, never RunSignup rows", async () => {
+    await createSignup({ runId, userId: ids.tank, characterId: tankChar, participationType: "BOOSTER", role: "TANK" });
+    await createSignup({ runId, userId: ids.healer, characterId: healerChar, participationType: "BOOSTER", role: "HEALER" });
+
+    const data = await discordSyncService.getSignupEmbedData(runId);
+    expect(data?.uniqueSignupCount).toBe(2);
+    expect(data?.signupWindowOpen).toBe(true);
+    expect(data?.runStatus).toBe("OPEN");
+  });
+
+  it("role counts are PEOPLE per role: one User with 3 healer characters is 1 healer, all characters still listed", async () => {
+    const roleRunId = await runService
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(15), desiredTankCount: 1, desiredHealerCount: 2, desiredDpsCount: 2 }))
+      .then((run) => run.id);
+    createdRunIds.push(roleRunId);
+    await runService.openRun(lead, roleRunId);
+
+    // "Testblast" case: one User, several healer characters — one of them also offers DPS.
+    const healAlt1 = await createCharacter(ids.extra, "Testblast", "PRIEST", "Holy", "HEALER");
+    const healAlt2 = await createCharacter(ids.extra, "Testlight", "PRIEST", "Discipline", "HEALER");
+    const healAlt3 = await createCharacter(ids.extra, "Testpal", "PALADIN", "Holy", "HEALER");
+    for (const characterId of [healAlt1, healAlt2, healAlt3]) {
+      await createSignup({ runId: roleRunId, userId: ids.extra, characterId, participationType: "BOOSTER", role: "HEALER" });
+    }
+    const multiRole = (await orm.RunSignup.where({ runId: roleRunId, characterId: healAlt3 }).first()) as { id: string };
+    await orm.RunSignupRole.create({ id: crypto.randomUUID(), signupId: multiRole.id, role: "MELEE_DPS" });
+    await createSignup({ runId: roleRunId, userId: ids.healer, characterId: healerChar, participationType: "BOOSTER", role: "HEALER" });
+
+    const data = await discordSyncService.getSignupEmbedData(roleRunId);
+    expect(data?.uniqueSignupCount).toBe(2);
+    expect(data?.roleStatus.healer.signed).toBe(2);
+    expect(data?.members.signed.healers).toHaveLength(4);
+    expect(data?.roleStatus.dps.signed).toBe(1);
+    expect(data?.roleStatus.tank.signed).toBe(0);
+  });
+
+  it("returns null for an unknown run", async () => {
+    const data = await discordSyncService.getSignupEmbedData("r0000000-0000-4000-8000-000000000000");
+    expect(data).toBeNull();
+  });
+
+  it("drops a User from the count once their only offer is WITHDRAWN, but keeps NOT_SELECTED on the board", async () => {
+    // A dedicated run so mutating these signups cannot affect the shared runId
+    // that later tests in this file (and getRosterEmbedData) depend on.
+    const countRunId = await runService
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 2 }))
+      .then((run) => run.id);
+    createdRunIds.push(countRunId);
+    await runService.openRun(lead, countRunId);
+
+    const tankSignupId = await createSignup({
+      runId: countRunId,
+      userId: ids.tank,
+      characterId: tankChar,
+      participationType: "BOOSTER",
+      role: "TANK",
+    });
+    const healerSignupId = await createSignup({
+      runId: countRunId,
+      userId: ids.healer,
+      characterId: healerChar,
+      participationType: "BOOSTER",
+      role: "HEALER",
+    });
+
+    expect((await discordSyncService.getSignupEmbedData(countRunId))?.uniqueSignupCount).toBe(2);
+
+    await orm.RunSignup.where({ id: tankSignupId }).update({ status: "WITHDRAWN" });
+    expect((await discordSyncService.getSignupEmbedData(countRunId))?.uniqueSignupCount).toBe(1);
+
+    // NOT_SELECTED is a roster outcome, not a withdrawal — still a signed user.
+    await orm.RunSignup.where({ id: healerSignupId }).update({ status: "NOT_SELECTED" });
+    const afterNotSelected = await discordSyncService.getSignupEmbedData(countRunId);
+    expect(afterNotSelected?.uniqueSignupCount).toBe(1);
+    expect(afterNotSelected?.members.signed.healers.some((m) => m.signupId === healerSignupId)).toBe(true);
+  });
+
+  it("keeps NOT_SELECTED RANGED_DPS under DPS after roster publish while signups stay open", async () => {
+    // Dedicated characters/users so SELECTED on this run cannot schedule-conflict
+    // the shared suite runId that later roster embed tests still mutate.
+    const pubRunId = await runService
+      .createRun(
+        lead,
+        venomousCreateInput({
+          difficulty: "HEROIC",
+          lootType: "UNSAVED",
+          venomousPlannedBossCount: 8,
+          scheduledStartAt: futureIso(21),
+          desiredTankCount: 1,
+          desiredHealerCount: 0,
+          desiredDpsCount: 0,
+        }),
+      )
+      .then((run) => run.id);
+    createdRunIds.push(pubRunId);
+    await runService.openRun(lead, pubRunId);
+
+    const pubTankChar = await createCharacter(ids.extra, "PubTankLab", "PALADIN", "Protection", "TANK");
+    await grantQualification(ids.extra);
+    const tankSignupId = await createSignup({
+      runId: pubRunId,
+      userId: ids.extra,
+      characterId: pubTankChar,
+      participationType: "BOOSTER",
+      role: "TANK",
+    });
+    const rangedOnly = await createCharacter(ids.ranged, "SakamutoLab", "HUNTER", "Marksmanship", "RANGED_DPS");
+    const rangedSignupId = await createSignup({
+      runId: pubRunId,
+      userId: ids.ranged,
+      characterId: rangedOnly,
+      participationType: "BOOSTER",
+      role: "RANGED_DPS",
+    });
+    const meleeOnly = await createCharacter(ids.melee, "MeleePendingLab", "WARRIOR", "Fury", "MELEE_DPS");
+    const meleeSignupId = await createSignup({
+      runId: pubRunId,
+      userId: ids.melee,
+      characterId: meleeOnly,
+      participationType: "BOOSTER",
+      role: "MELEE_DPS",
+    });
+
+    let view = await rosterService.getRosterManagementView(lead, pubRunId);
+    await rosterService.saveDraftSelection(lead, {
+      runId: pubRunId,
+      version: view.roster.version,
+      selections: [{ signupId: tankSignupId, selectedRole: "TANK" }],
+    });
+    view = await rosterService.getRosterManagementView(lead, pubRunId);
+    await rosterService.publishRoster(lead, {
+      runId: pubRunId,
+      version: view.roster.version,
+      acknowledgeWarnings: true,
+    });
+
+    expect((await orm.RunSignup.where({ id: rangedSignupId }).first())?.status).toBe("NOT_SELECTED");
+    expect((await orm.RunSignup.where({ id: meleeSignupId }).first())?.status).toBe("NOT_SELECTED");
+    expect((await orm.RunSignup.where({ id: tankSignupId }).first())?.status).toBe("SELECTED");
+
+    const embed = await discordSyncService.getSignupEmbedData(pubRunId);
+    expect(embed?.runStatus).toBe("PUBLISHED");
+    expect(embed?.signupWindowOpen).toBe(true);
+    // Signed users: tank + ranged + melee — the SELECTED tank still counts.
+    expect(embed?.uniqueSignupCount).toBe(3);
+    // SELECTED leaves the unpicked pool; NOT_SELECTED stays (#230).
+    expect(embed?.members.signed.tanks.some((m) => m.signupId === tankSignupId)).toBe(false);
+    expect(embed?.roleStatus.tank.signed).toBe(0);
+    expect(embed?.members.signed.dps.some((m) => m.signupId === rangedSignupId)).toBe(true);
+    expect(embed?.members.signed.dps.some((m) => m.signupId === meleeSignupId)).toBe(true);
+    expect(embed?.roleStatus.dps.signed).toBe(2);
+    expect(embed?.members.picked.tanks.some((m) => m.signupId === tankSignupId)).toBe(true);
+    expect(embed?.members.picked.dps).toHaveLength(0);
+
+    // Late PENDING signup after publish must also appear and refresh the board.
+    // Use the loot user — ids.extra is already the selected tank on this run.
+    const lateChar = await createCharacter(ids.loot, "LateDpsLab", "MAGE", "Frost", "RANGED_DPS");
+    await grantQualification(ids.loot);
+    const lateSignupId = await createSignup({
+      runId: pubRunId,
+      userId: ids.loot,
+      characterId: lateChar,
+      participationType: "BOOSTER",
+      role: "RANGED_DPS",
+    });
+    expect((await orm.RunSignup.where({ id: lateSignupId }).first())?.status).toBe("PENDING");
+    const afterLate = await discordSyncService.getSignupEmbedData(pubRunId);
+    expect(afterLate?.uniqueSignupCount).toBe(4);
+    expect(afterLate?.members.signed.dps.some((m) => m.signupId === lateSignupId)).toBe(true);
+    expect(afterLate?.members.signed.dps.some((m) => m.signupId === rangedSignupId)).toBe(true);
+  });
+
+  it("PUBLISHED picked counts use publishedRole, not a mutated replacement draft role", async () => {
+    const freezeRunId = await runService
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 0, desiredHealerCount: 1, desiredDpsCount: 0 }))
+      .then((run) => run.id);
+    createdRunIds.push(freezeRunId);
+    await runService.openRun(lead, freezeRunId);
+
+    const shamanId = await createCharacter(ids.healer, "TestblastEmbed", "PRIEST", "Holy", "HEALER");
+    await createSignup({
+      runId: freezeRunId,
+      userId: ids.healer,
+      characterId: shamanId,
+      participationType: "BOOSTER",
+      role: "HEALER",
+    });
+    // Multi-role offer: HEALER + DPS
+    const rows = await orm.RunSignup.where({ runId: freezeRunId, userId: ids.healer }).include("offeredRoles").all();
+    const signupRow = rows[0] as { id: string };
+    await orm.RunSignupRole.create({
+      id: crypto.randomUUID(),
+      signupId: signupRow.id,
+      role: "MELEE_DPS",
+      createdAt: new Date().toISOString(),
+    });
+
+    let view = await rosterService.getRosterManagementView(lead, freezeRunId);
+    await rosterService.saveDraftSelection(lead, {
+      runId: freezeRunId,
+      version: view.roster.version,
+      selections: [{ signupId: signupRow.id, selectedRole: "HEALER" }],
+    });
+    view = await rosterService.getRosterManagementView(lead, freezeRunId);
+    await rosterService.publishRoster(lead, {
+      runId: freezeRunId,
+      version: view.roster.version,
+      acknowledgeWarnings: true,
+    });
+
+    let embed = await discordSyncService.getSignupEmbedData(freezeRunId);
+    expect(embed?.roleStatus.healer.picked).toBe(1);
+    expect(embed?.roleStatus.dps.picked).toBe(0);
+    expect(embed?.members.picked.healers).toHaveLength(1);
+    expect(embed?.members.picked.dps).toHaveLength(0);
+
+    view = await rosterService.getRosterManagementView(lead, freezeRunId);
+    await rosterService.preparePublishedRosterForEditing(lead, {
+      runId: freezeRunId,
+      version: view.roster.version,
+    });
+    view = await rosterService.getRosterManagementView(lead, freezeRunId);
+    await rosterService.saveDraftSelection(lead, {
+      runId: freezeRunId,
+      version: view.roster.version,
+      selections: [{ signupId: signupRow.id, selectedRole: "MELEE_DPS" }],
+    });
+
+    embed = await discordSyncService.getSignupEmbedData(freezeRunId);
+    expect(embed?.roleStatus.healer.picked).toBe(1);
+    expect(embed?.roleStatus.dps.picked).toBe(0);
+    expect(embed?.members.picked.healers).toHaveLength(1);
+    expect(embed?.members.picked.dps).toHaveLength(0);
+
+    view = await rosterService.getRosterManagementView(lead, freezeRunId);
+    await rosterService.publishRoster(lead, {
+      runId: freezeRunId,
+      version: view.roster.version,
+      acknowledgeWarnings: true,
+    });
+    embed = await discordSyncService.getSignupEmbedData(freezeRunId);
+    expect(embed?.roleStatus.healer.picked).toBe(0);
+    expect(embed?.roleStatus.dps.picked).toBe(1);
+    expect(embed?.members.picked.healers).toHaveLength(0);
+    expect(embed?.members.picked.dps).toHaveLength(1);
+  });
+
+  it("Signups by role is the unpicked pool: picks leave it, unpicks return, Signed users and message stay", async () => {
+    const poolRunId = await runService
+      .createRun(
+        lead,
+        venomousCreateInput({
+          difficulty: "HEROIC",
+          lootType: "UNSAVED",
+          venomousPlannedBossCount: 8,
+          scheduledStartAt: futureIso(28),
+          desiredTankCount: 1,
+          desiredHealerCount: 0,
+          desiredDpsCount: 2,
+        }),
+      )
+      .then((run) => run.id);
+    createdRunIds.push(poolRunId);
+    await runService.openRun(lead, poolRunId);
+
+    await grantQualification(ids.extra);
+    const tankChar = await createCharacter(ids.extra, "PoolTankLab", "PALADIN", "Protection", "TANK");
+    const tankSignupId = await createSignup({
+      runId: poolRunId,
+      userId: ids.extra,
+      characterId: tankChar,
+      participationType: "BOOSTER",
+      role: "TANK",
+    });
+    const rangedChar = await createCharacter(ids.ranged, "PoolRangedLab", "HUNTER", "Marksmanship", "RANGED_DPS");
+    const rangedSignupId = await createSignup({
+      runId: poolRunId,
+      userId: ids.ranged,
+      characterId: rangedChar,
+      participationType: "BOOSTER",
+      role: "RANGED_DPS",
+    });
+    const meleeChar = await createCharacter(ids.melee, "PoolMeleeLab", "WARRIOR", "Fury", "MELEE_DPS");
+    const meleeSignupId = await createSignup({
+      runId: poolRunId,
+      userId: ids.melee,
+      characterId: meleeChar,
+      participationType: "BOOSTER",
+      role: "MELEE_DPS",
+    });
+
+    const inPool = async (signupId: string) => {
+      const embed = await discordSyncService.getSignupEmbedData(poolRunId);
+      const signed = embed!.members.signed;
+      return [...signed.tanks, ...signed.healers, ...signed.dps, ...signed.lootbuddies].some(
+        (member) => member.signupId === signupId,
+      );
+    };
+    const signupWork = async () =>
+      (await discordSyncService.listSyncWork()).signups.find((item) => item.runId === poolRunId);
+    const settle = () =>
+      discordSyncService.recordSignupPost({ runId: poolRunId, channelId: "pool-chan", messageId: "pool-msg" });
+
+    // PENDING -> visible; settle the existing Discord message.
+    expect(await inPool(tankSignupId)).toBe(true);
+    expect(await inPool(rangedSignupId)).toBe(true);
+    await settle();
+    expect(await signupWork()).toBeUndefined();
+
+    // Draft pick (status still PENDING) -> leaves the pool, message edited in place.
+    let view = await rosterService.getRosterManagementView(lead, poolRunId);
+    await rosterService.saveDraftSelection(lead, {
+      runId: poolRunId,
+      version: view.roster.version,
+      selections: [
+        { signupId: tankSignupId, selectedRole: "TANK" },
+        { signupId: meleeSignupId, selectedRole: "MELEE_DPS" },
+      ],
+    });
+    expect((await orm.RunSignup.where({ id: tankSignupId }).first())?.status).toBe("PENDING");
+    expect(await inPool(tankSignupId)).toBe(false);
+    expect(await inPool(meleeSignupId)).toBe(false);
+    expect(await inPool(rangedSignupId)).toBe(true);
+    let embed = await discordSyncService.getSignupEmbedData(poolRunId);
+    expect(embed?.uniqueSignupCount).toBe(3);
+    expect(embed?.roleStatus.tank.signed).toBe(0);
+    expect(embed?.roleStatus.dps.signed).toBe(1);
+    let work = await signupWork();
+    expect(work?.existingMessageId).toBe("pool-msg");
+    await settle();
+
+    // Draft unpick -> back in the pool.
+    view = await rosterService.getRosterManagementView(lead, poolRunId);
+    await rosterService.saveDraftSelection(lead, {
+      runId: poolRunId,
+      version: view.roster.version,
+      selections: [{ signupId: tankSignupId, selectedRole: "TANK" }],
+    });
+    expect(await inPool(meleeSignupId)).toBe(true);
+    expect((await signupWork())?.existingMessageId).toBe("pool-msg");
+    await settle();
+
+    // Publish: tank SELECTED (absent), ranged + melee NOT_SELECTED (visible under DPS).
+    view = await rosterService.getRosterManagementView(lead, poolRunId);
+    await rosterService.publishRoster(lead, { runId: poolRunId, version: view.roster.version, acknowledgeWarnings: true });
+    expect((await orm.RunSignup.where({ id: tankSignupId }).first())?.status).toBe("SELECTED");
+    expect((await orm.RunSignup.where({ id: rangedSignupId }).first())?.status).toBe("NOT_SELECTED");
+    embed = await discordSyncService.getSignupEmbedData(poolRunId);
+    expect(embed?.members.signed.tanks.some((m) => m.signupId === tankSignupId)).toBe(false);
+    expect(embed?.members.signed.dps.some((m) => m.signupId === rangedSignupId)).toBe(true);
+    expect(embed?.members.signed.dps.some((m) => m.signupId === meleeSignupId)).toBe(true);
+    expect(embed?.uniqueSignupCount).toBe(3);
+    await settle();
+
+    // Update Roster: NOT_SELECTED -> SELECTED leaves, SELECTED -> NOT_SELECTED returns.
+    view = await rosterService.getRosterManagementView(lead, poolRunId);
+    await rosterService.saveDraftSelection(lead, {
+      runId: poolRunId,
+      version: view.roster.version,
+      selections: [{ signupId: rangedSignupId, selectedRole: "RANGED_DPS" }],
+    });
+    // A replacement draft after publication stays private until Update Roster.
+    expect(await inPool(rangedSignupId)).toBe(true);
+    expect(await inPool(tankSignupId)).toBe(false);
+    view = await rosterService.getRosterManagementView(lead, poolRunId);
+    await rosterService.publishRoster(lead, { runId: poolRunId, version: view.roster.version, acknowledgeWarnings: true });
+    expect((await orm.RunSignup.where({ id: rangedSignupId }).first())?.status).toBe("SELECTED");
+    expect((await orm.RunSignup.where({ id: tankSignupId }).first())?.status).toBe("NOT_SELECTED");
+    expect(await inPool(rangedSignupId)).toBe(false);
+    expect(await inPool(tankSignupId)).toBe(true);
+    embed = await discordSyncService.getSignupEmbedData(poolRunId);
+    expect(embed?.uniqueSignupCount).toBe(3);
+    work = await signupWork();
+    expect(work?.existingMessageId).toBe("pool-msg");
+
+    // One RunDiscordPost row, same message identity throughout.
+    const posts = await orm.RunDiscordPost.where({ runId: poolRunId }).all();
+    expect(posts).toHaveLength(1);
+    expect((posts[0] as { signupMessageId: string }).signupMessageId).toBe("pool-msg");
+  });
+
+  it("Signed users counts distinct Users while one of their Characters is picked", async () => {
+    const multiRunId = await runService
+      .createRun(
+        lead,
+        venomousCreateInput({
+          difficulty: "HEROIC",
+          lootType: "UNSAVED",
+          venomousPlannedBossCount: 8,
+          scheduledStartAt: futureIso(35),
+          desiredTankCount: 1,
+          desiredHealerCount: 1,
+          desiredDpsCount: 0,
+        }),
+      )
+      .then((run) => run.id);
+    createdRunIds.push(multiRunId);
+    await runService.openRun(lead, multiRunId);
+    await grantQualification(ids.healer);
+    const altTank = await createCharacter(ids.healer, "MultiTankLab", "PALADIN", "Protection", "TANK");
+    const altHeal = await createCharacter(ids.healer, "MultiHealLab", "PRIEST", "Holy", "HEALER");
+    const tankSignupId = await createSignup({
+      runId: multiRunId,
+      userId: ids.healer,
+      characterId: altTank,
+      participationType: "BOOSTER",
+      role: "TANK",
+    });
+    await createSignup({
+      runId: multiRunId,
+      userId: ids.healer,
+      characterId: altHeal,
+      participationType: "BOOSTER",
+      role: "HEALER",
+    });
+
+    let embed = await discordSyncService.getSignupEmbedData(multiRunId);
+    expect(embed?.uniqueSignupCount).toBe(1);
+
+    const view = await rosterService.getRosterManagementView(lead, multiRunId);
+    await rosterService.saveDraftSelection(lead, {
+      runId: multiRunId,
+      version: view.roster.version,
+      selections: [{ signupId: tankSignupId, selectedRole: "TANK" }],
+    });
+    embed = await discordSyncService.getSignupEmbedData(multiRunId);
+    // Still one signed User; the picked User's other Character leaves the pool too.
+    expect(embed?.uniqueSignupCount).toBe(1);
+    expect(embed?.members.signed.tanks).toHaveLength(0);
+    expect(embed?.members.signed.healers).toHaveLength(0);
+  });
+
+  it("a picked User leaves Signups by role with ALL their booster Characters; web repick A → B keeps them hidden", async () => {
+    const userRunId = await runService
+      .createRun(
+        lead,
+        venomousCreateInput({
+          difficulty: "HEROIC",
+          lootType: "UNSAVED",
+          venomousPlannedBossCount: 8,
+          scheduledStartAt: futureIso(42),
+          desiredTankCount: 1,
+          desiredHealerCount: 0,
+          desiredDpsCount: 1,
+        }),
+      )
+      .then((run) => run.id);
+    createdRunIds.push(userRunId);
+    await runService.openRun(lead, userRunId);
+
+    await grantQualification(ids.loot);
+    await grantQualification(ids.tank);
+    const charA = await createCharacter(ids.loot, "MultiUserA", "PALADIN", "Protection", "TANK");
+    const charB = await createCharacter(ids.loot, "MultiUserB", "HUNTER", "Marksmanship", "RANGED_DPS");
+    const charOther = await createCharacter(ids.tank, "OtherUserTank", "WARRIOR", "Protection", "TANK");
+    const signupA = await createSignup({ runId: userRunId, userId: ids.loot, characterId: charA, participationType: "BOOSTER", role: "TANK" });
+    const signupB = await createSignup({ runId: userRunId, userId: ids.loot, characterId: charB, participationType: "BOOSTER", role: "RANGED_DPS" });
+    const signupOther = await createSignup({ runId: userRunId, userId: ids.tank, characterId: charOther, participationType: "BOOSTER", role: "TANK" });
+
+    const board = async () => {
+      const embed = await discordSyncService.getSignupEmbedData(userRunId);
+      const signed = embed!.members.signed;
+      return {
+        embed: embed!,
+        ids: new Set([...signed.tanks, ...signed.healers, ...signed.dps, ...signed.lootbuddies].map((m) => m.signupId)),
+      };
+    };
+    const settle = () =>
+      discordSyncService.recordSignupPost({ runId: userRunId, channelId: "user-chan", messageId: "user-msg" });
+    const workMessageId = async () =>
+      (await discordSyncService.listSyncWork()).signups.find((item) => item.runId === userRunId)?.existingMessageId;
+    const signupRowCount = async () => (await orm.RunSignup.where({ runId: userRunId }).all()).length;
+
+    // 1/2/13: unpicked → A, B and the other User visible; 2 signed Users.
+    let state = await board();
+    expect([...state.ids].sort()).toEqual([signupA, signupB, signupOther].sort());
+    expect(state.embed.uniqueSignupCount).toBe(2);
+    await settle();
+    const rowsBefore = await signupRowCount();
+
+    // 3/4: A draft-picked (still PENDING) → neither A nor B on Signups; A on the roster.
+    let view = await rosterService.getRosterManagementView(lead, userRunId);
+    await rosterService.saveDraftSelection(lead, {
+      runId: userRunId,
+      version: view.roster.version,
+      selections: [{ signupId: signupA, selectedRole: "TANK" }],
+    });
+    state = await board();
+    expect(state.ids.has(signupA)).toBe(false);
+    expect(state.ids.has(signupB)).toBe(false);
+    expect(state.ids.has(signupOther)).toBe(true);
+    expect(state.embed.members.picked.tanks.some((m) => m.signupId === signupA)).toBe(true);
+    expect(state.embed.uniqueSignupCount).toBe(2);
+    expect(await workMessageId()).toBe("user-msg");
+    await settle();
+
+    // 10: the web roster still offers B while A is picked.
+    view = await rosterService.getRosterManagementView(lead, userRunId);
+    expect(view.boosters.some((card) => card.id === signupB)).toBe(true);
+
+    // 8/9/11: repick A → B in one save — the User never reappears; no rows deleted.
+    await rosterService.saveDraftSelection(lead, {
+      runId: userRunId,
+      version: view.roster.version,
+      selections: [{ signupId: signupB, selectedRole: "RANGED_DPS" }],
+    });
+    state = await board();
+    expect(state.ids.has(signupA)).toBe(false);
+    expect(state.ids.has(signupB)).toBe(false);
+    expect(state.embed.members.picked.dps.some((m) => m.signupId === signupB)).toBe(true);
+    expect(state.embed.members.picked.tanks.some((m) => m.signupId === signupA)).toBe(false);
+    expect(state.embed.uniqueSignupCount).toBe(2);
+    expect(await signupRowCount()).toBe(rowsBefore);
+    await settle();
+
+    // 5/6: publish → B SELECTED, A NOT_SELECTED: User still fully hidden; the
+    // unpicked other User is NOT_SELECTED and stays visible (#230).
+    view = await rosterService.getRosterManagementView(lead, userRunId);
+    await rosterService.publishRoster(lead, { runId: userRunId, version: view.roster.version, acknowledgeWarnings: true });
+    const status = async (id: string) => ((await orm.RunSignup.where({ id }).first()) as { status: string }).status;
+    expect(await status(signupB)).toBe("SELECTED");
+    expect(await status(signupA)).toBe("NOT_SELECTED");
+    expect(await status(signupOther)).toBe("NOT_SELECTED");
+    state = await board();
+    expect(state.ids.has(signupA)).toBe(false);
+    expect(state.ids.has(signupB)).toBe(false);
+    expect(state.ids.has(signupOther)).toBe(true);
+    expect(state.embed.uniqueSignupCount).toBe(2);
+    await settle();
+
+    // 7: Update Roster picks only the other User → A and B reappear, the other User leaves.
+    view = await rosterService.getRosterManagementView(lead, userRunId);
+    await rosterService.saveDraftSelection(lead, {
+      runId: userRunId,
+      version: view.roster.version,
+      selections: [{ signupId: signupOther, selectedRole: "TANK" }],
+    });
+    view = await rosterService.getRosterManagementView(lead, userRunId);
+    await rosterService.publishRoster(lead, { runId: userRunId, version: view.roster.version, acknowledgeWarnings: true });
+    state = await board();
+    expect(state.ids.has(signupA)).toBe(true);
+    expect(state.ids.has(signupB)).toBe(true);
+    expect(state.ids.has(signupOther)).toBe(false);
+    expect(state.embed.uniqueSignupCount).toBe(2);
+    expect(await signupRowCount()).toBe(rowsBefore);
+
+    // 16/17: same message identity, one RunDiscordPost row.
+    expect(await workMessageId()).toBe("user-msg");
+    const posts = await orm.RunDiscordPost.where({ runId: userRunId }).all();
+    expect(posts).toHaveLength(1);
+  });
+
+  it("OPEN/ROSTERING: multi-role offers count in each signed role, but draft picked uses only selectedRole", async () => {
+    const hybridRunId = await runService
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 2, desiredHealerCount: 2, desiredDpsCount: 2 }))
+      .then((run) => run.id);
+    createdRunIds.push(hybridRunId);
+    await runService.openRun(lead, hybridRunId);
+
+    const hybridChar = await createCharacter(ids.extra, "HybridOffer", "PALADIN", "Holy", "HEALER");
+    await grantQualification(ids.extra);
+    const hybridSignupId = await createSignup({
+      runId: hybridRunId,
+      userId: ids.extra,
+      characterId: hybridChar,
+      participationType: "BOOSTER",
+      role: "TANK",
+    });
+    await orm.RunSignupRole.create({
+      id: crypto.randomUUID(),
+      signupId: hybridSignupId,
+      role: "HEALER",
+      createdAt: new Date().toISOString(),
+    });
+
+    const healerOnly = await createCharacter(ids.healer, "HealOnlyEmbed", "PRIEST", "Holy", "HEALER");
+    await createSignup({
+      runId: hybridRunId,
+      userId: ids.healer,
+      characterId: healerOnly,
+      participationType: "BOOSTER",
+      role: "HEALER",
+    });
+    const dpsOnly = await createCharacter(ids.melee, "DpsOnlyEmbed", "WARRIOR", "Fury", "MELEE_DPS");
+    await createSignup({
+      runId: hybridRunId,
+      userId: ids.melee,
+      characterId: dpsOnly,
+      participationType: "BOOSTER",
+      role: "MELEE_DPS",
+    });
+
+    let     embed = await discordSyncService.getSignupEmbedData(hybridRunId);
+    expect(embed?.uniqueSignupCount).toBe(3);
+    expect(embed?.roleStatus.tank.signed).toBe(1);
+    expect(embed?.roleStatus.healer.signed).toBe(2);
+    expect(embed?.roleStatus.dps.signed).toBe(1);
+    expect(embed?.members.signed.tanks).toHaveLength(1);
+    expect(embed?.members.signed.healers).toHaveLength(2);
+    expect(embed?.members.signed.dps).toHaveLength(1);
+    expect(embed?.roleStatus.tank.signed).toBe(embed?.members.signed.tanks.length);
+    expect(embed?.roleStatus.healer.signed).toBe(embed?.members.signed.healers.length);
+    expect(embed?.roleStatus.dps.signed).toBe(embed?.members.signed.dps.length);
+    // Projected role offers sum to 4 — must not become unique users.
+    expect(embed?.uniqueSignupCount).not.toBe(
+      (embed?.roleStatus.tank.signed ?? 0) +
+        (embed?.roleStatus.healer.signed ?? 0) +
+        (embed?.roleStatus.dps.signed ?? 0),
+    );
+
+    let view = await rosterService.getRosterManagementView(lead, hybridRunId);
+    await rosterService.saveDraftSelection(lead, {
+      runId: hybridRunId,
+      version: view.roster.version,
+      selections: [{ signupId: hybridSignupId, selectedRole: "HEALER" }],
+    });
+    embed = await discordSyncService.getSignupEmbedData(hybridRunId);
+    expect(embed?.roleStatus.tank.picked).toBe(0);
+    expect(embed?.roleStatus.healer.picked).toBe(1);
+    expect(embed?.roleStatus.dps.picked).toBe(0);
+    expect(embed?.members.picked.tanks.some((m) => m.signupId === hybridSignupId)).toBe(false);
+    expect(embed?.members.picked.healers.filter((m) => m.signupId === hybridSignupId)).toHaveLength(1);
+    // A draft pick leaves the unpicked pool in every offered role; Signed users unchanged.
+    expect(embed?.members.signed.tanks.some((m) => m.signupId === hybridSignupId)).toBe(false);
+    expect(embed?.members.signed.healers.some((m) => m.signupId === hybridSignupId)).toBe(false);
+    expect(embed?.roleStatus.tank.signed).toBe(0);
+    expect(embed?.roleStatus.healer.signed).toBe(1);
+    expect(embed?.roleStatus.dps.signed).toBe(1);
+
+    view = await rosterService.getRosterManagementView(lead, hybridRunId);
+    await rosterService.saveDraftSelection(lead, {
+      runId: hybridRunId,
+      version: view.roster.version,
+      selections: [{ signupId: hybridSignupId, selectedRole: "TANK" }],
+    });
+    embed = await discordSyncService.getSignupEmbedData(hybridRunId);
+    expect(embed?.roleStatus.tank.picked).toBe(1);
+    expect(embed?.roleStatus.healer.picked).toBe(0);
+    expect(embed?.members.picked.tanks.some((m) => m.signupId === hybridSignupId)).toBe(true);
+    expect(embed?.members.picked.healers.some((m) => m.signupId === hybridSignupId)).toBe(false);
+    expect(embed?.members.signed.tanks.some((m) => m.signupId === hybridSignupId)).toBe(false);
+  });
+});
+
+describe("discordSyncService.listSyncWork", () => {
+  it("excludes DRAFT runs entirely", async () => {
+    const work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((item) => item.runId === draftRunId)).toBe(false);
+    expect(work.roster.some((item) => item.runId === draftRunId)).toBe(false);
+  });
+
+  it("never creates a first signup post for a non-DRAFT run that was never actually signup-available", async () => {
+    const neverOpenedRunId = await runService
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 2 }))
+      .then((run) => run.id);
+    createdRunIds.push(neverOpenedRunId);
+    await runService.cancelRun(lead, neverOpenedRunId);
+
+    const work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((item) => item.runId === neverOpenedRunId)).toBe(false);
+  });
+
+  it("keeps updating an already-posted signup embed through to cancellation (continuity, not a re-trigger of the creation gate)", async () => {
+    const openedThenCancelledRunId = await runService
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 2 }))
+      .then((run) => run.id);
+    createdRunIds.push(openedThenCancelledRunId);
+    await runService.openRun(lead, openedThenCancelledRunId);
+
+    let work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((item) => item.runId === openedThenCancelledRunId)).toBe(true);
+    await discordSyncService.recordSignupPost({ runId: openedThenCancelledRunId, channelId: "chan-c", messageId: "msg-c" });
+
+    work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((item) => item.runId === openedThenCancelledRunId)).toBe(false);
+
+    await runService.cancelRun(lead, openedThenCancelledRunId);
+    work = await discordSyncService.listSyncWork();
+    const cancelledItem = work.signups.find((item) => item.runId === openedThenCancelledRunId);
+    expect(cancelledItem?.existingMessageId).toBe("msg-c");
+  });
+
+  it("flags a run needing its first signup post, then clears after recording it", async () => {
+    let work = await discordSyncService.listSyncWork();
+    const before = work.signups.find((item) => item.runId === runId);
+    expect(before?.existingMessageId).toBeNull();
+
+    await discordSyncService.recordSignupPost({ runId, channelId: "chan-1", messageId: "msg-1" });
+
+    work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((item) => item.runId === runId)).toBe(false);
+  });
+
+  it("flags UPDATE work again once the unique signup count changes", async () => {
+    await createSignup({ runId, userId: ids.melee, characterId: meleeChar, participationType: "BOOSTER", role: "MELEE_DPS" });
+
+    const work = await discordSyncService.listSyncWork();
+    const item = work.signups.find((entry) => entry.runId === runId);
+    expect(item?.existingMessageId).toBe("msg-1");
+    expect(item?.existingChannelId).toBe("chan-1");
+
+    await discordSyncService.recordSignupPost({ runId, channelId: "chan-1", messageId: "msg-1" });
+    const settled = await discordSyncService.listSyncWork();
+    expect(settled.signups.some((entry) => entry.runId === runId)).toBe(false);
+  });
+
+  it("refreshes an existing Signup post once when messageFormatVersion bumps (Quick Signup button row)", async () => {
+    // Ensure a settled post exists under the current signature.
+    await discordSyncService.recordSignupPost({ runId, channelId: "chan-1", messageId: "msg-1" });
+    expect((await discordSyncService.listSyncWork()).signups.some((entry) => entry.runId === runId)).toBe(false);
+
+    const post = await runDiscordPostRepository.findByRunId(runId);
+    expect(post?.lastSignupSignature).toContain(SIGNUP_MESSAGE_FORMAT_VERSION);
+    expect(post?.signupMessageId).toBe("msg-1");
+
+    // Simulate a pre-#154 stored signature: same domain fields, without messageFormatVersion.
+    const stripped = JSON.parse(post!.lastSignupSignature!) as Record<string, unknown>;
+    delete stripped.messageFormatVersion;
+    await orm.RunDiscordPost.where({ runId }).update({ lastSignupSignature: JSON.stringify(stripped) });
+
+    const refresh = await discordSyncService.listSyncWork();
+    const items = refresh.signups.filter((entry) => entry.runId === runId);
+    expect(items).toHaveLength(1);
+    expect(items[0]?.existingMessageId).toBe("msg-1");
+    expect(items[0]?.existingChannelId).toBe("chan-1");
+
+    await discordSyncService.recordSignupPost({ runId, channelId: "chan-1", messageId: "msg-1" });
+    const after = await runDiscordPostRepository.findByRunId(runId);
+    expect(after?.signupMessageId).toBe("msg-1");
+    expect(after?.lastSignupSignature).toContain(SIGNUP_MESSAGE_FORMAT_VERSION);
+    expect(after?.lastSignupSignature).toContain('"messageFormatVersion"');
+
+    const settled = await discordSyncService.listSyncWork();
+    expect(settled.signups.some((entry) => entry.runId === runId)).toBe(false);
+  });
+
+  it("refreshes existing Signup once for the Run-title link format version, then settles (EDIT → NOOP)", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("BETTER_AUTH_URL", "https://example.test");
+
+    await discordSyncService.recordSignupPost({ runId, channelId: "chan-1", messageId: "msg-url" });
+    expect((await discordSyncService.listSyncWork()).signups.some((entry) => entry.runId === runId)).toBe(false);
+
+    const post = await runDiscordPostRepository.findByRunId(runId);
+    expect(post?.signupMessageId).toBe("msg-url");
+    const previous = JSON.parse(post!.lastSignupSignature!) as Record<string, unknown>;
+    previous.messageFormatVersion = "v7-canonical-run-url";
+    await orm.RunDiscordPost.where({ runId }).update({ lastSignupSignature: JSON.stringify(previous) });
+
+    const refresh = await discordSyncService.listSyncWork();
+    const item = refresh.signups.find((entry) => entry.runId === runId);
+    expect(item?.existingMessageId).toBe("msg-url");
+    expect(item?.existingChannelId).toBe("chan-1");
+
+    const data = await discordSyncService.getSignupEmbedData(runId);
+    expect(data).not.toBeNull();
+    const embed = buildSignupEmbed(data!).toJSON();
+    // Compact content title; the canonical Run link sits on the title now.
+    expect(embed.title).toBe(data!.contentTitle);
+    expect(embed.url).toMatch(/^https:\/\/example\.test\/runs\//);
+
+    await discordSyncService.recordSignupPost({ runId, channelId: "chan-1", messageId: "msg-url" });
+    const after = await runDiscordPostRepository.findByRunId(runId);
+    expect(after?.signupMessageId).toBe("msg-url");
+    expect(after?.lastSignupSignature).toContain(SIGNUP_MESSAGE_FORMAT_VERSION);
+    expect(JSON.parse(after!.lastSignupSignature!).messageFormatVersion).toBe(SIGNUP_MESSAGE_FORMAT_VERSION);
+
+    expect((await discordSyncService.listSyncWork()).signups.some((entry) => entry.runId === runId)).toBe(false);
+    vi.unstubAllEnvs();
+  });
+
+  it("also refreshes a closed-window Signup post once for the Quick Signup button layout", async () => {
+    // Continuity path: post already exists; closing the window must still refresh presentation.
+    await discordSyncService.recordSignupPost({ runId, channelId: "chan-1", messageId: "msg-closed" });
+    await runService.setSignupWindow(lead, runId, false);
+
+    // Re-settle under the new closed-window signature, then downgrade the format marker only.
+    await discordSyncService.recordSignupPost({ runId, channelId: "chan-1", messageId: "msg-closed" });
+    const post = await runDiscordPostRepository.findByRunId(runId);
+    expect(JSON.parse(post!.lastSignupSignature!).signupWindowOpen).toBe(false);
+
+    const stripped = JSON.parse(post!.lastSignupSignature!) as Record<string, unknown>;
+    delete stripped.messageFormatVersion;
+    await orm.RunDiscordPost.where({ runId }).update({ lastSignupSignature: JSON.stringify(stripped) });
+
+    const refresh = await discordSyncService.listSyncWork();
+    const item = refresh.signups.find((entry) => entry.runId === runId);
+    expect(item?.existingMessageId).toBe("msg-closed");
+    expect((await discordSyncService.getSignupEmbedData(runId))?.signupWindowOpen).toBe(false);
+
+    await discordSyncService.recordSignupPost({ runId, channelId: "chan-1", messageId: "msg-closed" });
+    expect((await discordSyncService.listSyncWork()).signups.some((entry) => entry.runId === runId)).toBe(false);
+
+    // Restore OPEN for later tests that share runId.
+    await runService.setSignupWindow(lead, runId, true);
+  });
+});
+
+describe("discordSyncService.getRosterEmbedData", () => {
+  it("returns a draft Roster payload before publish (empty until picks exist)", async () => {
+    const data = await discordSyncService.getRosterEmbedData(runId);
+    expect(data).not.toBeNull();
+    expect(data?.publishedAt).toBeNull();
+    expect(data?.totalSelected).toBe(0);
+    expect(data?.groups.tanks).toEqual([]);
+  });
+
+  it("groups selected participants into tanks/healers/melee/ranged/lootbuddies with Discord mentions", async () => {
+    await createSignup({ runId, userId: ids.ranged, characterId: rangedChar, participationType: "BOOSTER", role: "RANGED_DPS" });
+    await createSignup({ runId, userId: ids.loot, characterId: lootChar, participationType: "LOOTBUDDY", role: null });
+
+    const view = await rosterService.getRosterManagementView(lead, runId);
+    const all = [...rosterBoosters(view), ...view.groups.lootbuddies];
+    let version = view.roster.version;
+    for (const signup of all) {
+      await rosterService.setDraftSelection(lead, { runId, signupId: signup.id, selected: true, version });
+      version = (await rosterService.getRosterManagementView(lead, runId)).roster.version;
+    }
+
+    await rosterService.publishRoster(lead, { runId, version, acknowledgeWarnings: true });
+
+    const data = await discordSyncService.getRosterEmbedData(runId);
+    expect(data).not.toBeNull();
+    expect(data?.groups.tanks.map((m) => m.userId)).toEqual([ids.tank]);
+    expect(data?.groups.tanks[0]?.discordUserId).toBe("111111111111111111");
+    expect(data?.groups.healers.map((m) => m.userId)).toEqual([ids.healer]);
+    expect(data?.groups.healers[0]?.discordUserId).toBeNull();
+    expect(data?.groups.meleeDps.map((m) => m.userId)).toEqual([ids.melee]);
+    expect(data?.groups.rangedDps.map((m) => m.userId)).toEqual([ids.ranged]);
+    expect(data?.groups.lootbuddies.map((m) => m.userId)).toEqual([ids.loot]);
+    expect(data?.totalSelected).toBe(5);
+    expect(data?.targets).toEqual({ tanks: 1, healers: 1, dps: 2, lootbuddies: 0 });
+  });
+
+  it("reports roster sync work, clears it after recording, and reopens it on republish", async () => {
+    let work = await discordSyncService.listSyncWork();
+    const first = work.roster.find((item) => item.runId === runId && item.existingMessageId === null);
+    // The first Publish is an explicit post intent: POST, fulfilling postRevision 1.
+    expect(first).toMatchObject({ mode: "POST", postRevision: 1 });
+
+    await discordSyncService.recordRosterPost({ runId, channelId: "chan-2", messageId: "roster-msg-1", postRevision: 1 });
+    work = await discordSyncService.listSyncWork();
+    expect(work.roster.some((item) => item.runId === runId)).toBe(false);
+
+    const view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.publishRoster(lead, { runId, version: view.roster.version, acknowledgeWarnings: true });
+
+    work = await discordSyncService.listSyncWork();
+    // Republishing never posts again: the current message is refreshed in place.
+    expect(work.roster.find((item) => item.runId === runId)).toMatchObject({
+      existingMessageId: "roster-msg-1",
+      mode: "REFRESH",
+      postRevision: null,
+    });
+  });
+
+  it("refreshes the posted roster in place when the Guild emoji fingerprint changes", async () => {
+    const now = new Date();
+    await discordSyncService.recordRosterPost({
+      runId,
+      channelId: "chan-2",
+      messageId: "roster-msg-1",
+      classEmojiFingerprint: "emoji-a",
+    });
+    const rosterWork = async (classEmojiFingerprint?: string) =>
+      (await discordSyncService.listSyncWork(now, { classEmojiFingerprint })).roster.find((item) => item.runId === runId);
+
+    // Same emojis the message was rendered with, or no fingerprint at all: nothing to do.
+    expect(await rosterWork("emoji-a")).toBeUndefined();
+    expect(await rosterWork()).toBeUndefined();
+
+    // New/renamed Guild emojis: edit the current message, never post a new one.
+    expect(await rosterWork("emoji-b")).toMatchObject({
+      existingMessageId: "roster-msg-1",
+      mode: "REFRESH",
+      postRevision: null,
+    });
+
+    await discordSyncService.recordRosterPost({
+      runId,
+      channelId: "chan-2",
+      messageId: "roster-msg-1",
+      classEmojiFingerprint: "emoji-b",
+    });
+    expect(await rosterWork("emoji-b")).toBeUndefined();
+  });
+
+  it("a record without a fingerprint keeps the stored one; a legacy null fingerprint refreshes once", async () => {
+    const now = new Date();
+    await discordSyncService.recordRosterPost({ runId, channelId: "chan-2", messageId: "roster-msg-1" });
+    expect((await runDiscordPostRepository.findByRunId(runId))?.lastRosterEmojiFingerprint).toBe(
+      rosterEmbedRenderFingerprint("emoji-b"),
+    );
+
+    // Posts made before this column existed carry null.
+    await orm.RunDiscordPost.where({ runId }).update({ lastRosterEmojiFingerprint: null });
+    const work = await discordSyncService.listSyncWork(now, { classEmojiFingerprint: "emoji-b" });
+    expect(work.roster.find((item) => item.runId === runId)).toMatchObject({
+      existingMessageId: "roster-msg-1",
+      mode: "REFRESH",
+    });
+  });
+
+  it("unpublished draft Roster with null fingerprint still refreshes then settles (production stuck shape)", async () => {
+    // Mirrors run 16e9d032-…: draft publishedAt=null, existing rosterMessageId,
+    // lastRosterEmojiFingerprint=null, channels already aligned. Service data must
+    // be available so the bot can edit and persist the current v4 fingerprint.
+    const now = new Date();
+    await discordSyncService.recordRosterPost({
+      runId,
+      channelId: "chan-2",
+      messageId: "roster-msg-stuck",
+      classEmojiFingerprint: "emoji-b",
+    });
+    await orm.RunDiscordPost.where({ runId }).update({
+      lastRosterEmojiFingerprint: null,
+      lastRosterVersion: 0,
+    });
+    await orm.RunRoster.where({ runId }).update({ publishedAt: null });
+
+    const data = await discordSyncService.getRosterEmbedData(runId);
+    expect(data?.publishedAt).toBeNull();
+
+    const refresh = await discordSyncService.listSyncWork(now, { classEmojiFingerprint: "emoji-b" });
+    expect(refresh.roster.find((item) => item.runId === runId)).toMatchObject({
+      existingMessageId: "roster-msg-stuck",
+      existingChannelId: "chan-2",
+      mode: "REFRESH",
+    });
+
+    await discordSyncService.recordRosterPost({
+      runId,
+      channelId: "chan-2",
+      messageId: "roster-msg-stuck",
+      classEmojiFingerprint: "emoji-b",
+    });
+    const after = await runDiscordPostRepository.findByRunId(runId);
+    expect(after?.rosterMessageId).toBe("roster-msg-stuck");
+    expect(after?.lastRosterEmojiFingerprint).toBe(rosterEmbedRenderFingerprint("emoji-b"));
+    expect(
+      (await discordSyncService.listSyncWork(now, { classEmojiFingerprint: "emoji-b" })).roster.find(
+        (item) => item.runId === runId,
+      ),
+    ).toBeUndefined();
+
+    // Restore publish state for later tests that share this runId.
+    await orm.RunRoster.where({ runId }).update({ publishedAt: new Date().toISOString() });
+  });
+
+  it("legacy bare emoji fingerprints refresh once onto the presentation-format fingerprint", async () => {
+    const now = new Date();
+    await discordSyncService.recordRosterPost({
+      runId,
+      channelId: "chan-2",
+      messageId: "roster-msg-1",
+      classEmojiFingerprint: "emoji-b",
+    });
+    await orm.RunDiscordPost.where({ runId }).update({ lastRosterEmojiFingerprint: "emoji-b" });
+    const work = await discordSyncService.listSyncWork(now, { classEmojiFingerprint: "emoji-b" });
+    expect(work.roster.find((item) => item.runId === runId)).toMatchObject({
+      existingMessageId: "roster-msg-1",
+      mode: "REFRESH",
+    });
+    await discordSyncService.recordRosterPost({
+      runId,
+      channelId: "chan-2",
+      messageId: "roster-msg-1",
+      classEmojiFingerprint: "emoji-b",
+    });
+    expect(
+      (await discordSyncService.listSyncWork(now, { classEmojiFingerprint: "emoji-b" })).roster.find(
+        (item) => item.runId === runId,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("refreshes existing Roster once for the Run-title link format version, then settles (EDIT → NOOP)", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("BETTER_AUTH_URL", "https://example.test");
+    const now = new Date();
+
+    await discordSyncService.recordRosterPost({
+      runId,
+      channelId: "chan-2",
+      messageId: "roster-msg-url",
+      classEmojiFingerprint: "emoji-b",
+    });
+    expect(
+      (await discordSyncService.listSyncWork(now, { classEmojiFingerprint: "emoji-b" })).roster.find(
+        (item) => item.runId === runId,
+      ),
+    ).toBeUndefined();
+    expect((await runDiscordPostRepository.findByRunId(runId))?.lastRosterEmojiFingerprint).toBe(
+      rosterEmbedRenderFingerprint("emoji-b"),
+    );
+    expect(ROSTER_EMBED_FORMAT_VERSION).toBe("v5-one-dps-group");
+
+    await orm.RunDiscordPost.where({ runId }).update({
+      lastRosterEmojiFingerprint: "v3-canonical-run-url|emoji-b",
+    });
+
+    const refresh = await discordSyncService.listSyncWork(now, { classEmojiFingerprint: "emoji-b" });
+    expect(refresh.roster.find((item) => item.runId === runId)).toMatchObject({
+      existingMessageId: "roster-msg-url",
+      mode: "REFRESH",
+      postRevision: null,
+    });
+
+    const data = await discordSyncService.getRosterEmbedData(runId);
+    expect(data).not.toBeNull();
+    const embed = buildRosterEmbed(data!).toJSON();
+    expect(embed.title).toBe("Roster");
+    expect(embed.url).toBeUndefined();
+    expect(embed.description?.split("\n")[0]).toMatch(/^\[.+\]\(https:\/\/example\.test\/runs\//);
+
+    await discordSyncService.recordRosterPost({
+      runId,
+      channelId: "chan-2",
+      messageId: "roster-msg-url",
+      classEmojiFingerprint: "emoji-b",
+    });
+    const after = await runDiscordPostRepository.findByRunId(runId);
+    expect(after?.rosterMessageId).toBe("roster-msg-url");
+    expect(after?.lastRosterEmojiFingerprint).toBe(`v5-one-dps-group|emoji-b`);
+
+    expect(
+      (await discordSyncService.listSyncWork(now, { classEmojiFingerprint: "emoji-b" })).roster.find(
+        (item) => item.runId === runId,
+      ),
+    ).toBeUndefined();
+    vi.unstubAllEnvs();
+  });
+});
+
+describe("discordSyncService — empty Roster once Signup is provisioned", () => {
+  it("emits one Roster REFRESH with no picks when Signup exists; settles after record; no second send", async () => {
+    const id = await runService
+      .createRun(
+        lead,
+        venomousCreateInput({
+          difficulty: "HEROIC",
+          lootType: "UNSAVED",
+          venomousPlannedBossCount: 8,
+          scheduledStartAt: futureIso(),
+          desiredTankCount: 1,
+          desiredHealerCount: 1,
+          desiredDpsCount: 2,
+        }),
+      )
+      .then((run) => run.id);
+    createdRunIds.push(id);
+    await runService.openRun(lead, id);
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "empty-roster-chan" });
+    await discordSyncService.recordSignupPost({
+      runId: id,
+      channelId: "empty-roster-chan",
+      messageId: "empty-signup-msg",
+    });
+
+    const data = await discordSyncService.getRosterEmbedData(id);
+    expect(data?.totalSelected).toBe(0);
+    expect(data?.publishedAt).toBeNull();
+
+    let work = await discordSyncService.listSyncWork();
+    const first = work.roster.find((item) => item.runId === id);
+    expect(first).toMatchObject({
+      mode: "REFRESH",
+      existingMessageId: null,
+      postRevision: null,
+    });
+
+    await discordSyncService.recordRosterPost({
+      runId: id,
+      channelId: "empty-roster-chan",
+      messageId: "empty-roster-msg",
+    });
+    work = await discordSyncService.listSyncWork();
+    expect(work.roster.some((item) => item.runId === id)).toBe(false);
+    expect((await runDiscordPostRepository.findByRunId(id))?.rosterMessageId).toBe("empty-roster-msg");
+  });
+
+  it("Publish with an existing draft Roster message keeps that message id and acknowledges postRevision", async () => {
+    const id = await runService
+      .createRun(
+        lead,
+        venomousCreateInput({
+          difficulty: "HEROIC",
+          lootType: "UNSAVED",
+          venomousPlannedBossCount: 8,
+          scheduledStartAt: futureIso(),
+          desiredTankCount: 1,
+          desiredHealerCount: 1,
+          desiredDpsCount: 2,
+        }),
+      )
+      .then((run) => run.id);
+    createdRunIds.push(id);
+    await runService.openRun(lead, id);
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "publish-inplace-chan" });
+    await discordSyncService.recordSignupPost({
+      runId: id,
+      channelId: "publish-exists-chan",
+      messageId: "publish-exists-signup",
+    });
+    await discordSyncService.recordRosterPost({
+      runId: id,
+      channelId: "publish-exists-chan",
+      messageId: "publish-exists-roster",
+    });
+
+    // Dedicated Characters on already-qualified boosters — avoids schedule clashes
+    // with the shared suite runId that already holds Dstank/Dsheal.
+    const localTankChar = await createCharacter(ids.melee, "PubExistTank", "WARRIOR", "Protection", "TANK");
+    const localHealerChar = await createCharacter(ids.ranged, "PubExistHeal", "PRIEST", "Holy", "HEALER");
+    const tankSignup = await createSignup({
+      runId: id,
+      userId: ids.melee,
+      characterId: localTankChar,
+      participationType: "BOOSTER",
+      role: "TANK",
+    });
+    const healerSignup = await createSignup({
+      runId: id,
+      userId: ids.ranged,
+      characterId: localHealerChar,
+      participationType: "BOOSTER",
+      role: "HEALER",
+    });
+    let view = await rosterService.getRosterManagementView(lead, id);
+    await rosterService.saveDraftSelection(lead, {
+      runId: id,
+      version: view.roster.version,
+      selections: [
+        { signupId: tankSignup, selectedRole: "TANK" },
+        { signupId: healerSignup, selectedRole: "HEALER" },
+      ],
+    });
+    // Draft version bump → REFRESH same id
+    expect((await discordSyncService.listSyncWork()).roster.find((item) => item.runId === id)).toMatchObject({
+      mode: "REFRESH",
+      existingMessageId: "publish-exists-roster",
+    });
+    await discordSyncService.recordRosterPost({
+      runId: id,
+      channelId: "publish-exists-chan",
+      messageId: "publish-exists-roster",
+    });
+
+    view = await rosterService.getRosterManagementView(lead, id);
+    await rosterService.publishRoster(lead, { runId: id, version: view.roster.version, acknowledgeWarnings: true });
+    const postWork = (await discordSyncService.listSyncWork()).roster.find((item) => item.runId === id);
+    expect(postWork).toMatchObject({
+      mode: "POST",
+      postRevision: 1,
+      existingMessageId: "publish-exists-roster",
+    });
+    await discordSyncService.recordRosterPost({
+      runId: id,
+      channelId: "publish-exists-chan",
+      messageId: "publish-exists-roster",
+      postRevision: 1,
+    });
+    expect((await runDiscordPostRepository.findByRunId(id))?.rosterMessageId).toBe("publish-exists-roster");
+    expect((await runDiscordPostRepository.findByRunId(id))?.lastRosterPostRevision).toBe(1);
+    expect((await discordSyncService.listSyncWork()).roster.some((item) => item.runId === id)).toBe(false);
+  });
+});
+
+describe("discordSyncService — per-Run channel provisioning", () => {
+  let channelRunId = "";
+
+  beforeAll(async () => {
+    channelRunId = await runService
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 2 }))
+      .then((run) => run.id);
+    createdRunIds.push(channelRunId);
+    await runService.openRun(lead, channelRunId);
+  }, 60_000);
+
+  it("always computes a desiredChannelName, with no channel provisioned yet", async () => {
+    const work = await discordSyncService.listSyncWork();
+    const item = work.signups.find((entry) => entry.runId === channelRunId);
+    expect(item?.existingRunChannelId).toBeNull();
+    expect(item?.desiredChannelName).toMatch(/^[a-z]{3}-\d{4}-hc-unsaved-\dof\d-discord-lead$/);
+  });
+
+  it("persists the channel id as soon as it's recorded, independent of any signup message", async () => {
+    await discordSyncService.recordRunChannel({ runId: channelRunId, channelId: "run-chan-1" });
+    const work = await discordSyncService.listSyncWork();
+    const item = work.signups.find((entry) => entry.runId === channelRunId);
+    expect(item?.existingRunChannelId).toBe("run-chan-1");
+    // No signup message recorded yet, so this is still sync work.
+    expect(item?.existingMessageId).toBeNull();
+  });
+
+  it("repeated sync never re-provisions a channel: the same channel id is reused every pass", async () => {
+    await discordSyncService.recordSignupPost({ runId: channelRunId, channelId: "run-chan-1", messageId: "run-msg-1" });
+    let work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((entry) => entry.runId === channelRunId)).toBe(false);
+
+    work = await discordSyncService.listSyncWork();
+    const stillNoWork = !work.signups.some((entry) => entry.runId === channelRunId);
+    expect(stillNoWork).toBe(true);
+
+    const persisted = await runDiscordPostRepository.findByRunId(channelRunId);
+    expect(persisted?.runChannelId).toBe("run-chan-1");
+  });
+
+  it("a schedule change produces a new desiredChannelName (rename), while the persisted channel id is untouched", async () => {
+    const before = await runDiscordPostRepository.findByRunId(channelRunId);
+    const newSchedule = new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString();
+
+    await runService.updateRun(lead, {
+      runId: channelRunId,
+      raidId,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
+      scheduledStartAt: newSchedule,
+      notes: null,
+      desiredTankCount: 1,
+      desiredHealerCount: 1,
+      desiredDpsCount: 2,
+    });
+
+    const work = await discordSyncService.listSyncWork();
+    const item = work.signups.find((entry) => entry.runId === channelRunId);
+    // The desired name changed (new schedule), so this is sync work again —
+    // but the run's channel identity (existingRunChannelId) never changes:
+    // a rename edits the same channel, it does not create a replacement.
+    expect(item).toBeTruthy();
+    expect(item?.existingRunChannelId).toBe("run-chan-1");
+    expect(item?.existingRunChannelId).toBe(before?.runChannelId);
+  });
+
+  it("a lootType or plannedBossCount change also renames the same persisted channel", async () => {
+    const before = await runDiscordPostRepository.findByRunId(channelRunId);
+    const run = await runRepository.findById(channelRunId);
+
+    await runService.updateRun(lead, {
+      runId: channelRunId,
+      raidId,
+      difficulty: "HEROIC",
+      lootType: "VIP",
+      plannedBossCount: 5,
+      scheduledStartAt: run!.scheduledStartAt,
+      notes: null,
+      desiredTankCount: 1,
+      desiredHealerCount: 1,
+      desiredDpsCount: 2,
+    });
+
+    const work = await discordSyncService.listSyncWork();
+    const item = work.signups.find((entry) => entry.runId === channelRunId);
+    expect(item).toBeTruthy();
+    expect(item?.desiredChannelName).toContain("-vip-5of8-");
+    expect(item?.existingRunChannelId).toBe("run-chan-1");
+    expect(item?.existingRunChannelId).toBe(before?.runChannelId);
+  });
+
+  it("survives a restart: a fresh read of persisted state still finds the same channel id (no duplicate provisioning)", async () => {
+    const persisted = await runDiscordPostRepository.findByRunId(channelRunId);
+    expect(persisted?.runChannelId).toBe("run-chan-1");
+  });
+
+  it("a Run that already reached CANCELLED without ever being signup-available never gets a channel/signup post", async () => {
+    const neverOpenedRunId = await runService
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 2 }))
+      .then((run) => run.id);
+    createdRunIds.push(neverOpenedRunId);
+    await runService.cancelRun(lead, neverOpenedRunId);
+
+    const work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((entry) => entry.runId === neverOpenedRunId)).toBe(false);
+
+    const persisted = await runDiscordPostRepository.findByRunId(neverOpenedRunId);
+    expect(persisted).toBeNull();
+  });
+
+  it("never generates roster work for a published Run the bot had no Discord presence for (would otherwise let the roster path provision a channel on its own)", async () => {
+    const orphanRunId = await runService
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 0, desiredDpsCount: 0 }))
+      .then((run) => run.id);
+    createdRunIds.push(orphanRunId);
+    await runService.openRun(lead, orphanRunId);
+
+    const orphanCharId = crypto.randomUUID();
+    createdCharacterIds.push(orphanCharId);
+    await orm.Character.create({
+      id: orphanCharId,
+      userId: ids.tank,
+      name: "Dsorphan",
+      realm: "Discord Lab",
+      normalizedName: normalizeCharacterIdentity("Dsorphan"),
+      normalizedRealm: normalizeCharacterIdentity("Discord Lab"),
+      region: "EU",
+      wowClass: "PALADIN",
+      specialization: "Protection",
+      primaryRole: "TANK",
+      itemLevel: 700,
+      isActive: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    await createSignup({ runId: orphanRunId, userId: ids.tank, characterId: orphanCharId, participationType: "BOOSTER", role: "TANK" });
+
+    const view = await rosterService.getRosterManagementView(lead, orphanRunId);
+    const tankSignup = rosterBoosters(view)[0];
+    await rosterService.setDraftSelection(lead, { runId: orphanRunId, signupId: tankSignup.id, selected: true, version: view.roster.version });
+    const afterSelect = await rosterService.getRosterManagementView(lead, orphanRunId);
+    await rosterService.publishRoster(lead, { runId: orphanRunId, version: afterSelect.roster.version, acknowledgeWarnings: true });
+
+    // The bot never recorded a channel or a signup post for this Run at any point.
+    const persisted = await runDiscordPostRepository.findByRunId(orphanRunId);
+    expect(persisted).toBeNull();
+
+    const work = await discordSyncService.listSyncWork();
+    expect(work.roster.some((entry) => entry.runId === orphanRunId)).toBe(false);
+  });
+});
+
+describe("discordSyncService — archive category movement", () => {
+  it("flags targetBucket ARCHIVE after Archive and reverts to schedule-derived CURRENT after Restore, with the channel identity untouched", async () => {
+    const scheduleInCurrent = currentWeekFutureIso();
+    const archiveRunId = await runService
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: scheduleInCurrent, desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 2 }))
+      .then((run) => run.id);
+    createdRunIds.push(archiveRunId);
+    await runService.openRun(lead, archiveRunId);
+    await discordSyncService.recordRunChannel({ runId: archiveRunId, channelId: "archive-chan-1" });
+    await discordSyncService.recordSignupPost({ runId: archiveRunId, channelId: "archive-chan-1", messageId: "archive-msg-1" });
+
+    let work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((entry) => entry.runId === archiveRunId)).toBe(false);
+
+    await runRepository.updateFields(archiveRunId, { status: "CANCELLED" });
+    await runService.archiveRun(lead, archiveRunId);
+
+    work = await discordSyncService.listSyncWork();
+    const archived = work.signups.find((entry) => entry.runId === archiveRunId);
+    expect(archived?.targetBucket).toBe("ARCHIVE");
+    expect(archived?.existingRunChannelId).toBe("archive-chan-1");
+
+    // The bot resyncs (same channel, same message) once it observes the new signature.
+    await discordSyncService.recordSignupPost({ runId: archiveRunId, channelId: "archive-chan-1", messageId: "archive-msg-1" });
+    work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((entry) => entry.runId === archiveRunId)).toBe(false);
+
+    await runService.restoreRun(lead, archiveRunId);
+    work = await discordSyncService.listSyncWork();
+    const restored = work.signups.find((entry) => entry.runId === archiveRunId);
+    // Restore is never "back to the one active category" — placement is
+    // re-derived from the schedule, and this Run is deliberately CURRENT-week.
+    expect(restored?.targetBucket).toBe("CURRENT");
+    expect(restored?.existingRunChannelId).toBe("archive-chan-1");
+  });
+
+  it("generates no sync work — and so requests no channel — for an archived Run that never had Discord presence", async () => {
+    const bareRunId = await runService
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 2 }))
+      .then((run) => run.id);
+    createdRunIds.push(bareRunId);
+    await runRepository.updateFields(bareRunId, { status: "CANCELLED" });
+    await runService.archiveRun(lead, bareRunId);
+
+    const work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((entry) => entry.runId === bareRunId)).toBe(false);
+    expect(work.roster.some((entry) => entry.runId === bareRunId)).toBe(false);
+    expect(await runDiscordPostRepository.findByRunId(bareRunId)).toBeNull();
+  });
+});
+
+describe("discordSyncService.listSyncWork — channel reconciliation is independent of message state", () => {
+  async function createOpenRunWithChannel(channelId: string, scheduledStartAt = futureIso()) {
+    const id = await runService
+      .createRun(lead, {
+        raidId,
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
+        scheduledStartAt,
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      })
+      .then((run) => run.id);
+    createdRunIds.push(id);
+    await runService.openRun(lead, id);
+    await discordSyncService.recordRunChannel({ runId: id, channelId });
+    return id;
+  }
+
+  it("CORE REGRESSION: a Run with a settled signup post and an archive-state change still gets a channels[] item, with no signups/roster work forced", async () => {
+    const id = await createOpenRunWithChannel("core-regr-chan-1");
+    await discordSyncService.recordSignupPost({ runId: id, channelId: "core-regr-chan-1", messageId: "core-regr-msg-1" });
+
+    // Settle the signup message before archiving, then archive and resettle
+    // once more — the pre-existing signature still embeds `targetBucket`, so
+    // one resync is expected to clear it. The point of this test is what
+    // happens AFTER that: at steady state (signup message fully caught up),
+    // channels[] must still carry the Run so the bot keeps checking its
+    // live Discord category every poll — it must never depend on the
+    // signup/roster lanes waking it up again.
+    await runRepository.updateFields(id, { status: "CANCELLED" });
+    await runService.archiveRun(lead, id);
+    await discordSyncService.recordSignupPost({ runId: id, channelId: "core-regr-chan-1", messageId: "core-regr-msg-1" });
+
+    const work = await discordSyncService.listSyncWork();
+    const channelItem = work.channels.find((entry) => entry.runId === id);
+    expect(channelItem).toBeTruthy();
+    expect(channelItem?.existingRunChannelId).toBe("core-regr-chan-1");
+    expect(channelItem?.targetBucket).toBe("ARCHIVE");
+    expect(work.signups.some((entry) => entry.runId === id)).toBe(false);
+    expect(work.roster.some((entry) => entry.runId === id)).toBe(false);
+  });
+
+  it("RESTORE: the channels[] item reflects schedule-derived CURRENT immediately after Restore, independent of message settlement", async () => {
+    const id = await createOpenRunWithChannel("restore-chan-1", currentWeekFutureIso());
+    await discordSyncService.recordSignupPost({ runId: id, channelId: "restore-chan-1", messageId: "restore-msg-1" });
+    await runRepository.updateFields(id, { status: "CANCELLED" });
+    await runService.archiveRun(lead, id);
+    await runService.restoreRun(lead, id);
+
+    // Deliberately NOT resyncing the signup message here — the whole point
+    // is that channels[] must report the correct target on its own, whether
+    // or not the (separate, still-coupled-by-design) signup signature has
+    // caught up yet.
+    const work = await discordSyncService.listSyncWork();
+    const channelItem = work.channels.find((entry) => entry.runId === id);
+    expect(channelItem).toBeTruthy();
+    expect(channelItem?.targetBucket).toBe("CURRENT");
+    expect(channelItem?.existingRunChannelId).toBe("restore-chan-1");
+  });
+
+  it("NO CHANNEL: an archived Run with no persisted runChannelId never appears in channels[]", async () => {
+    const id = await runService
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 2 }))
+      .then((run) => run.id);
+    createdRunIds.push(id);
+    await runRepository.updateFields(id, { status: "CANCELLED" });
+    await runService.archiveRun(lead, id);
+
+    const work = await discordSyncService.listSyncWork();
+    expect(work.channels.some((entry) => entry.runId === id)).toBe(false);
+    expect(await runDiscordPostRepository.findByRunId(id)).toBeNull();
+  });
+
+  it("TERMINAL RUN: a COMPLETED Run with an existing channel still appears in channels[]", async () => {
+    const id = await createOpenRunWithChannel("terminal-chan-1");
+    await runRepository.updateFields(id, { status: "COMPLETED" });
+
+    const work = await discordSyncService.listSyncWork();
+    const channelItem = work.channels.find((entry) => entry.runId === id);
+    expect(channelItem).toBeTruthy();
+    expect(channelItem?.existingRunChannelId).toBe("terminal-chan-1");
+  });
+
+  it("a DRAFT Run with a (legacy/abnormal) persisted channel is still reconcilable, but gets no signup/roster work", async () => {
+    const id = await runService
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 2 }))
+      .then((run) => run.id);
+    createdRunIds.push(id);
+    // Never opened — still DRAFT. Recording a channel here simulates an
+    // abnormal legacy row; listSyncWork must not provision anything new for
+    // it, but the existing stored channel identity remains reconcilable.
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "draft-chan-1" });
+
+    const work = await discordSyncService.listSyncWork();
+    expect(work.channels.some((entry) => entry.runId === id)).toBe(true);
+    expect(work.signups.some((entry) => entry.runId === id)).toBe(false);
+    expect(work.roster.some((entry) => entry.runId === id)).toBe(false);
+  });
+});
+
+describe("discordSyncService — raid identity invalidation (embed content signature)", () => {
+  let raidEditRunId = "";
+
+  beforeAll(async () => {
+    // Manaforge Omega is historical (RAID_NOT_AVAILABLE_FOR_RUNS via the
+    // service create boundary) — this fixture simulates a pre-existing
+    // historical Run by writing it directly through the repository, exactly
+    // as a Run created before the raid became historical would look.
+    raidEditRunId = await runRepository.create({
+title: "Historical raid edit fixture",
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      scheduledStartAt: futureIso(),
+      raidLeadId: ids.lead,
+      notes: null,
+      desiredTankCount: 1,
+      desiredHealerCount: 1,
+      desiredDpsCount: 2,
+      contents: [
+        {
+          raidId: MANAFORGE_OMEGA_RAID_ID,
+          sortOrder: 1,
+          plannedBossCount: 8,
+        },
+      ],
+    });
+    createdRunIds.push(raidEditRunId);
+    await runService.openRun(lead, raidEditRunId);
+  }, 60_000);
+
+  it("exposes productLabel on SignupEmbedData", async () => {
+    const data = await discordSyncService.getSignupEmbedData(raidEditRunId);
+    expect(data?.productLabel).toBe("Manaforge Omega");
+    expect(data?.raidName).toBe(data?.productLabel);
+  });
+
+  it("settles after the first post, with no work pending before any edit", async () => {
+    await discordSyncService.recordSignupPost({ runId: raidEditRunId, channelId: "raid-chan-1", messageId: "raid-msg-1" });
+    const work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((entry) => entry.runId === raidEditRunId)).toBe(false);
+  });
+
+  it("CRITICAL: a raid change with an unchanged desired channel name still produces signup sync work", async () => {
+    const before = await discordSyncService.listSyncWork();
+    const beforeItem = before.signups.find((entry) => entry.runId === raidEditRunId);
+    const beforeChannelName = beforeItem?.desiredChannelName;
+    expect(beforeItem).toBeUndefined(); // no pending work yet — settled by the prior test
+
+    const run = await runRepository.findById(raidEditRunId);
+    await runService.updateRun(
+      lead,
+      venomousUpdateInput(raidEditRunId, run!, {
+        venomousPlannedBossCount: 8,
+        scheduledStartAt: run!.scheduledStartAt,
+        notes: null,
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      }),
+    );
+
+    const work = await discordSyncService.listSyncWork();
+    const item = work.signups.find((entry) => entry.runId === raidEditRunId);
+    expect(item).toBeTruthy();
+    expect(item?.existingMessageId).toBe("raid-msg-1");
+    expect(item?.existingChannelId).toBe("raid-chan-1");
+    // Same difficulty/lootType/plannedBossCount/raidLead/schedule → the
+    // channel name (which is deliberately raid-name-free) is unchanged. The
+    // whole point of this fix is that sync work is still produced anyway.
+    if (beforeChannelName) {
+      expect(item?.desiredChannelName).toBe(beforeChannelName);
+    }
+  });
+
+  it("reflects the new raid in getSignupEmbedData after the edit", async () => {
+    const data = await discordSyncService.getSignupEmbedData(raidEditRunId);
+    expect(data?.productLabel).toBe("The Venomous Abyss");
+    expect(data?.raidName).toBe("The Venomous Abyss");
+  });
+
+  it("clears after the bot re-edits the same message, and does not resurface on a no-op resync", async () => {
+    await discordSyncService.recordSignupPost({ runId: raidEditRunId, channelId: "raid-chan-1", messageId: "raid-msg-1" });
+    let work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((entry) => entry.runId === raidEditRunId)).toBe(false);
+
+    // Re-running sync detection with nothing changed must stay idempotent.
+    work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((entry) => entry.runId === raidEditRunId)).toBe(false);
+  });
+
+  it("never recreates the channel or message across the raid edit — same ids throughout", async () => {
+    const persisted = await runDiscordPostRepository.findByRunId(raidEditRunId);
+    // recordSignupPost stamps runChannelId to the same dedicated channel id.
+    expect(persisted?.runChannelId).toBe("raid-chan-1");
+    expect(persisted?.signupChannelId).toBe("raid-chan-1");
+    expect(persisted?.signupMessageId).toBe("raid-msg-1");
+  });
+
+  it("still produces work for a non-raid rendered-field edit after the raid change has settled (schedule)", async () => {
+    const run = await runRepository.findById(raidEditRunId);
+    const newSchedule = new Date(Date.now() + 25 * 24 * 60 * 60 * 1000).toISOString();
+    await runService.updateRun(
+      lead,
+      venomousUpdateInput(raidEditRunId, run!, {
+        scheduledStartAt: newSchedule,
+        notes: null,
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      }),
+    );
+
+    const work = await discordSyncService.listSyncWork();
+    const item = work.signups.find((entry) => entry.runId === raidEditRunId);
+    expect(item).toBeTruthy();
+
+    const data = await discordSyncService.getSignupEmbedData(raidEditRunId);
+    expect(new Date(data!.scheduledStartAt).getTime()).toBe(new Date(newSchedule).getTime());
+
+    await discordSyncService.recordSignupPost({ runId: raidEditRunId, channelId: "raid-chan-1", messageId: "raid-msg-1" });
+    const settled = await discordSyncService.listSyncWork();
+    expect(settled.signups.some((entry) => entry.runId === raidEditRunId)).toBe(false);
+  });
+
+  it("combines with archive: an archived + raid-changed run still flags work, and clears once resynced", async () => {
+    // Historical-raid fixture, same reasoning as raidEditRunId above.
+    const comboRunId = await runRepository.create({
+title: "Historical archive+raid-change fixture",
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      scheduledStartAt: futureIso(),
+      raidLeadId: ids.lead,
+      notes: null,
+      desiredTankCount: 1,
+      desiredHealerCount: 1,
+      desiredDpsCount: 2,
+      contents: [
+        {
+          raidId: MANAFORGE_OMEGA_RAID_ID,
+          sortOrder: 1,
+          plannedBossCount: 8,
+        },
+      ],
+    });
+    createdRunIds.push(comboRunId);
+    await runService.openRun(lead, comboRunId);
+    await discordSyncService.recordSignupPost({ runId: comboRunId, channelId: "combo-chan-1", messageId: "combo-msg-1" });
+
+    const run = await runRepository.findById(comboRunId);
+    await runService.updateRun(
+      lead,
+      venomousUpdateInput(comboRunId, run!, {
+        venomousPlannedBossCount: 8,
+        scheduledStartAt: run!.scheduledStartAt,
+        notes: null,
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      }),
+    );
+    await runRepository.updateFields(comboRunId, { status: "CANCELLED" });
+    await runService.archiveRun(lead, comboRunId);
+
+    const work = await discordSyncService.listSyncWork();
+    const item = work.signups.find((entry) => entry.runId === comboRunId);
+    expect(item).toBeTruthy();
+    expect(item?.targetBucket).toBe("ARCHIVE");
+
+    await discordSyncService.recordSignupPost({ runId: comboRunId, channelId: "combo-chan-1", messageId: "combo-msg-1" });
+    const settled = await discordSyncService.listSyncWork();
+    expect(settled.signups.some((entry) => entry.runId === comboRunId)).toBe(false);
+  });
+
+  it("a PUBLISHED Run stays editable; roster-relevant edits mark the roster changed and reach the roster post only via Update (version bump)", async () => {
+    // Historical-raid fixture, same reasoning as raidEditRunId above.
+    const publishedRunId = await runRepository.create({
+title: "Historical roster-invariant fixture",
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      scheduledStartAt: futureIso(),
+      raidLeadId: ids.lead,
+      notes: null,
+      desiredTankCount: 1,
+      desiredHealerCount: 0,
+      desiredDpsCount: 0,
+      contents: [
+        {
+          raidId: MANAFORGE_OMEGA_RAID_ID,
+          sortOrder: 1,
+          plannedBossCount: 8,
+        },
+      ],
+    });
+    createdRunIds.push(publishedRunId);
+    await runService.openRun(lead, publishedRunId);
+
+    const soloCharId = crypto.randomUUID();
+    createdCharacterIds.push(soloCharId);
+    await orm.Character.create({
+      id: soloCharId,
+      userId: ids.tank,
+      name: "Dsinvariant",
+      realm: "Discord Lab",
+      normalizedName: normalizeCharacterIdentity("Dsinvariant"),
+      normalizedRealm: normalizeCharacterIdentity("Discord Lab"),
+      region: "EU",
+      wowClass: "PALADIN",
+      specialization: "Protection",
+      primaryRole: "TANK",
+      itemLevel: 700,
+      isActive: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    await createSignup({ runId: publishedRunId, userId: ids.tank, characterId: soloCharId, participationType: "BOOSTER", role: "TANK" });
+
+    const view = await rosterService.getRosterManagementView(lead, publishedRunId);
+    const tankSignup = rosterBoosters(view)[0];
+    await rosterService.setDraftSelection(lead, { runId: publishedRunId, signupId: tankSignup.id, selected: true, version: view.roster.version });
+    const afterSelect = await rosterService.getRosterManagementView(lead, publishedRunId);
+    await rosterService.publishRoster(lead, { runId: publishedRunId, version: afterSelect.roster.version, acknowledgeWarnings: true });
+
+    const published = await runRepository.findById(publishedRunId);
+    expect(published?.status).toBe("PUBLISHED");
+    const versionBefore = (await rosterService.getRosterManagementView(lead, publishedRunId)).roster.version;
+
+    await runService.updateRun(
+      lead,
+      contentLegacyUpdateInput(publishedRunId, published!, {
+        lootType: "VIP",
+        scheduledStartAt: published!.scheduledStartAt,
+        notes: null,
+        desiredTankCount: 1,
+        desiredHealerCount: 0,
+        desiredDpsCount: 0,
+      }),
+    );
+
+    const after = await rosterService.getRosterManagementView(lead, publishedRunId);
+    expect((await runRepository.findById(publishedRunId))?.status).toBe("PUBLISHED");
+    expect(after.roster.runChangedSinceAck).toBe(true);
+    expect(after.roster.hasUnpublishedChanges).toBe(true);
+    // No version bump from the edit itself → the roster post is not refreshed until Update Roster.
+    expect(after.roster.version).toBe(versionBefore);
+  });
+});
+
+describe("discordSyncService — weekly raid-ID target resolution", () => {
+  // A classification "now" far enough in the real future that every test
+  // schedule below (CURRENT/NEXT/PAST/FUTURE relative to THIS now) is still
+  // comfortably in the real future too, so runService.createRun's own
+  // past-schedule guard never rejects them — only the explicit `now` passed
+  // to listSyncWork decides week classification here, never the real clock.
+  const classificationNow = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+  const { currentStart, nextStart, followingStart } = classifyRunWeek({
+    scheduledStartAt: classificationNow.toISOString(),
+    now: classificationNow,
+  });
+
+  async function createRunAt(scheduledStartAt: string) {
+    const id = await runService
+      .createRun(lead, {
+        raidId,
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
+        scheduledStartAt,
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      })
+      .then((run) => run.id);
+    createdRunIds.push(id);
+    return id;
+  }
+
+  it("CURRENT + signup-open + no channel: eligible for first provisioning, targetBucket CURRENT", async () => {
+    const id = await createRunAt(currentStart);
+    await runService.openRun(lead, id);
+
+    const work = await discordSyncService.listSyncWork(classificationNow);
+    const item = work.signups.find((entry) => entry.runId === id);
+    expect(item).toBeTruthy();
+    expect(item?.targetBucket).toBe("CURRENT");
+    // Eligibility is not provisioning itself — no channel exists until the bot creates one.
+    expect(await runDiscordPostRepository.findByRunId(id)).toBeNull();
+  });
+
+  it("NEXT + signup-open + no channel: eligible for first provisioning, targetBucket NEXT", async () => {
+    const id = await createRunAt(nextStart);
+    await runService.openRun(lead, id);
+
+    const work = await discordSyncService.listSyncWork(classificationNow);
+    const item = work.signups.find((entry) => entry.runId === id);
+    expect(item).toBeTruthy();
+    expect(item?.targetBucket).toBe("NEXT");
+  });
+
+  it("FUTURE + signup-open + no channel: NOT eligible — no signups[] item, no RunDiscordPost created", async () => {
+    const id = await createRunAt(followingStart);
+    await runService.openRun(lead, id);
+
+    const work = await discordSyncService.listSyncWork(classificationNow);
+    expect(work.signups.some((entry) => entry.runId === id)).toBe(false);
+    expect(await runDiscordPostRepository.findByRunId(id)).toBeNull();
+  });
+
+  it("PAST + no channel: NOT eligible for first provisioning even though status/signups otherwise look open", async () => {
+    // Before currentStart relative to classificationNow, but still safely in
+    // the real future relative to actual now — see classificationNow above.
+    const pastRelativeToClassification = new Date(new Date(currentStart).getTime() - 24 * 60 * 60 * 1000).toISOString();
+    const id = await createRunAt(pastRelativeToClassification);
+    await runService.openRun(lead, id); // status OPEN, signupsOpen true — otherwise looks eligible
+
+    const work = await discordSyncService.listSyncWork(classificationNow);
+    expect(work.signups.some((entry) => entry.runId === id)).toBe(false);
+    expect(await runDiscordPostRepository.findByRunId(id)).toBeNull();
+  });
+
+  it("rollover: the SAME scheduled Run flips NEXT -> CURRENT across two listSyncWork calls with different `now`, with no Run mutation in between", async () => {
+    const id = await createRunAt(nextStart);
+    await runService.openRun(lead, id);
+
+    const before = await discordSyncService.listSyncWork(classificationNow);
+    expect(before.signups.find((entry) => entry.runId === id)?.targetBucket).toBe("NEXT");
+
+    // Advance only the classification `now` to the NEXT boundary itself — no
+    // write to the Run row happens between these two calls.
+    const after = await discordSyncService.listSyncWork(new Date(nextStart));
+    expect(after.signups.find((entry) => entry.runId === id)?.targetBucket).toBe("CURRENT");
+  });
+
+  it("app archive overrides week classification: an archived Run scheduled NEXT still targets ARCHIVE", async () => {
+    const id = await createRunAt(nextStart);
+    await runService.openRun(lead, id);
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "override-chan-1" });
+    await runRepository.updateFields(id, { status: "CANCELLED" });
+    await runService.archiveRun(lead, id);
+
+    const work = await discordSyncService.listSyncWork(classificationNow);
+    const channelItem = work.channels.find((entry) => entry.runId === id);
+    expect(channelItem?.targetBucket).toBe("ARCHIVE");
+    expect(channelItem?.retireChannel).toBe(true);
+    expect(channelItem?.archiveArtifactsNeeded).toBe(true);
+    expect(channelItem?.desiredChannelName.startsWith("closed-")).toBe(true);
+  });
+
+  it("schedule PAST holding uses ARCHIVE without closed- name or archive artifacts", async () => {
+    const id = await createRunAt(followingStart);
+    await runService.openRun(lead, id);
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "past-hold-1" });
+
+    // Classify against a `now` after this Run's raid-ID week → PAST → ARCHIVE holding.
+    const work = await discordSyncService.listSyncWork(new Date(Date.parse(followingStart) + 21 * 24 * 60 * 60 * 1000));
+    const channelItem = work.channels.find((entry) => entry.runId === id);
+    expect(channelItem?.targetBucket).toBe("ARCHIVE");
+    expect(channelItem?.retireChannel).toBe(false);
+    expect(channelItem?.archiveArtifactsNeeded).toBe(false);
+    expect(channelItem?.desiredChannelName.startsWith("closed-")).toBe(false);
+  });
+
+  it("COMPLETED / CANCELLED keep the Discord channel until app archive (closed naming only)", async () => {
+    const id = await createRunAt(nextStart);
+    await runService.openRun(lead, id);
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "completed-chan-1" });
+    await runRepository.updateFields(id, { status: "COMPLETED" });
+
+    let work = await discordSyncService.listSyncWork(classificationNow);
+    let channelItem = work.channels.find((entry) => entry.runId === id);
+    expect(channelItem?.retireChannel).toBe(false);
+    expect(channelItem?.archiveArtifactsNeeded).toBe(false);
+    expect(channelItem?.desiredChannelName.startsWith("closed-")).toBe(true);
+    expect(await discordSyncService.shouldRetireRunChannel(id)).toBe(false);
+
+    await runRepository.updateFields(id, { status: "CANCELLED" });
+    work = await discordSyncService.listSyncWork(classificationNow);
+    channelItem = work.channels.find((entry) => entry.runId === id);
+    expect(channelItem?.retireChannel).toBe(false);
+    expect(channelItem?.desiredChannelName.startsWith("closed-")).toBe(true);
+    expect(await discordSyncService.shouldRetireRunChannel(id)).toBe(false);
+
+    await runService.archiveRun(lead, id);
+    work = await discordSyncService.listSyncWork(classificationNow);
+    channelItem = work.channels.find((entry) => entry.runId === id);
+    expect(channelItem?.retireChannel).toBe(true);
+    expect(channelItem?.archiveArtifactsNeeded).toBe(true);
+    expect(await discordSyncService.shouldRetireRunChannel(id)).toBe(true);
+  });
+
+  it("archive artifacts alone never authorize TEXT-channel retirement without archivedAt", async () => {
+    const id = await createRunAt(nextStart);
+    await runService.openRun(lead, id);
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "art-only-chan" });
+    await runRepository.updateFields(id, { status: "COMPLETED" });
+    await orm.RunDiscordPost.where({ runId: id }).update({
+      archiveCloseMessageId: "close-orphan",
+      archiveTranscriptMessageId: "transcript-orphan",
+      archiveTranscriptHtml: "<html>orphan</html>",
+      archiveTranscriptFilename: "orphan.html",
+      updatedAt: new Date().toISOString(),
+    });
+
+    const work = await discordSyncService.listSyncWork(classificationNow);
+    const channelItem = work.channels.find((entry) => entry.runId === id);
+    expect(channelItem?.retireChannel).toBe(false);
+    expect(channelItem?.archiveArtifactsNeeded).toBe(false);
+    expect(await discordSyncService.shouldRetireRunChannel(id)).toBe(false);
+  });
+
+  it("Restore Archive immediately revokes deletion authority (fresh check)", async () => {
+    const id = await createRunAt(nextStart);
+    await runService.openRun(lead, id);
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "restore-race-chan" });
+    await runRepository.updateFields(id, { status: "COMPLETED" });
+    await runService.archiveRun(lead, id);
+    expect(await discordSyncService.shouldRetireRunChannel(id)).toBe(true);
+
+    await runService.restoreRun(lead, id);
+    expect(await discordSyncService.shouldRetireRunChannel(id)).toBe(false);
+    const work = await discordSyncService.listSyncWork(classificationNow);
+    const channelItem = work.channels.find((entry) => entry.runId === id);
+    expect(channelItem?.retireChannel).toBe(false);
+    expect(channelItem?.archiveArtifactsNeeded).toBe(false);
+  });
+
+  it("Cancel → Reactivate keeps the same Run TEXT channel identity", async () => {
+    const id = await createRunAt(nextStart);
+    await runService.openRun(lead, id);
+    await runRepository.updateFields(id, { status: "PUBLISHED", signupsOpen: true });
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "cancel-reactivate-chan" });
+    await discordSyncService.recordSignupPost({
+      runId: id,
+      channelId: "cancel-reactivate-chan",
+      messageId: "cancel-reactivate-signup",
+    });
+
+    await runService.cancelRun(lead, id);
+    let post = await runDiscordPostRepository.findByRunId(id);
+    expect(post?.runChannelId).toBe("cancel-reactivate-chan");
+    expect(post?.signupMessageId).toBe("cancel-reactivate-signup");
+    let work = await discordSyncService.listSyncWork(classificationNow);
+    expect(work.channels.find((entry) => entry.runId === id)?.retireChannel).toBe(false);
+
+    // Drain PENDING cancel announcement so it does not block later archive tests.
+    for (const announcement of work.runAnnouncements.filter((row) => row.runId === id)) {
+      await discordSyncService.recordRunAnnouncementDelivery({
+        announcementId: announcement.announcementId,
+        result: "SENT",
+      });
+    }
+
+    await runService.reactivateRun(lead, id);
+    post = await runDiscordPostRepository.findByRunId(id);
+    expect(post?.runChannelId).toBe("cancel-reactivate-chan");
+    expect(post?.signupChannelId).toBe("cancel-reactivate-chan");
+    expect(post?.signupMessageId).toBe("cancel-reactivate-signup");
+    work = await discordSyncService.listSyncWork(classificationNow);
+    const channelItem = work.channels.find((entry) => entry.runId === id);
+    expect(channelItem?.existingRunChannelId).toBe("cancel-reactivate-chan");
+    expect(channelItem?.retireChannel).toBe(false);
+    expect(await discordSyncService.shouldRetireRunChannel(id)).toBe(false);
+  });
+
+  it("clears archive artifact need after recordArchiveArtifacts and again after restore", async () => {
+    const id = await createRunAt(nextStart);
+    await runService.openRun(lead, id);
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "art-chan-1" });
+    await runRepository.updateFields(id, { status: "CANCELLED" });
+    await runService.archiveRun(lead, id);
+
+    let work = await discordSyncService.listSyncWork(classificationNow);
+    expect(work.channels.find((entry) => entry.runId === id)?.archiveArtifactsNeeded).toBe(true);
+
+    await discordSyncService.recordArchiveArtifacts({
+      runId: id,
+      closeMessageId: "close-1",
+      transcriptMessageId: "close-1",
+      transcriptHtml: "<html>transcript</html>",
+      transcriptFilename: "transcript-test.html",
+    });
+    work = await discordSyncService.listSyncWork(classificationNow);
+    expect(work.channels.find((entry) => entry.runId === id)?.archiveArtifactsNeeded).toBe(false);
+
+    await runService.restoreRun(lead, id);
+    await runRepository.updateFields(id, { status: "CANCELLED" });
+    await runService.archiveRun(lead, id);
+    work = await discordSyncService.listSyncWork(classificationNow);
+    expect(work.channels.find((entry) => entry.runId === id)?.archiveArtifactsNeeded).toBe(true);
+  });
+
+  it("keeps archiveArtifactsNeeded when Discord ids exist but website HTML is missing", async () => {
+    const id = await createRunAt(nextStart);
+    await runService.openRun(lead, id);
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "html-miss-1" });
+    await runRepository.updateFields(id, { status: "CANCELLED" });
+    await runService.archiveRun(lead, id);
+
+    await orm.RunDiscordPost.where({ runId: id }).update({
+      archiveCloseMessageId: "close-only",
+      archiveTranscriptMessageId: "transcript-only",
+      archiveTranscriptHtml: null,
+      archiveTranscriptFilename: null,
+      updatedAt: new Date().toISOString(),
+    });
+
+    const work = await discordSyncService.listSyncWork(classificationNow);
+    const channelItem = work.channels.find((entry) => entry.runId === id);
+    expect(channelItem?.archiveArtifactsNeeded).toBe(true);
+    expect(channelItem?.archiveCloseMessageId).toBe("close-only");
+    expect(channelItem?.archiveTranscriptMessageId).toBe("transcript-only");
+  });
+
+  describe("confirmed-deleted Discord channel (Unknown Channel) quiescence", () => {
+    const RAID_INVITE_SIGNUP_ID = "aaaaaaaa-aaaa-4aaa-8aaa-ds00000000ff";
+
+    /**
+     * Exact production pattern (35 Runs, 2026-09-20 → 2026-09-23): a terminal,
+     * app-archived Run whose channel was retired (transcript + delete +
+     * clear-channel) — runChannelId null, but signupChannelId/signupMessageId
+     * still point at the deleted channel with a pre-archive signature.
+     */
+    async function retiredRunWithDanglingSignupIdentity(channelId: string) {
+      const id = await createRunAt(nextStart);
+      await runService.openRun(lead, id);
+      await discordSyncService.recordRunChannel({ runId: id, channelId });
+      await discordSyncService.recordSignupPost({ runId: id, channelId, messageId: `${channelId}-signup-msg` });
+      await discordSyncService.recordRaidInviteSent({ runId: id, signupId: RAID_INVITE_SIGNUP_ID });
+      await runRepository.updateFields(id, { status: "CANCELLED" });
+      await runService.archiveRun(lead, id);
+      await discordSyncService.recordArchiveArtifacts({
+        runId: id,
+        closeMessageId: "close-dead",
+        transcriptMessageId: "transcript-dead",
+        transcriptHtml: "<html>kept</html>",
+        transcriptFilename: "transcript-kept.html",
+      });
+      await discordSyncService.clearRunChannel(id);
+      return id;
+    }
+
+    it("PRODUCTION FIXTURE: the dangling signup identity yields create-forbidden signup work targeting the deleted channel every poll", async () => {
+      const id = await retiredRunWithDanglingSignupIdentity("dead-signup-chan-1");
+
+      for (let poll = 0; poll < 2; poll++) {
+        const work = await discordSyncService.listSyncWork(classificationNow);
+        expect(work.channels.some((entry) => entry.runId === id)).toBe(false);
+        const signup = work.signups.find((entry) => entry.runId === id);
+        expect(signup?.existingRunChannelId).toBe("dead-signup-chan-1");
+        expect(signup?.allowChannelCreate).toBe(false);
+      }
+    });
+
+    it("converges after channel-gone: no further signup/roster/start/channel work, stable across polls", async () => {
+      const id = await retiredRunWithDanglingSignupIdentity("dead-signup-chan-2");
+
+      await discordSyncService.recordRunChannelGone({ runId: id, channelId: "dead-signup-chan-2" });
+
+      for (let poll = 0; poll < 2; poll++) {
+        const work = await discordSyncService.listSyncWork(classificationNow);
+        expect(work.channels.some((entry) => entry.runId === id)).toBe(false);
+        expect(work.signups.some((entry) => entry.runId === id)).toBe(false);
+        expect(work.roster.some((entry) => entry.runId === id)).toBe(false);
+        expect(work.start.some((entry) => entry.runId === id)).toBe(false);
+      }
+    });
+
+    it("keeps archive transcript metadata, Raid Invite history and signup timestamp while dropping only dead-channel identity", async () => {
+      const id = await retiredRunWithDanglingSignupIdentity("dead-signup-chan-3");
+      const before = await runDiscordPostRepository.findByRunId(id);
+
+      await discordSyncService.recordRunChannelGone({ runId: id, channelId: "dead-signup-chan-3" });
+
+      const after = await runDiscordPostRepository.findByRunId(id);
+      expect(after?.runChannelId).toBeNull();
+      expect(after?.signupChannelId).toBeNull();
+      expect(after?.signupMessageId).toBeNull();
+      expect(after?.lastSignupSignature).toBeNull();
+      expect(after?.signupPostedAt).toBe(before?.signupPostedAt);
+      expect(after?.archiveCloseMessageId).toBe("close-dead");
+      expect(after?.archiveTranscriptMessageId).toBe("transcript-dead");
+      expect(after?.archiveTranscriptHtml).toBe("<html>kept</html>");
+      expect(after?.archiveTranscriptFilename).toBe("transcript-kept.html");
+      expect(after?.raidInviteSentSignupIds).toBe(before?.raidInviteSentSignupIds);
+    });
+
+    it("roster/start lanes target the same fallback channel, and clearing drops roster identity only when it lived in the dead channel", async () => {
+      const id = await retiredRunWithDanglingSignupIdentity("dead-signup-chan-4");
+      await orm.RunDiscordPost.where({ runId: id }).update({
+        rosterChannelId: "dead-signup-chan-4",
+        rosterMessageId: "roster-msg-dead",
+        lastRosterVersion: 3,
+        startChannelId: "legacy-start-chan",
+        startMessageId: "start-msg-legacy",
+        updatedAt: new Date().toISOString(),
+      });
+
+      await discordSyncService.recordRunChannelGone({ runId: id, channelId: "dead-signup-chan-4" });
+
+      const after = await runDiscordPostRepository.findByRunId(id);
+      expect(after?.rosterChannelId).toBeNull();
+      expect(after?.rosterMessageId).toBeNull();
+      expect(after?.lastRosterVersion).toBeNull();
+      // Start post marker in another channel is history — never cleared here.
+      expect(after?.startChannelId).toBe("legacy-start-chan");
+      expect(after?.startMessageId).toBe("start-msg-legacy");
+    });
+
+    it("is a no-op for a channel id that no longer matches (e.g. a replacement recorded meanwhile)", async () => {
+      const id = await createRunAt(nextStart);
+      await runService.openRun(lead, id);
+      await discordSyncService.recordRunChannel({ runId: id, channelId: "replacement-chan" });
+      await discordSyncService.recordSignupPost({ runId: id, channelId: "replacement-chan", messageId: "replacement-msg" });
+
+      await discordSyncService.recordRunChannelGone({ runId: id, channelId: "old-dead-chan" });
+
+      const after = await runDiscordPostRepository.findByRunId(id);
+      expect(after?.runChannelId).toBe("replacement-chan");
+      expect(after?.signupChannelId).toBe("replacement-chan");
+      expect(after?.signupMessageId).toBe("replacement-msg");
+    });
+
+    describe("runDiscordPostRepository.clearDeletedChannelIdentity — exact-match writes", () => {
+      async function runWithIdentity(identity: {
+        runChannelId: string | null;
+        signupChannelId: string | null;
+        rosterChannelId: string | null;
+      }) {
+        const id = await createRunAt(nextStart);
+        await discordSyncService.recordRunChannel({ runId: id, channelId: "seed" });
+        await orm.RunDiscordPost.where({ runId: id }).update({
+          runChannelId: identity.runChannelId,
+          signupChannelId: identity.signupChannelId,
+          signupMessageId: identity.signupChannelId ? `${identity.signupChannelId}-signup-msg` : null,
+          lastSignupSignature: identity.signupChannelId ? `${identity.signupChannelId}-sig` : null,
+          rosterChannelId: identity.rosterChannelId,
+          rosterMessageId: identity.rosterChannelId ? `${identity.rosterChannelId}-roster-msg` : null,
+          lastRosterVersion: identity.rosterChannelId ? 7 : null,
+          startChannelId: "start-chan",
+          startMessageId: "start-msg",
+          updatedAt: new Date().toISOString(),
+        });
+        return id;
+      }
+
+      async function identityOf(id: string) {
+        const post = await runDiscordPostRepository.findByRunId(id);
+        return {
+          run: post?.runChannelId ?? null,
+          signup: [post?.signupChannelId ?? null, post?.signupMessageId ?? null, post?.lastSignupSignature ?? null],
+          roster: [post?.rosterChannelId ?? null, post?.rosterMessageId ?? null, post?.lastRosterVersion ?? null],
+          start: [post?.startChannelId ?? null, post?.startMessageId ?? null],
+        };
+      }
+
+      const NEW_SIGNUP = ["new-chan", "new-chan-signup-msg", "new-chan-sig"];
+      const NEW_ROSTER = ["new-chan", "new-chan-roster-msg", 7];
+      const CLEARED = [null, null, null];
+      const START = ["start-chan", "start-msg"];
+
+      it("a stale OLD report never clears NEW run, signup or roster identity", async () => {
+        const id = await runWithIdentity({ runChannelId: "new-chan", signupChannelId: "new-chan", rosterChannelId: "new-chan" });
+
+        await runDiscordPostRepository.clearDeletedChannelIdentity(id, "old-chan");
+
+        expect(await identityOf(id)).toEqual({ run: "new-chan", signup: NEW_SIGNUP, roster: NEW_ROSTER, start: START });
+      });
+
+      it("clears each matching group independently and leaves non-matching groups intact", async () => {
+        const signupOnly = await runWithIdentity({ runChannelId: "new-chan", signupChannelId: "old-chan", rosterChannelId: "new-chan" });
+        const runAndRoster = await runWithIdentity({ runChannelId: "old-chan", signupChannelId: "new-chan", rosterChannelId: "old-chan" });
+
+        await runDiscordPostRepository.clearDeletedChannelIdentity(signupOnly, "old-chan");
+        await runDiscordPostRepository.clearDeletedChannelIdentity(runAndRoster, "old-chan");
+
+        expect(await identityOf(signupOnly)).toEqual({ run: "new-chan", signup: CLEARED, roster: NEW_ROSTER, start: START });
+        expect(await identityOf(runAndRoster)).toEqual({ run: null, signup: NEW_SIGNUP, roster: CLEARED, start: START });
+      });
+
+      it("is idempotent, and a repeat after a replacement was recorded leaves the replacement intact", async () => {
+        const id = await runWithIdentity({ runChannelId: "old-chan", signupChannelId: "old-chan", rosterChannelId: "old-chan" });
+
+        await runDiscordPostRepository.clearDeletedChannelIdentity(id, "old-chan");
+        await runDiscordPostRepository.clearDeletedChannelIdentity(id, "old-chan");
+        expect(await identityOf(id)).toEqual({ run: null, signup: CLEARED, roster: CLEARED, start: START });
+
+        await discordSyncService.recordRunChannel({ runId: id, channelId: "replacement-chan" });
+        await runDiscordPostRepository.clearDeletedChannelIdentity(id, "old-chan");
+        expect((await identityOf(id)).run).toBe("replacement-chan");
+      });
+
+      it("RACE: a replacement recorded between the cleanup's database calls survives the stale report", async () => {
+        const id = await runWithIdentity({ runChannelId: "old-chan", signupChannelId: "old-chan", rosterChannelId: "old-chan" });
+
+        // Interleave a concurrent replacement write right after the cleanup's
+        // first statement. A read-then-write implementation would then erase
+        // it with a runId-only UPDATE; exact-match writes must not.
+        const originalWhere = orm.RunDiscordPost.where.bind(orm.RunDiscordPost);
+        let calls = 0;
+        const whereSpy = vi.spyOn(orm.RunDiscordPost, "where").mockImplementation(((criteria: Parameters<typeof originalWhere>[0]) => {
+          calls += 1;
+          if (calls === 2) {
+            // Runs before the second statement is built/executed.
+            return {
+              ...originalWhere(criteria),
+              update: async (patch: Record<string, unknown>) => {
+                await originalWhere({ runId: id }).update({
+                  signupChannelId: "new-chan",
+                  signupMessageId: "new-chan-signup-msg",
+                  lastSignupSignature: "new-chan-sig",
+                  rosterChannelId: "new-chan",
+                  rosterMessageId: "new-chan-roster-msg",
+                  lastRosterVersion: 7,
+                  updatedAt: new Date().toISOString(),
+                });
+                return originalWhere(criteria).update(patch as never);
+              },
+              first: async () => originalWhere(criteria).first(),
+            };
+          }
+          return originalWhere(criteria);
+        }) as never);
+
+        try {
+          await runDiscordPostRepository.clearDeletedChannelIdentity(id, "old-chan");
+        } finally {
+          whereSpy.mockRestore();
+        }
+
+        const after = await identityOf(id);
+        expect(after.signup).toEqual(NEW_SIGNUP);
+        expect(after.roster).toEqual(NEW_ROSTER);
+        expect(after.start).toEqual(START);
+      });
+    });
+
+    it("does not disable legitimate provisioning: a restored, re-opened CURRENT/NEXT Run is eligible for a first channel again", async () => {
+      const id = await retiredRunWithDanglingSignupIdentity("dead-signup-chan-5");
+      await discordSyncService.recordRunChannelGone({ runId: id, channelId: "dead-signup-chan-5" });
+
+      await runService.restoreRun(lead, id);
+      await runRepository.updateFields(id, { status: "OPEN", signupsOpen: true });
+
+      const work = await discordSyncService.listSyncWork(classificationNow);
+      const signup = work.signups.find((entry) => entry.runId === id);
+      expect(signup?.allowChannelCreate).toBe(true);
+      expect(signup?.existingRunChannelId).toBeNull();
+      expect(signup?.existingMessageId).toBeNull();
+      // Its signup went out once before, so the replacement must not ping roles again.
+      expect(signup?.announceOnCreate).toBe(false);
+    });
+
+    it("a fresh open Run announces on create; after its channel is deleted, the recreate does not (2026-09-24)", async () => {
+      const id = await createRunAt(nextStart);
+      await runService.openRun(lead, id);
+
+      let signup = (await discordSyncService.listSyncWork(classificationNow)).signups.find((entry) => entry.runId === id);
+      expect(signup?.allowChannelCreate).toBe(true);
+      expect(signup?.announceOnCreate).toBe(true);
+
+      await discordSyncService.recordRunChannel({ runId: id, channelId: "deleted-live-chan" });
+      await discordSyncService.recordSignupPost({ runId: id, channelId: "deleted-live-chan", messageId: "deleted-live-msg" });
+      await discordSyncService.recordRunChannelGone({ runId: id, channelId: "deleted-live-chan" });
+
+      signup = (await discordSyncService.listSyncWork(classificationNow)).signups.find((entry) => entry.runId === id);
+      expect(signup?.allowChannelCreate).toBe(true);
+      expect(signup?.existingRunChannelId).toBeNull();
+      expect(signup?.announceOnCreate).toBe(false);
+    });
+  });
+});
+
+describe("discordSyncService — run start operational post", () => {
+  it("exposes start work once, builds grouped DTO from attendance, and disappears after recordStartPost", async () => {
+    const id = await runService
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(3), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1 }))
+      .then((run) => run.id);
+    createdRunIds.push(id);
+    await runService.openRun(lead, id);
+
+    const tank = await createCharacter(ids.tank, "StartTank", "PALADIN", "Protection", "TANK");
+    const healer = await createCharacter(ids.healer, "StartHeal", "PRIEST", "Holy", "HEALER");
+    const dps = await createCharacter(ids.melee, "StartDps", "WARRIOR", "Arms", "MELEE_DPS");
+    await createSignup({ runId: id, userId: ids.tank, characterId: tank, participationType: "BOOSTER", role: "TANK" });
+    await createSignup({ runId: id, userId: ids.healer, characterId: healer, participationType: "BOOSTER", role: "HEALER" });
+    await createSignup({ runId: id, userId: ids.melee, characterId: dps, participationType: "BOOSTER", role: "MELEE_DPS" });
+    await createSignup({
+      runId: id,
+      userId: ids.loot,
+      characterId: null,
+      participationType: "LOOTBUDDY",
+      role: null,
+      lootbuddyClass: "MAGE",
+      lootbuddyMode: "LOOT_ONLY",
+    });
+
+    let view = await rosterService.getRosterManagementView(lead, id);
+    for (const group of [rosterBoosters(view), view.groups.lootbuddies]) {
+      for (const signup of group) {
+        view = await rosterService.getRosterManagementView(lead, id);
+        if (!signup.draftSelected) {
+          await rosterService.setDraftSelection(lead, {
+            runId: id,
+            signupId: signup.id,
+            selected: true,
+            version: view.roster.version,
+          });
+        }
+      }
+    }
+    view = await rosterService.getRosterManagementView(lead, id);
+    await rosterService.publishRoster(lead, { runId: id, version: view.roster.version, acknowledgeWarnings: true });
+
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "start-chan-1" });
+
+    let work = await discordSyncService.listSyncWork();
+    expect(work.start.some((entry) => entry.runId === id)).toBe(false);
+    expect(work.raidInvites.some((entry) => entry.runId === id)).toBe(false);
+
+    await runService.startRun(lead, {
+      runId: id,
+    });
+
+    work = await discordSyncService.listSyncWork();
+    expect(work.start.some((entry) => entry.runId === id && entry.existingMessageId === null)).toBe(true);
+
+    const dto = await discordSyncService.getRunStartEmbedData(id);
+    expect(dto).toBeTruthy();
+    expect(dto!.targets).toEqual({ tanks: 1, healers: 1, dps: 1, lootbuddies: 0 });
+    expect(dto!.groups.tanks).toHaveLength(1);
+    expect(dto!.groups.healers).toHaveLength(1);
+    expect(dto!.groups.dps).toHaveLength(1);
+    expect(dto!.groups.lootbuddies).toHaveLength(1);
+    expect(dto).not.toHaveProperty("goldCollectors");
+    expect(dto!.groups.lootbuddies[0].characterName).toBe("Mage");
+    expect(dto!.groups.tanks[0].wowClass).toBe("PALADIN");
+
+    await discordSyncService.recordStartPost({ runId: id, channelId: "start-chan-1", messageId: "start-msg-1" });
+    work = await discordSyncService.listSyncWork();
+    expect(work.start.some((entry) => entry.runId === id)).toBe(false);
+  });
+});
+
+describe("Final Setup LFG footer uses Manawyrm branding", () => {
+  async function publishedRunWithLootbuddy(): Promise<string> {
+    const id = await runService
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(9), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1 }))
+      .then((run) => run.id);
+    createdRunIds.push(id);
+    await runService.openRun(lead, id);
+    await createSignup({
+      runId: id,
+      userId: ids.extra,
+      characterId: null,
+      participationType: "LOOTBUDDY",
+      role: null,
+      lootbuddyClass: "MAGE",
+      lootbuddyMode: "LOOT_ONLY",
+    });
+    let view = await rosterService.getRosterManagementView(lead, id);
+    for (const signup of view.groups.lootbuddies) {
+      view = await rosterService.getRosterManagementView(lead, id);
+      await rosterService.setDraftSelection(lead, { runId: id, signupId: signup.id, selected: true, version: view.roster.version });
+    }
+    view = await rosterService.getRosterManagementView(lead, id);
+    await rosterService.publishRoster(lead, { runId: id, version: view.roster.version, acknowledgeWarnings: true });
+    return id;
+  }
+
+  it("web preview and Discord Final Setup share the Manawyrm LFG footer after Start", async () => {
+    const id = await publishedRunWithLootbuddy();
+
+    // Web Start Run preview / Copy message (PUBLISHED).
+    const detail = await runDetailService.getRunDetail(lead, id);
+    expect(detail.finalSetupPreview).not.toBeNull();
+    expect(detail.finalSetupPreview).not.toHaveProperty("raidLeadDisplayName");
+    const previewText = renderFinalSetupText(detail.finalSetupPreview!);
+    expect(previewText.endsWith(formatFinalSetupLfgLine())).toBe(true);
+    expect(previewText).not.toContain("LFG HM");
+
+    // An ADMIN — not the assigned Raid Lead — clicks Start Run.
+    await runService.startRun(admin, { runId: id });
+    const snapshot = await runStartSnapshotRepository.findByRunId(id);
+    expect(snapshot?.startedById).toBe(ids.admin);
+
+    // Discord projection uses the same fixed Manawyrm footer.
+    const embed = await discordSyncService.getRunStartEmbedData(id);
+    expect(embed).not.toBeNull();
+    expect(embed).not.toHaveProperty("raidLeadDisplayName");
+    const discordText = renderRunStartMessageText(embed!);
+    expect(discordText.endsWith(formatFinalSetupLfgLine())).toBe(true);
+    expect(discordText.match(/LFG Manawyrm/g)).toHaveLength(1);
+    expect(discordText).not.toContain("LFG HM");
+    expect(discordText).not.toContain("Discord Admin");
+
+    // Same footer on both paths.
+    expect(discordText.slice(discordText.lastIndexOf("\n") + 1)).toBe(previewText.slice(previewText.lastIndexOf("\n") + 1));
+  });
+});
+
+describe("planRunVoiceChannel — temporary Run voice lifecycle decision", () => {
+  const plan = (status: Parameters<typeof planRunVoiceChannel>[0]["status"], voiceChannelId: string | null, extra: { archivedAt?: string | null; hasStartSnapshot?: boolean } = {}) =>
+    planRunVoiceChannel({ status, voiceChannelId, archivedAt: extra.archivedAt ?? null, hasStartSnapshot: extra.hasStartSnapshot ?? true });
+
+  it("provisions only for IN_PROGRESS with a start snapshot and no voice channel yet", () => {
+    expect(plan("IN_PROGRESS", null)).toBe("PROVISION");
+    expect(plan("IN_PROGRESS", null, { hasStartSnapshot: false })).toBeNull();
+    for (const status of ["DRAFT", "OPEN", "ROSTERING", "PUBLISHED", "COMPLETED", "CANCELLED"] as const) {
+      expect(plan(status, null)).toBeNull();
+    }
+    expect(plan("IN_PROGRESS", null, { archivedAt: "2026-09-24T00:00:00.000Z" })).toBeNull();
+  });
+
+  it("keeps (RECONCILE) while IN_PROGRESS, RETIRE_IF_EMPTY once terminal or app-archived", () => {
+    expect(plan("IN_PROGRESS", "voice-1")).toBe("RECONCILE");
+    expect(plan("COMPLETED", "voice-1")).toBe("RETIRE_IF_EMPTY");
+    expect(plan("CANCELLED", "voice-1")).toBe("RETIRE_IF_EMPTY");
+    expect(plan("IN_PROGRESS", "voice-1", { archivedAt: "2026-09-24T00:00:00.000Z" })).toBe("RETIRE_IF_EMPTY");
+  });
+});
+
+describe("listSyncWork — voiceChannels lane", () => {
+  /** The Raid Lead's displayed name (User.name, resolved from Discord) — what the voice channel shows. */
+  async function setLeadName(name: string) {
+    await orm.User.where({ id: ids.lead }).update({ name, updatedAt: new Date().toISOString() });
+  }
+
+  async function publishedRun(): Promise<string> {
+    const id = await runService
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(13), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1 }))
+      .then((run) => run.id);
+    createdRunIds.push(id);
+    await runService.openRun(lead, id);
+    await createSignup({ runId: id, userId: ids.extra, characterId: null, participationType: "LOOTBUDDY", role: null, lootbuddyClass: "MAGE", lootbuddyMode: "LOOT_ONLY" });
+    let view = await rosterService.getRosterManagementView(lead, id);
+    for (const signup of view.groups.lootbuddies) {
+      view = await rosterService.getRosterManagementView(lead, id);
+      await rosterService.setDraftSelection(lead, { runId: id, signupId: signup.id, selected: true, version: view.roster.version });
+    }
+    view = await rosterService.getRosterManagementView(lead, id);
+    await rosterService.publishRoster(lead, { runId: id, version: view.roster.version, acknowledgeWarnings: true });
+    return id;
+  }
+
+  const voiceItem = async (id: string) => (await discordSyncService.listSyncWork()).voiceChannels.find((entry) => entry.runId === id);
+  const startItem = async (id: string) => (await discordSyncService.listSyncWork()).start.find((entry) => entry.runId === id);
+
+  describe("Final Setup Voice link: start work carries the persisted id and goes stale on voice changes", () => {
+    async function startedRunWithChannel(): Promise<string> {
+      const id = await publishedRun();
+      await discordSyncService.recordRunChannel({ runId: id, channelId: "text-chan-v" });
+      await runService.startRun(lead, { runId: id });
+      return id;
+    }
+    const recordStart = (id: string, voiceChannelId?: string | null) =>
+      discordSyncService.recordStartPost({ runId: id, channelId: "text-chan-v", messageId: "start-msg-v", voiceChannelId });
+
+    it("first send carries the persisted voice id (null before the voice lane records one)", async () => {
+      const id = await startedRunWithChannel();
+      expect(await startItem(id)).toMatchObject({ existingMessageId: null, voiceChannelId: null });
+
+      await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-1" });
+      expect(await startItem(id)).toMatchObject({ existingMessageId: null, voiceChannelId: "voice-1" });
+
+      await recordStart(id, "voice-1");
+      expect(await startItem(id)).toBeUndefined();
+    });
+
+    it("existing post: voice recorded later → stale; replaced → stale with the new id; cleared → stale with null; re-rendered → clean", async () => {
+      const id = await startedRunWithChannel();
+      await recordStart(id, null);
+      expect(await startItem(id)).toBeUndefined();
+
+      // Provisioned after the post went out (no roster-version bump).
+      await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-1" });
+      expect(await startItem(id)).toMatchObject({ existingMessageId: "start-msg-v", voiceChannelId: "voice-1" });
+      await recordStart(id, "voice-1");
+      expect(await startItem(id)).toBeUndefined();
+
+      // Manually deleted → cleared → replacement provisioned.
+      await discordSyncService.clearRunVoiceChannel({ runId: id, channelId: "voice-1" });
+      await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-2" });
+      expect(await startItem(id)).toMatchObject({ existingMessageId: "start-msg-v", voiceChannelId: "voice-2" });
+      await recordStart(id, "voice-2");
+      expect(await startItem(id)).toBeUndefined();
+      expect((await runDiscordPostRepository.findByRunId(id))?.lastStartVoiceChannelId).toBe("voice-2");
+
+      // Confirmed gone and not (yet) replaced → the stale mention must be removed.
+      await discordSyncService.clearRunVoiceChannel({ runId: id, channelId: "voice-2" });
+      expect(await startItem(id)).toMatchObject({ existingMessageId: "start-msg-v", voiceChannelId: null });
+      await recordStart(id, null);
+      expect(await startItem(id)).toBeUndefined();
+    });
+
+    it("self-heal: a post recorded without a Voice line while a voice channel exists is edited", async () => {
+      const id = await startedRunWithChannel();
+      await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-1" });
+      // Older bot / post made before this existed: no voiceChannelId reported.
+      await recordStart(id);
+      expect((await runDiscordPostRepository.findByRunId(id))?.lastStartVoiceChannelId).toBeNull();
+      expect(await startItem(id)).toMatchObject({ existingMessageId: "start-msg-v", voiceChannelId: "voice-1" });
+    });
+
+    it("terminal Run: post-completion voice cleanup never re-targets the Final Setup", async () => {
+      const id = await startedRunWithChannel();
+      await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-1" });
+      await recordStart(id, "voice-1");
+
+      await runRepository.updateFields(id, { status: "COMPLETED" });
+      await discordSyncService.clearRunVoiceChannel({ runId: id, channelId: "voice-1" });
+      expect(await startItem(id)).toBeUndefined();
+    });
+
+    it("no voice feature: a posted Final Setup without voice is never re-edited", async () => {
+      const id = await startedRunWithChannel();
+      await recordStart(id, null);
+      expect(await startItem(id)).toBeUndefined();
+    });
+  });
+
+  it("PUBLISHED → none; started by an ADMIN → PROVISION `Raid with <assigned Raid Lead>`; recorded → RECONCILE; terminal → RETIRE_IF_EMPTY", async () => {
+    try {
+      await setLeadName("Gamma");
+      const id = await publishedRun();
+      expect(await voiceItem(id)).toBeUndefined();
+
+      await runService.startRun(admin, { runId: id });
+      expect(await voiceItem(id)).toEqual({
+        runId: id,
+        existingVoiceChannelId: null,
+        desiredVoiceChannelName: "Raid with Gamma",
+        action: "PROVISION",
+      });
+
+      await setLeadName("Discord Lead");
+      expect((await voiceItem(id))?.desiredVoiceChannelName).toBe("Raid with Discord Lead");
+
+      await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-9" });
+      expect(await voiceItem(id)).toMatchObject({ existingVoiceChannelId: "voice-9", action: "RECONCILE" });
+
+      for (const status of ["COMPLETED", "CANCELLED"] as const) {
+        await runRepository.updateFields(id, { status });
+        expect(await voiceItem(id)).toMatchObject({ existingVoiceChannelId: "voice-9", action: "RETIRE_IF_EMPTY" });
+      }
+
+      await runRepository.updateFields(id, { status: "IN_PROGRESS" });
+      await orm.Run.where({ id }).update({ archivedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      expect(await voiceItem(id)).toMatchObject({ existingVoiceChannelId: "voice-9", action: "RETIRE_IF_EMPTY" });
+    } finally {
+      await setLeadName("Discord Lead");
+    }
+  });
+
+  it("a Run completed before the bot ever polled gets no voice channel", async () => {
+    const id = await publishedRun();
+    await runService.startRun(lead, { runId: id });
+    await runRepository.updateFields(id, { status: "COMPLETED" });
+    expect(await voiceItem(id)).toBeUndefined();
+  });
+
+  it("voice provisioning is Run-level: present even when no participant gets any DM", async () => {
+    const id = await publishedRun();
+    await runService.startRun(lead, { runId: id });
+    const work = await discordSyncService.listSyncWork();
+    expect(work.notificationDms.some((entry) => entry.runId === id)).toBe(false);
+    expect(work.voiceChannels.find((entry) => entry.runId === id)?.action).toBe("PROVISION");
+  });
+
+  it("Quiet-Hours-delayed RAID_INVITE uses the voice id persisted at delivery time, and omits it once cleared", async () => {
+    const id = await publishedRun();
+    await runService.startRun(lead, { runId: id });
+    await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-222" });
+    const signup = (await orm.RunSignup.where({ runId: id }).first()) as { id: string };
+    const notificationId = crypto.randomUUID();
+    await userNotificationRepository.createIgnoreDuplicate({
+      id: notificationId,
+      userId: ids.extra,
+      type: "RAID_INVITE",
+      runId: id,
+      signupId: signup.id,
+      sourceKey: `raid-invite-voice-test:${id}`,
+      title: "Raid invite",
+      message: "You are invited.",
+      href: `/runs/${id}`,
+      discordDeliveryStatus: "PENDING",
+      discordUserId: "999999999999999999",
+      discordDeliverAfter: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
+    });
+    const dm = async () => (await discordSyncService.listSyncWork()).notificationDms.find((entry) => entry.notificationId === notificationId);
+
+    // Deferred by Quiet Hours: not yet due, but the voice channel already exists.
+    expect(await dm()).toBeUndefined();
+    expect((await discordSyncService.listSyncWork()).voiceChannels.find((entry) => entry.runId === id)?.action).toBe("RECONCILE");
+
+    await orm.UserNotification.where({ id: notificationId }).update({ discordDeliverAfter: new Date(Date.now() - 60_000).toISOString() });
+    expect((await dm())?.voiceChannelId).toBe("voice-222");
+
+    // Run ended and its empty voice channel was deleted before the DM went out.
+    await runRepository.updateFields(id, { status: "COMPLETED" });
+    await discordSyncService.clearRunVoiceChannel({ runId: id, channelId: "voice-222" });
+    expect((await dm())?.voiceChannelId).toBeNull();
+
+    const stored = (await orm.UserNotification.where({ id: notificationId }).first()) as { message: string };
+    expect(stored.message).not.toContain("Voice");
+    await orm.UserNotification.where({ id: notificationId }).delete();
+  });
+
+  it("IN_PROGRESS without a start snapshot is not provisioned", async () => {
+    const id = await publishedRun();
+    await runRepository.updateFields(id, { status: "IN_PROGRESS" });
+    expect(await voiceItem(id)).toBeUndefined();
+  });
+});
+
+describe("RunDiscordPost.voiceChannelId state", () => {
+  async function runWithDiscordState(): Promise<string> {
+    const id = await runService
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(11), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1 }))
+      .then((run) => run.id);
+    createdRunIds.push(id);
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "text-chan" });
+    await orm.RunDiscordPost.where({ runId: id }).update({
+      signupChannelId: "text-chan",
+      signupMessageId: "signup-msg",
+      rosterMessageId: "roster-msg",
+      startMessageId: "start-msg",
+      archiveCloseMessageId: "close-msg",
+      raidInviteSentSignupIds: "[\"s1\"]",
+      updatedAt: new Date().toISOString(),
+    });
+    return id;
+  }
+
+  function otherState(post: Awaited<ReturnType<typeof runDiscordPostRepository.findByRunId>>) {
+    return [post?.runChannelId, post?.signupMessageId, post?.rosterMessageId, post?.startMessageId, post?.archiveCloseMessageId, post?.raidInviteSentSignupIds];
+  }
+
+  it("records the voice channel without touching any other Discord state, idempotently", async () => {
+    const id = await runWithDiscordState();
+    const before = otherState(await runDiscordPostRepository.findByRunId(id));
+    expect((await runDiscordPostRepository.findByRunId(id))?.voiceChannelId).toBeNull();
+
+    await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-1" });
+    await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-1" });
+
+    const after = await runDiscordPostRepository.findByRunId(id);
+    expect(after?.voiceChannelId).toBe("voice-1");
+    expect(otherState(after)).toEqual(before);
+  });
+
+  it("clears only while the stored id still matches, never another channel or other state", async () => {
+    const id = await runWithDiscordState();
+    await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-new" });
+    const before = otherState(await runDiscordPostRepository.findByRunId(id));
+
+    await discordSyncService.clearRunVoiceChannel({ runId: id, channelId: "voice-old" });
+    expect((await runDiscordPostRepository.findByRunId(id))?.voiceChannelId).toBe("voice-new");
+
+    await discordSyncService.clearRunVoiceChannel({ runId: id, channelId: "voice-new" });
+    await discordSyncService.clearRunVoiceChannel({ runId: id, channelId: "voice-new" });
+    const after = await runDiscordPostRepository.findByRunId(id);
+    expect(after?.voiceChannelId).toBeNull();
+    expect(otherState(after)).toEqual(before);
+  });
+});

@@ -1,0 +1,385 @@
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import type { AuthenticatedUser } from "@/auth/authorization";
+import { orm } from "@/lib/prisma";
+import { anyContentRunInput } from "@tests/fixtures/test-run-input";
+import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
+import { characterRepository } from "@/repositories/character.repository";
+import { raidRepository } from "@/repositories/raid.repository";
+import { characterOperationsService } from "@/services/character-operations.service";
+import { characterService } from "@/services/character.service";
+import { runService } from "@/services/run.service";
+import { attendanceRepository } from "@/repositories/attendance.repository";
+import { attendanceService } from "@/services/attendance.service";
+import { rosterService } from "@/services/roster.service";
+import { runDetailService } from "@/services/run-detail.service";
+import { testActor } from "@tests/fixtures/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@tests/fixtures/db-fixtures";
+import { expectDomainError } from "@tests/helpers/domain-error";
+import { DAY_MS, HOUR_MS } from "@tests/fixtures/time";
+
+// Warcraft Logs auto-link enrichment runs after Character writes/syncs; keep it
+// offline (a real WARCRAFT_LOGS_* in .env would otherwise hit the live API).
+vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/integrations/warcraft-logs/warcraft-logs-api-client")>()),
+  warcraftLogsApiClient: {
+    isConfigured: () => true,
+    findCharacter: async () => ({ status: "NOT_FOUND" as const }),
+  },
+}));
+
+const token = Math.random().toString(36).replace(/[^a-z]/g, "").slice(0, 5).padEnd(5, "x");
+/** Characters are tracked too: the Platform Owner may be a pre-existing user this suite does not delete. */
+const created = { runIds: [] as string[], characterIds: [] as string[], userIds: [] as string[] };
+
+async function createUser(accountRole: AuthenticatedUser["accountRole"]) {
+  const name = `Del ${accountRole} ${token}`;
+  const id = await createTestUser({ name, accountRole });
+  created.userIds.push(id);
+  return testActor(id, accountRole, { name });
+}
+
+let nameCounter = 0;
+async function createCharacter(owner: AuthenticatedUser) {
+  nameCounter += 1;
+  const character = await characterService.createCharacter(owner, {
+    name: `Del${token}${String.fromCharCode(96 + nameCounter)}`,
+    realm: "Twisting Nether",
+    region: "EU",
+    wowClass: "MAGE",
+    specialization: "Arcane",
+    itemLevel: 600,
+  });
+  created.characterIds.push(character.id);
+  return character;
+}
+
+async function signup(runId: string, userId: string, characterId: string, status: "PENDING" | "WITHDRAWN" | "SELECTED" | "NOT_SELECTED") {
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await orm.RunSignup.create({
+    id,
+    runId,
+    userId,
+    characterId,
+    participationType: "BOOSTER",
+    isBackup: false,
+    status,
+    publishedRole: null,
+    lootbuddyMode: null,
+    lootbuddyVerification: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return id;
+}
+
+async function createOpenRun(lead: AuthenticatedUser) {
+  const run = await runService.createRun(lead, anyContentRunInput({ scheduledStartAt: new Date(Date.now() + 5 * DAY_MS).toISOString() }));
+  created.runIds.push(run.id);
+  await runService.openRun(lead, run.id);
+  return run.id;
+}
+
+/** Test-only shortcut to a finished Run, for the signup FK behaviour alone. */
+async function createCompletedRun(lead: AuthenticatedUser) {
+  const runId = await createOpenRun(lead);
+  await orm.Run.where({ id: runId }).update({ status: "COMPLETED", signupsOpen: false });
+  return runId;
+}
+
+async function characterDeletedEvents(userId: string) {
+  return (await orm.ActivityEvent.where({ userId, type: "CHARACTER_DELETED" }).all()) as Array<{ message: string }>;
+}
+
+let owner: AuthenticatedUser;
+let other: AuthenticatedUser;
+let lead: AuthenticatedUser;
+let admin: AuthenticatedUser;
+let platformOwner: AuthenticatedUser;
+
+beforeAll(async () => {
+  assertIsolatedTestDatabase();
+  await raidRepository.ensureReferenceRaids();
+  owner = await createUser("USER");
+  other = await createUser("USER");
+  lead = await createUser("RAID_LEAD");
+  admin = await createUser("ADMIN");
+  // Only one OWNER may exist: reuse it when present (never deleted here), else create one.
+  const existingOwner = (await orm.User.where({ accountRole: "OWNER" }).select("id").first()) as { id: string } | null;
+  platformOwner = existingOwner ? testActor(existingOwner.id, "OWNER") : await createUser("OWNER");
+});
+
+afterAll(async () => {
+  assertIsolatedTestDatabase();
+  // Attendance references roster entries with RESTRICT, so it goes before its Run.
+  for (const runId of created.runIds) await orm.RunAttendance.where({ runId }).deleteAndCount();
+  await deleteCreatedRows(created);
+});
+
+describe("owner delete", () => {
+  it("deletes the owner's character with its lockouts and records an activity event", async () => {
+    const character = await createCharacter(owner);
+    const raid = (await raidRepository.loadCatalog()).lockoutRaids[0]!;
+    const now = new Date().toISOString();
+    await orm.CharacterRaidLockout.create({
+      id: crypto.randomUUID(),
+      characterId: character.id,
+      raidId: raid.id,
+      difficulty: "HEROIC",
+      resetIdentifier: getRegionalWeeklyReset("EU").resetIdentifier,
+      bossesDefeated: 2,
+      isComplete: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await characterService.deleteCharacter(owner, character.id);
+
+    expect(await characterRepository.findById(character.id)).toBeNull();
+    expect(await orm.CharacterRaidLockout.where({ characterId: character.id }).all()).toHaveLength(0);
+    const events = await characterDeletedEvents(owner.id);
+    expect(events.filter((event) => event.message === `Deleted character ${character.name}-Twisting Nether (EU).`)).toHaveLength(1);
+  });
+
+  it("FKs: weekly unavailability cascades; the owner's default-Character pointer is cleared, the user stays", async () => {
+    const character = await createCharacter(owner);
+    const now = new Date().toISOString();
+    await orm.CharacterWeeklyUnavailability.create({
+      id: crypto.randomUUID(),
+      characterId: character.id,
+      resetIdentifier: getRegionalWeeklyReset("EU").resetIdentifier,
+      difficulty: "HEROIC",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await orm.User.where({ id: owner.id }).update({ defaultCharacterId: character.id });
+
+    await characterService.deleteCharacter(owner, character.id);
+
+    expect(await orm.CharacterWeeklyUnavailability.where({ characterId: character.id }).all()).toHaveLength(0);
+    const user = (await orm.User.where({ id: owner.id }).first()) as { defaultCharacterId: string | null } | null;
+    expect(user).not.toBeNull();
+    expect(user!.defaultCharacterId).toBeNull();
+  });
+
+  it("never deletes someone else's character", async () => {
+    const character = await createCharacter(other);
+    await expectDomainError(characterService.deleteCharacter(owner, character.id), "CHARACTER_NOT_OWNED");
+    expect(await characterRepository.findById(character.id)).not.toBeNull();
+  });
+
+  it("is refused while an unfinished run has a signup on it; a withdrawn signup does not block", async () => {
+    const character = await createCharacter(owner);
+    const runId = await createOpenRun(lead);
+    const signupId = await signup(runId, owner.id, character.id, "PENDING");
+
+    await expectDomainError(characterService.deleteCharacter(owner, character.id), "CHARACTER_HAS_OPEN_SIGNUPS");
+    expect(await characterRepository.findById(character.id)).not.toBeNull();
+
+    await orm.RunSignup.where({ id: signupId }).update({ status: "WITHDRAWN" });
+    await characterService.deleteCharacter(owner, character.id);
+    expect(await characterRepository.findById(character.id)).toBeNull();
+  });
+
+  it.each(["SELECTED", "NOT_SELECTED"] as const)("an open-run %s signup also blocks (Replace can still pick it)", async (status) => {
+    const character = await createCharacter(owner);
+    const runId = await createOpenRun(lead);
+    await signup(runId, owner.id, character.id, status);
+    await expectDomainError(characterService.deleteCharacter(owner, character.id), "CHARACTER_HAS_OPEN_SIGNUPS");
+    expect(await characterRepository.findById(character.id)).not.toBeNull();
+  });
+
+  it("keeps finished-run history: the signup stays, its character link is cleared", async () => {
+    const character = await createCharacter(owner);
+    const runId = await createCompletedRun(lead);
+    const signupId = await signup(runId, owner.id, character.id, "SELECTED");
+
+    await characterService.deleteCharacter(owner, character.id);
+
+    const row = (await orm.RunSignup.where({ id: signupId }).first()) as { characterId: string | null } | null;
+    expect(row).not.toBeNull();
+    expect(row!.characterId).toBeNull();
+  });
+});
+
+describe("admin delete", () => {
+  it("lets an ADMIN delete any user's character and records the target", async () => {
+    const character = await createCharacter(other);
+    const result = await characterOperationsService.deleteCharacter(admin, character.id);
+    expect(result.label).toContain(character.name);
+    expect(await characterRepository.findById(character.id)).toBeNull();
+    const events = (await orm.ActivityEvent.where({ userId: admin.id, type: "ADMIN_CHARACTER_DELETED" }).all()) as Array<{
+      message: string;
+    }>;
+    expect(events.some((event) => event.message.includes(`targetCharacterId=${character.id}`))).toBe(true);
+  });
+
+  it("applies the same open-signup guard", async () => {
+    const character = await createCharacter(other);
+    const runId = await createOpenRun(lead);
+    await signup(runId, other.id, character.id, "SELECTED");
+    await expectDomainError(characterOperationsService.deleteCharacter(admin, character.id), "CHARACTER_HAS_OPEN_SIGNUPS");
+    expect(await characterRepository.findById(character.id)).not.toBeNull();
+  });
+
+  it("protects the Platform Owner's characters from ADMINs; the Owner may delete them", async () => {
+    const character = await createCharacter(platformOwner);
+    await expectDomainError(characterOperationsService.deleteCharacter(admin, character.id), "OWNER_ROLE_PROTECTED");
+    expect(await characterRepository.findById(character.id)).not.toBeNull();
+    await characterOperationsService.deleteCharacter(platformOwner, character.id);
+    expect(await characterRepository.findById(character.id)).toBeNull();
+  });
+
+  it("the Platform Owner deletes their own Character through the normal owner path", async () => {
+    const character = await createCharacter(platformOwner);
+    await characterService.deleteCharacter(platformOwner, character.id);
+    expect(await characterRepository.findById(character.id)).toBeNull();
+  });
+
+  it("the admin detail projection mirrors the server rule: Owner Characters show a block reason, others do not", async () => {
+    const ownerCharacter = await createCharacter(platformOwner);
+    const userCharacter = await createCharacter(other);
+
+    expect((await characterOperationsService.getDetail(admin, ownerCharacter.id)).deleteBlockedReason).toMatch(/Platform Owner/);
+    expect((await characterOperationsService.getDetail(admin, userCharacter.id)).deleteBlockedReason).toBeNull();
+    expect((await characterOperationsService.getDetail(platformOwner, ownerCharacter.id)).deleteBlockedReason).toBeNull();
+
+    // The UI is not the boundary: a direct ADMIN mutation is still refused.
+    await expectDomainError(characterOperationsService.deleteCharacter(admin, ownerCharacter.id), "OWNER_ROLE_PROTECTED");
+    await characterOperationsService.deleteCharacter(platformOwner, ownerCharacter.id);
+    await characterOperationsService.deleteCharacter(admin, userCharacter.id);
+  });
+
+  it("refuses non-admins", async () => {
+    const character = await createCharacter(other);
+    for (const caller of [lead, other]) {
+      await expectDomainError(characterOperationsService.deleteCharacter(caller, character.id), "NOT_AUTHORIZED");
+    }
+    expect(await characterRepository.findById(character.id)).not.toBeNull();
+  });
+});
+
+describe("delete after completed-run history (signup / attendance preservation)", () => {
+  async function qualify(userId: string) {
+    await orm.User.where({ id: userId }).update({ isBooster: true });
+  }
+
+  /** Real lifecycle: signup → roster publish → start → attendance → complete. */
+  async function completedRunWithHistory(booster: AuthenticatedUser, characterId: string) {
+    const runId = await createOpenRun(lead);
+    const signupId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    await orm.RunSignup.create({
+      id: signupId,
+      runId,
+      userId: booster.id,
+      characterId,
+      participationType: "BOOSTER",
+      isBackup: false,
+      status: "PENDING",
+      publishedRole: null,
+      lootbuddyMode: null,
+      lootbuddyVerification: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await orm.RunSignupRole.create({ id: crypto.randomUUID(), signupId, role: "MELEE_DPS", createdAt: now });
+    const view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.saveDraftSelection(lead, {
+      runId,
+      version: view.roster.version,
+      selections: [{ signupId, selectedRole: "MELEE_DPS" }],
+    });
+    const ready = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.publishRoster(lead, { runId, version: ready.roster.version, acknowledgeWarnings: true });
+    await runService.startRun(lead, { runId });
+    const [attendance] = await attendanceRepository.listByRunId(runId);
+    await attendanceService.setStatus(lead, { attendanceId: attendance!.id, expectedStatus: "UNMARKED", status: "PRESENT" });
+    await runService.completeRun(lead, runId);
+    return { runId, signupId, attendanceId: attendance!.id };
+  }
+
+  it("deletes the Character but keeps user, signup and attendance intact and renderable", async () => {
+    const booster = await createUser("USER");
+    await qualify(booster.id);
+    const character = await createCharacter(booster);
+    const history = await completedRunWithHistory(booster, character.id);
+
+    await characterService.deleteCharacter(booster, character.id);
+
+    // Character gone, user stays.
+    expect(await characterRepository.findById(character.id)).toBeNull();
+    expect(await orm.User.where({ id: booster.id }).first()).not.toBeNull();
+
+    // Completed signup + attendance remain; the Character link is cleared.
+    const signupRow = (await orm.RunSignup.where({ id: history.signupId }).first()) as Record<string, unknown> | null;
+    expect(signupRow).not.toBeNull();
+    expect(signupRow!.characterId).toBeNull();
+    expect(signupRow!.status).toBe("SELECTED");
+    expect(await orm.RunAttendance.where({ id: history.attendanceId }).first()).not.toBeNull();
+
+    // Historical projections still render without the Character relation.
+    const managerAttendance = await attendanceService.getManagerAttendance(lead, history.runId);
+    expect(managerAttendance.rows).toEqual([
+      expect.objectContaining({ id: history.attendanceId, userName: booster.name, status: "PRESENT" }),
+    ]);
+    expect(await attendanceService.getOwnAttendance(booster, history.runId)).toHaveLength(1);
+    const detail = await runDetailService.getRunDetail(lead, history.runId);
+    expect(detail.run.status).toBe("COMPLETED");
+    const boosterDetail = await runDetailService.getRunDetail(booster, history.runId);
+    expect(boosterDetail.run.status).toBe("COMPLETED");
+  }, 60_000);
+
+  it("relations: availability blocks + WCL data cascade; legacy Booster Access and account qualification stay", async () => {
+    const character = await createCharacter(owner);
+    const now = new Date().toISOString();
+    await orm.CharacterAvailabilityBlock.create({
+      id: crypto.randomUUID(),
+      characterId: character.id,
+      startsAt: now,
+      endsAt: new Date(Date.now() + HOUR_MS).toISOString(),
+      reason: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await orm.CharacterWclPerformance.create({
+      id: crypto.randomUUID(),
+      characterId: character.id,
+      zoneId: 1,
+      encounterId: 0,
+      difficulty: 4,
+      metricKey: "dps",
+      bestPct: 90,
+      avgPct: 80,
+      fetchedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const accessId = crypto.randomUUID();
+    await orm.BoosterAccess.create({
+      id: accessId,
+      userId: owner.id,
+      characterId: character.id,
+      wowClass: "MAGE",
+      role: "RANGED_DPS",
+      difficulty: "MYTHIC",
+      status: "APPROVED",
+      approvedAt: now,
+      approvedById: null,
+      reviewedAt: null,
+      reviewedById: null,
+      notes: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await characterService.deleteCharacter(owner, character.id);
+
+    expect(await orm.CharacterAvailabilityBlock.where({ characterId: character.id }).all()).toHaveLength(0);
+    expect(await orm.CharacterWclPerformance.where({ characterId: character.id }).all()).toHaveLength(0);
+    const access = (await orm.BoosterAccess.where({ id: accessId }).first()) as Record<string, unknown> | null;
+    expect(access).not.toBeNull();
+    expect(access!.characterId).toBeNull();
+    expect(access!.userId).toBe(owner.id);
+  });
+});
