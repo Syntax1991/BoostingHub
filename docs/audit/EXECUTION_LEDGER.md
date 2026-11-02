@@ -132,7 +132,7 @@ Order follows the assignment. Each line is one PR, stacked on the one before.
 | 4 | MVCS boundaries: app and controllers no longer import repositories; lib no longer imports components | PR #326, awaiting review |
 | 4b | Move pure rules from `src/services` to `src/domain` | PR #327, awaiting review |
 | 5 | Guide code: drop legacy paths, share publisher code | PR #328, awaiting review |
-| 6 | Test cleanup by module | Phase 1 DONE ([PHASE-1.md](reports/PHASE-1.md)). Phase 2 in progress on `test/audit-batch-a`: 336 of 341 live files decided (+1 tombstone), 3594 of 3825 ledger tests reviewed, 231 UNREVIEWED across 5 files |
+| 6 | Test cleanup by module | Phase 1 DONE ([PHASE-1.md](reports/PHASE-1.md)). Phase 2 in progress on `test/audit-batch-a`: 337 of 341 live files decided (+1 tombstone), 3635 of 3825 ledger tests reviewed, 190 UNREVIEWED across 4 files |
 | 7 | Frontend: error, loading and not-found pages; shared dialog effect | PR #329, awaiting review |
 | 8 | Performance, measured: run detail payload, event purge, rate-limit log | PR #330, awaiting review |
 | 9 | Dependencies and final verification | Dependencies audited, no change; TruffleHog scan still invalid |
@@ -355,7 +355,7 @@ Found while moving, not changed (feature freeze): four production modules are im
 | Phase | Name | Status | Report |
 | --- | --- | --- | --- |
 | 1 | Centralized test structure | DONE | [PHASE-1.md](reports/PHASE-1.md) |
-| 2 | Test quality audit | IN PROGRESS (5 UNREVIEWED files / 231 tests) | — |
+| 2 | Test quality audit | IN PROGRESS (4 UNREVIEWED files / 190 tests) | — |
 | 3 | Production refactoring / code quality | NOT STARTED | — |
 | 4 | Performance, security, reliability | NOT STARTED | — |
 | 5 | UX and documentation | NOT STARTED | — |
@@ -365,11 +365,10 @@ Found while moving, not changed (feature freeze): four production modules are im
 
 HEAD at last ledger touch: see git. Still UNREVIEWED:
 
-1. `run-management.service.test.ts` (41)
-2. `signup-offers.service.test.ts` (32) — has `setDraftSelection`
-3. `attendance.service.test.ts` (36) — has `setDraftSelection`
-4. `roster.service.test.ts` (30) — has `setDraftSelection`; historically needs fresh DB reset
-5. `discord-sync.service.test.ts` (92) — has `setDraftSelection`
+1. `signup-offers.service.test.ts` (32) — has `setDraftSelection`
+2. `attendance.service.test.ts` (36) — has `setDraftSelection`
+3. `roster.service.test.ts` (30) — has `setDraftSelection`; historically needs fresh DB reset
+4. `discord-sync.service.test.ts` (92) — has `setDraftSelection`
 
 Then: remove `rosterService.setDraftSelection` once callers are gone; full suite ×2 without reset; lint; typecheck; build; `PHASE-2.md`.
 

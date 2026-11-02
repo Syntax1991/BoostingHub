@@ -1351,6 +1351,10 @@
     "tests/integration/services/run-management.service.test.ts": [
       "REWRITE",
       "assertIsolatedTestDatabase; verified deleteAndCount cleanup; testActor; expectDomainError"
+    ],
+    "tests/integration/services/signup-offers.service.test.ts": [
+      "REWRITE",
+      "assertIsolatedTestDatabase; verified deleteAndCount; testActor; expectDomainError; local setDraftSelection adapter over saveDraftSelection (same-user booster replace)"
     ]
   },
   "tests": {

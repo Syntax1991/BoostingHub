@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
+import type { CharacterRole } from "@/domain/run-types";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
 import { raidRepository } from "@/repositories/raid.repository";
@@ -9,8 +9,11 @@ import { runRepository } from "@/repositories/run.repository";
 import { signupRepository } from "@/repositories/signup.repository";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
-import { venomousCreateInput } from "@tests/fixtures/test-run-input";
 import { signupService } from "@/services/signup.service";
+import { testActor } from "@tests/fixtures/actors";
+import { assertIsolatedTestDatabase } from "@tests/fixtures/db-fixtures";
+import { venomousCreateInput } from "@tests/fixtures/test-run-input";
+import { expectDomainError } from "@tests/helpers/domain-error";
 
 const ids = {
   lead: "aaaaaaaa-aaaa-4aaa-8aaa-so0000000001",
@@ -22,28 +25,46 @@ const createdRunIds: string[] = [];
 const createdCharacterIds: string[] = [];
 
 function asUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"] = "USER"): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@sotest.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
+  return testActor(id, accountRole, { name, email: `${id}@sotest.boostting.local` });
 }
 
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    if (error instanceof Error && error.message === `Expected domain error ${code}`) {
-      throw error;
-    }
-    expect(isDomainError(error) && error.code).toBe(code);
-  }
+/** Test-local adapter: production path is saveDraftSelection (full draft replace).
+ * Mirrors setDraftSelection's one-booster-per-user replace when selecting a second Booster. */
+async function setDraftSelection(
+  actor: AuthenticatedUser,
+  input: {
+    runId: string;
+    signupId: string;
+    selected: boolean;
+    version: number;
+    selectedRole?: CharacterRole | null;
+  },
+) {
+  const view = await rosterService.getRosterManagementView(actor, input.runId);
+  const all = [...view.boosters, ...view.groups.lootbuddies];
+  const target = all.find((row) => row.id === input.signupId);
+  const others = all
+    .filter((row) => {
+      if (!row.draftSelected || row.id === input.signupId) return false;
+      if (
+        input.selected &&
+        target?.participationType === "BOOSTER" &&
+        row.participationType === "BOOSTER" &&
+        row.userId === target.userId
+      ) {
+        return false;
+      }
+      return true;
+    })
+    .map((row) => ({ signupId: row.id, selectedRole: row.selectedRole }));
+  const selections = input.selected
+    ? [...others, { signupId: input.signupId, selectedRole: input.selectedRole ?? null }]
+    : others;
+  await rosterService.saveDraftSelection(actor, {
+    runId: input.runId,
+    version: input.version,
+    selections,
+  });
 }
 
 async function createTestUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"]) {
@@ -59,15 +80,15 @@ async function createTestUser(id: string, name: string, accountRole: Authenticat
   });
 }
 
-async function deleteIfPresent(table: string, id: string) {
-  try {
-    if (table === "User") await orm.User.where({ id }).delete();
-    else if (table === "Character") await orm.Character.where({ id }).delete();
-    else if (table === "RunSignupRole") await orm.RunSignupRole.where({ id }).delete();
-    else if (table === "RunSignup") await orm.RunSignup.where({ id }).delete();
-    else if (table === "Run") await orm.Run.where({ id }).delete();
-  } catch {
-    // Already gone.
+async function deleteOwnedRow(
+  table: "User" | "Character" | "RunSignupRole" | "RunSignup" | "Run",
+  id: string,
+) {
+  assertIsolatedTestDatabase();
+  const model = orm[table];
+  const n = await model.where({ id }).deleteAndCount();
+  if (n !== 0 && n !== 1) {
+    throw new Error(`Expected 0 or 1 delete for ${table} ${id}, got ${n}`);
   }
 }
 
@@ -118,25 +139,26 @@ async function createCharacter(
 }
 
 async function cleanupRun(runId: string) {
+  assertIsolatedTestDatabase();
   const roster = await orm.RunRoster.where({ runId }).first();
   if (roster) {
     const rosterId = (roster as { id: string }).id;
     const entries = await orm.RunRosterEntry.where({ rosterId }).all();
     for (const entry of entries) {
-      await orm.RunRosterEntry.where({ id: (entry as { id: string }).id }).delete();
+      await orm.RunRosterEntry.where({ id: (entry as { id: string }).id }).deleteAndCount();
     }
-    await orm.RunRoster.where({ id: rosterId }).delete();
+    await orm.RunRoster.where({ id: rosterId }).deleteAndCount();
   }
   const signups = await orm.RunSignup.where({ runId }).select("id").all();
   for (const row of signups) {
     const signupId = (row as { id: string }).id;
     const offered = await orm.RunSignupRole.where({ signupId }).select("id").all();
     for (const offer of offered) {
-      await deleteIfPresent("RunSignupRole", (offer as { id: string }).id);
+      await deleteOwnedRow("RunSignupRole", (offer as { id: string }).id);
     }
-    await deleteIfPresent("RunSignup", signupId);
+    await deleteOwnedRow("RunSignup", signupId);
   }
-  await deleteIfPresent("Run", runId);
+  await deleteOwnedRow("Run", runId);
 }
 
 const lead = asUser(ids.lead, "Offer Lead", "RAID_LEAD");
@@ -152,6 +174,7 @@ let mainRunId = "";
 let mythicRunId = "";
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   await raidRepository.ensureReferenceRaids();
   for (const userId of createdUserIds) {
     const runs = await orm.Run.where({ raidLeadId: userId }).select("id").all();
@@ -160,9 +183,9 @@ beforeAll(async () => {
     }
     const chars = await orm.Character.where({ userId }).select("id").all();
     for (const row of chars) {
-      await deleteIfPresent("Character", (row as { id: string }).id);
+      await deleteOwnedRow("Character", (row as { id: string }).id);
     }
-    await deleteIfPresent("User", userId);
+    await deleteOwnedRow("User", userId);
   }
 
   await createTestUser(ids.lead, "Offer Lead", "RAID_LEAD");
@@ -197,14 +220,15 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
+  assertIsolatedTestDatabase();
   for (const runId of createdRunIds) {
     await cleanupRun(runId);
   }
   for (const id of createdCharacterIds) {
-    await deleteIfPresent("Character", id);
+    await deleteOwnedRow("Character", id);
   }
   for (const id of createdUserIds) {
-    await deleteIfPresent("User", id);
+    await deleteOwnedRow("User", id);
   }
 }, 60_000);
 
@@ -301,7 +325,7 @@ describe("signupService.setCharacterOffers — basic offer sets", () => {
 
 describe("signupService.setCharacterOffers — validation", () => {
   it("rejects a duplicate character within one request", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       signupService.setCharacterOffers(target, {
         runId: mainRunId,
         offers: [{ characterId: hunterA, offeredRoles: ["RANGED_DPS"] }, { characterId: hunterA, offeredRoles: ["RANGED_DPS"] }],
@@ -311,7 +335,7 @@ describe("signupService.setCharacterOffers — validation", () => {
   });
 
   it("rejects a character owned by another user", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       signupService.setCharacterOffers(target, {
         runId: mainRunId,
         offers: [{ characterId: foreignHunter, offeredRoles: ["RANGED_DPS"] }],
@@ -321,7 +345,7 @@ describe("signupService.setCharacterOffers — validation", () => {
   });
 
   it("rejects an inactive character", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       signupService.setCharacterOffers(target, {
         runId: mainRunId,
         offers: [{ characterId: hunterInactive, offeredRoles: ["RANGED_DPS"] }],
@@ -331,7 +355,7 @@ describe("signupService.setCharacterOffers — validation", () => {
   });
 
   it("rejects a role invalid for the character's class", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       signupService.setCharacterOffers(target, {
         runId: mainRunId,
         offers: [{ characterId: hunterA, offeredRoles: ["TANK"] }],
@@ -341,7 +365,7 @@ describe("signupService.setCharacterOffers — validation", () => {
   });
 
   it("requires an explicit role for every BOOSTER offer — an empty role set is rejected, never guessed", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       signupService.setCharacterOffers(target, {
         runId: mainRunId,
         offers: [{ characterId: paladinHybrid, offeredRoles: [] }],
@@ -392,7 +416,7 @@ describe("signupService.setCharacterOffers — validation", () => {
       offers: [{ characterId: hunterA, offeredRoles: ["RANGED_DPS"] }],
     });
 
-    await expectDomainCode(
+    await expectDomainError(
       signupService.setCharacterOffers(target, {
         runId: mainRunId,
         offers: [{ characterId: hunterB, offeredRoles: ["RANGED_DPS"] }, { characterId: hunterInactive, offeredRoles: ["RANGED_DPS"] }],
@@ -509,7 +533,7 @@ describe("signupService.setCharacterOffers — signup window", () => {
     });
     await runService.setSignupWindow(lead, mainRunId, false);
 
-    await expectDomainCode(
+    await expectDomainError(
       signupService.setCharacterOffers(target, {
         runId: mainRunId,
         offers: [{ characterId: hunterA, offeredRoles: ["RANGED_DPS"] }, { characterId: hunterB, offeredRoles: ["RANGED_DPS"] }],
@@ -539,14 +563,14 @@ describe("signupService.setCharacterOffers — roster protection", () => {
     const selectedSignupId = active.find((row) => row.character?.id === hunterA)!.id;
 
     const view = await rosterService.getRosterManagementView(lead, mainRunId);
-    await rosterService.setDraftSelection(lead, {
+    await setDraftSelection(lead, {
       runId: mainRunId,
       signupId: selectedSignupId,
       selected: true,
       version: view.roster.version,
     });
 
-    await expectDomainCode(
+    await expectDomainError(
       signupService.setCharacterOffers(target, {
         runId: mainRunId,
         offers: [{ characterId: hunterB, offeredRoles: ["RANGED_DPS"] }],
@@ -556,7 +580,7 @@ describe("signupService.setCharacterOffers — roster protection", () => {
 
     // Raid lead deselects first, then the User can freely reconcile.
     const view2 = await rosterService.getRosterManagementView(lead, mainRunId);
-    await rosterService.setDraftSelection(lead, {
+    await setDraftSelection(lead, {
       runId: mainRunId,
       signupId: selectedSignupId,
       selected: false,
@@ -582,7 +606,7 @@ describe("signupService.setCharacterOffers — roster protection", () => {
     const rowB = active.find((row) => row.character?.id === hunterB)!;
 
     const view = await rosterService.getRosterManagementView(lead, mainRunId);
-    await rosterService.setDraftSelection(lead, {
+    await setDraftSelection(lead, {
       runId: mainRunId,
       signupId: rowA.id,
       selected: true,
@@ -592,7 +616,7 @@ describe("signupService.setCharacterOffers — roster protection", () => {
     const rosterAfterFirst = await rosterRepository.findByRunId(mainRunId);
     expect(rosterAfterFirst?.selectedSignupIds).toContain(rowA.id);
 
-    await rosterService.setDraftSelection(lead, {
+    await setDraftSelection(lead, {
       runId: mainRunId,
       signupId: rowB.id,
       selected: true,
@@ -602,8 +626,8 @@ describe("signupService.setCharacterOffers — roster protection", () => {
     expect(rosterAfterSecond?.selectedSignupIds).toContain(rowB.id);
     expect(rosterAfterSecond?.selectedSignupIds).not.toContain(rowA.id);
 
-    await expectDomainCode(
-      rosterService.setDraftSelection(lead, {
+    await expectDomainError(
+      setDraftSelection(lead, {
         runId: mainRunId,
         signupId: "s0000000-0000-4000-8000-000000000000",
         selected: true,
@@ -613,7 +637,7 @@ describe("signupService.setCharacterOffers — roster protection", () => {
     );
 
     const cleanupView = await rosterService.getRosterManagementView(lead, mainRunId);
-    await rosterService.setDraftSelection(lead, {
+    await setDraftSelection(lead, {
       runId: mainRunId,
       signupId: rowB.id,
       selected: false,
@@ -637,7 +661,7 @@ describe("signupService.cancelBoosterSignup", () => {
   });
 
   it("reports NOT_FOUND when there is nothing active to cancel", async () => {
-    await expectDomainCode(signupService.cancelBoosterSignup(target, { runId: mainRunId }), "NOT_FOUND");
+    await expectDomainError(signupService.cancelBoosterSignup(target, { runId: mainRunId }), "NOT_FOUND");
   });
 
   it("blocks cancellation when an offer is protected by roster selection (all-or-nothing)", async () => {
@@ -649,14 +673,14 @@ describe("signupService.cancelBoosterSignup", () => {
     const rowA = active.find((row) => row.character?.id === hunterA)!;
 
     const view = await rosterService.getRosterManagementView(lead, mainRunId);
-    await rosterService.setDraftSelection(lead, {
+    await setDraftSelection(lead, {
       runId: mainRunId,
       signupId: rowA.id,
       selected: true,
       version: view.roster.version,
     });
 
-    await expectDomainCode(
+    await expectDomainError(
       signupService.cancelBoosterSignup(target, { runId: mainRunId }),
       "SIGNUP_OFFER_ROSTER_SELECTED",
     );
@@ -665,7 +689,7 @@ describe("signupService.cancelBoosterSignup", () => {
     expect(stillActive.length).toBe(2);
 
     const view2 = await rosterService.getRosterManagementView(lead, mainRunId);
-    await rosterService.setDraftSelection(lead, {
+    await setDraftSelection(lead, {
       runId: mainRunId,
       signupId: rowA.id,
       selected: false,
@@ -720,7 +744,7 @@ describe("signupService.cancelActiveSignups", () => {
   });
 
   it("reports NOT_FOUND when nothing is active", async () => {
-    await expectDomainCode(signupService.cancelActiveSignups(target, { runId: mainRunId }), "NOT_FOUND");
+    await expectDomainError(signupService.cancelActiveSignups(target, { runId: mainRunId }), "NOT_FOUND");
   });
 });
 
@@ -743,7 +767,7 @@ describe("concurrency regression coverage", () => {
     await orm.RunSignup.where({ id: withdrawnRow.id }).update({ status: "PENDING" });
 
     const mainRun = await runRepository.findById(mainRunId);
-    await expectDomainCode(
+    await expectDomainError(
       signupRepository.applyOfferPlan({
         runId: mainRunId,
         userId: ids.target,
