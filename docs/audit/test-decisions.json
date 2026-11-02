@@ -1139,6 +1139,30 @@
     "src/services/published-run-signups.test.ts": [
       "REWRITE",
       "Scenario kept as one test; fresh fixtures, frozen raid week, quick signup count exact (one Character)"
+    ],
+    "src/services/dev-account-bootstrap.service.test.ts": [
+      "REWRITE",
+      "Fresh user and synthetic Discord id per scenario instead of 17 fixed ids with a pre-clean; every restoring scenario now checks it wrote no activity, replacing an order-dependent aggregate test"
+    ],
+    "src/services/discord-role-access-sync.service.test.ts": [
+      "REWRITE",
+      "Real-looking guild and role ids (incl. Raid Staff, Raidleader, M+) replaced by synthetic ones; fresh user per scenario instead of shared mutable users"
+    ],
+    "src/services/character-wcl-performance.resolve.test.ts": [
+      "KEEP",
+      "Cache, deferral and role-relevance rules with mocked WCL; the repeated clock is one named constant"
+    ],
+    "src/services/run-content-products.test.ts": [
+      "REWRITE",
+      "Run payload factory replaces nine copies; fresh lead, verified cleanup, duplicate vitest import removed"
+    ],
+    "src/services/roster-legacy-dps.test.ts": [
+      "REWRITE",
+      "Own Raid Lead and Boosters instead of seeded users; frozen raid week; verified cleanup replaces a 40-line manual delete"
+    ],
+    "src/services/raid-lockout-informational.test.ts": [
+      "REWRITE",
+      "Fresh saved Character per test; the lockout helper reuses an existing row instead of deleting it with errors swallowed; exact offer counts"
     ]
   },
   "tests": {
@@ -1321,6 +1345,10 @@
     "src/services/multi-raid-foundation.test.ts::RunRaidContent — contents authority > createManyDraftsAtomic writes one content per Run (contents-only Run row)": [
       "REWRITE",
       "Planned counts 4 and 5 asserted literally; before it compared two reads of the same rows"
+    ],
+    "src/services/raid-lockout-informational.test.ts::raid lockouts are informational — full signup/roster/publish chain > a fully-saved Character (HC 8/8) is eligible, offerable, and confirms successfully — no LOCKOUT_CONFLICT": [
+      "REWRITE",
+      "Offer result exact (one created) instead of greater than zero"
     ]
   },
   "removed": {
@@ -1775,6 +1803,10 @@
     "src/services/roster-builder-optimizer-fill.test.ts::optimizeRosterProposal — fill count matches a brute-force optimum > fills exactly as many slots as the best possible assignment (300 random constellations)": [
       "MERGE",
       "Moved unchanged to src/domain/roster-builder-optimizer-fill.test.ts"
+    ],
+    "src/services/dev-account-bootstrap.service.test.ts::bootstrapDevelopmentAccount — restoring the target account > never creates an ActivityEvent across any mutation scenario above": [
+      "MERGE",
+      "Depended on earlier tests' users; each restoring scenario now asserts zero activity itself"
     ]
   }
 }

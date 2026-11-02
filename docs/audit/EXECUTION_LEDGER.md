@@ -260,7 +260,7 @@ Refactored so far:
 
 The test audit is not complete. Order for the rest, smallest risk first:
 
-1. Done on branch `test/audit-batch-a`: `src/repositories` (11 files), `src/components` (39), `src/discord-bot` (37), `src/lib` (88), `src/domain` (22), `src/services` batches 1–3 (54 files, the smallest by line count, through `published-run-signups.test.ts`).
+1. Done on branch `test/audit-batch-a`: `src/repositories` (11 files), `src/components` (39), `src/discord-bot` (37), `src/lib` (88), `src/domain` (22), `src/services` batches 1–4 (60 files, the smallest by line count, through `raid-lockout-informational.test.ts`).
 2. Next: the rest of `src/services` (smallest first, `node todo.cjs src` lists them), `src/guides/guide-replace.test.ts`. Each file now also gets the fixture rules above; files already audited get a fixture sweep afterwards (local `asUser`, `expectDomainCode`, fixed-id pre-cleans, swallowed `.catch(() => {})` cleanups).
 3. Open from batch 2: `src/services/signup.service.test.ts` is classified REWRITE but not yet rewritten. It writes onto shared seed Runs, its tests depend on order, and it is the main caller of the test-only `signupService.createBoosterSignup`. It is rewritten in the batch that removes that method (13 files, 75 uses), because the replacement production entry point (`setCharacterOffers`) has different semantics: complete offer set, no backups, no `DUPLICATE_SIGNUP`.
 

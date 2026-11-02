@@ -2,7 +2,7 @@ import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { pgConnectionConfig } from "@/lib/pg-pool";
 import { orm } from "@/lib/prisma";
 import { isTestRuntime, resolveTestDatabaseUrl } from "@/lib/test-database-guard";
-import type { AccountRole, CharacterRole, WowClass } from "@/models/enums";
+import type { AccountRole, AccountStatus, CharacterRole, WowClass } from "@/models/enums";
 
 /**
  * Row fixtures for DB suites. Every id is fresh per call, so a suite never
@@ -28,6 +28,7 @@ export function syntheticDiscordId(): string {
 export async function createTestUser(options: {
   name: string;
   accountRole?: AccountRole;
+  accountStatus?: AccountStatus;
   discordUserId?: string | null;
   isBooster?: boolean;
 }): Promise<string> {
@@ -40,7 +41,7 @@ export async function createTestUser(options: {
     emailVerified: true,
     discordUserId: options.discordUserId ?? null,
     accountRole: options.accountRole ?? "USER",
-    accountStatus: "ACTIVE",
+    accountStatus: options.accountStatus ?? "ACTIVE",
     isBooster: options.isBooster ?? false,
     createdAt: now,
     updatedAt: now,

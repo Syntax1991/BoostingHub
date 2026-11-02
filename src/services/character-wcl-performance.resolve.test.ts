@@ -9,6 +9,8 @@ const upsert = vi.fn();
 const fetchZoneRankings = vi.fn();
 const isConfigured = vi.fn();
 const scheduled: Array<() => Promise<void>> = [];
+/** Cached rows from 11:00 are fresh, rows from two days earlier are past the 12 h TTL. */
+const NOW = new Date("2026-09-20T12:00:00.000Z");
 
 vi.mock("@/lib/after-response", () => ({
   runAfterResponse: (task: () => Promise<void>) => {
@@ -109,7 +111,7 @@ describe("resolveRosterWclPerformance", () => {
           },
         },
       ],
-      now: new Date("2026-09-20T12:00:00.000Z"),
+      now: NOW,
     });
 
     const segments = map.get("signup-1");
@@ -151,7 +153,7 @@ describe("resolveRosterWclPerformance", () => {
           },
         },
       ],
-      now: new Date("2026-09-20T12:00:00.000Z"),
+      now: NOW,
     });
 
     const roles = map.get("signup-h")?.[0]?.roles.map((r) => r.role) ?? [];
@@ -192,7 +194,7 @@ describe("resolveRosterWclPerformance", () => {
           },
         },
       ],
-      now: new Date("2026-09-20T12:00:00.000Z"),
+      now: NOW,
     });
 
     const roles = map.get("signup-s")?.[0]?.roles.map((r) => r.role) ?? [];
@@ -239,7 +241,7 @@ describe("resolveRosterWclPerformance", () => {
           },
         },
       ],
-      now: new Date("2026-09-20T12:00:00.000Z"),
+      now: NOW,
     });
 
     expect(fetchZoneRankings).not.toHaveBeenCalled();
@@ -275,7 +277,7 @@ describe("resolveRosterWclPerformance", () => {
           character: { id: "char-1", wowClass: "MAGE" as const, specialization: null, primaryRole: "RANGED_DPS" as const, warcraftLogsId: "111" },
         },
       ],
-      now: new Date("2026-09-20T12:00:00.000Z"),
+      now: NOW,
     };
 
     const map = await resolveRosterWclPerformance(input);
@@ -344,7 +346,7 @@ describe("resolveRosterWclPerformance", () => {
           },
         },
       ],
-      now: new Date("2026-09-20T12:00:00.000Z"),
+      now: NOW,
       allowRemoteFetch: false,
     });
 
@@ -369,7 +371,7 @@ describe("resolveRosterWclPerformance", () => {
       boosters: [
         { signupId: "s", offeredRoles: ["RANGED_DPS"], character: { id: "char-1", wowClass: "MAGE", specialization: null, primaryRole: "RANGED_DPS", warcraftLogsId: "111" } },
       ],
-      now: new Date("2026-09-20T12:00:00.000Z"),
+      now: NOW,
     });
     expect(scheduled).toHaveLength(0);
     expect(fetchZoneRankings).not.toHaveBeenCalled();

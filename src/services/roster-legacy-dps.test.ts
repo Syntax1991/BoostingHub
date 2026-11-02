@@ -1,30 +1,22 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { orm } from "@/lib/prisma";
-import { venomousCreateInput } from "@/lib/test-run-input";
+import { anyContentRunInput } from "@/lib/test-run-input";
 import { attendanceService } from "@/services/attendance.service";
 import { discordSyncService } from "@/services/discord-sync.service";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import type { CharacterRole, WowClass } from "@/models/enums";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestCharacter, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { CURRENT_WEEK_RUN_START, HOUR_MS, RAID_WEEK_TEST_CLOCK, freezeSystemTime, restoreSystemTime } from "@/test/time";
 
-const kaelId = "11111111-1111-4111-8111-111111111111";
-const thorneId = "33333333-3333-4333-8333-333333333333";
-const brannId = "55555555-5555-4555-8555-555555555555";
-
-const thorne: AuthenticatedUser = {
-  id: thorneId,
-  name: "Thorne Ironvein",
-  email: `${thorneId}@dev.boostting.local`,
-  image: null,
-  discordUserId: null,
-  discordUsername: null,
-  accountRole: "RAID_LEAD",
-  accountStatus: "ACTIVE",
-};
-
-const createdCharacterIds: string[] = [];
-const createdRunIds: string[] = [];
+/** Runs (signups, rosters, attendance) cascade; Characters and specs go with their owners. */
+const created = { runIds: [] as string[], userIds: [] as string[] };
+let lead: AuthenticatedUser;
+/** Owners of the historic signups; a second Booster where one User must not own both. */
+let boosterId = "";
+let secondBoosterId = "";
 
 type Fixture = {
   name: string;
@@ -38,24 +30,14 @@ type Fixture = {
 
 async function createHistoricSignup(runId: string, fixture: Fixture): Promise<string> {
   const now = new Date().toISOString();
-  const characterId = crypto.randomUUID();
-  createdCharacterIds.push(characterId);
-  const userId = fixture.userId ?? kaelId;
-  await orm.Character.create({
-    id: characterId,
+  const userId = fixture.userId ?? boosterId;
+  const characterId = await createTestCharacter({
     userId,
     name: fixture.name,
     realm: "Antonidas",
-    normalizedName: fixture.name.toLowerCase(),
-    normalizedRealm: "antonidas",
-    region: "EU",
     wowClass: fixture.wowClass,
     specialization: fixture.specialization,
     primaryRole: fixture.primaryRole,
-    itemLevel: 700,
-    isActive: true,
-    createdAt: now,
-    updatedAt: now,
   });
   for (const specialization of fixture.playableSpecs ?? []) {
     await orm.CharacterPlayableSpec.create({
@@ -89,21 +71,15 @@ async function createHistoricSignup(runId: string, fixture: Fixture): Promise<st
   return signupId;
 }
 
+/** An OPEN Run a few hours after the previous one, so no two of them reserve the same Character slot. */
 async function createOpenRun(desiredDpsCount = 2) {
+  const scheduledStartAt = new Date(Date.parse(CURRENT_WEEK_RUN_START) + created.runIds.length * 3 * HOUR_MS).toISOString();
   const run = await runService.createRun(
-    thorne,
-    venomousCreateInput({
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      venomousPlannedBossCount: 8,
-      scheduledStartAt: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString(),
-      desiredTankCount: 0,
-      desiredHealerCount: 0,
-      desiredDpsCount,
-    }),
+    lead,
+    anyContentRunInput({ scheduledStartAt, desiredTankCount: 0, desiredHealerCount: 0, desiredDpsCount }),
   );
-  createdRunIds.push(run.id);
-  await runService.openRun(thorne, run.id);
+  created.runIds.push(run.id);
+  await runService.openRun(lead, run.id);
   return run.id;
 }
 
@@ -116,48 +92,25 @@ async function offeredRoleNames(signupId: string): Promise<string[]> {
   return rows.map((row) => row.role).sort();
 }
 
-describe("historic generic DPS roster assignment", () => {
-  afterAll(async () => {
-    for (const runId of createdRunIds) {
-      const notes = await orm.UserNotification.where({ runId }).select("id").all();
-      for (const row of notes) {
-        await orm.UserNotification.where({ id: (row as { id: string }).id }).delete();
-      }
-      const attendance = await orm.RunAttendance.where({ runId }).select("id").all();
-      for (const row of attendance) {
-        await orm.RunAttendance.where({ id: (row as { id: string }).id }).delete();
-      }
-      const start = await orm.RunStartSnapshot.where({ runId }).first();
-      if (start) await orm.RunStartSnapshot.where({ id: (start as { id: string }).id }).delete();
-      const roster = await orm.RunRoster.where({ runId }).first();
-      if (roster) {
-        const rosterId = (roster as { id: string }).id;
-        const entries = await orm.RunRosterEntry.where({ rosterId }).all();
-        for (const entry of entries) {
-          await orm.RunRosterEntry.where({ id: (entry as { id: string }).id }).delete();
-        }
-        await orm.RunRoster.where({ id: rosterId }).delete();
-      }
-      const signups = await orm.RunSignup.where({ runId }).select("id").all();
-      for (const row of signups) {
-        const signupId = (row as { id: string }).id;
-        const roles = await orm.RunSignupRole.where({ signupId }).select("id").all();
-        for (const role of roles) {
-          await orm.RunSignupRole.where({ id: (role as { id: string }).id }).delete();
-        }
-        await orm.RunSignup.where({ id: signupId }).delete();
-      }
-      await orm.Run.where({ id: runId }).delete();
-    }
-    for (const id of createdCharacterIds) {
-      const specs = await orm.CharacterPlayableSpec.where({ characterId: id }).select("id").all();
-      for (const spec of specs) {
-        await orm.CharacterPlayableSpec.where({ id: (spec as { id: string }).id }).delete();
-      }
-      await orm.Character.where({ id }).delete();
-    }
-  });
+beforeAll(async () => {
+  assertIsolatedTestDatabase();
+  freezeSystemTime(RAID_WEEK_TEST_CLOCK, { advance: true });
+  const leadId = await createTestUser({ name: "Legacy Lead", accountRole: "RAID_LEAD" });
+  boosterId = await createTestUser({ name: "Legacy Booster", isBooster: true });
+  secondBoosterId = await createTestUser({ name: "Legacy Second Booster", isBooster: true });
+  created.userIds.push(leadId, boosterId, secondBoosterId);
+  lead = testActor(leadId, "RAID_LEAD");
+});
 
+afterAll(async () => {
+  try {
+    await deleteCreatedRows(created);
+  } finally {
+    restoreSystemTime();
+  }
+});
+
+describe("historic generic DPS roster assignment", () => {
   it("buckets resolved historic DPS and leaves only ambiguous rows unassigned", async () => {
     const runId = await createOpenRun();
     const fixtures: Fixture[] = [
@@ -219,7 +172,7 @@ describe("historic generic DPS roster assignment", () => {
       await createHistoricSignup(runId, fixture);
     }
 
-    const view = await rosterService.getRosterManagementView(thorne, runId);
+    const view = await rosterService.getRosterManagementView(lead, runId);
     const names = (rows: Array<{ character: { name: string } | null }>) =>
       rows.map((row) => row.character?.name).sort();
 
@@ -254,23 +207,23 @@ describe("historic generic DPS roster assignment", () => {
       primaryRole: "RANGED_DPS",
       offeredRoles: ["DPS"],
     });
-    let view = await rosterService.getRosterManagementView(thorne, runId);
+    let view = await rosterService.getRosterManagementView(lead, runId);
 
     await expect(
-      rosterService.saveDraftSelection(thorne, {
+      rosterService.saveDraftSelection(lead, {
         runId,
         version: view.roster.version,
         selections: [{ signupId, selectedRole: "DPS" }],
       }),
     ).rejects.toMatchObject({ code: "INVALID_ROSTER_SELECTION" });
 
-    await rosterService.setDraftSelection(thorne, {
+    await rosterService.setDraftSelection(lead, {
       runId,
       signupId,
       selected: true,
       version: view.roster.version,
     });
-    view = await rosterService.getRosterManagementView(thorne, runId);
+    view = await rosterService.getRosterManagementView(lead, runId);
     expect(view.boosters.find((row) => row.id === signupId)?.selectedRole).toBe("RANGED_DPS");
     expect(await offeredRoleNames(signupId)).toEqual(["DPS"]);
   });
@@ -288,10 +241,10 @@ describe("historic generic DPS roster assignment", () => {
       characterId: string;
     };
     const beforeSpecs = await orm.CharacterPlayableSpec.where({ characterId: signupRow.characterId }).all();
-    let view = await rosterService.getRosterManagementView(thorne, runId);
+    let view = await rosterService.getRosterManagementView(lead, runId);
 
     await expect(
-      rosterService.setDraftSelection(thorne, {
+      rosterService.setDraftSelection(lead, {
         runId,
         signupId,
         selected: true,
@@ -302,18 +255,18 @@ describe("historic generic DPS roster assignment", () => {
       message: "Choose Melee or Ranged DPS for Testblast-Antonidas.",
     });
 
-    await rosterService.saveDraftSelection(thorne, {
+    await rosterService.saveDraftSelection(lead, {
       runId,
       version: view.roster.version,
       selections: [{ signupId, selectedRole: "MELEE_DPS" }],
     });
-    view = await rosterService.getRosterManagementView(thorne, runId);
+    view = await rosterService.getRosterManagementView(lead, runId);
     const entry = (await orm.RunRosterEntry.where({ signupId }).first()) as { id: string } | null;
     expect(entry).not.toBeNull();
     await orm.RunRosterEntry.where({ id: entry!.id }).update({ selectedRole: null });
 
     await expect(
-      rosterService.publishRoster(thorne, {
+      rosterService.publishRoster(lead, {
         runId,
         version: view.roster.version,
         acknowledgeWarnings: true,
@@ -323,8 +276,8 @@ describe("historic generic DPS roster assignment", () => {
       message: "Choose Melee or Ranged DPS for Testblast-Antonidas.",
     });
 
-    view = await rosterService.getRosterManagementView(thorne, runId);
-    await rosterService.saveDraftSelection(thorne, {
+    view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.saveDraftSelection(lead, {
       runId,
       version: view.roster.version,
       selections: [{ signupId, selectedRole: "RANGED_DPS" }],
@@ -345,14 +298,14 @@ describe("historic generic DPS roster assignment", () => {
     });
     const shamanId = await createHistoricSignup(runId, {
       name: "Raidresto",
-      userId: brannId,
+      userId: secondBoosterId,
       wowClass: "SHAMAN",
       specialization: "Restoration",
       primaryRole: "HEALER",
       offeredRoles: ["HEALER", "DPS"],
     });
-    let view = await rosterService.getRosterManagementView(thorne, runId);
-    await rosterService.saveDraftSelection(thorne, {
+    let view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.saveDraftSelection(lead, {
       runId,
       version: view.roster.version,
       selections: [
@@ -360,8 +313,8 @@ describe("historic generic DPS roster assignment", () => {
         { signupId: shamanId, selectedRole: "MELEE_DPS" },
       ],
     });
-    view = await rosterService.getRosterManagementView(thorne, runId);
-    await rosterService.publishRoster(thorne, {
+    view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.publishRoster(lead, {
       runId,
       version: view.roster.version,
       acknowledgeWarnings: true,
@@ -380,8 +333,8 @@ describe("historic generic DPS roster assignment", () => {
     expect(embed?.groups.unspecifiedDps.map((member) => member.characterName)).not.toContain("Raidresto");
     expect(embed?.groups.unspecifiedDps.map((member) => member.characterName)).not.toContain("Raidfrost");
 
-    await runService.startRun(thorne, { runId });
-    const attendance = await attendanceService.getManagerAttendance(thorne, runId);
+    await runService.startRun(lead, { runId });
+    const attendance = await attendanceService.getManagerAttendance(lead, runId);
     expect(attendance.rows.find((row) => row.characterName === "Raidfrost")?.selectedRole).toBe("RANGED_DPS");
     expect(attendance.rows.find((row) => row.characterName === "Raidresto")?.selectedRole).toBe("MELEE_DPS");
   });

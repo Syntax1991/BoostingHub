@@ -1,38 +1,44 @@
-import { describe, expect, it } from "vitest";
-import { seededProductSelection } from "@/lib/test-run-input";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { seededProductSelection, type SeededProductKey } from "@/lib/test-run-input";
 import { projectRunContentDisplay } from "@/lib/run-content-display";
 import {
   TIDEBOUND_GROTTO_RAID_ID,
   VENOMOUS_ABYSS_RAID_ID,
 } from "@/lib/wow-raid-catalog";
-import { afterAll, beforeAll } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { orm } from "@/lib/prisma";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { runService } from "@/services/run.service";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { DAY_MS } from "@/test/time";
 
-const ids = {
-  lead: "aaaaaaaa-aaaa-4aaa-8aaa-p2rc00000001",
-};
+/** Contents and signups cascade with their Run. */
+const created = { runIds: [] as string[], userIds: [] as string[] };
+let lead: AuthenticatedUser;
 
-const createdRunIds: string[] = [];
+function futureIso(days: number) {
+  return new Date(Date.now() + days * DAY_MS).toISOString();
+}
 
-function asLead(): AuthenticatedUser {
+/** The full Run fields for one of the seeded products; only the product, boss count and day vary here. */
+function productRun(product: SeededProductKey, venomousBossCount: number, daysAhead: number) {
   return {
-    id: ids.lead,
-    name: "Phase2 Lead",
-    email: `${ids.lead}@p2.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole: "RAID_LEAD",
-    accountStatus: "ACTIVE",
+    ...seededProductSelection(product, venomousBossCount),
+    difficulty: "HEROIC" as const,
+    lootType: "UNSAVED" as const,
+    scheduledStartAt: futureIso(daysAhead),
+    desiredTankCount: 2,
+    desiredHealerCount: 4,
+    desiredDpsCount: 14,
   };
 }
 
-function futureIso(days = 14) {
-  return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+async function createProductRun(product: SeededProductKey, venomousBossCount: number, daysAhead: number) {
+  const { id } = await runService.createRun(lead, productRun(product, venomousBossCount, daysAhead));
+  created.runIds.push(id);
+  return id;
 }
 
 describe("run content display (persisted contents)", () => {
@@ -120,72 +126,28 @@ describe("run content display (persisted contents)", () => {
 });
 
 describe("run content products — create / mass-create / edit", () => {
-  const lead = asLead();
-
   beforeAll(async () => {
+    assertIsolatedTestDatabase();
     await raidRepository.ensureReferenceRaids();
-    try {
-      await orm.User.where({ id: ids.lead }).delete();
-    } catch {
-      // absent
-    }
-    await orm.User.create({
-      id: ids.lead,
-      name: "Phase2 Lead",
-      email: `${ids.lead}@p2.boostting.local`,
-      emailVerified: true,
-      accountRole: "RAID_LEAD",
-      accountStatus: "ACTIVE",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
+    const leadId = await createTestUser({ name: "Phase2 Lead", accountRole: "RAID_LEAD" });
+    created.userIds.push(leadId);
+    lead = testActor(leadId, "RAID_LEAD");
   });
 
-  afterAll(async () => {
-    for (const id of createdRunIds) {
-      try {
-        await orm.Run.where({ id }).delete();
-      } catch {
-        // cascade / already gone
-      }
-    }
-    try {
-      await orm.User.where({ id: ids.lead }).delete();
-    } catch {
-      // absent
-    }
-  });
+  afterAll(() => deleteCreatedRows(created));
 
   it("creates Venomous 8 with one content row and Venomous authoritative contents", async () => {
-    const { id } = await runService.createRun(lead, {
-      ...seededProductSelection("VENOMOUS_ABYSS", 8),
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      scheduledStartAt: futureIso(20),
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    });
-    createdRunIds.push(id);
+    const id = await createProductRun("VENOMOUS_ABYSS", 8, 20);
     const contents = await runRepository.listRaidContents(id);
-            expect(contents).toHaveLength(1);
+    expect(contents).toHaveLength(1);
     expect(contents[0]?.raidId).toBe(VENOMOUS_ABYSS_RAID_ID);
     expect(contents[0]?.plannedBossCount).toBe(8);
   });
 
   it("creates Bundle 8 with Tidebound 1 + Venomous 8 and Venomous authoritative contents", async () => {
-    const { id } = await runService.createRun(lead, {
-      ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 8),
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      scheduledStartAt: futureIso(21),
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    });
-    createdRunIds.push(id);
+    const id = await createProductRun("MIDNIGHT_S2_BUNDLE", 8, 21);
     const contents = await runRepository.listRaidContents(id);
-            expect(contents).toHaveLength(2);
+    expect(contents).toHaveLength(2);
     expect(contents[0]).toMatchObject({
       raidId: TIDEBOUND_GROTTO_RAID_ID,
       sortOrder: 1,
@@ -199,16 +161,7 @@ describe("run content products — create / mass-create / edit", () => {
   });
 
   it("creates partial Bundle 6 with display summary Tide 1/1 · Venomous 6/8", async () => {
-    const { id } = await runService.createRun(lead, {
-      ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 6),
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      scheduledStartAt: futureIso(22),
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    });
-    createdRunIds.push(id);
+    const id = await createProductRun("MIDNIGHT_S2_BUNDLE", 6, 22);
     const contents = await runRepository.listRaidContents(id);
     expect(contents.map((row) => row.plannedBossCount)).toEqual([1, 6]);
     const display = projectRunContentDisplay(contents);
@@ -237,7 +190,7 @@ describe("run content products — create / mass-create / edit", () => {
         },
       ],
     });
-    createdRunIds.push(...result.ids);
+    created.runIds.push(...result.ids);
     expect(result.ids).toHaveLength(3);
     const counts = await Promise.all(result.ids.map((id) => runRepository.listRaidContents(id)));
     expect(counts.map((rows) => rows.length)).toEqual([1, 2, 2]);
@@ -245,27 +198,9 @@ describe("run content products — create / mass-create / edit", () => {
   });
 
   it("allows Venomous → Bundle 6 before freeze and Bundle → Venomous after", async () => {
-    const { id } = await runService.createRun(lead, {
-      ...seededProductSelection("VENOMOUS_ABYSS", 8),
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      scheduledStartAt: futureIso(40),
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    });
-    createdRunIds.push(id);
+    const id = await createProductRun("VENOMOUS_ABYSS", 8, 40);
 
-    await runService.updateRun(lead, {
-      runId: id,
-      ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 6),
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      scheduledStartAt: futureIso(40),
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    });
+    await runService.updateRun(lead, { runId: id, ...productRun("MIDNIGHT_S2_BUNDLE", 6, 40) });
     let contents = await runRepository.listRaidContents(id);
     expect(contents).toHaveLength(2);
     expect(contents.map((row) => [row.raidId, row.plannedBossCount])).toEqual([
@@ -273,16 +208,7 @@ describe("run content products — create / mass-create / edit", () => {
       [VENOMOUS_ABYSS_RAID_ID, 6],
     ]);
 
-    await runService.updateRun(lead, {
-      runId: id,
-      ...seededProductSelection("VENOMOUS_ABYSS", 8),
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      scheduledStartAt: futureIso(40),
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    });
+    await runService.updateRun(lead, { runId: id, ...productRun("VENOMOUS_ABYSS", 8, 40) });
     contents = await runRepository.listRaidContents(id);
     expect(contents).toHaveLength(1);
     expect(contents[0]?.raidId).toBe(VENOMOUS_ABYSS_RAID_ID);
@@ -290,23 +216,14 @@ describe("run content products — create / mass-create / edit", () => {
   });
 
   it("keeps content identity editable after signup history — the signup rows stay attached", async () => {
-    const { id } = await runService.createRun(lead, {
-      ...seededProductSelection("VENOMOUS_ABYSS", 8),
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      scheduledStartAt: futureIso(41),
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    });
-    createdRunIds.push(id);
+    const id = await createProductRun("VENOMOUS_ABYSS", 8, 41);
     await runService.openRun(lead, id);
 
     const signupId = crypto.randomUUID();
     await orm.RunSignup.create({
       id: signupId,
       runId: id,
-      userId: ids.lead,
+      userId: lead.id,
       characterId: null,
       participationType: "LOOTBUDDY",
       isBackup: false,
@@ -315,16 +232,7 @@ describe("run content products — create / mass-create / edit", () => {
       updatedAt: new Date().toISOString(),
     });
 
-    await runService.updateRun(lead, {
-      runId: id,
-      ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 8),
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      scheduledStartAt: futureIso(41),
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    });
+    await runService.updateRun(lead, { runId: id, ...productRun("MIDNIGHT_S2_BUNDLE", 8, 41) });
 
     // Venomous → Bundle: Tidebound 1/1 + Venomous 8/8, signup history untouched.
     const contents = await runRepository.listRaidContents(id);
@@ -333,46 +241,17 @@ describe("run content products — create / mass-create / edit", () => {
     expect(await orm.RunSignup.where({ id: signupId }).first()).toBeTruthy();
 
     // And back: Bundle → Venomous with a different boss count.
-    await runService.updateRun(lead, {
-      runId: id,
-      ...seededProductSelection("VENOMOUS_ABYSS", 6),
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      scheduledStartAt: futureIso(41),
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    });
+    await runService.updateRun(lead, { runId: id, ...productRun("VENOMOUS_ABYSS", 6, 41) });
     const back = await runRepository.listRaidContents(id);
     expect(back.map((row) => [row.raidId, row.plannedBossCount])).toEqual([[VENOMOUS_ABYSS_RAID_ID, 6]]);
 
-    await orm.RunSignup.where({ id: signupId }).delete();
   });
 
   it("notes-only update leaves Bundle contents untouched", async () => {
-    const { id } = await runService.createRun(lead, {
-      ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 7),
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      scheduledStartAt: futureIso(42),
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    });
-    createdRunIds.push(id);
+    const id = await createProductRun("MIDNIGHT_S2_BUNDLE", 7, 42);
     const before = await runRepository.listRaidContents(id);
 
-    await runService.updateRun(lead, {
-      runId: id,
-      ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 7),
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      scheduledStartAt: futureIso(42),
-      notes: "Bundle note",
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    });
+    await runService.updateRun(lead, { runId: id, ...productRun("MIDNIGHT_S2_BUNDLE", 7, 42), notes: "Bundle note" });
     const after = await runRepository.listRaidContents(id);
     expect(after.map((row) => ({ id: row.id, raidId: row.raidId, plannedBossCount: row.plannedBossCount }))).toEqual(
       before.map((row) => ({ id: row.id, raidId: row.raidId, plannedBossCount: row.plannedBossCount })),

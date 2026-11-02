@@ -1,7 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
-import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
 import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
@@ -13,6 +11,9 @@ import type { ConfirmedRosterWarning, RosterSelectionRisk } from "@/domain/roste
 import { runService } from "@/services/run.service";
 import { venomousCreateInput } from "@/lib/test-run-input";
 import { signupService } from "@/services/signup.service";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestCharacter, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { expectDomainError } from "@/test/domain-error";
 import { freezeSystemTime, restoreSystemTime } from "@/test/time";
 
 /**
@@ -24,14 +25,14 @@ import { freezeSystemTime, restoreSystemTime } from "@/test/time";
  */
 
 const raidId = VENOMOUS_ABYSS_RAID_ID;
-const ids = {
-  lead: "aaaaaaaa-aaaa-4aaa-8aaa-rl0000000001",
-  target: "aaaaaaaa-aaaa-4aaa-8aaa-rl0000000002",
-};
-const createdUserIds = Object.values(ids);
-const createdRunIds: string[] = [];
-const createdCharacterIds: string[] = [];
-const createdLockoutIds: string[] = [];
+/** Runs cascade; Characters and their lockouts go with the target User. */
+const created = { runIds: [] as string[], userIds: [] as string[] };
+let lead: AuthenticatedUser;
+let target: AuthenticatedUser;
+/** A fresh saved Character per test, so no test sees another's lockouts or reservations. */
+let saved = "";
+let savedName = "";
+let testIndex = 0;
 
 function rosterBoosters<T extends { id: string }>(view: { boosters: T[] }): T[] {
   return view.boosters;
@@ -46,135 +47,34 @@ function confirmWarnings(signup: { id: string; selectionRisk: RosterSelectionRis
   }));
 }
 
-function asUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"] = "USER"): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@rltest.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
-
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    if (error instanceof Error && error.message === `Expected domain error ${code}`) {
-      throw error;
-    }
-    expect(isDomainError(error) && error.code).toBe(code);
-  }
-}
-
-async function createTestUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"]) {
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@rltest.boostting.local`,
-    emailVerified: true,
-    accountRole,
-    accountStatus: "ACTIVE",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
-}
-
-async function deleteIfPresent(table: string, id: string) {
-  try {
-    if (table === "User") await orm.User.where({ id }).delete();
-    else if (table === "Character") await orm.Character.where({ id }).delete();
-    else if (table === "RunSignup") await orm.RunSignup.where({ id }).delete();
-    else if (table === "Run") await orm.Run.where({ id }).delete();
-    else if (table === "CharacterRaidLockout") await orm.CharacterRaidLockout.where({ id }).delete();
-  } catch {
-    // Already gone.
-  }
-}
-
 function futureIso(hoursFromNow: number) {
   return new Date(Date.now() + hoursFromNow * 60 * 60 * 1000).toISOString();
 }
 
-async function cleanupRun(runId: string) {
-  const roster = await orm.RunRoster.where({ runId }).first();
-  if (roster) {
-    const rosterId = (roster as { id: string }).id;
-    const entries = await orm.RunRosterEntry.where({ rosterId }).all();
-    for (const entry of entries) {
-      await orm.RunRosterEntry.where({ id: (entry as { id: string }).id }).delete();
-    }
-    await orm.RunRoster.where({ id: rosterId }).delete();
-  }
-  const signups = await orm.RunSignup.where({ runId }).select("id").all();
-  for (const row of signups) {
-    await deleteIfPresent("RunSignup", (row as { id: string }).id);
-  }
-  await deleteIfPresent("Run", runId);
-}
-
-const lead = asUser(ids.lead, "Lockout Lead", "RAID_LEAD");
-const target = asUser(ids.target, "Lockout Target", "USER");
-
-let saved = "";
-
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   await raidRepository.ensureReferenceRaids();
-  for (const userId of createdUserIds) {
-    const runs = await orm.Run.where({ raidLeadId: userId }).select("id").all();
-    for (const row of runs) {
-      await cleanupRun((row as { id: string }).id);
-    }
-    const chars = await orm.Character.where({ userId }).select("id").all();
-    for (const row of chars) {
-      await deleteIfPresent("Character", (row as { id: string }).id);
-    }
-    await deleteIfPresent("User", userId);
-  }
+  const leadId = await createTestUser({ name: "Lockout Lead", accountRole: "RAID_LEAD" });
+  const targetId = await createTestUser({ name: "Lockout Target", isBooster: true });
+  created.userIds.push(leadId, targetId);
+  lead = testActor(leadId, "RAID_LEAD");
+  target = testActor(targetId);
+}, 60_000);
 
-  await createTestUser(ids.lead, "Lockout Lead", "RAID_LEAD");
-  await createTestUser(ids.target, "Lockout Target", "USER");
-
-  saved = crypto.randomUUID();
-  createdCharacterIds.push(saved);
-  await orm.Character.create({
-    id: saved,
-    userId: ids.target,
-    name: "Rlsaved",
+beforeEach(async () => {
+  // Character names are letters only and unique per owner.
+  savedName = `Rlsaved${"abcdefghij"[testIndex++]}`;
+  saved = await createTestCharacter({
+    userId: target.id,
+    name: savedName,
     realm: "Lockout Lab",
-    normalizedName: normalizeCharacterIdentity("Rlsaved"),
-    normalizedRealm: normalizeCharacterIdentity("Lockout Lab"),
-    region: "EU",
     wowClass: "HUNTER",
     specialization: "Beast Mastery",
     primaryRole: "RANGED_DPS",
-    itemLevel: 700,
-    isActive: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
   });
+});
 
-  await orm.User.where({ id: ids.target }).update({ isBooster: true });
-}, 60_000);
-
-afterAll(async () => {
-  for (const runId of createdRunIds) {
-    await cleanupRun(runId);
-  }
-  for (const id of createdLockoutIds) {
-    await deleteIfPresent("CharacterRaidLockout", id);
-  }
-  for (const id of createdCharacterIds) {
-    await deleteIfPresent("Character", id);
-  }
-  for (const id of createdUserIds) {
-    await deleteIfPresent("User", id);
-  }
-}, 60_000);
+afterAll(() => deleteCreatedRows(created), 60_000);
 
 async function createOpenRun(scheduledStartAt: string) {
   const id = await runService
@@ -188,7 +88,7 @@ async function createOpenRun(scheduledStartAt: string) {
       }),
     )
     .then((run) => run.id);
-  createdRunIds.push(id);
+  created.runIds.push(id);
   await runService.openRun(lead, id);
   return id;
 }
@@ -201,13 +101,10 @@ async function markSaved(runId: string, characterId: string, bossesDefeated = 8,
     region,
     run?.scheduledStartAt ?? futureIso(1),
   );
-  // Tests reuse the same Character/raid/difficulty across several Runs that
-  // may land in the same reset week — CharacterRaidLockout is unique on
-  // (characterId, raidId, difficulty, resetIdentifier), so clear any prior
-  // row for this exact key first rather than colliding with it.
-  await orm.CharacterRaidLockout.where({ characterId, raidId, difficulty: "HEROIC", resetIdentifier }).delete().catch(() => {});
+  // One lockout per (Character, raid, difficulty, reset): a second Run in the same reset reuses it.
+  const existing = await orm.CharacterRaidLockout.where({ characterId, raidId, difficulty: "HEROIC", resetIdentifier }).first();
+  if (existing) return { lockoutId: (existing as { id: string }).id, resetIdentifier };
   const lockoutId = crypto.randomUUID();
-  createdLockoutIds.push(lockoutId);
   await orm.CharacterRaidLockout.create({
     id: lockoutId,
     characterId,
@@ -244,9 +141,9 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
       runId: runA,
       offers: [{ characterId: saved, offeredRoles: ["RANGED_DPS"] }],
     });
-    expect(result.created + result.reactivated).toBeGreaterThan(0);
+    expect(result).toMatchObject({ created: 1, reactivated: 0 });
 
-    const rows = await signupRepository.listByRunAndUser(runA, ids.target);
+    const rows = await signupRepository.listByRunAndUser(runA, target.id);
     const activeRow = rows.find((row) => row.character?.id === saved && row.status !== "WITHDRAWN");
     expect(activeRow?.offeredRoles).toEqual(["RANGED_DPS"]);
 
@@ -270,7 +167,7 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
     // A known save on an UNSAVED Run is a WARNING: selectable, but only with
     // the Raid Lead's explicit confirmation (never a blocker).
     expect(candidate?.selectionRisk.level).toBe("WARNING");
-    await expectDomainCode(
+    await expectDomainError(
       rosterService.setDraftSelection(lead, { runId: runA, signupId: candidate!.id, selected: true, version: view.roster.version }),
       "ROSTER_WARNING_CONFIRMATION_REQUIRED",
     );
@@ -290,7 +187,7 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
     ).resolves.toBeTruthy();
 
     const published = await rosterService.getPublishedRosterView(runA);
-    expect(published?.members.some((member) => member.characterName === "Rlsaved")).toBe(true);
+    expect(published?.members.some((member) => member.characterName === savedName)).toBe(true);
   });
 
   it("keeps raid save and cross-Run reservation as separate concerns: saved-but-free is eligible, saved-and-reserved-elsewhere is still ALREADY_SELECTED_OTHER_RUN (never LOCKOUT_CONFLICT)", async () => {
@@ -320,7 +217,7 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
 
     // Now runB must block on the cross-run reservation reason, not lockout —
     // even though the Character is ALSO saved on runB's exact raid/difficulty/reset.
-    await expectDomainCode(
+    await expectDomainError(
       signupService.setCharacterOffers(target, { runId: runB, offers: [{ characterId: saved, offeredRoles: ["RANGED_DPS"] }] }),
       "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
     );
@@ -339,8 +236,8 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
       const tuesday = await createOpenRun("2026-09-15T01:00:00.000Z"); // Tue 03:00 Berlin VIP-style
       const { resetIdentifier } = await markSaved(monday, saved, 7, false);
       expect(resetIdentifier).toBe("2026-W37");
-      // Same regional key for Tuesday — reusing markSaved would recreate the same unique row.
-      await markSaved(tuesday, saved, 7, false);
+      // Same regional reset for Tuesday: the existing lockout covers it.
+      expect((await markSaved(tuesday, saved, 7, false)).resetIdentifier).toBe("2026-W37");
 
       const mondayOptions = await signupService.getSignupOptions(target, monday);
       expect(mondayOptions.booster.eligible.find((item) => item.characterId === saved)?.contentSaves[0]?.raidSave).toEqual({
