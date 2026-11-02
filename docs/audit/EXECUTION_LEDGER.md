@@ -359,13 +359,16 @@ Found while moving, not changed (feature freeze): four production modules are im
 | 3 | Production refactoring / code quality | DONE | [PHASE-3.md](reports/PHASE-3.md) |
 | 4 | Performance, security, reliability | DONE | [PHASE-4.md](reports/PHASE-4.md) |
 | 5 | UX and documentation | DONE | [PHASE-5.md](reports/PHASE-5.md) |
-| 6 | Final validation and readiness | NOT STARTED | — |
+| 6 | Final validation and readiness | DONE | [PHASE-6.md](reports/PHASE-6.md) |
 
 ### Phase 2 remaining (authoritative)
 
 Phase 2 complete. See [PHASE-2.md](reports/PHASE-2.md). Full suite 341 files / 3824 tests ×2 on `boostting_bot_test_audit` without reset; lint/typecheck/build pass; `setDraftSelection` removed from production.
 
 ## Continuation point
+
+Master audit Phases 1–6 complete on 	est/audit-batch-a — see [PHASE-6.md](reports/PHASE-6.md). Open owner items only (A16, CSP, etc.).
+
 
 Handover to Cursor (2026-11-02): Claude left branch `test/audit-batch-a` at local `af6bb59` (1 commit ahead of origin `95c2eaf`, `setDraftSelection`→`saveDraftSelection` for six audited suites) plus uncommitted fixture isolation rewrites for three remaining suites. Cursor recovered that work, fixed one TDZ shadowing bug in `roster-pre-start-replacements`, validated 67/67 twice on `boostting_bot_test_audit` without reset, and recorded the decisions below.
 
