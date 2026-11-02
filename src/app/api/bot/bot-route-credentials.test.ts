@@ -50,8 +50,8 @@ describe("bot API credentials on every route", () => {
   });
 
   it.each(routes)("$name refuses a missing or wrong token", async ({ file, name }) => {
-    const module = (await import(/* @vite-ignore */ file)) as Partial<Record<(typeof METHODS)[number], Handler>>;
-    const handlers = METHODS.flatMap((method) => (module[method] ? [[method, module[method]] as const] : []));
+    const route = (await import(/* @vite-ignore */ file)) as Partial<Record<(typeof METHODS)[number], Handler>>;
+    const handlers = METHODS.flatMap((method) => (route[method] ? [[method, route[method]] as const] : []));
     expect(handlers.length).toBeGreaterThan(0);
 
     for (const [method, handler] of handlers) {
