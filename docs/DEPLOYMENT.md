@@ -317,7 +317,8 @@ systemctl restart boostinghub-web.service boostinghub-discord-bot.service
 - [ ] Discord sign-in completes with no redirect loop; a returning login maps to the same user
 - [ ] A member holding the configured Booster role receives Booster on sign-in;
       manual Booster grants remain enabled and role absence does not revoke them
-- [ ] `/profile` renders, including Active Sessions (no raw tokens)
+- [ ] `/profile` renders
+- [ ] `/settings` renders, including Active sessions (no raw tokens)
 - [ ] `/characters` loads (availability, lockouts, WCL, Battle.net)
 - [ ] `/runs`, `/my-runs` and `/manage/runs` (for authorized roles) load
 - [ ] Discord bot shows online in the guild
@@ -326,6 +327,7 @@ systemctl restart boostinghub-web.service boostinghub-discord-bot.service
       `systemd-cgls -u boostinghub-discord-bot.service --no-pager`
 - [ ] `systemctl list-timers 'boostinghub-*'` shows all four timers with a next run
 - [ ] Newest `/var/backups/boostinghub/*.dump` is non-empty and passes `pg_restore --list`
+- [ ] Do **not** use `npm run db:seed` as a check. It is guarded, but it exists to delete data
 - [ ] Fresh logs are clean since the restart:
       `journalctl -u boostinghub-web --since "10 min ago"` and
       `journalctl -u boostinghub-discord-bot --since "10 min ago"` show no startup errors,

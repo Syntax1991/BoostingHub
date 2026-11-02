@@ -1,6 +1,6 @@
 # BoostingHub handover
 
-For the next developer and operator: the real state of the project, what is unfinished, and what you must take over. Written 2026-11-01. Statements about the live server come from the last recorded release and were **not re-checked when this was written**; confirm them first.
+For the next developer and operator: the real state of the project, what is unfinished, and what you must take over. Written 2026-11-01 and updated 2026-11-02. Statements about the live server were last checked read-only on 2026-11-02 and will age; confirm them first.
 
 This repository is public, so concrete server details, access data and secret values are not here. They are handed over privately.
 
@@ -23,7 +23,7 @@ This repository is public, so concrete server details, access data and secret va
 - Since 2026-11-01 the project is in a **final feature freeze**, because the owner is stepping away from World of Warcraft. The goal is a stable handover. No new features are planned.
 - Stack: Next.js, React, TypeScript, PostgreSQL, Prisma 8 (release candidate), Better Auth, discord.js. Details: [DEVELOPER.md](DEVELOPER.md).
 - The app runs on one Linux server with a web process, one Discord bot process and four systemd timers. See [OPERATIONS.md](OPERATIONS.md).
-- Last recorded production release: `418fd7b` (security dependency update, PR #318), deployed 2026-11-01. The owner's production smoke test passed, including a real Discord login and session survival. `main` is ahead of production only by documentation, comments, guide text, four bot messages, test changes and removed one-off scripts; they reach the server with the next normal release.
+- Last recorded production release: `da5df27` (new Discord guides and replace flow, PR #321), deployed 2026-11-02 with no migrations. It includes the `db:seed` production guard from PR #322, deployed the same day as `0fd2080`. Automated production checks and signed-in pages passed after the deploy. A fresh Discord login was last done on 2026-11-01, on the `a596c8e` release, not since.
 
 ## Production and disabled features
 
@@ -44,8 +44,8 @@ This repository is public, so concrete server details, access data and secret va
 ## Known bugs and limitations
 
 - A full test run on a database without reset failed four tests once, while another session was active (cause unproven). Those files passed alone, and the suite passed after a reset. Use `npm run test:full`.
-- The production web log showed a burst of "Server Reference ID did not match" lines on 2026-11-01. The origin was not traced; it looks like invalid Server Action probing, not an app failure.
-- The guide channels in Discord still show older text and screenshots. On 2026-11-01 an in-place publish stopped at Discord's limit for editing older messages: three Booster cards were updated, the other Booster cards and the whole Raid Lead guide were not. Use the replace flow in [OPERATIONS.md](./OPERATIONS.md#replacing-a-guide-with-new-messages) instead of editing again.
+- The production web log shows recurring bursts of exactly 25 "Server Reference ID did not match" lines, each saying it received `x`, for example seven bursts between 2026-11-01 and 2026-11-02. They look like automated Server Action probing, not an app failure. The source was not traced.
+- The Discord guides were replaced on 2026-11-02 with the flow in [OPERATIONS.md](./OPERATIONS.md#replacing-a-guide-with-new-messages): 5 Booster and 6 Raid Lead messages, verified through the Discord API. Replacing needs the channels to hold only this bot's guide messages. There is no undo or restore command; the old text and images are in the replace snapshot folders on the server.
 - **Add strike on the Run page looks unreachable.** `AddStrikeButton` only renders in the manager signup list, and `run-detail-tabs.tsx` shows that list only to viewers who are not managers. So in practice Strikes are added on `/manage/users/[userId]`, which means by Admins. Found by reading the code, not reproduced in a browser, and not fixed because the freeze excludes logic changes.
 - External boosters have no Warcraft Logs identity and are shown as "Log data unavailable".
 - The voice-presence hint assumes one web process.
@@ -66,7 +66,7 @@ This repository is public, so concrete server details, access data and secret va
 
 ## Open pull requests
 
-None. The last one, #297, was merged on 2026-11-01.
+None once this documentation update is merged. The last feature PR, #321, was merged on 2026-11-02.
 
 ## Open decisions
 
@@ -76,7 +76,7 @@ None. The last one, #297, was merged on 2026-11-01.
 | `production` branch | Planned, see below. Today everything deploys from `main` |
 | Secret rotation timing | Open; see below. Rotating `BETTER_AUTH_SECRET` ends sessions unless the old value stays configured as a legacy secret |
 | Enabling boss exceptions | Open; not needed for the freeze |
-| Off-site backups | Open |
+| Off-site backups | Open: a destination and encryption key still have to be chosen. Nothing has been copied off the server |
 | Scope of the Discord bot's permissions | To be reduced when a new community or operator takes over |
 
 ## Open follow-up ideas
@@ -96,12 +96,12 @@ Named as classes on purpose. Details and evidence go to the new maintainer priva
 | --- | --- | --- |
 | Server access hardening is incomplete, and root access depends on one key on one machine | Give the new operator their own verified access first, then harden login and remove old access. Never the other way round | New operator |
 | No independent console access for the current maintainer | Take over the provider account; until then keep server changes minimal | New operator |
-| Backups only on the production host | Add encrypted off-site copies and test a restore | New operator |
+| Backups only on the production host. An isolated restore test passed on 2026-11-02 on that host (see [OPERATIONS.md](OPERATIONS.md#testing-a-backup-without-touching-production)): 54 tables, 576 columns, 241 constraints and 204 indexes matched production, and row counts matched in 53 of 54 tables, with `integration_event` growing after the backup as expected. If that host is lost, the backups are lost with it | Add encrypted off-site copies and repeat the restore test from them | New operator |
 | Secrets were reachable from development and AI tooling, and local and production values overlapped | Rotate all production secrets during takeover, in a planned order | New operator |
 | GitHub owner credentials were available to AI tooling | See [Planned access separation](#planned-access-separation) | Owner |
 | Release helper runs an app-writable script as root; server installs dev dependencies | Move to a root-owned helper; review dependency install | New operator |
-| Known dependency advisories remain: `lodash` (not reachable at runtime per the last review) and development tools | Re-run `npm audit` and decide | Maintainer |
-| Public repository history holds operational details and a personal commit e-mail. On 2026-11-01 Gitleaks and TruffleHog (offline, unverified mode, history including PR refs) found **no confirmed credential**: only Discord ids misread as client ids, and the password fixture in `deploy/production/backup-db.test.sh`, which is also what GitGuardian flagged on PR #86. On 2026-11-02 Gitleaks 8.28.0 ran again over the tracked files and all refs including PR refs (909 commits scanned, merge commits have no separate diff scan): no confirmed credential, but **not a clean result**. Most findings are 18-digit numbers in test files. The `.env.example` finding is an empty value. One finding from 2026-09-10 in the since-removed `docs/features/blizzard-integration.md` (commit `0c23031`, line 148) looks like prose but **remains unresolved**. Prod-only and old secrets were not compared, and the GitGuardian dashboard status is not visible from the repository | Repeat the scans at the snapshot checkpoint; treat exposed information as public | Owner |
+| Known dependency advisories remain. `lodash` 4.17.21 (high) is indirect: the bot reaches it through `discord.js` and `@sapphire/shapeshift`, which import only `get` and `uniqWith`, not the affected `template`, `unset` or `omit`. Development tools also pull it in, and the server installs those | Re-run `npm audit`, and update it in a separate tested change | Maintainer |
+| Public repository history holds operational details and a personal commit e-mail. On 2026-11-01 Gitleaks and TruffleHog (offline, unverified mode, history including PR refs) found **no confirmed credential**: only Discord ids misread as client ids, and the password fixture in `deploy/production/backup-db.test.sh`, which is also what GitGuardian flagged on PR #86. On 2026-11-02 Gitleaks 8.28.0 ran again over the tracked files and all refs including PR refs (909 commits scanned, merge commits have no separate diff scan): **no confirmed credential**. Every finding was reviewed: 18-digit numbers in test files, which are not credentials but were not each proven to be made up; an empty `DISCORD_BOT_TOKEN` in `.env.example`; and plain words in a table of the removed `docs/features/blizzard-integration.md` (commit `0c23031`, only on the ref of PR #8, not on `main`). Scanners match patterns and do not test whether a value still works. Prod-only and old secrets were not compared, and the GitGuardian dashboard status is not visible from the repository | Repeat the scans at the snapshot checkpoint; treat exposed information as public | Owner |
 | Discord bot permissions are broader than the documented minimum | Scope down | New operator |
 
 **Remaining public identifiers in tracked files** (no secrets): the guild and guide channel ids in `src/discord-bot/guide-channels.ts`, the app URL in `deploy/update-server.sh` and the guides, and the Guild emoji name `PhoenixStarDiscord` the bot looks up. They are working configuration. Moving the Discord ids to the environment would be a small separate change worth making when a new community takes over; it brings no security gain on its own. Test fixtures, comments and `.env.example` now use neutral names and ids.
