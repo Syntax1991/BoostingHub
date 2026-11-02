@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
 import { FEED_TEST_CLOCK, freezeSystemTime, restoreSystemTime } from "@tests/fixtures/time";
 import { futureTestIso, venomousCreateInput } from "@tests/fixtures/test-run-input";
@@ -20,54 +19,41 @@ import { runRepository } from "@/repositories/run.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { discordSyncService } from "@/services/discord-sync.service";
 import { runService } from "@/services/run.service";
+import { signupService } from "@/services/signup.service";
 import { activityRepository } from "@/repositories/activity.repository";
+import { testActor } from "@tests/fixtures/actors";
+import {
+  assertIsolatedTestDatabase,
+  createTestUser,
+  deleteCreatedRows,
+  syntheticDiscordId,
+} from "@tests/fixtures/db-fixtures";
+import { expectDomainError } from "@tests/helpers/domain-error";
 
-const ids = {
-  lead: "aaaaaaaa-aaaa-4aaa-8aaa-rx0000000001",
-  admin: "aaaaaaaa-aaaa-4aaa-8aaa-rx0000000002",
-  player: "aaaaaaaa-aaaa-4aaa-8aaa-rx0000000003",
-};
+const created = { runIds: [] as string[], userIds: [] as string[] };
+let lead: AuthenticatedUser;
+let admin: AuthenticatedUser;
+let player: AuthenticatedUser;
 
-const createdRunIds: string[] = [];
-const createdSignupIds: string[] = [];
+const CHANNEL = syntheticDiscordId();
+const STALE_REACTIVATE_CHANNEL = syntheticDiscordId();
+const LIVE_CHANNEL = syntheticDiscordId();
+const STALE_CANCEL_CHANNEL = syntheticDiscordId();
 
-function asUser(
-  id: string,
+async function createUser(
   name: string,
-  accountRole: AuthenticatedUser["accountRole"] = "USER",
-): AuthenticatedUser {
-  return {
-    id,
+  accountRole: AuthenticatedUser["accountRole"],
+  options: { discordUserId?: string; discordUsername?: string } = {},
+) {
+  const id = await createTestUser({
     name,
-    email: `${id}@rx.boostting.local`,
-    image: null,
-    discordUserId: id === ids.player ? "discord-rx-player" : null,
-    discordUsername: id === ids.player ? "rxplayer" : null,
     accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
-
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    if (error instanceof Error && error.message === `Expected domain error ${code}`) throw error;
-    expect(isDomainError(error) && error.code).toBe(code);
-  }
-}
-
-async function createTestUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"]) {
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@rx.boostting.local`,
-    emailVerified: true,
-    discordUserId: id === ids.player ? "discord-rx-player" : null,
-    discordUsername: id === ids.player ? "rxplayer" : null,
-    accountRole,
-    accountStatus: "ACTIVE",
+    discordUserId: options.discordUserId ?? null,
+    discordUsername: options.discordUsername ?? null,
+  });
+  created.userIds.push(id);
+  // Cancel / reactivate DMs must be opted in for the delivery-authority cases.
+  await orm.User.where({ id }).update({
     discordDmEnabled: true,
     dmRosterSelectedEnabled: true,
     dmRaidInviteEnabled: true,
@@ -75,109 +61,80 @@ async function createTestUser(id: string, name: string, accountRole: Authenticat
     dmRunRescheduledEnabled: true,
     dmRosterRemovedEnabled: true,
     timeZone: "Europe/Berlin",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+  });
+  return testActor(id, accountRole, {
+    name,
+    discordUserId: options.discordUserId ?? null,
+    discordUsername: options.discordUsername ?? null,
   });
 }
 
-async function cleanupRun(runId: string) {
-  const notes = await orm.UserNotification.where({ runId }).select("id").all();
-  for (const row of notes) {
-    await orm.UserNotification.where({ id: (row as { id: string }).id }).delete();
-  }
-  const announcements = await orm.RunDiscordAnnouncement.where({ runId }).select("id").all();
-  for (const row of announcements) {
-    await orm.RunDiscordAnnouncement.where({ id: (row as { id: string }).id }).delete();
-  }
-  try {
-    await orm.RunDiscordPost.where({ runId }).delete();
-  } catch {
-    // none
-  }
-  const activities = await orm.ActivityEvent.where({ type: "RUN_REACTIVATED" }).select("id").all();
-  for (const row of activities) {
-    // leave other activity; only clean by message match later if needed
-    void row;
-  }
-  try {
-    await orm.Run.where({ id: runId }).delete();
-  } catch {
-    // gone
-  }
-}
-
-const lead = asUser(ids.lead, "Rx Lead", "RAID_LEAD");
-const admin = asUser(ids.admin, "Rx Admin", "ADMIN");
-
-// Deterministic wall clock (see FEED_TEST_CLOCK), frozen once for the whole file
-// so time stays monotonic across tests that share state; the global newest-first
-// feeds asserted on here must not be outranked by rows other suites left behind.
+// Deterministic wall clock so the global newest-first activity feed asserted
+// here is not outranked by rows other suites left behind.
 beforeAll(() => freezeSystemTime(FEED_TEST_CLOCK, { advance: true }));
 afterAll(() => restoreSystemTime());
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   await raidRepository.ensureReferenceRaids();
-  for (const id of Object.values(ids)) {
-    try {
-      await orm.User.where({ id }).delete();
-    } catch {
-      // gone
-    }
-  }
-  await createTestUser(ids.lead, "Rx Lead", "RAID_LEAD");
-  await createTestUser(ids.admin, "Rx Admin", "ADMIN");
-  await createTestUser(ids.player, "Rx Player", "USER");
-});
+  lead = await createUser("Rx Lead", "RAID_LEAD");
+  admin = await createUser("Rx Admin", "ADMIN");
+  player = await createUser("Rx Player", "USER", {
+    discordUserId: syntheticDiscordId(),
+    discordUsername: "rxplayer",
+  });
+}, 60_000);
 
-afterAll(async () => {
-  for (const signupId of createdSignupIds.splice(0)) {
-    try {
-      await orm.RunSignup.where({ id: signupId }).delete();
-    } catch {
-      // gone
-    }
-  }
-  for (const runId of createdRunIds.splice(0)) {
-    await cleanupRun(runId);
-  }
-  for (const id of Object.values(ids)) {
-    try {
-      await orm.User.where({ id }).delete();
-    } catch {
-      // gone
-    }
-  }
-});
+afterAll(() => deleteCreatedRows(created), 60_000);
 
 async function createDraft(extra: Record<string, unknown> = {}) {
-  const created = await runService.createRun(
+  const createdRun = await runService.createRun(
     lead,
     venomousCreateInput({
-      scheduledStartAt: futureTestIso(10 + createdRunIds.length),
+      scheduledStartAt: futureTestIso(10 + created.runIds.length),
       ...extra,
     }),
   );
-  createdRunIds.push(created.id);
-  return created.id;
+  created.runIds.push(createdRun.id);
+  return createdRun.id;
 }
 
 async function addPendingSignup(runId: string) {
-  const signupId = crypto.randomUUID();
-  createdSignupIds.push(signupId);
-  await orm.RunSignup.create({
-    id: signupId,
+  const before = (await orm.RunSignup.where({
     runId,
-    userId: ids.player,
+    userId: player.id,
     participationType: "LOOTBUDDY",
-    lootbuddyClass: "MAGE",
-    lootbuddyMode: "LOOT_ONLY",
-    lootbuddyVerification: "NONE",
-    isBackup: false,
-    status: "PENDING",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+  }).all()) as Array<{
+    id: string;
+    status: string;
+    lootbuddyClass: "MAGE";
+    lootbuddyMode: "LOOT_ONLY";
+    lootbuddyVerification: "NONE";
+  }>;
+  const keep = before
+    .filter((row) => row.status !== "WITHDRAWN")
+    .map((row) => ({
+      signupId: row.id,
+      wowClass: row.lootbuddyClass,
+      mode: row.lootbuddyMode,
+      verification: row.lootbuddyVerification,
+    }));
+  const beforeIds = new Set(before.map((row) => row.id));
+  await signupService.setLootbuddies(player, {
+    runId,
+    lootbuddies: [...keep, { wowClass: "MAGE", mode: "LOOT_ONLY", verification: "NONE" }],
   });
-  return signupId;
+  const after = (await orm.RunSignup.where({
+    runId,
+    userId: player.id,
+    participationType: "LOOTBUDDY",
+    status: "PENDING",
+  })
+    .select("id")
+    .all()) as Array<{ id: string }>;
+  const newest = after.find((row) => !beforeIds.has(row.id));
+  if (!newest) throw new Error("Expected a new pending lootbuddy signup");
+  return newest.id;
 }
 
 describe("reactivate cancelled run", () => {
@@ -273,7 +230,7 @@ describe("reactivate cancelled run", () => {
     await orm.RunRoster.where({ id: String(roster.id) }).update({
       state: "PUBLISHED",
       publishedAt: new Date().toISOString(),
-      publishedById: ids.lead,
+      publishedById: lead.id,
       version: 3,
       postRevision: 2,
       runChangedSinceAck: true,
@@ -310,14 +267,14 @@ describe("reactivate cancelled run", () => {
     expect(rosterAfter.version).toBe(3);
     expect(rosterAfter.postRevision).toBe(2);
     expect(rosterAfter.runChangedSinceAck).toBe(true);
-    expect(rosterAfter.publishedById).toBe(ids.lead);
+    expect(rosterAfter.publishedById).toBe(lead.id);
     expect(await orm.RunExternalBooster.where({ rosterId: String(roster.id) }).all()).toHaveLength(1);
   });
 
   it("R/S/T/U/V/W: hard blocks + archive restore then reactivate", async () => {
     const inProgressId = await createDraft({ title: "Rx in progress" });
     await runRepository.updateFields(inProgressId, { status: "IN_PROGRESS" });
-    await expectDomainCode(runService.reactivateRun(lead, inProgressId), "RUN_CANNOT_REACTIVATE");
+    await expectDomainError(runService.reactivateRun(lead, inProgressId), "RUN_CANNOT_REACTIVATE");
 
     const completedId = await createDraft({ title: "Rx completed" });
     await orm.Run.where({ id: completedId }).update({
@@ -325,18 +282,18 @@ describe("reactivate cancelled run", () => {
       completedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
-    await expectDomainCode(runService.reactivateRun(lead, completedId), "RUN_CANNOT_REACTIVATE");
+    await expectDomainError(runService.reactivateRun(lead, completedId), "RUN_CANNOT_REACTIVATE");
 
     const legacyId = await createDraft({ title: "Rx legacy cancel" });
     await runRepository.updateFields(legacyId, { status: "CANCELLED", signupsOpen: false });
     // cancelRevision 0 + null snapshot = legacy
-    await expectDomainCode(runService.reactivateRun(lead, legacyId), "RUN_CANNOT_REACTIVATE");
+    await expectDomainError(runService.reactivateRun(lead, legacyId), "RUN_CANNOT_REACTIVATE");
 
     const archivedId = await createDraft({ title: "Rx archived cancel" });
     await runService.openRun(lead, archivedId);
     await runService.cancelRun(lead, archivedId);
     await runService.archiveRun(admin, archivedId);
-    await expectDomainCode(runService.reactivateRun(lead, archivedId), "RUN_CANNOT_REACTIVATE");
+    await expectDomainError(runService.reactivateRun(lead, archivedId), "RUN_CANNOT_REACTIVATE");
 
     await runService.restoreRun(admin, archivedId);
     const stillCancelled = await runRepository.findById(archivedId);
@@ -350,17 +307,17 @@ describe("reactivate cancelled run", () => {
     const runId = await createDraft({ title: "Rx notify cycles" });
     await runService.openRun(lead, runId);
     await addPendingSignup(runId);
-    await discordSyncService.recordRunChannel({ runId, channelId: "rx-chan-1" });
+    await discordSyncService.recordRunChannel({ runId, channelId: CHANNEL });
 
     await runService.cancelRun(lead, runId);
     const cancelAnn1 = await runDiscordAnnouncementRepository.findBySourceKey(
       runCancelledChannelSourceKey(runId, 1),
     );
     expect(cancelAnn1?.status).toBe("PENDING");
-    const cancelNote1 = (await userNotificationRepository.listForUser(ids.player, 20)).find(
+    const cancelNote1 = (await userNotificationRepository.listForUser(player.id, 20)).find(
       (row) => row.runId === runId && row.type === "RUN_CANCELLED",
     );
-    expect(cancelNote1?.sourceKey).toBe(runCancelledSourceKey(runId, 1, ids.player));
+    expect(cancelNote1?.sourceKey).toBe(runCancelledSourceKey(runId, 1, player.id));
     expect(cancelNote1?.discordDeliveryStatus).toBe("PENDING");
 
     await runService.reactivateRun(lead, runId);
@@ -376,13 +333,13 @@ describe("reactivate cancelled run", () => {
     );
     expect(reactivateAnn?.type).toBe("RUN_REACTIVATED");
     expect(reactivateAnn?.status).toBe("PENDING");
-    const reactivateNote = (await userNotificationRepository.listForUser(ids.player, 20)).find(
+    const reactivateNote = (await userNotificationRepository.listForUser(player.id, 20)).find(
       (row) => row.runId === runId && row.type === "RUN_REACTIVATED",
     );
-    expect(reactivateNote?.sourceKey).toBe(runReactivatedSourceKey(runId, 1, ids.player));
+    expect(reactivateNote?.sourceKey).toBe(runReactivatedSourceKey(runId, 1, player.id));
 
     // Idempotent reactivate must not duplicate
-    await expectDomainCode(runService.reactivateRun(lead, runId), "RUN_CANNOT_REACTIVATE");
+    await expectDomainError(runService.reactivateRun(lead, runId), "RUN_CANNOT_REACTIVATE");
     const reactivateAnns = (await orm.RunDiscordAnnouncement.where({ runId, type: "RUN_REACTIVATED" }).all()) as Array<
       Record<string, unknown>
     >;
@@ -474,8 +431,8 @@ describe("reactivate cancelled run", () => {
         ?.status,
     ).toBe("PENDING");
     expect(
-      (await userNotificationRepository.listForUser(ids.player, 50)).find(
-        (row) => row.sourceKey === runReactivatedSourceKey(pendingId, 1, ids.player),
+      (await userNotificationRepository.listForUser(player.id, 50)).find(
+        (row) => row.sourceKey === runReactivatedSourceKey(pendingId, 1, player.id),
       )?.discordDeliveryStatus,
     ).toBe("SKIPPED");
 
@@ -517,8 +474,8 @@ describe("reactivate cancelled run", () => {
     await addPendingSignup(dmId);
     await runService.cancelRun(lead, dmId);
     await runService.reactivateRun(lead, dmId);
-    const pendingDm = (await userNotificationRepository.listForUser(ids.player, 50)).find(
-      (row) => row.sourceKey === runReactivatedSourceKey(dmId, 1, ids.player),
+    const pendingDm = (await userNotificationRepository.listForUser(player.id, 50)).find(
+      (row) => row.sourceKey === runReactivatedSourceKey(dmId, 1, player.id),
     );
     expect(pendingDm?.discordDeliveryStatus).toBe("PENDING");
     await runService.cancelRun(lead, dmId);
@@ -531,8 +488,8 @@ describe("reactivate cancelled run", () => {
     await addPendingSignup(sentDmId);
     await runService.cancelRun(lead, sentDmId);
     await runService.reactivateRun(lead, sentDmId);
-    const sentDm = (await userNotificationRepository.listForUser(ids.player, 50)).find(
-      (row) => row.sourceKey === runReactivatedSourceKey(sentDmId, 1, ids.player),
+    const sentDm = (await userNotificationRepository.listForUser(player.id, 50)).find(
+      (row) => row.sourceKey === runReactivatedSourceKey(sentDmId, 1, player.id),
     );
     await userNotificationRepository.updateDiscordDelivery(sentDm!.id, "SENT");
     await runService.cancelRun(lead, sentDmId);
@@ -543,7 +500,7 @@ describe("reactivate cancelled run", () => {
     const runId = await createDraft({ title: "Rx stale reactivate announce" });
     await runService.openRun(lead, runId);
     await addPendingSignup(runId);
-    await discordSyncService.recordRunChannel({ runId, channelId: "rx-stale-reactivate-chan" });
+    await discordSyncService.recordRunChannel({ runId, channelId: STALE_REACTIVATE_CHANNEL });
     await runService.cancelRun(lead, runId);
     await runService.reactivateRun(lead, runId);
 
@@ -581,7 +538,7 @@ describe("reactivate cancelled run", () => {
     await runService.cancelRun(lead, runId);
     await runService.reactivateRun(lead, runId);
 
-    const notes = (await userNotificationRepository.listForUser(ids.player, 50)).filter(
+    const notes = (await userNotificationRepository.listForUser(player.id, 50)).filter(
       (row) => row.runId === runId && row.type === "RUN_REACTIVATED",
     );
     expect(notes).toHaveLength(1);
@@ -631,8 +588,8 @@ describe("reactivate cancelled run", () => {
             runReactivatedChannelSourceKey(runId, revision - 1),
           ))?.status,
         ).toBe("SKIPPED");
-        const priorDm = (await userNotificationRepository.listForUser(ids.player, 50)).find(
-          (row) => row.sourceKey === runReactivatedSourceKey(runId, revision - 1, ids.player),
+        const priorDm = (await userNotificationRepository.listForUser(player.id, 50)).find(
+          (row) => row.sourceKey === runReactivatedSourceKey(runId, revision - 1, player.id),
         );
         expect(priorDm?.discordDeliveryStatus).toBe("SKIPPED");
       }
@@ -670,13 +627,13 @@ describe("reactivate cancelled run", () => {
   it("AF–AK: existing channel not retired after Reactivate; archive pointers cleared; deleted ids not restored", async () => {
     const runId = await createDraft({ title: "Rx discord survive" });
     await runService.openRun(lead, runId);
-    await discordSyncService.recordRunChannel({ runId, channelId: "rx-live-chan" });
+    await discordSyncService.recordRunChannel({ runId, channelId: LIVE_CHANNEL });
     await runDiscordPostRepository.recordSignupPost({
       runId,
-      signupChannelId: "rx-live-chan",
+      signupChannelId: LIVE_CHANNEL,
       signupMessageId: "signup-msg-1",
       lastSignupSignature: "sig",
-      runChannelId: "rx-live-chan",
+      runChannelId: LIVE_CHANNEL,
     });
     await runDiscordPostRepository.recordArchiveArtifacts({
       runId,
@@ -694,11 +651,11 @@ describe("reactivate cancelled run", () => {
     work = await discordSyncService.listSyncWork();
     const channel = work.channels.find((row) => row.runId === runId);
     expect(channel?.retireChannel).toBe(false);
-    expect(channel?.existingRunChannelId).toBe("rx-live-chan");
+    expect(channel?.existingRunChannelId).toBe(LIVE_CHANNEL);
     expect(await discordSyncService.shouldRetireRunChannel(runId)).toBe(false);
 
     const post = await runDiscordPostRepository.findByRunId(runId);
-    expect(post?.runChannelId).toBe("rx-live-chan");
+    expect(post?.runChannelId).toBe(LIVE_CHANNEL);
     expect(post?.signupMessageId).toBe("signup-msg-1");
     expect(post?.archiveCloseMessageId).toBeNull();
     expect(post?.archiveTranscriptMessageId).toBeNull();
@@ -722,7 +679,7 @@ describe("reactivate cancelled run", () => {
     const runId = await createDraft({ title: "Rx stale announce" });
     await runService.openRun(lead, runId);
     await addPendingSignup(runId);
-    await discordSyncService.recordRunChannel({ runId, channelId: "rx-stale-chan" });
+    await discordSyncService.recordRunChannel({ runId, channelId: STALE_CANCEL_CHANNEL });
     await runService.cancelRun(lead, runId);
 
     const pendingWork = await discordSyncService.listSyncWork();
@@ -756,7 +713,7 @@ describe("reactivate cancelled run", () => {
     await addPendingSignup(runId);
     await runService.cancelRun(lead, runId);
 
-    const notes = (await userNotificationRepository.listForUser(ids.player, 20)).filter(
+    const notes = (await userNotificationRepository.listForUser(player.id, 20)).filter(
       (row) => row.runId === runId && row.type === "RUN_CANCELLED",
     );
     expect(notes).toHaveLength(1);

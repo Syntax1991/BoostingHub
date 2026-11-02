@@ -1279,6 +1279,10 @@
     "tests/integration/services/run-warcraft-logs-auto.test.ts": [
       "REWRITE",
       "Owns its Runs through the production lifecycle instead of mutating seeded Runs; synthetic Discord ids; frozen clock for exact start/complete stamps; removed the manager-already-analyzed skip case that only flipped auto flags on a row; encounter ids match Venomous content"
+    ],
+    "tests/integration/services/run-reactivate.test.ts": [
+      "REWRITE",
+      "Fresh users via createTestUser with DM prefs and synthetic Discord ids; lootbuddy rows through setLootbuddies instead of raw inserts; verified deleteCreatedRows; expectDomainError; channel ids synthetic"
     ]
   },
   "tests": {

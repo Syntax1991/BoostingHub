@@ -131,7 +131,7 @@ Order follows the assignment. Each line is one PR, stacked on the one before.
 | 4 | MVCS boundaries: app and controllers no longer import repositories; lib no longer imports components | PR #326, awaiting review |
 | 4b | Move pure rules from `src/services` to `src/domain` | PR #327, awaiting review |
 | 5 | Guide code: drop legacy paths, share publisher code | PR #328, awaiting review |
-| 6 | Test cleanup by module | In progress on `test/audit-batch-a`: 320 of 341 files decided, 3066 of ~3824 tests (22 files left) |
+| 6 | Test cleanup by module | In progress on `test/audit-batch-a`: 321 of 341 files decided, 3080 of ~3824 tests (21 files left) |
 | 7 | Frontend: error, loading and not-found pages; shared dialog effect | PR #329, awaiting review |
 | 8 | Performance, measured: run detail payload, event purge, rate-limit log | PR #330, awaiting review |
 | 9 | Dependencies and final verification | Dependencies audited, no change; TruffleHog scan still invalid |
@@ -356,7 +356,7 @@ Handover to Cursor (2026-11-02): Claude left branch `test/audit-batch-a` at loca
 The test audit is not complete. Order for the rest, smallest risk first:
 
 1. Done on branch `test/audit-batch-a`: `src/repositories` (11 files), `src/components` (39), `src/discord-bot` (37), `src/lib` (88), `src/domain` (22), `src/guides`, `src/services` batches 1–11. All tests now live under `tests/` (see above); paths below that still name `src/...test.ts` are as they were at the time.
-2. Phase 2 batch (Cursor): `character-run-commitments`, `roster-pre-start-replacements`, `run-warcraft-logs-auto` rewritten for own fixtures / no seed mutation / `waitForLockWaiter`. **22 files left** (see unreviewed list in git status of `test-decisions.json`). `roster.service` still passes only on a freshly reset DB. A test file without an entry in `test-decisions.json` is unreviewed. Each file now also gets the fixture rules above; files already audited get a fixture sweep afterwards (local `asUser`, `expectDomainCode`, fixed-id pre-cleans, swallowed `.catch(() => {})` cleanups).
+2. Phase 2 batch (Cursor): `character-run-commitments`, `roster-pre-start-replacements`, `run-warcraft-logs-auto`, `run-reactivate` rewritten for own fixtures / no seed mutation / production signup paths / `waitForLockWaiter`. **21 files left**. `roster.service` still passes only on a freshly reset DB. A test file without an entry in `test-decisions.json` is unreviewed. Each file now also gets the fixture rules above; files already audited get a fixture sweep afterwards (local `asUser`, `expectDomainCode`, fixed-id pre-cleans, swallowed `.catch(() => {})` cleanups).
 3. Done: `signupService.createBoosterSignup` is removed with `persistSignup`, `signupRepository.create` / `findDuplicate`, `isBlockingDuplicate` and `boosterSignupSchema`. All 13 suites offer through `offerCharacters` / `offerCharacter` in `tests/helpers/signup-offers.ts`, which calls the production `setCharacterOffers`. `signup.service.test.ts` is rewritten.
 
 Services batch 2 notes worth keeping:
