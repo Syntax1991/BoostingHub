@@ -1042,7 +1042,7 @@
     ],
     "src/services/signup.service.test.ts": [
       "REWRITE",
-      "Pending, scheduled with the createBoosterSignup batch: writes onto shared seed Runs, tests depend on order (revived flag, withdrawn row), main user of the test-only method"
+      "Rebuilt on own users, Characters and Runs instead of seeded Runs and order-dependent state; keeps the withdraw rules and Lootbuddy metadata; the six tests of the removed createBoosterSignup are covered by signup-offers.service.test.ts or tested backup and DUPLICATE_SIGNUP behaviour production no longer has"
     ],
     "src/services/run-preflight.service.test.ts": [
       "KEEP",
@@ -1191,6 +1191,18 @@
     "src/services/scheduled-character-sync-backoff.test.ts": [
       "REWRITE",
       "Shared user fixtures and verified cleanup; Force refresh all removes only its own admin marker and fails on a foreign marker inside the cooldown instead of deleting every marker; the repository spy is restored even when the run throws"
+    ],
+    "src/services/character-delete.test.ts": [
+      "REWRITE",
+      "Shared user fixtures and verified cleanup instead of a hand-written delete chain; Characters tracked because the Platform Owner may be a pre-existing user; exact delete event message, NOT_AUTHORIZED for RAID_LEAD and USER instead of any domain error, attendance rows asserted instead of a substring of stringified JSON; production saveDraftSelection instead of the test-only setDraftSelection"
+    ],
+    "src/services/notification-raid-invite.test.ts": [
+      "REWRITE",
+      "Fresh users with synthetic snowflakes instead of invalid fixed ids, a pre-clean and real-looking Discord ids; production saveDraftSelection, which refuses the Raid Lead holding two selected offers the old test-only setDraftSelection allowed, so DPS is a separate booster; the always-empty raidInvites assertion dropped (lane is dead code, A19); one started-Run helper instead of two copies; preference restore in finally"
+    ],
+    "src/services/signup-draft-selection-visibility.test.ts": [
+      "REWRITE",
+      "Frozen RAID_WEEK_TEST_CLOCK instead of fixed December 2026 starts, which Run creation would refuse from 1 Dec 2026; fresh users instead of fixed ids, swallowed creates and a leftover delete; offers through setCharacterOffers; exact ROSTERING status instead of OPEN-or-ROSTERING; spy restored in finally and the batched lookup asserted to contain the offers"
     ]
   },
   "tests": {
@@ -1839,6 +1851,34 @@
     "src/services/discord-schedule-sync.test.ts::discord schedule lane — listSyncWork > signature matches pure builder for the rendered runs": [
       "REMOVE",
       "Never called the builder its title names; stability is already proven by the U/V/W and Z convergence tests"
+    ],
+    "src/services/signup.service.test.ts::signupService create/withdraw > creates a booster signup and a backup signup for different characters": [
+      "REMOVE",
+      "Tested createBoosterSignup and backup offers, which production cannot create; offer creation is covered by signup-offers \"creates one offer\" and \"expands to multiple offers\""
+    ],
+    "src/services/signup.service.test.ts::signupService create/withdraw > rejects an exact duplicate booster combination": [
+      "REMOVE",
+      "DUPLICATE_SIGNUP existed only in the removed createBoosterSignup; resubmission is a no-op in setCharacterOffers (covered)"
+    ],
+    "src/services/signup.service.test.ts::signupService create/withdraw > allows identical class+mode lootbuddy entries as distinct signup ids": [
+      "REMOVE",
+      "Covered by signup-offers \"supports N lootbuddies including duplicates\""
+    ],
+    "src/services/signup.service.test.ts::signupService create/withdraw > rejects booster signup when the user has no characters / character not owned": [
+      "REMOVE",
+      "Covered by signup-offers \"rejects a character owned by another user\""
+    ],
+    "src/services/signup.service.test.ts::signupService create/withdraw > rejects a closed/non-signable run": [
+      "REMOVE",
+      "Covered by signup-offers \"rejects creating a new offer once the signup window is closed\""
+    ],
+    "src/services/signup.service.test.ts::signupService create/withdraw > can offer two different Brann characters on the same open run": [
+      "REMOVE",
+      "Covered by signup-offers \"expands to multiple offers\" and \"reactivates the withdrawn A row\""
+    ],
+    "src/services/signup-eligibility.test.ts::signup creation rules > treats a non-withdrawn matching combination as an active duplicate": [
+      "REMOVE",
+      "isBlockingDuplicate was only used by the removed createBoosterSignup path and is deleted with it"
     ]
   }
 }

@@ -1,8 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
-import { venomousCreateInput } from "@/lib/test-run-input";
+import { anyContentRunInput } from "@/lib/test-run-input";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import { characterRepository } from "@/repositories/character.repository";
 import { raidRepository } from "@/repositories/raid.repository";
@@ -13,6 +12,10 @@ import { attendanceRepository } from "@/repositories/attendance.repository";
 import { attendanceService } from "@/services/attendance.service";
 import { rosterService } from "@/services/roster.service";
 import { runDetailService } from "@/services/run-detail.service";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { expectDomainError } from "@/test/domain-error";
+import { DAY_MS, HOUR_MS } from "@/test/time";
 
 // Warcraft Logs auto-link enrichment runs after Character writes/syncs; keep it
 // offline (a real WARCRAFT_LOGS_* in .env would otherwise hit the live API).
@@ -25,43 +28,20 @@ vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOr
 }));
 
 const token = Math.random().toString(36).replace(/[^a-z]/g, "").slice(0, 5).padEnd(5, "x");
-const userIds: string[] = [];
-const runIds: string[] = [];
-
-function asUser(id: string, accountRole: AuthenticatedUser["accountRole"] = "USER"): AuthenticatedUser {
-  return {
-    id,
-    name: `Del ${accountRole} ${token}`,
-    email: `${id}@delete.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
+/** Characters are tracked too: the Platform Owner may be a pre-existing user this suite does not delete. */
+const created = { runIds: [] as string[], characterIds: [] as string[], userIds: [] as string[] };
 
 async function createUser(accountRole: AuthenticatedUser["accountRole"]) {
-  const id = crypto.randomUUID();
-  const now = new Date().toISOString();
-  await orm.User.create({
-    id,
-    name: `Del ${accountRole} ${token}`,
-    email: `${id}@delete.boostting.local`,
-    emailVerified: true,
-    accountRole,
-    accountStatus: "ACTIVE",
-    createdAt: now,
-    updatedAt: now,
-  });
-  userIds.push(id);
-  return asUser(id, accountRole);
+  const name = `Del ${accountRole} ${token}`;
+  const id = await createTestUser({ name, accountRole });
+  created.userIds.push(id);
+  return testActor(id, accountRole, { name });
 }
 
 let nameCounter = 0;
 async function createCharacter(owner: AuthenticatedUser) {
   nameCounter += 1;
-  return characterService.createCharacter(owner, {
+  const character = await characterService.createCharacter(owner, {
     name: `Del${token}${String.fromCharCode(96 + nameCounter)}`,
     realm: "Twisting Nether",
     region: "EU",
@@ -69,6 +49,8 @@ async function createCharacter(owner: AuthenticatedUser) {
     specialization: "Arcane",
     itemLevel: 600,
   });
+  created.characterIds.push(character.id);
+  return character;
 }
 
 async function signup(runId: string, userId: string, characterId: string, status: "PENDING" | "WITHDRAWN" | "SELECTED" | "NOT_SELECTED") {
@@ -91,27 +73,22 @@ async function signup(runId: string, userId: string, characterId: string, status
   return id;
 }
 
-async function createRun(lead: AuthenticatedUser, status: "OPEN" | "COMPLETED") {
-  const created = await runService.createRun(
-    lead,
-    venomousCreateInput({
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      scheduledStartAt: new Date(Date.now() + 5 * 86_400_000).toISOString(),
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    }),
-  );
-  runIds.push(created.id);
-  // Test-only shortcut to the lifecycle state under test.
-  await orm.Run.where({ id: created.id }).update({ status });
-  return created.id;
+async function createOpenRun(lead: AuthenticatedUser) {
+  const run = await runService.createRun(lead, anyContentRunInput({ scheduledStartAt: new Date(Date.now() + 5 * DAY_MS).toISOString() }));
+  created.runIds.push(run.id);
+  await runService.openRun(lead, run.id);
+  return run.id;
 }
 
-async function expectCode(promise: Promise<unknown>, code: string) {
-  const error = await promise.then(() => null).catch((caught) => caught);
-  expect(isDomainError(error) && error.code).toBe(code);
+/** Test-only shortcut to a finished Run, for the signup FK behaviour alone. */
+async function createCompletedRun(lead: AuthenticatedUser) {
+  const runId = await createOpenRun(lead);
+  await orm.Run.where({ id: runId }).update({ status: "COMPLETED", signupsOpen: false });
+  return runId;
+}
+
+async function characterDeletedEvents(userId: string) {
+  return (await orm.ActivityEvent.where({ userId, type: "CHARACTER_DELETED" }).all()) as Array<{ message: string }>;
 }
 
 let owner: AuthenticatedUser;
@@ -121,6 +98,7 @@ let admin: AuthenticatedUser;
 let platformOwner: AuthenticatedUser;
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   await raidRepository.ensureReferenceRaids();
   owner = await createUser("USER");
   other = await createUser("USER");
@@ -128,34 +106,14 @@ beforeAll(async () => {
   admin = await createUser("ADMIN");
   // Only one OWNER may exist: reuse it when present (never deleted here), else create one.
   const existingOwner = (await orm.User.where({ accountRole: "OWNER" }).select("id").first()) as { id: string } | null;
-  platformOwner = existingOwner ? asUser(existingOwner.id, "OWNER") : await createUser("OWNER");
+  platformOwner = existingOwner ? testActor(existingOwner.id, "OWNER") : await createUser("OWNER");
 });
 
 afterAll(async () => {
-  for (const runId of runIds) {
-    // Attendance references roster entries with RESTRICT: remove it first.
-    await orm.RunAttendance.where({ runId }).deleteAll();
-    const roster = (await orm.RunRoster.where({ runId }).first()) as { id: string } | null;
-    if (roster) {
-      await orm.RunRosterEntry.where({ rosterId: roster.id }).deleteAll();
-      await orm.RunRoster.where({ id: roster.id }).delete();
-    }
-    for (const row of await orm.RunSignup.where({ runId }).select("id").all()) {
-      await orm.RunSignupRole.where({ signupId: (row as { id: string }).id }).deleteAll();
-      await orm.RunSignup.where({ id: (row as { id: string }).id }).delete();
-    }
-    await orm.Run.where({ id: runId }).delete();
-  }
-  for (const userId of userIds) {
-    for (const row of await orm.Character.where({ userId }).select("id").all()) {
-      await orm.Character.where({ id: (row as { id: string }).id }).delete();
-    }
-    await orm.UserNotification.where({ userId }).deleteAll();
-    for (const row of await orm.ActivityEvent.where({ userId }).select("id").all()) {
-      await orm.ActivityEvent.where({ id: (row as { id: string }).id }).delete();
-    }
-    await orm.User.where({ id: userId }).delete();
-  }
+  assertIsolatedTestDatabase();
+  // Attendance references roster entries with RESTRICT, so it goes before its Run.
+  for (const runId of created.runIds) await orm.RunAttendance.where({ runId }).deleteAndCount();
+  await deleteCreatedRows(created);
 });
 
 describe("owner delete", () => {
@@ -179,8 +137,8 @@ describe("owner delete", () => {
 
     expect(await characterRepository.findById(character.id)).toBeNull();
     expect(await orm.CharacterRaidLockout.where({ characterId: character.id }).all()).toHaveLength(0);
-    const events = (await orm.ActivityEvent.where({ userId: owner.id, type: "CHARACTER_DELETED" }).all()) as unknown[];
-    expect(events.length).toBeGreaterThan(0);
+    const events = await characterDeletedEvents(owner.id);
+    expect(events.filter((event) => event.message === `Deleted character ${character.name}-Twisting Nether (EU).`)).toHaveLength(1);
   });
 
   it("FKs: weekly unavailability cascades; the owner's default-Character pointer is cleared, the user stays", async () => {
@@ -206,16 +164,16 @@ describe("owner delete", () => {
 
   it("never deletes someone else's character", async () => {
     const character = await createCharacter(other);
-    await expectCode(characterService.deleteCharacter(owner, character.id), "CHARACTER_NOT_OWNED");
+    await expectDomainError(characterService.deleteCharacter(owner, character.id), "CHARACTER_NOT_OWNED");
     expect(await characterRepository.findById(character.id)).not.toBeNull();
   });
 
   it("is refused while an unfinished run has a signup on it; a withdrawn signup does not block", async () => {
     const character = await createCharacter(owner);
-    const runId = await createRun(lead, "OPEN");
+    const runId = await createOpenRun(lead);
     const signupId = await signup(runId, owner.id, character.id, "PENDING");
 
-    await expectCode(characterService.deleteCharacter(owner, character.id), "CHARACTER_HAS_OPEN_SIGNUPS");
+    await expectDomainError(characterService.deleteCharacter(owner, character.id), "CHARACTER_HAS_OPEN_SIGNUPS");
     expect(await characterRepository.findById(character.id)).not.toBeNull();
 
     await orm.RunSignup.where({ id: signupId }).update({ status: "WITHDRAWN" });
@@ -225,15 +183,15 @@ describe("owner delete", () => {
 
   it.each(["SELECTED", "NOT_SELECTED"] as const)("an open-run %s signup also blocks (Replace can still pick it)", async (status) => {
     const character = await createCharacter(owner);
-    const runId = await createRun(lead, "OPEN");
+    const runId = await createOpenRun(lead);
     await signup(runId, owner.id, character.id, status);
-    await expectCode(characterService.deleteCharacter(owner, character.id), "CHARACTER_HAS_OPEN_SIGNUPS");
+    await expectDomainError(characterService.deleteCharacter(owner, character.id), "CHARACTER_HAS_OPEN_SIGNUPS");
     expect(await characterRepository.findById(character.id)).not.toBeNull();
   });
 
   it("keeps finished-run history: the signup stays, its character link is cleared", async () => {
     const character = await createCharacter(owner);
-    const runId = await createRun(lead, "COMPLETED");
+    const runId = await createCompletedRun(lead);
     const signupId = await signup(runId, owner.id, character.id, "SELECTED");
 
     await characterService.deleteCharacter(owner, character.id);
@@ -258,15 +216,15 @@ describe("admin delete", () => {
 
   it("applies the same open-signup guard", async () => {
     const character = await createCharacter(other);
-    const runId = await createRun(lead, "OPEN");
+    const runId = await createOpenRun(lead);
     await signup(runId, other.id, character.id, "SELECTED");
-    await expectCode(characterOperationsService.deleteCharacter(admin, character.id), "CHARACTER_HAS_OPEN_SIGNUPS");
+    await expectDomainError(characterOperationsService.deleteCharacter(admin, character.id), "CHARACTER_HAS_OPEN_SIGNUPS");
     expect(await characterRepository.findById(character.id)).not.toBeNull();
   });
 
   it("protects the Platform Owner's characters from ADMINs; the Owner may delete them", async () => {
     const character = await createCharacter(platformOwner);
-    await expectCode(characterOperationsService.deleteCharacter(admin, character.id), "OWNER_ROLE_PROTECTED");
+    await expectDomainError(characterOperationsService.deleteCharacter(admin, character.id), "OWNER_ROLE_PROTECTED");
     expect(await characterRepository.findById(character.id)).not.toBeNull();
     await characterOperationsService.deleteCharacter(platformOwner, character.id);
     expect(await characterRepository.findById(character.id)).toBeNull();
@@ -287,15 +245,16 @@ describe("admin delete", () => {
     expect((await characterOperationsService.getDetail(platformOwner, ownerCharacter.id)).deleteBlockedReason).toBeNull();
 
     // The UI is not the boundary: a direct ADMIN mutation is still refused.
-    await expectCode(characterOperationsService.deleteCharacter(admin, ownerCharacter.id), "OWNER_ROLE_PROTECTED");
+    await expectDomainError(characterOperationsService.deleteCharacter(admin, ownerCharacter.id), "OWNER_ROLE_PROTECTED");
     await characterOperationsService.deleteCharacter(platformOwner, ownerCharacter.id);
     await characterOperationsService.deleteCharacter(admin, userCharacter.id);
   });
 
   it("refuses non-admins", async () => {
     const character = await createCharacter(other);
-    const error = await characterOperationsService.deleteCharacter(lead, character.id).catch((caught) => caught);
-    expect(isDomainError(error)).toBe(true);
+    for (const caller of [lead, other]) {
+      await expectDomainError(characterOperationsService.deleteCharacter(caller, character.id), "NOT_AUTHORIZED");
+    }
     expect(await characterRepository.findById(character.id)).not.toBeNull();
   });
 });
@@ -307,24 +266,12 @@ describe("delete after completed-run history (signup / attendance preservation)"
 
   /** Real lifecycle: signup → roster publish → start → attendance → complete. */
   async function completedRunWithHistory(booster: AuthenticatedUser, characterId: string) {
-    const created = await runService.createRun(
-      lead,
-      venomousCreateInput({
-        difficulty: "HEROIC",
-        lootType: "UNSAVED",
-        scheduledStartAt: new Date(Date.now() + 5 * 86_400_000).toISOString(),
-        desiredTankCount: 2,
-        desiredHealerCount: 4,
-        desiredDpsCount: 14,
-      }),
-    );
-    runIds.push(created.id);
-    await runService.openRun(lead, created.id);
+    const runId = await createOpenRun(lead);
     const signupId = crypto.randomUUID();
     const now = new Date().toISOString();
     await orm.RunSignup.create({
       id: signupId,
-      runId: created.id,
+      runId,
       userId: booster.id,
       characterId,
       participationType: "BOOSTER",
@@ -337,15 +284,19 @@ describe("delete after completed-run history (signup / attendance preservation)"
       updatedAt: now,
     });
     await orm.RunSignupRole.create({ id: crypto.randomUUID(), signupId, role: "MELEE_DPS", createdAt: now });
-    const view = await rosterService.getRosterManagementView(lead, created.id);
-    await rosterService.setDraftSelection(lead, { runId: created.id, signupId, selected: true, version: view.roster.version });
-    const ready = await rosterService.getRosterManagementView(lead, created.id);
-    await rosterService.publishRoster(lead, { runId: created.id, version: ready.roster.version, acknowledgeWarnings: true });
-    await runService.startRun(lead, { runId: created.id });
-    const [attendance] = await attendanceRepository.listByRunId(created.id);
+    const view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.saveDraftSelection(lead, {
+      runId,
+      version: view.roster.version,
+      selections: [{ signupId, selectedRole: "MELEE_DPS" }],
+    });
+    const ready = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.publishRoster(lead, { runId, version: ready.roster.version, acknowledgeWarnings: true });
+    await runService.startRun(lead, { runId });
+    const [attendance] = await attendanceRepository.listByRunId(runId);
     await attendanceService.setStatus(lead, { attendanceId: attendance!.id, expectedStatus: "UNMARKED", status: "PRESENT" });
-    await runService.completeRun(lead, created.id);
-    return { runId: created.id, signupId, attendanceId: attendance!.id };
+    await runService.completeRun(lead, runId);
+    return { runId, signupId, attendanceId: attendance!.id };
   }
 
   it("deletes the Character but keeps user, signup and attendance intact and renderable", async () => {
@@ -369,7 +320,9 @@ describe("delete after completed-run history (signup / attendance preservation)"
 
     // Historical projections still render without the Character relation.
     const managerAttendance = await attendanceService.getManagerAttendance(lead, history.runId);
-    expect(JSON.stringify(managerAttendance)).toContain(booster.name);
+    expect(managerAttendance.rows).toEqual([
+      expect.objectContaining({ id: history.attendanceId, userName: booster.name, status: "PRESENT" }),
+    ]);
     expect(await attendanceService.getOwnAttendance(booster, history.runId)).toHaveLength(1);
     const detail = await runDetailService.getRunDetail(lead, history.runId);
     expect(detail.run.status).toBe("COMPLETED");
@@ -384,7 +337,7 @@ describe("delete after completed-run history (signup / attendance preservation)"
       id: crypto.randomUUID(),
       characterId: character.id,
       startsAt: now,
-      endsAt: new Date(Date.now() + 3_600_000).toISOString(),
+      endsAt: new Date(Date.now() + HOUR_MS).toISOString(),
       reason: null,
       createdAt: now,
       updatedAt: now,
@@ -428,6 +381,5 @@ describe("delete after completed-run history (signup / attendance preservation)"
     expect(access).not.toBeNull();
     expect(access!.characterId).toBeNull();
     expect(access!.userId).toBe(owner.id);
-    await orm.BoosterAccess.where({ id: accessId }).delete();
   });
 });

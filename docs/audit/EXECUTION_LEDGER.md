@@ -71,6 +71,7 @@ Confirmed by import analysis of all non-test files. Severity is about real impac
 | A15 | Medium | `src/services/discord-sync.service.ts`, `src/discord-bot/sync-loop.ts` | 2240 and 2289 lines | Split only along tested lanes |
 | A16 | Open | `src/lib/gold.ts` | Payout leftover with no caller. Payouts were removed on purpose in #228 | **Owner decision**, see below |
 | A17 | High | `src/repositories/user.repository.ts` `changeAccountRoleAtomic` | The "lock every Admin-level row" step used `update()`, which in Prisma Next writes only the first matching row. Two Admins demoting each other could leave none | Fixed in `26a80d5` with `updateAndCount()`; an AST scan of every ORM `update()` / `delete()` in `src` found no other multi-row filter |
+| A19 | Low | `discordSyncService.listSyncWork`, `api/bot/discord/sync/route.ts`, `bot-api-client.ts`, `sync-loop.ts` | `raidInvites` is declared and returned but never filled; Raid Invites travel as `notificationDms`. The bot still has a lane and `syncRaidInvite` for it | Remove the lane on both sides (the bot reads it with `?? []`, so either deploy order is safe) |
 | A18 | Low | `src/repositories/*` (40 sites), 10 test files | `((tx.orm as { public?: … }).public ?? (tx.orm as unknown as …)) as …` copied everywhere; `tx.orm.public` is already typed and present at runtime (checked) | Replace with `tx.orm.public` in one refactor commit |
 
 Healthy and to be left alone: no import cycles, no repository bypass from components, bot API uses constant-time token comparison, all 127 server actions authenticate directly or through the service they call.
@@ -267,13 +268,20 @@ Refactored so far:
 - Mutation checks: single-row `update()` lock restored, 4 of 5 runs fail; Admin-level lock removed, every run fails.
 - Fixed sleeps still waiting for a lock in unaudited files: `attendance.service`, `flexible-run-management`, `roster-pre-start-replacements`, `roster-reservation-concurrency`, `run-lifecycle-concurrency`. Each moves to `waitForLockWaiter` when its file is audited.
 
+### Batch 7 and the test-only signup path
+
+- Audited: `character-delete`, `notification-raid-invite`, `signup-draft-selection-visibility`, `signup.service` (rewritten).
+- `signup-draft-selection-visibility` created Runs at fixed December 2026 dates; Run creation refuses past starts, so it would have failed for good from 1 December 2026. It now runs at `RAID_WEEK_TEST_CLOCK`.
+- `createBoosterSignup` removed (see continuation point 3). The migration is mechanical in unaudited files; their own audit is still due. Same-User same-Run offers that used to add up are now one `offerCharacters` call.
+- Not yet audited and found while migrating: `roster.service.test.ts` passes only on a freshly reset test DB (5 failures otherwise, also before this change); `roster-saved-notice.test.ts` starts Runs on fixed dates from 26 December 2026 and forces several SELECTED offers onto one User.
+
 ## Continuation point
 
 The test audit is not complete. Order for the rest, smallest risk first:
 
 1. Done on branch `test/audit-batch-a`: `src/repositories` (11 files), `src/components` (39), `src/discord-bot` (37), `src/lib` (88), `src/domain` (22), `src/services` batches 1–6 (67 files, the smallest by line count, through `scheduled-character-sync-backoff.test.ts`).
 2. Next: the rest of `src/services`, smallest first, starting at `character-delete.test.ts`; then `src/guides/guide-replace.test.ts`. A test file without an entry in `test-decisions.json` is unreviewed. Each file now also gets the fixture rules above; files already audited get a fixture sweep afterwards (local `asUser`, `expectDomainCode`, fixed-id pre-cleans, swallowed `.catch(() => {})` cleanups).
-3. Open from batch 2: `src/services/signup.service.test.ts` is classified REWRITE but not yet rewritten. It writes onto shared seed Runs, its tests depend on order, and it is the main caller of the test-only `signupService.createBoosterSignup`. It is rewritten in the batch that removes that method (13 files, 75 uses), because the replacement production entry point (`setCharacterOffers`) has different semantics: complete offer set, no backups, no `DUPLICATE_SIGNUP`.
+3. Done: `signupService.createBoosterSignup` is removed with `persistSignup`, `signupRepository.create` / `findDuplicate`, `isBlockingDuplicate` and `boosterSignupSchema`. All 13 suites offer through `offerCharacters` / `offerCharacter` in `src/test/signup-offers.ts`, which calls the production `setCharacterOffers`. `signup.service.test.ts` is rewritten.
 
 Services batch 2 notes worth keeping:
 
@@ -283,7 +291,7 @@ Services batch 2 notes worth keeping:
 - `warcraft-logs-discovery.test.ts` and `discord-member-name-sync.service.test.ts` used real-looking Discord snowflakes (log channel, log bot, guild, role ids). They are now synthetic per run.
 - Bulk refresh markers (resolved in batch 6): the cooldown stays community-wide in production, which is the intended behaviour. Suites now start bulk runs with their own admin, remove only that admin's markers (`src/test/bulk-force-refresh.ts`), and fail with the marker's id when a foreign marker is still inside the cooldown. No suite deletes another suite's markers any more.
 3. For each file: read every test, record a decision in `docs/audit/test-decisions.json`, change what the decision says, then rebuild `docs/audit/test-ledger.tsv` from `vitest list --json`.
-4. After that, remove methods only tests call, such as `signupService.createBoosterSignup` (74 uses) and `rosterService.setDraftSelection` (78 uses). Move their tests to the production entry points first.
+4. Next test-only method: `rosterService.setDraftSelection`. It skips the production rule "one selected Booster offer per User" (found in `notification-raid-invite`), so suites built on it can test rosters production cannot produce. Move its callers to `saveDraftSelection`, then remove it.
 5. Then shared helpers for `createTestUser` (36 copies), `createCharacter` (29) and `createUser` (26), and `restoreMocks` for the 52 files that never reset mocks.
 
 Not started: renames from the naming table, other than the move to `src/domain`.
