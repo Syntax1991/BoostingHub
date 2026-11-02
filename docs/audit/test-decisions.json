@@ -1359,6 +1359,10 @@
     "tests/integration/services/attendance.service.test.ts": [
       "REWRITE",
       "assertIsolatedTestDatabase; verified deleteAndCount (incl RunSignupRole/events/snapshot); testActor; expectDomainError; local setDraftSelection→saveDraftSelection; fixed sleeps→waitForLockWaiter"
+    ],
+    "tests/integration/services/roster.service.test.ts": [
+      "REWRITE",
+      "SEED_IDS; restoreSeededRosterFixtures before/after for ×2 without reset; assertIsolated; verified deleteAndCount; testActor; expectDomainError; setDraftSelection→saveDraftSelection adapter (confirmedWarnings); unapproved booster via repo plant + Save rejects; activity via findLatestByType"
     ]
   },
   "tests": {

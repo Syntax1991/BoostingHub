@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
+import type { CharacterRole } from "@/domain/run-types";
 import { orm } from "@/lib/prisma";
-import { FEED_TEST_CLOCK, freezeSystemTime, restoreSystemTime } from "@tests/fixtures/time";
+import { SEED_IDS } from "@/prisma/seed-ids";
 import { activityRepository } from "@/repositories/activity.repository";
 import { rosterRepository } from "@/repositories/roster.repository";
 import { signupRepository } from "@/repositories/signup.repository";
@@ -10,34 +10,62 @@ import { lockoutService } from "@/services/lockout.service";
 import { rosterService } from "@/services/roster.service";
 import { runDetailService } from "@/services/run-detail.service";
 import { runService } from "@/services/run.service";
-import { venomousCreateInput } from "@tests/fixtures/test-run-input";
 import { signupService } from "@/services/signup.service";
+import { testActor } from "@tests/fixtures/actors";
+import { assertIsolatedTestDatabase } from "@tests/fixtures/db-fixtures";
+import { FEED_TEST_CLOCK, freezeSystemTime, restoreSystemTime } from "@tests/fixtures/time";
+import { venomousCreateInput } from "@tests/fixtures/test-run-input";
+import { expectDomainError } from "@tests/helpers/domain-error";
 import { offerCharacter } from "@tests/helpers/signup-offers";
 
 const ids = {
-  kael: "11111111-1111-4111-8111-111111111111",
-  thorne: "33333333-3333-4333-8333-333333333333",
-  aelira: "44444444-4444-4444-8444-444444444444",
-  lab: "r8888888-8888-4888-8888-888888888888",
-  weekend: "r7777777-7777-4777-8777-777777777777",
-  normal: "r4444444-4444-4444-8444-444444444444",
-  published: "r5555555-5555-4555-8555-555555555555",
-  draft: "r6666666-6666-4666-8666-666666666666",
-  sunday: "r3333333-3333-4333-8333-333333333333",
-  labKaelResto: "s8888888-8888-4888-8888-888888888881",
-  labKaelEle: "s8888888-8888-4888-8888-888888888882",
-  labBrannTank: "s8888888-8888-4888-8888-888888888883",
-  labBrannHoly: "s8888888-8888-4888-8888-888888888884",
-  labMira: "s8888888-8888-4888-8888-888888888885",
-  labSylva: "s8888888-8888-4888-8888-888888888886",
-  labThorne: "s8888888-8888-4888-8888-888888888887",
-  labAelira: "s8888888-8888-4888-8888-888888888888",
-  publishedKael: "s5555555-5555-4555-8555-555555555551",
-  kaelResto: "c1111111-1111-4111-8111-111111111111",
-  raid: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  kael: SEED_IDS.users.kael,
+  thorne: SEED_IDS.users.thorne,
+  aelira: SEED_IDS.users.aelira,
+  lab: SEED_IDS.runs.rosterLab,
+  weekend: SEED_IDS.runs.heroicWeekend,
+  normal: SEED_IDS.runs.normalOpen,
+  published: SEED_IDS.runs.heroicPublished,
+  draft: SEED_IDS.runs.mythicDraft,
+  sunday: SEED_IDS.runs.heroicRostering,
+  labKaelResto: SEED_IDS.signups.labKaelResto,
+  labKaelEle: SEED_IDS.signups.labKaelEle,
+  labBrannTank: SEED_IDS.signups.labBrannTank,
+  labBrannHoly: SEED_IDS.signups.labBrannHoly,
+  labMira: SEED_IDS.signups.labMira,
+  labSylva: SEED_IDS.signups.labSylva,
+  labThorne: SEED_IDS.signups.labThorne,
+  labAelira: SEED_IDS.signups.labAelira,
+  publishedKael: SEED_IDS.signups.publishedKael,
+  kaelResto: SEED_IDS.characters.kaelResto,
+  raid: SEED_IDS.raid,
 };
 
 const lockoutIds: string[] = [];
+const ownedRunIds: string[] = [];
+
+async function cleanupOwnedRun(runId: string) {
+  assertIsolatedTestDatabase();
+  const attendance = await orm.RunAttendance.where({ runId }).select("id").all();
+  for (const row of attendance) {
+    await orm.RunAttendance.where({ id: (row as { id: string }).id }).deleteAndCount();
+  }
+  const start = await orm.RunStartSnapshot.where({ runId }).first();
+  if (start) await orm.RunStartSnapshot.where({ runId }).deleteAndCount();
+  await clearRosterRows(runId);
+  const roster = await orm.RunRoster.where({ runId }).first();
+  if (roster) await orm.RunRoster.where({ id: (roster as { id: string }).id }).deleteAndCount();
+  const signups = await orm.RunSignup.where({ runId }).select("id").all();
+  for (const row of signups) {
+    const signupId = (row as { id: string }).id;
+    const roles = await orm.RunSignupRole.where({ signupId }).select("id").all();
+    for (const role of roles) {
+      await orm.RunSignupRole.where({ id: (role as { id: string }).id }).deleteAndCount();
+    }
+    await orm.RunSignup.where({ id: signupId }).deleteAndCount();
+  }
+  await orm.Run.where({ id: runId }).deleteAndCount();
+}
 
 /** Unique BOOSTER signups across role projections (dedupe by signup id). */
 function rosterBoosters<T extends { id: string }>(view: { boosters: T[] }): T[] {
@@ -49,26 +77,125 @@ function asUser(
   name: string,
   accountRole: AuthenticatedUser["accountRole"] = "USER",
 ): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@dev.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
+  return testActor(id, accountRole, { name, email: `${id}@dev.boostting.local` });
 }
 
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    expect(isDomainError(error) && error.code).toBe(code);
+/** Test-local adapter: production path is saveDraftSelection (full draft replace). */
+async function setDraftSelection(
+  actor: AuthenticatedUser,
+  input: {
+    runId: string;
+    signupId: string;
+    selected: boolean;
+    version: number;
+    selectedRole?: CharacterRole | null;
+    confirmedWarnings?: Array<{ signupId: string; type: string; fingerprint: string }>;
+  },
+) {
+  const view = await rosterService.getRosterManagementView(actor, input.runId);
+  const all = [...view.boosters, ...view.groups.lootbuddies];
+  const target = all.find((row) => row.id === input.signupId);
+  const others = all
+    .filter((row) => {
+      if (!row.draftSelected || row.id === input.signupId) return false;
+      if (
+        input.selected &&
+        target?.participationType === "BOOSTER" &&
+        row.participationType === "BOOSTER" &&
+        row.userId === target.userId
+      ) {
+        return false;
+      }
+      return true;
+    })
+    .map((row) => ({ signupId: row.id, selectedRole: row.selectedRole }));
+  const selections = input.selected
+    ? [...others, { signupId: input.signupId, selectedRole: input.selectedRole ?? null }]
+    : others;
+  await rosterService.saveDraftSelection(actor, {
+    runId: input.runId,
+    version: input.version,
+    selections,
+    confirmedWarnings: input.confirmedWarnings,
+  });
+}
+
+async function clearRosterRows(runId: string) {
+  assertIsolatedTestDatabase();
+  const roster = await orm.RunRoster.where({ runId }).first();
+  if (!roster) return;
+  const rosterId = (roster as { id: string }).id;
+  const entries = await orm.RunRosterEntry.where({ rosterId }).all();
+  for (const entry of entries) {
+    await orm.RunRosterEntry.where({ id: (entry as { id: string }).id }).deleteAndCount();
   }
 }
+
+/**
+ * Restore the seeded roster-lab + published runs so this suite is repeatable
+ * without `test:db:reset`. Only touches SEED_IDS rows this file mutates.
+ */
+async function restoreSeededRosterFixtures() {
+  assertIsolatedTestDatabase();
+
+  // Lab: OPEN, no draft selection, seed signup statuses.
+  await orm.Run.where({ id: ids.lab }).update({
+    status: "OPEN",
+    signupsOpen: true,
+  });
+  await clearRosterRows(ids.lab);
+  const labRoster = await orm.RunRoster.where({ runId: ids.lab }).first();
+  if (labRoster) {
+    await orm.RunRoster.where({ id: (labRoster as { id: string }).id }).update({
+      state: "DRAFT",
+      version: 1,
+      publishedAt: null,
+      publishedById: null,
+      runChangedSinceAck: false,
+    });
+  }
+  const labStatuses: Array<[string, "PENDING" | "WITHDRAWN"]> = [
+    [ids.labKaelResto, "PENDING"],
+    [ids.labKaelEle, "PENDING"],
+    [ids.labBrannTank, "PENDING"],
+    [ids.labBrannHoly, "WITHDRAWN"],
+    [ids.labMira, "PENDING"],
+    [ids.labSylva, "PENDING"],
+    [ids.labThorne, "PENDING"],
+    [ids.labAelira, "PENDING"],
+  ];
+  for (const [signupId, status] of labStatuses) {
+    await orm.RunSignup.where({ id: signupId }).update({
+      status,
+      publishedRole: null,
+    });
+  }
+
+  // Published: keep PUBLISHED + publishedAt, empty draft at version 1 (needsPublishSeed).
+  await orm.Run.where({ id: ids.published }).update({
+    status: "PUBLISHED",
+    signupsOpen: false,
+  });
+  await clearRosterRows(ids.published);
+  const publishedRoster = await orm.RunRoster.where({ runId: ids.published }).first();
+  if (publishedRoster) {
+    const now = (publishedRoster as { publishedAt: string | null }).publishedAt ?? new Date().toISOString();
+    await orm.RunRoster.where({ id: (publishedRoster as { id: string }).id }).update({
+      state: "PUBLISHED",
+      version: 1,
+      publishedAt: now,
+      publishedById: ids.thorne,
+      runChangedSinceAck: false,
+    });
+  }
+  await orm.RunSignup.where({ id: ids.publishedKael }).update({ status: "SELECTED", publishedRole: "RANGED_DPS" });
+  await orm.RunSignup.where({ id: SEED_IDS.signups.publishedMira }).update({ status: "SELECTED", publishedRole: null });
+  await orm.RunSignup.where({ id: SEED_IDS.signups.publishedBrann }).update({
+    status: "NOT_SELECTED",
+    publishedRole: null,
+  });
+}
+
 
 const kael = asUser(ids.kael, "Kael Stormhowl");
 const thorne = asUser(ids.thorne, "Thorne Ironvein", "RAID_LEAD");
@@ -91,21 +218,28 @@ beforeAll(() => freezeSystemTime(FEED_TEST_CLOCK, { advance: true }));
 afterAll(() => restoreSystemTime());
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
+  await restoreSeededRosterFixtures();
   await setSylvaBooster(false);
 });
 
 afterAll(async () => {
+  assertIsolatedTestDatabase();
+  for (const runId of ownedRunIds.splice(0)) {
+    await cleanupOwnedRun(runId);
+  }
   for (const id of lockoutIds) {
-    await orm.CharacterRaidLockout.where({ id }).delete();
+    await orm.CharacterRaidLockout.where({ id }).deleteAndCount();
   }
   await setSylvaBooster(true);
+  await restoreSeededRosterFixtures();
 });
 
 describe("rosterService authorization", () => {
   it("rejects USER roster reads and mutations", async () => {
-    await expectDomainCode(rosterService.getRosterManagementView(kael, ids.lab), "RUN_NOT_MANAGEABLE");
-    await expectDomainCode(
-      rosterService.setDraftSelection(kael, {
+    await expectDomainError(rosterService.getRosterManagementView(kael, ids.lab), "RUN_NOT_MANAGEABLE");
+    await expectDomainError(
+      setDraftSelection(kael, {
         runId: ids.lab,
         signupId: ids.labKaelResto,
         selected: true,
@@ -113,7 +247,7 @@ describe("rosterService authorization", () => {
       }),
       "RUN_NOT_MANAGEABLE",
     );
-    await expectDomainCode(
+    await expectDomainError(
       rosterService.publishRoster(kael, { runId: ids.lab, version: 1, acknowledgeWarnings: true }),
       "RUN_NOT_MANAGEABLE",
     );
@@ -122,8 +256,8 @@ describe("rosterService authorization", () => {
   it("lets a raid lead manage an assigned run and rejects another lead's run", async () => {
     const own = await rosterService.getRosterManagementView(thorne, ids.weekend);
     expect(own.run.id).toBe(ids.weekend);
-    await expectDomainCode(rosterService.getRosterManagementView(thorne, ids.normal), "RUN_NOT_MANAGEABLE");
-    await expectDomainCode(rosterService.getRosterManagementView(otherLead, ids.weekend), "RUN_NOT_MANAGEABLE");
+    await expectDomainError(rosterService.getRosterManagementView(thorne, ids.normal), "RUN_NOT_MANAGEABLE");
+    await expectDomainError(rosterService.getRosterManagementView(otherLead, ids.weekend), "RUN_NOT_MANAGEABLE");
   });
 
   it("lets an admin manage a run assigned to another raid lead", async () => {
@@ -147,7 +281,7 @@ describe("rosterService groups — active offer filtering", () => {
 describe("rosterService draft", () => {
   it("selects a pending signup, persists it, and returns it after reload", async () => {
     const before = await rosterService.getRosterManagementView(thorne, ids.lab);
-    await rosterService.setDraftSelection(thorne, {
+    await setDraftSelection(thorne, {
       runId: ids.lab,
       signupId: ids.labKaelResto,
       selected: true,
@@ -163,7 +297,7 @@ describe("rosterService draft", () => {
 
   it("deselects a draft signup", async () => {
     const view = await rosterService.getRosterManagementView(thorne, ids.lab);
-    await rosterService.setDraftSelection(thorne, {
+    await setDraftSelection(thorne, {
       runId: ids.lab,
       signupId: ids.labKaelResto,
       selected: false,
@@ -175,8 +309,8 @@ describe("rosterService draft", () => {
 
   it("rejects withdrawn signups, unknown IDs, and signups from another run", async () => {
     const view = await rosterService.getRosterManagementView(thorne, ids.lab);
-    await expectDomainCode(
-      rosterService.setDraftSelection(thorne, {
+    await expectDomainError(
+      setDraftSelection(thorne, {
         runId: ids.lab,
         signupId: ids.labBrannHoly,
         selected: true,
@@ -184,8 +318,8 @@ describe("rosterService draft", () => {
       }),
       "SIGNUP_WITHDRAWN",
     );
-    await expectDomainCode(
-      rosterService.setDraftSelection(thorne, {
+    await expectDomainError(
+      setDraftSelection(thorne, {
         runId: ids.lab,
         signupId: "s0000000-0000-4000-8000-000000000000",
         selected: true,
@@ -193,8 +327,8 @@ describe("rosterService draft", () => {
       }),
       "NOT_FOUND",
     );
-    await expectDomainCode(
-      rosterService.setDraftSelection(thorne, {
+    await expectDomainError(
+      setDraftSelection(thorne, {
         runId: ids.lab,
         signupId: ids.publishedKael,
         selected: true,
@@ -206,14 +340,14 @@ describe("rosterService draft", () => {
 
   it("replaces a user's previously selected signup instead of stacking two slots", async () => {
     let view = await rosterService.getRosterManagementView(thorne, ids.lab);
-    await rosterService.setDraftSelection(thorne, {
+    await setDraftSelection(thorne, {
       runId: ids.lab,
       signupId: ids.labKaelResto,
       selected: true,
       version: view.roster.version,
     });
     view = await rosterService.getRosterManagementView(thorne, ids.lab);
-    await rosterService.setDraftSelection(thorne, {
+    await setDraftSelection(thorne, {
       runId: ids.lab,
       signupId: ids.labKaelEle,
       selected: true,
@@ -226,14 +360,14 @@ describe("rosterService draft", () => {
 
   it("rejects a stale roster version", async () => {
     const view = await rosterService.getRosterManagementView(thorne, ids.lab);
-    await rosterService.setDraftSelection(thorne, {
+    await setDraftSelection(thorne, {
       runId: ids.lab,
       signupId: ids.labThorne,
       selected: true,
       version: view.roster.version,
     });
-    await expectDomainCode(
-      rosterService.setDraftSelection(thorne, {
+    await expectDomainError(
+      setDraftSelection(thorne, {
         runId: ids.lab,
         signupId: ids.labBrannTank,
         selected: true,
@@ -278,7 +412,7 @@ describe("rosterService saveDraftSelection", () => {
 
   it("rejects two booster offers from the same user in one batch", async () => {
     const view = await rosterService.getRosterManagementView(thorne, ids.lab);
-    await expectDomainCode(
+    await expectDomainError(
       rosterService.saveDraftSelection(thorne, {
         runId: ids.lab,
         version: view.roster.version,
@@ -322,7 +456,7 @@ describe("rosterService saveDraftSelection", () => {
 
   it("rejects withdrawn and unapproved booster selections", async () => {
     const view = await rosterService.getRosterManagementView(thorne, ids.lab);
-    await expectDomainCode(
+    await expectDomainError(
       rosterService.saveDraftSelection(thorne, {
         runId: ids.lab,
         version: view.roster.version,
@@ -330,7 +464,7 @@ describe("rosterService saveDraftSelection", () => {
       }),
       "SIGNUP_WITHDRAWN",
     );
-    await expectDomainCode(
+    await expectDomainError(
       rosterService.saveDraftSelection(thorne, {
         runId: ids.lab,
         version: view.roster.version,
@@ -347,7 +481,7 @@ describe("rosterService saveDraftSelection", () => {
       version: view.roster.version,
       selections: [{ signupId: ids.labThorne, selectedRole: null }],
     });
-    await expectDomainCode(
+    await expectDomainError(
       rosterService.saveDraftSelection(thorne, {
         runId: ids.lab,
         version: view.roster.version,
@@ -359,6 +493,7 @@ describe("rosterService saveDraftSelection", () => {
 
   it("transitions OPEN to ROSTERING only when the saved selection is non-empty", async () => {
     const run = await runService.createRun(thorne, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: "2030-06-15T18:00:00.000Z", desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14 }));
+    ownedRunIds.push(run.id);
     await runService.openRun(thorne, run.id);
     const signupId = await offerCharacter(kael, run.id, ids.kaelResto, "HEALER");
 
@@ -384,16 +519,34 @@ describe("rosterService saveDraftSelection", () => {
 describe("rosterService publish validation", () => {
   it("blocks publishing a selected booster whose access is not approved", async () => {
     let view = await rosterService.getRosterManagementView(thorne, ids.lab);
-    await rosterService.setDraftSelection(thorne, {
-      runId: ids.lab,
+    // Production saveDraftSelection refuses unapproved Boosters; plant the
+    // draft row via the repository so publish validation still has a target.
+    await expectDomainError(
+      setDraftSelection(thorne, {
+        runId: ids.lab,
+        signupId: ids.labSylva,
+        selected: true,
+        version: view.roster.version,
+      }),
+      "INVALID_ROSTER_SELECTION",
+    );
+    const roster = await rosterRepository.ensure(ids.lab);
+    const labRun = await orm.Run.where({ id: ids.lab }).first();
+    await rosterRepository.setSignupSelected({
+      rosterId: roster.id,
+      expectedVersion: (roster as { version: number }).version,
       signupId: ids.labSylva,
       selected: true,
-      version: view.roster.version,
+      selectedRole: "RANGED_DPS",
+      replaceSignupIds: [],
+      characterId: SEED_IDS.characters.sylvaHunter,
+      targetRunId: ids.lab,
+      scheduledStartAt: (labRun as { scheduledStartAt: string }).scheduledStartAt,
     });
     view = await rosterService.getRosterManagementView(thorne, ids.lab);
     expect(view.validation.canPublish).toBe(false);
     expect(view.validation.blockers.some((item) => item.code === "BOOSTER_ACCESS_INVALID")).toBe(true);
-    await expectDomainCode(
+    await expectDomainError(
       rosterService.publishRoster(thorne, {
         runId: ids.lab,
         version: view.roster.version,
@@ -401,7 +554,8 @@ describe("rosterService publish validation", () => {
       }),
       "ROSTER_VALIDATION_FAILED",
     );
-    await rosterService.setDraftSelection(thorne, {
+    view = await rosterService.getRosterManagementView(thorne, ids.lab);
+    await setDraftSelection(thorne, {
       runId: ids.lab,
       signupId: ids.labSylva,
       selected: false,
@@ -430,7 +584,7 @@ describe("rosterService publish validation", () => {
       // A known save on this UNSAVED Run is a WARNING — the pick carries the
       // Raid Lead's acknowledgement of the warning the roster card shows.
       const pick = rosterBoosters(view).find((item) => item.id === ids.labKaelResto)!;
-      await rosterService.setDraftSelection(thorne, {
+      await setDraftSelection(thorne, {
         runId: ids.lab,
         signupId: ids.labKaelResto,
         selected: true,
@@ -457,7 +611,7 @@ describe("rosterService publish validation", () => {
 
     await orm.CharacterRaidLockout.where({ id: lockoutId }).delete();
     lockoutIds.splice(lockoutIds.indexOf(lockoutId), 1);
-    await rosterService.setDraftSelection(thorne, {
+    await setDraftSelection(thorne, {
       runId: ids.lab,
       signupId: ids.labKaelResto,
       selected: false,
@@ -475,7 +629,7 @@ describe("rosterService publish validation", () => {
   it("rejects publishing a draft-status run", async () => {
     const view = await rosterService.getRosterManagementView(thorne, ids.draft);
     expect(view.validation.canPublish).toBe(false);
-    await expectDomainCode(
+    await expectDomainError(
       rosterService.publishRoster(thorne, {
         runId: ids.draft,
         version: view.roster.version,
@@ -493,7 +647,7 @@ describe("rosterService publish and republish", () => {
       const current = await rosterService.getRosterManagementView(thorne, ids.lab);
       if (![...rosterBoosters(current), ...current.groups.lootbuddies]
         .find((item) => item.id === signupId)?.draftSelected) {
-        await rosterService.setDraftSelection(thorne, {
+        await setDraftSelection(thorne, {
           runId: ids.lab,
           signupId,
           selected: true,
@@ -503,7 +657,7 @@ describe("rosterService publish and republish", () => {
     }
     const kaelEle = await rosterService.getRosterManagementView(thorne, ids.lab);
     if (rosterBoosters(kaelEle).find((item) => item.id === ids.labKaelEle)?.draftSelected) {
-      await rosterService.setDraftSelection(thorne, {
+      await setDraftSelection(thorne, {
         runId: ids.lab,
         signupId: ids.labKaelEle,
         selected: false,
@@ -535,20 +689,22 @@ describe("rosterService publish and republish", () => {
   });
 
   it("records a roster published activity event", async () => {
-    const events = await activityRepository.listRecent(20);
-    expect(events.some((event) => event.type === "ROSTER_PUBLISHED" && event.message === "Published a roster.")).toBe(true);
+    const latest = await activityRepository.findLatestByType("ROSTER_PUBLISHED");
+    expect(latest).toBeTruthy();
+    const row = await orm.ActivityEvent.where({ id: latest!.id }).first();
+    expect((row as { message: string } | null)?.message).toBe("Published a roster.");
   });
 
   it("republishes replacements without leaving a partial roster", async () => {
     let view = await rosterService.getRosterManagementView(thorne, ids.lab);
-    await rosterService.setDraftSelection(thorne, {
+    await setDraftSelection(thorne, {
       runId: ids.lab,
       signupId: ids.labKaelEle,
       selected: true,
       version: view.roster.version,
     });
     view = await rosterService.getRosterManagementView(thorne, ids.lab);
-    await rosterService.setDraftSelection(thorne, {
+    await setDraftSelection(thorne, {
       runId: ids.lab,
       signupId: ids.labAelira,
       selected: true,
@@ -572,8 +728,10 @@ describe("rosterService publish and republish", () => {
   });
 
   it("records a roster updated event on republication", async () => {
-    const events = await activityRepository.listRecent(20);
-    expect(events.some((event) => event.type === "ROSTER_UPDATED" && event.message === "Updated a published roster.")).toBe(true);
+    const latest = await activityRepository.findLatestByType("ROSTER_UPDATED");
+    expect(latest).toBeTruthy();
+    const row = await orm.ActivityEvent.where({ id: latest!.id }).first();
+    expect((row as { message: string } | null)?.message).toBe("Updated a published roster.");
   });
 
   it("seeds a published roster draft without reverting live signup statuses", async () => {
@@ -590,7 +748,7 @@ describe("rosterService publish and republish", () => {
   });
 
   it("a selected player on a published run can only withdraw with a reason", async () => {
-    await expectDomainCode(signupService.withdrawSignup(kael, ids.publishedKael), "WITHDRAW_REASON_REQUIRED");
+    await expectDomainError(signupService.withdrawSignup(kael, ids.publishedKael), "WITHDRAW_REASON_REQUIRED");
   });
 });
 
@@ -606,35 +764,12 @@ describe("rosterService publishedRole snapshot", () => {
   const createdRunIds: string[] = [];
 
   afterAll(async () => {
+    assertIsolatedTestDatabase();
     for (const runId of createdRunIds) {
-      const attendance = await orm.RunAttendance.where({ runId }).select("id").all();
-      for (const row of attendance) {
-        await orm.RunAttendance.where({ id: (row as { id: string }).id }).delete();
-      }
-      const start = await orm.RunStartSnapshot.where({ runId }).first();
-      if (start) await orm.RunStartSnapshot.where({ id: (start as { id: string }).id }).delete();
-      const roster = await orm.RunRoster.where({ runId }).first();
-      if (roster) {
-        const rosterId = (roster as { id: string }).id;
-        const entries = await orm.RunRosterEntry.where({ rosterId }).all();
-        for (const entry of entries) {
-          await orm.RunRosterEntry.where({ id: (entry as { id: string }).id }).delete();
-        }
-        await orm.RunRoster.where({ id: rosterId }).delete();
-      }
-      const signups = await orm.RunSignup.where({ runId }).select("id").all();
-      for (const row of signups) {
-        const signupId = (row as { id: string }).id;
-        const roles = await orm.RunSignupRole.where({ signupId }).select("id").all();
-        for (const role of roles) {
-          await orm.RunSignupRole.where({ id: (role as { id: string }).id }).delete();
-        }
-        await orm.RunSignup.where({ id: signupId }).delete();
-      }
-      await orm.Run.where({ id: runId }).delete();
+      await cleanupOwnedRun(runId);
     }
     for (const id of createdCharacterIds) {
-      await orm.Character.where({ id }).delete();
+      await orm.Character.where({ id }).deleteAndCount();
     }
   });
 
