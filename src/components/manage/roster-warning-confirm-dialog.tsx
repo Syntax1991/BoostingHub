@@ -7,7 +7,7 @@ import {
   type PendingRosterSelectionWarning,
   type RosterSelectionWarning,
   type RosterWarningAcknowledgement,
-} from "@/services/roster-selection-risk";
+} from "@/domain/roster-selection-risk";
 
 /** One Character's warnings as shown in the confirmation dialog. */
 export type RosterWarningDialogItem = {

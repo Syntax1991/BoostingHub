@@ -45,7 +45,7 @@ import type { BossExceptionStages } from "@/lib/roster-boss-plan";
 import { normalizeOfferedRoles } from "@/lib/offered-roles";
 import type { InitialBoosterSignup } from "@/services/run-raid-lead-bootstrap.service";
 import type { RunDomainEventActorKind } from "@/models/enums";
-import { canCancelRun, canEditRunBeforeStart, REACTIVATABLE_FROM_STATUSES } from "@/services/run-state";
+import { canCancelRun, canEditRunBeforeStart, REACTIVATABLE_FROM_STATUSES } from "@/domain/run-state";
 
 /**
  * Test-only hooks that force a mid-transaction failure for rollback proofs.

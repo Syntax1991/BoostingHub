@@ -4,7 +4,7 @@ import { DomainError } from "@/lib/errors";
 import { characterRepository } from "@/repositories/character.repository";
 import { signupRepository } from "@/repositories/signup.repository";
 import { getScheduleConflictsForCharacter } from "@/services/character-schedule-conflict.service";
-import type { CharacterScheduleConflict } from "@/services/character-schedule-conflict";
+import type { CharacterScheduleConflict } from "@/domain/character-schedule-conflict";
 
 export type CharacterScheduleCommitment = {
   signupId: string;

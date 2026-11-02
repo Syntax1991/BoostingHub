@@ -3,7 +3,7 @@ import {
   WCL_FIGHT_ASSIGNMENT_POLICY,
   assignReportFights,
   type RunAssignmentCandidate,
-} from "@/services/wcl-fight-assignment";
+} from "@/domain/wcl-fight-assignment";
 
 /**
  * Central discovery: a report link from a dedicated log channel carries no

@@ -7,7 +7,7 @@ import {
   mapRunStatus,
   mapAttendanceStatus,
 } from "@/lib/persistence";
-import type { OperationalAnalyticsRunRow } from "@/services/operational-analytics";
+import type { OperationalAnalyticsRunRow } from "@/domain/operational-analytics";
 
 const MAX_RANGE_DAYS = 90;
 const DEFAULT_RANGE_DAYS = 30;

@@ -1,6 +1,6 @@
 import type { RunStatus } from "@/models/enums";
 import type { RunDetailTab } from "@/lib/run-routes";
-import type { RunLifecycleCapabilities } from "@/services/run-state";
+import type { RunLifecycleCapabilities } from "@/domain/run-state";
 
 export type RunOperationalAttention =
   | "NONE"

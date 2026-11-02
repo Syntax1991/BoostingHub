@@ -1,5 +1,5 @@
 import { isDomainError, RosterWarningConfirmationRequiredError } from "@/lib/errors";
-import type { PendingRosterSelectionWarning } from "@/services/roster-selection-risk";
+import type { PendingRosterSelectionWarning } from "@/domain/roster-selection-risk";
 import { ZodError } from "zod";
 
 export type ActionResult =

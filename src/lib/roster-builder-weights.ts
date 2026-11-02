@@ -1,4 +1,4 @@
-import { RAID_BUFF_DEFINITIONS, type RaidBuffId } from "@/services/roster-raid-buffs";
+import { RAID_BUFF_DEFINITIONS, type RaidBuffId } from "@/domain/roster-raid-buffs";
 
 /**
  * Centralized soft-scoring weights for Roster Builder.

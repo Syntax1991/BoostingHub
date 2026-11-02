@@ -3,7 +3,7 @@ import {
   buildRosterSelectedDmMessage,
   buildRosterWithdrawnDmMessage,
   rosterWithdrawnWebNotification,
-} from "@/services/notification-content";
+} from "@/domain/notification-content";
 
 const BASE = {
   run: {

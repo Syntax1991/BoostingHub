@@ -9,6 +9,7 @@ import {
   type CharacterSyncHealth,
 } from "@/lib/blizzard/sync-health";
 import { mapWithConcurrency } from "@/lib/concurrency";
+import { SYNC_INELIGIBLE_COPY, syncIneligibleReason, type SyncIneligibleReason } from "@/domain/character-sync-eligibility";
 import { DomainError, isDomainError } from "@/lib/errors";
 import {
   projectCurrentRaidLockoutSlots,
@@ -59,9 +60,6 @@ export const BULK_FORCE_REFRESH_COOLDOWN_MS = 10 * 60_000;
 export const BULK_FORCE_REFRESH_STARTED_EVENT = "CHARACTER_BULK_FORCE_REFRESH_STARTED";
 export const BULK_FORCE_REFRESH_COMPLETED_EVENT = "CHARACTER_BULK_FORCE_REFRESH_COMPLETED";
 
-/** Only retirement blocks a sync: unlinked / unconnected Characters sync PUBLIC. */
-export type SyncIneligibleReason = "RETIRED";
-
 /** Admin link backfill over existing Battle.net connections. */
 export const RECONCILE_LINKS_CONCURRENCY = 2;
 export type ReconcileLinksResult = {
@@ -76,10 +74,6 @@ export type ReconcileLinksResult = {
   /** Connections whose reconciliation threw — isolated, the rest continue. */
   connectionErrors: number;
   durationMs: number;
-};
-
-export const SYNC_INELIGIBLE_COPY: Record<SyncIneligibleReason, string> = {
-  RETIRED: "Retired characters are not synced.",
 };
 
 export type OperationsRow = {
@@ -149,10 +143,6 @@ function lockoutRows(record: OperationsCharacterRecord, catalog: RaidCatalog): L
     isComplete: lockout.isComplete,
     verified: true,
   }));
-}
-
-export function syncIneligibleReason(input: { isActive: boolean }): SyncIneligibleReason | null {
-  return input.isActive ? null : "RETIRED";
 }
 
 /** The one row derivation used by the table, filters, sorting and summary. */

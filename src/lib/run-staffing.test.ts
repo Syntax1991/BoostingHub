@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CompositionMember } from "@/services/roster-composition";
+import type { CompositionMember } from "@/domain/roster-composition";
 import {
   formatCompositionCounts,
   formatMissingCounts,

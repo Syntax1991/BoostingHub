@@ -12,7 +12,7 @@ import { discordSyncService } from "@/services/discord-sync.service";
 import { raidCatalogService } from "@/services/raid-catalog.service";
 import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
-import { normalizeSignupNote } from "@/services/signup-state";
+import { normalizeSignupNote } from "@/domain/signup-state";
 
 vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/integrations/warcraft-logs/warcraft-logs-api-client")>()),

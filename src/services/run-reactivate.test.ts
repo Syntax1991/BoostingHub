@@ -4,7 +4,7 @@ import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
 import { FEED_TEST_CLOCK, freezeSystemTime, restoreSystemTime } from "@/test/time";
 import { futureTestIso, venomousCreateInput } from "@/lib/test-run-input";
-import { isSignupWindowOpen } from "@/services/run-state";
+import { isSignupWindowOpen } from "@/domain/run-state";
 import { raidRepository } from "@/repositories/raid.repository";
 import {
   runCancelledChannelSourceKey,

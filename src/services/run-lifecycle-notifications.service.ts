@@ -15,9 +15,9 @@ import {
   runReactivatedWebNotification,
   runRescheduledWebNotification,
   runScopeChangedWebNotification,
-} from "@/services/notification-content";
+} from "@/domain/notification-content";
 import type { RunScopeChange } from "@/lib/run-scope-change";
-import { isSignedUpSignup } from "@/services/signup-state";
+import { isSignedUpSignup } from "@/domain/signup-state";
 
 type TxOrm = typeof orm;
 

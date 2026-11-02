@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { composeRoster, compositionWarnings } from "@/services/roster-composition";
+import { composeRoster, compositionWarnings } from "@/domain/roster-composition";
 
 const targets = { tanks: 2, healers: 4, dps: 14 };
 

@@ -18,7 +18,7 @@ import type {
   DashboardNextSelectedRun,
   DashboardOperationItem,
   DashboardPersonalCommitment,
-} from "@/services/dashboard-attention";
+} from "@/domain/dashboard-attention";
 
 type DashboardData = Awaited<ReturnType<typeof dashboardController.getDashboard>>;
 

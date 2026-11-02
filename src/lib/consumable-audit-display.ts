@@ -1,7 +1,7 @@
 import type { ConsumableCategory } from "@/lib/consumable-catalog";
 import { CHARACTER_ROLE_LABELS } from "@/lib/labels";
 import type { CharacterRole } from "@/models/enums";
-import type { PlayedRole } from "@/services/consumable-audit-policy";
+import type { PlayedRole } from "@/domain/consumable-audit-policy";
 
 /** Played role label: "Healer", "Mixed", "Unknown". */
 export function playedRoleLabel(role: PlayedRole): string {

@@ -8,7 +8,7 @@ import {
 import {
   aggregateOperationalAnalytics,
   type OperationalAnalyticsReport,
-} from "@/services/operational-analytics";
+} from "@/domain/operational-analytics";
 
 /**
  * ADMIN / OWNER operational analytics. No financial metrics.

@@ -11,7 +11,7 @@ import {
   type BoosterAccessAdminRecord,
 } from "@/repositories/booster-access.repository";
 import { characterRepository } from "@/repositories/character.repository";
-import { assertBoosterAccessTransition } from "@/services/booster-access-state";
+import { assertBoosterAccessTransition } from "@/domain/booster-access-state";
 import { boostingRoleService } from "@/services/boosting-role.service";
 
 export type { BoosterAccessRecord };

@@ -12,9 +12,9 @@ import type {
 import { availableRoles } from "@/lib/character-capabilities";
 import { roleForSpecialization } from "@/lib/wow-specializations";
 import { projectRunContentLockouts, type RunContentRaidSaveInfo } from "@/lib/run-content-lockouts";
-import { isApprovedBooster } from "@/services/boosting-role.service";
+import { isApprovedBooster } from "@/domain/boosting-access";
 import { lockoutService } from "@/services/lockout.service";
-import { isSignupWindowOpen } from "@/services/run-state";
+import { isSignupWindowOpen } from "@/domain/run-state";
 
 export type EligibilityLockout = {
   raidId: string;

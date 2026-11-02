@@ -4,13 +4,13 @@ import { fixtureRaidCatalog } from "@/lib/raid-catalog";
 import { TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import type { RunLootType } from "@/models/enums";
 import type { SignupRaidSaveInfo } from "@/models/records";
-import type { CharacterScheduleConflict } from "@/services/character-schedule-conflict";
+import type { CharacterScheduleConflict } from "@/domain/character-schedule-conflict";
 import {
   classifyRosterSelectionRisk,
   formatWarningContentProgress,
   lockoutAttentionWarning,
   unacknowledgedWarnings,
-} from "@/services/roster-selection-risk";
+} from "@/domain/roster-selection-risk";
 
 /**
  * The shared CLEAN / WARNING / BLOCKED classifier is a pure composition of the

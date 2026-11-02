@@ -8,10 +8,10 @@ import { runRepository } from "@/repositories/run.repository";
 import {
   projectDashboardOperations,
   projectPersonalDashboardAttention,
-} from "@/services/dashboard-attention";
+} from "@/domain/dashboard-attention";
 import { lockoutService } from "@/services/lockout.service";
 import { listManagedRunOperationalHandoffs } from "@/services/managed-run-operational.service";
-import { isSignupWindowOpen } from "@/services/run-state";
+import { isSignupWindowOpen } from "@/domain/run-state";
 import { signupService } from "@/services/signup.service";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import { deriveBlizzardSyncState } from "@/lib/blizzard/sync-state";

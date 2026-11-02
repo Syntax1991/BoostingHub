@@ -8,10 +8,10 @@ import { DomainError } from "@/lib/errors";
 import { integrationEventRepository } from "@/repositories/integration-event.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { runRepository } from "@/repositories/run.repository";
-import { compositionWarnings } from "@/services/roster-composition";
+import { compositionWarnings } from "@/domain/roster-composition";
 import { rosterService, type RosterManagementView } from "@/services/roster.service";
 import type { RunStatus } from "@/models/enums";
-import { canStartRun } from "@/services/run-state";
+import { canStartRun } from "@/domain/run-state";
 
 export const PREFLIGHT_OVERALL = ["READY", "ATTENTION", "BLOCKED"] as const;
 export type PreflightOverall = (typeof PREFLIGHT_OVERALL)[number];

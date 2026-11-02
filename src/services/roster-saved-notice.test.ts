@@ -13,7 +13,7 @@ import {
   buildRosterSelectedSavedSummaryDmMessage,
   rosterCharacterSavedWebNotification,
   rosterSelectedSavedSummaryWebNotification,
-} from "@/services/notification-content";
+} from "@/domain/notification-content";
 import { discordSyncService } from "@/services/discord-sync.service";
 import { contentShortTitle } from "@/lib/raid-catalog";
 import { runDetailPath } from "@/lib/run-routes";

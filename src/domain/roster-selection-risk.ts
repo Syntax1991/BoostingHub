@@ -25,7 +25,7 @@
  */
 
 import { isSaveRelevantToPlannedBosses, type RunContentRaidSaveInfo } from "@/lib/run-content-lockouts";
-import type { CharacterScheduleConflict } from "@/services/character-schedule-conflict";
+import type { CharacterScheduleConflict } from "@/domain/character-schedule-conflict";
 
 export type RosterSelectionRiskLevel = "CLEAN" | "WARNING" | "BLOCKED";
 

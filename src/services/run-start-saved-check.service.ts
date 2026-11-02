@@ -15,7 +15,7 @@ import { lockoutService } from "@/services/lockout.service";
 import {
   rosterCharacterSavedWebNotification,
   rosterSelectedSavedSummaryWebNotification,
-} from "@/services/notification-content";
+} from "@/domain/notification-content";
 import {
   deliveryFor,
   rosterCharacterSavedSourceKey,

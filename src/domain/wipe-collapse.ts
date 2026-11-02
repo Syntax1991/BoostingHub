@@ -1,4 +1,4 @@
-import type { AuditFightFact, AuditPlayerFact } from "@/services/consumable-audit-policy";
+import type { AuditFightFact, AuditPlayerFact } from "@/domain/consumable-audit-policy";
 
 /**
  * Collapse of the BOOSTING TEAM at the end of a wipe ("wipe cascade"). Pure.

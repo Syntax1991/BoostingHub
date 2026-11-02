@@ -11,7 +11,7 @@ import { runConsumableAuditRepository } from "@/repositories/run-consumable-audi
 import { runWarcraftLogsRepository } from "@/repositories/run-warcraft-logs.repository";
 import { scheduledJobLockRepository } from "@/repositories/scheduled-job-lock.repository";
 import { warcraftLogsDiscoveryRepository } from "@/repositories/warcraft-logs-discovery.repository";
-import { identityKey, type ConsumableAuditParticipant } from "@/services/consumable-audit-extract";
+import { identityKey, type ConsumableAuditParticipant } from "@/domain/consumable-audit-extract";
 import { discordSyncService } from "@/services/discord-sync.service";
 import { runConsumableAutoAuditService } from "@/services/run-consumable-auto-audit.service";
 import { fetchReport, linkDiscoveredReport } from "@/services/run-warcraft-logs.service";

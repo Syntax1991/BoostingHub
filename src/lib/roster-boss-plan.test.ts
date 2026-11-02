@@ -15,7 +15,7 @@ import {
   type RosterBossException,
 } from "@/lib/roster-boss-plan";
 import { diffBossPlans } from "@/lib/roster-diff";
-import { hasUnpublishedRosterChanges } from "@/services/roster-publish-state";
+import { hasUnpublishedRosterChanges } from "@/domain/roster-publish-state";
 
 const venomBosses = Array.from({ length: 8 }, (_, index) => ({ id: `v${index + 1}`, name: `Venom Boss ${index + 1}`, sortOrder: index + 1 }));
 const VENOM_6_OF_8 = { id: "c-venom", raidName: "The Venomous Abyss", raidShortName: "Venom", sortOrder: 1, plannedBossCount: 6, bosses: [...venomBosses].reverse() };

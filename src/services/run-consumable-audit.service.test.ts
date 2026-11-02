@@ -10,7 +10,7 @@ import {
 } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
 import { runConsumableAuditRepository } from "@/repositories/run-consumable-audit.repository";
 import { runWarcraftLogsRepository } from "@/repositories/run-warcraft-logs.repository";
-import { identityKey, type ConsumableAuditParticipant } from "@/services/consumable-audit-extract";
+import { identityKey, type ConsumableAuditParticipant } from "@/domain/consumable-audit-extract";
 import { analyzeRun, runConsumableAuditService } from "@/services/run-consumable-audit.service";
 import { runDetailService } from "@/services/run-detail.service";
 import { runWarcraftLogsService } from "@/services/run-warcraft-logs.service";

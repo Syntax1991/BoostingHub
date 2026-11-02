@@ -13,7 +13,7 @@ import { cn } from "@/lib/cn";
 import { formatDateTime, formatTime } from "@/lib/datetime";
 import type { ActionResult } from "@/lib/action-result";
 import { runActionWithFeedback } from "@/lib/run-action-feedback";
-import type { WclFightReason, WclFightStatus } from "@/services/wcl-fight-assignment";
+import type { WclFightReason, WclFightStatus } from "@/domain/wcl-fight-assignment";
 import type { RunWarcraftLogsFightView, RunWarcraftLogsView } from "@/services/run-warcraft-logs.service";
 
 /** Concrete evidence, never a score. */

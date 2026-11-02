@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { entityIdSchema } from "@/validators/ids";
-import { STRIKE_NOTES_MAX, STRIKE_REASON_MAX, STRIKE_REVOKE_REASON_MAX } from "@/services/strike-state";
+import { STRIKE_NOTES_MAX, STRIKE_REASON_MAX, STRIKE_REVOKE_REASON_MAX } from "@/domain/strike-state";
 
 export const addStrikeSchema = z.object({
   userId: entityIdSchema,

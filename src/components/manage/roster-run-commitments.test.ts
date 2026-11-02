@@ -9,7 +9,7 @@ import {
   getRunCommitmentPresentation,
   SCHEDULE_CONFLICT_ALERT_CLASSNAME,
 } from "@/lib/run-commitment-presentation";
-import type { CharacterRunCommitment } from "@/services/character-run-commitment-state";
+import type { CharacterRunCommitment } from "@/domain/character-run-commitment-state";
 
 vi.mock("next/link", () => ({
   default: ({ href, children, ...props }: { href: string; children?: React.ReactNode }) =>

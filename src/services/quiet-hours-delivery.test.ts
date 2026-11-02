@@ -6,7 +6,7 @@ import {
 } from "@/repositories/user-notification.repository";
 import { settingsService } from "@/services/settings.service";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { resolveDiscordDelivery } from "@/services/notification-content";
+import { resolveDiscordDelivery } from "@/domain/notification-content";
 
 const ids = {
   user: "qh111111-1111-4111-8111-111111111101",

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   projectCharacterScheduleConflicts,
   projectScheduleConflictsByCharacter,
-} from "@/services/character-schedule-conflict";
+} from "@/domain/character-schedule-conflict";
 import { CROSS_RUN_RESERVATION_MIN_GAP_MS, scheduledStartsCollideForReservation } from "@/repositories/signup.repository";
 
 describe("character schedule conflict domain", () => {

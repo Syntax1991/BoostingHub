@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   aggregateOperationalAnalytics,
   type OperationalAnalyticsRunRow,
-} from "@/services/operational-analytics";
+} from "@/domain/operational-analytics";
 
 function row(partial: Partial<OperationalAnalyticsRunRow> & { id: string }): OperationalAnalyticsRunRow {
   return {

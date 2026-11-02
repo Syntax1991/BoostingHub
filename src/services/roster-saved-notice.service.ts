@@ -10,7 +10,7 @@ import { signupRepository } from "@/repositories/signup.repository";
 import { userNotificationRepository } from "@/repositories/user-notification.repository";
 import { userRepository } from "@/repositories/user.repository";
 import { lockoutService } from "@/services/lockout.service";
-import { resolveDiscordDelivery, rosterCharacterSavedWebNotification } from "@/services/notification-content";
+import { resolveDiscordDelivery, rosterCharacterSavedWebNotification } from "@/domain/notification-content";
 
 /**
  * "Picked, then saved elsewhere": a Character draft-selected or SELECTED for a

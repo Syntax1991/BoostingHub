@@ -18,7 +18,7 @@ import type {
   ConfirmedRosterWarning,
   RosterSelectionRisk,
   RosterWarningAcknowledgement,
-} from "@/services/roster-selection-risk";
+} from "@/domain/roster-selection-risk";
 import { runService } from "@/services/run.service";
 
 /**

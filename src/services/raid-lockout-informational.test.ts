@@ -9,7 +9,7 @@ import { runRepository } from "@/repositories/run.repository";
 import { signupRepository } from "@/repositories/signup.repository";
 import { lockoutService } from "@/services/lockout.service";
 import { rosterService } from "@/services/roster.service";
-import type { ConfirmedRosterWarning, RosterSelectionRisk } from "@/services/roster-selection-risk";
+import type { ConfirmedRosterWarning, RosterSelectionRisk } from "@/domain/roster-selection-risk";
 import { runService } from "@/services/run.service";
 import { venomousCreateInput } from "@/lib/test-run-input";
 import { signupService } from "@/services/signup.service";

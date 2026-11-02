@@ -1,6 +1,6 @@
 import type { CharacterRole, ParticipationType, RunStatus, SignupStatus } from "@/models/enums";
-import { composeRoster, type CompositionMember } from "@/services/roster-composition";
-import { isActiveSignupOffer } from "@/services/signup-state";
+import { composeRoster, type CompositionMember } from "@/domain/roster-composition";
+import { isActiveSignupOffer } from "@/domain/signup-state";
 
 export type RunStaffingDesired = {
   tanks: number;

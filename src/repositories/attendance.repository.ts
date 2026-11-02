@@ -2,7 +2,7 @@ import { db, orm } from "@/lib/prisma";
 import { serializeRunDomainEventPayload } from "@/lib/run-domain-event";
 import { DomainError } from "@/lib/errors";
 import type { ExternalBoosterInput } from "@/lib/external-booster";
-import { ATTENDANCE_NOTE_MAX } from "@/services/run-state";
+import { ATTENDANCE_NOTE_MAX } from "@/domain/run-state";
 import {
   asBoolean,
   asNumber,
@@ -31,9 +31,9 @@ import {
   raidInviteWebNotification,
   resolveDiscordDelivery,
   type NotificationAssignmentInput,
-} from "@/services/notification-content";
-import { quietHoursDeliveryContextFromUserRow } from "@/services/notification-delivery-context";
-import { hasUnpublishedRosterChanges } from "@/services/roster-publish-state";
+} from "@/domain/notification-content";
+import { quietHoursDeliveryContextFromUserRow } from "@/domain/notification-delivery-context";
+import { hasUnpublishedRosterChanges } from "@/domain/roster-publish-state";
 import { assertCharactersFreeForReservationInTx, lockRosterInTx } from "@/repositories/roster.repository";
 
 export type AttendanceRecord = {

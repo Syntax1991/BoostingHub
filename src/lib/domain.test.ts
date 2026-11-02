@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { canAccessManagement, canManageRun, canReviewBoosterAccess, hasAdminAccess, hasRaidLeadAccess } from "@/auth/authorization";
 import { isDevAuthEnabled, isProductionRuntime } from "@/auth/dev-auth";
 import { formatDate, formatRelative, formatTime, fromDatetimeLocalValue, toDatetimeLocalValue } from "@/lib/datetime";
-import { canTransitionRun, getRunLifecycleCapabilities, isSignupWindowOpen } from "@/services/run-state";
-import { canTransitionSignup, canSelfWithdrawSignup } from "@/services/signup-state";
-import { isApprovedBooster } from "@/services/boosting-role.service";
+import { canTransitionRun, getRunLifecycleCapabilities, isSignupWindowOpen } from "@/domain/run-state";
+import { canTransitionSignup, canSelfWithdrawSignup } from "@/domain/signup-state";
+import { isApprovedBooster } from "@/domain/boosting-access";
 import { lockoutService } from "@/services/lockout.service";
 
 describe("account authorization", () => {

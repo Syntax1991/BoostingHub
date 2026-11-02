@@ -18,7 +18,7 @@ import {
 import {
   formatWarningContentProgress,
   type RosterSelectionWarning,
-} from "@/services/roster-selection-risk";
+} from "@/domain/roster-selection-risk";
 
 type PlayerMatch = NonNullable<Awaited<ReturnType<typeof searchRosterPlayersAction>>["data"]>[number];
 type ManualAddOptions = NonNullable<Awaited<ReturnType<typeof getRosterManualAddOptionsAction>>["data"]>;

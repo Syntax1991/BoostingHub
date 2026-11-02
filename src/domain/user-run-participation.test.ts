@@ -4,7 +4,7 @@ import {
   isMyRunsSelectedBucket,
   resolveUserRunParticipation,
   resolveUserRunParticipationFromDraftIds,
-} from "@/services/user-run-participation";
+} from "@/domain/user-run-participation";
 
 describe("resolveUserRunParticipation", () => {
   it("signup only → OFFERED, not selected", () => {

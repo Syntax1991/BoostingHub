@@ -4,7 +4,7 @@ import { characterRepository } from "@/repositories/character.repository";
 import { settingsRepository } from "@/repositories/settings.repository";
 import { userNotificationRepository } from "@/repositories/user-notification.repository";
 import { userRepository } from "@/repositories/user.repository";
-import { characterBattleNetRepairWebNotification, resolveDiscordDelivery } from "@/services/notification-content";
+import { characterBattleNetRepairWebNotification, resolveDiscordDelivery } from "@/domain/notification-content";
 
 const SOURCE_KEY_PREFIX = "character-battlenet-repair:";
 

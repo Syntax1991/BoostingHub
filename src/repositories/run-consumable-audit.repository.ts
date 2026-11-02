@@ -21,9 +21,9 @@ import type {
   ConsumableAuditParticipant,
   ConsumableObservationKindValue,
   ExtractedConsumableAudit,
-} from "@/services/consumable-audit-extract";
-import { CONSUMABLE_AUDIT_FACTS_VERSION } from "@/services/consumable-audit-extract";
-import type { AuditFightFact, AuditPlayerFact } from "@/services/consumable-audit-policy";
+} from "@/domain/consumable-audit-extract";
+import { CONSUMABLE_AUDIT_FACTS_VERSION } from "@/domain/consumable-audit-extract";
+import type { AuditFightFact, AuditPlayerFact } from "@/domain/consumable-audit-policy";
 
 type TxOrm = typeof orm;
 

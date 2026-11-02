@@ -87,7 +87,7 @@ import {
   buildRunReactivatedDmMessage,
   buildRunRescheduledDmMessage,
   buildRunScopeChangedDmMessage,
-} from "@/services/notification-content";
+} from "@/domain/notification-content";
 import { finalSetupAllowedMentions, renderRunStartMessageText } from "@/discord-bot/messages/run-start-message";
 import {
   mergeWeekSectionItemsForOrdering,

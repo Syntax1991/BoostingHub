@@ -8,7 +8,7 @@ import {
   offHandKind,
   resolveWeaponEnhancementRequirement,
   type GearItemFact,
-} from "@/services/gear-readiness-policy";
+} from "@/domain/gear-readiness-policy";
 
 // Enchant ids as Warcraft Logs reports them (SpellItemEnchantment, build 12.1.5).
 const OIL = 8052; // Thalassian Phoenix Oil

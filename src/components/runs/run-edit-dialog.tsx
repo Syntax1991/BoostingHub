@@ -9,7 +9,7 @@ import { projectRunContentCoverage } from "@/lib/run-content-display";
 import { selectionCoveragePreview, type ProductSelection } from "@/lib/product-selection";
 import { KEEP_CURRENT_CONTENTS, ProductContentPicker } from "@/components/runs/product-content-picker";
 import { buildRunTitle } from "@/lib/run-title";
-import { isLootTypeAllowedForDifficulty } from "@/services/run-state";
+import { isLootTypeAllowedForDifficulty } from "@/domain/run-state";
 import { RAID_DIFFICULTIES, RUN_LOOT_TYPES, type RaidDifficulty, type RunLootType } from "@/models/enums";
 import type { RunDetailView } from "@/services/run-detail.service";
 

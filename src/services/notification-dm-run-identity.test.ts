@@ -14,7 +14,7 @@ import {
   buildRunRescheduledDmMessage,
   buildRunScopeChangedDmMessage,
   rosterSelectedSavedSummaryWebNotification,
-} from "@/services/notification-content";
+} from "@/domain/notification-content";
 
 /**
  * Every Run-related Discord DM shares one Run identity and hierarchy:

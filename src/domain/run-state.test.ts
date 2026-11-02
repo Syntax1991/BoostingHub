@@ -5,7 +5,7 @@ import {
   assertValidPlannedBossCount,
   assertValidRunLootType,
   isLootTypeAllowedForDifficulty,
-} from "@/services/run-state";
+} from "@/domain/run-state";
 
 // The authoritative compatibility matrix: every difficulty allows every loot
 // type except MYTHIC+SAVED. Table-driven so adding a new difficulty or loot

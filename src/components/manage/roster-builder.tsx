@@ -98,13 +98,13 @@ import {
 import { buildRosterSavedSelectionKey, applyRoleCopyToggle, applyUnassignedDpsToggle, isRoleCopyChecked as roleCopyIsChecked, isUnassignedDpsCopyChecked } from "@/components/manage/roster-staged-selection";
 import type { rosterService } from "@/services/roster.service";
 import type { CharacterRole, RaidDifficulty, WowClass } from "@/models/enums";
-import type { RaidBuffCoverage } from "@/services/roster-raid-buffs";
+import type { RaidBuffCoverage } from "@/domain/roster-raid-buffs";
 import {
   evaluateRaidBuffCoverage,
   resolveBuffContributorClass,
   summarizeRaidBuffCoverageByClass,
-} from "@/services/roster-raid-buffs";
-import { validateRosterDraft } from "@/services/roster-validation";
+} from "@/domain/roster-raid-buffs";
+import { validateRosterDraft } from "@/domain/roster-validation";
 import {
   confirmedWarningsFor,
   RosterWarningConfirmDialog,
@@ -115,7 +115,7 @@ import {
   unacknowledgedWarnings,
   type ConfirmedRosterWarning,
   type PendingRosterSelectionWarning,
-} from "@/services/roster-selection-risk";
+} from "@/domain/roster-selection-risk";
 
 type RosterView = Awaited<ReturnType<typeof rosterService.getRosterManagementView>>;
 

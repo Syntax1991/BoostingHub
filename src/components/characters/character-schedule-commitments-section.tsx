@@ -13,7 +13,7 @@ import {
   RunStatusBadge,
   SignupStatusBadge,
 } from "@/components/ui/badges";
-import { deriveCharacterRunCommitmentState } from "@/services/character-run-commitment-state";
+import { deriveCharacterRunCommitmentState } from "@/domain/character-run-commitment-state";
 import type { CharacterScheduleCommitment } from "@/services/character-schedule-commitments.service";
 
 export function CharacterScheduleCommitmentsSection({

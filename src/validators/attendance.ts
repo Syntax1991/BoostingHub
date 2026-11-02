@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ATTENDANCE_STATUSES, CHARACTER_ROLES, MARKABLE_ATTENDANCE_STATUSES, WOW_CLASSES } from "@/models/enums";
-import { ATTENDANCE_NOTE_MAX } from "@/services/run-state";
+import { ATTENDANCE_NOTE_MAX } from "@/domain/run-state";
 import { entityIdSchema } from "@/validators/ids";
 
 export { startRunSchema } from "@/validators/run";

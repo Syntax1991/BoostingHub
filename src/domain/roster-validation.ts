@@ -1,7 +1,7 @@
 import { isConcreteCharacterRole } from "@/lib/character-roles";
 import { unresolvedHistoricDpsMessage } from "@/lib/signup-assignable-roles";
 import type { CharacterRole, ParticipationType, RunStatus, SignupStatus } from "@/models/enums";
-import { composeRoster, compositionWarnings, type RosterComposition } from "@/services/roster-composition";
+import { composeRoster, compositionWarnings, type RosterComposition } from "@/domain/roster-composition";
 
 export type RosterIssue = {
   code: string;

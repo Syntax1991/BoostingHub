@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   formatOperationalAttentionHint,
   projectRunOperationalHandoff,
-} from "@/services/run-operational-handoff";
-import { emptyRunCapabilities, getRunLifecycleCapabilities } from "@/services/run-state";
+} from "@/domain/run-operational-handoff";
+import { emptyRunCapabilities, getRunLifecycleCapabilities } from "@/domain/run-state";
 
 function caps(status: Parameters<typeof getRunLifecycleCapabilities>[0]["status"], actorIsAdmin = false) {
   return getRunLifecycleCapabilities({

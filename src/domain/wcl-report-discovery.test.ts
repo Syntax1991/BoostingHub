@@ -5,9 +5,9 @@ import type {
 } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
 import { fixtureRaidCatalog } from "@/lib/raid-catalog";
 import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
-import { identityKey } from "@/services/consumable-audit-extract";
-import type { RunAssignmentCandidate } from "@/services/wcl-fight-assignment";
-import { WCL_DISCOVERY_POLICY, evaluateReportDiscovery } from "@/services/wcl-report-discovery";
+import { identityKey } from "@/domain/consumable-audit-extract";
+import type { RunAssignmentCandidate } from "@/domain/wcl-fight-assignment";
+import { WCL_DISCOVERY_POLICY, evaluateReportDiscovery } from "@/domain/wcl-report-discovery";
 
 const at = (hhmm: string, day = 20) => Date.parse(`2026-09-${day}T${hhmm}:00.000Z`);
 const MIN = 60_000;

@@ -23,8 +23,8 @@ import {
   type RosterBuilderLockedPick,
   type RosterBuilderOptimizeResult,
   type RosterBuilderProposedPick,
-} from "@/services/roster-builder-optimizer";
-import { isApprovedBooster } from "@/services/boosting-role.service";
+} from "@/domain/roster-builder-optimizer";
+import { isApprovedBooster } from "@/domain/boosting-access";
 import { projectRosterSignupContentSaves, rosterService } from "@/services/roster.service";
 import {
   classifyRosterSelectionRisk,
@@ -32,8 +32,8 @@ import {
   type ConfirmedRosterWarning,
   formatWarningContentProgress,
   type RosterSelectionWarning,
-} from "@/services/roster-selection-risk";
-import { isActiveSignupOffer } from "@/services/signup-state";
+} from "@/domain/roster-selection-risk";
+import { isActiveSignupOffer } from "@/domain/signup-state";
 
 const EDITABLE_RUN_STATUSES: readonly RunStatus[] = ["OPEN", "ROSTERING", "PUBLISHED"];
 

@@ -6,7 +6,7 @@ import {
   parseQuietHoursHm,
   zonedLocalWallToUtcIso,
 } from "@/lib/quiet-hours";
-import { resolveDiscordDelivery } from "@/services/notification-content";
+import { resolveDiscordDelivery } from "@/domain/notification-content";
 
 describe("parseQuietHoursHm", () => {
   it("accepts HH:MM and rejects invalid shapes", () => {

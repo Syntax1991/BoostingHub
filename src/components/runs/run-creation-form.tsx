@@ -34,7 +34,7 @@ import {
   CREATE_RUN_OPT_IN_DEFAULTS,
   createRunOptInInitialState,
 } from "@/lib/create-run-form-defaults";
-import { isLootTypeAllowedForDifficulty } from "@/services/run-state";
+import { isLootTypeAllowedForDifficulty } from "@/domain/run-state";
 import {
   COMMUNITY_WEEKDAYS,
   RAID_DIFFICULTIES,
