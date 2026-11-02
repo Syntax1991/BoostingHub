@@ -1315,6 +1315,10 @@
     "tests/integration/services/flexible-run-management.test.ts": [
       "REWRITE",
       "Owned users/characters/runs via createTestUser; deleteCreatedRows replaces wipe/deleteAll best-effort cleanup; saveDraftSelection already used; assertIsolatedTestDatabase"
+    ],
+    "tests/integration/services/character-operations.test.ts": [
+      "REWRITE",
+      "createTestUser + deleteCreatedRows; scoped bulk-force markers via deleteBulkRefreshMarkers(adminId); cooldown update scoped to suite admin; assertIsolatedTestDatabase"
     ]
   },
   "tests": {

@@ -53,43 +53,32 @@ import {
 import { SCHEDULED_CHARACTER_SYNC_LOCK_KEY } from "@/services/scheduled-character-sync.service";
 import { parseCharacterOperationsFilters } from "@/validators/character-operations";
 import type { OperationsCharacterRecord } from "@/repositories/character-operations.repository";
+import { testActor } from "@tests/fixtures/actors";
+import {
+  assertIsolatedTestDatabase,
+  createTestUser,
+  deleteCreatedRows,
+} from "@tests/fixtures/db-fixtures";
+import { deleteBulkRefreshMarkers, expectBulkRefreshCooldownElapsed } from "@tests/helpers/bulk-force-refresh";
 
 const { ManageCharactersView } = await import("@/components/manage/manage-characters-view");
 const { ManageCharacterDetailView } = await import("@/components/manage/manage-character-detail-view");
 
 /* ------------------------------------------------------------------ fixtures */
 
-const createdUserIds: string[] = [];
-const createdCharacterIds: string[] = [];
+const created = {
+  userIds: [] as string[],
+  characterIds: [] as string[],
+};
 const token = Math.random().toString(36).replace(/[^a-z]/g, "").slice(0, 5) || "tok";
 
 function asUser(id: string, accountRole: AccountRole): AuthenticatedUser {
-  return {
-    id,
-    name: `Ops ${accountRole}`,
-    email: null,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
+  return testActor(id, accountRole, { name: `Ops ${accountRole}`, email: null });
 }
 
 async function createUser(name: string, role: AccountRole = "USER"): Promise<string> {
-  const id = crypto.randomUUID();
-  const now = new Date().toISOString();
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@ops.boostting.local`,
-    emailVerified: true,
-    accountRole: role,
-    accountStatus: "ACTIVE",
-    createdAt: now,
-    updatedAt: now,
-  });
-  createdUserIds.push(id);
+  const id = await createTestUser({ name, accountRole: role });
+  created.userIds.push(id);
   return id;
 }
 
@@ -146,7 +135,7 @@ async function createCharacter(
     lastSyncErrorCode: (input.lastSyncErrorCode ?? null) as never,
     syncFailureCount: input.syncFailureCount ?? 0,
   });
-  createdCharacterIds.push(id);
+  created.characterIds.push(id);
   return { id, name };
 }
 
@@ -174,6 +163,7 @@ let admin: AuthenticatedUser;
 const fx: Record<string, { id: string; name: string }> = {};
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   vi.stubEnv("BLIZZARD_CLIENT_ID", "test-client-id");
   vi.stubEnv("BLIZZARD_CLIENT_SECRET", "test-client-secret");
   vi.stubEnv("BLIZZARD_REDIRECT_URI", "http://localhost:3000/api/integrations/battlenet/callback");
@@ -205,8 +195,12 @@ beforeEach(async () => {
   vi.clearAllMocks();
   raiderIoMocks.getCharacterEquippedItemLevel.mockResolvedValue({ status: "TEMPORARY_FAILURE", message: "n/a" });
   vi.spyOn(console, "warn").mockImplementation(() => {});
-  // Each bulk test starts outside the 10-minute bulk cooldown.
-  await orm.ActivityEvent.where({ type: BULK_FORCE_REFRESH_STARTED_EVENT }).deleteAll();
+  // Each bulk test starts outside the 10-minute bulk cooldown; only remove this suite's markers.
+  if (adminId) {
+    await deleteBulkRefreshMarkers(adminId);
+    await orm.ActivityEvent.where({ type: BULK_FORCE_REFRESH_COMPLETED_EVENT, userId: adminId }).deleteAndCount();
+  }
+  await expectBulkRefreshCooldownElapsed();
 });
 
 afterEach(() => {
@@ -214,19 +208,23 @@ afterEach(() => {
 });
 
 afterAll(async () => {
-  await orm.ActivityEvent.where({ type: BULK_FORCE_REFRESH_STARTED_EVENT }).deleteAll();
-  await orm.ActivityEvent.where({ type: BULK_FORCE_REFRESH_COMPLETED_EVENT }).deleteAll();
-  for (const id of createdCharacterIds) {
-    await orm.CharacterRaidLockout.where({ characterId: id }).deleteAll();
-    await orm.CharacterWeeklyUnavailability.where({ characterId: id }).deleteAll();
-    await orm.CharacterPlayableSpec.where({ characterId: id }).deleteAll();
-    await orm.Character.where({ id }).deleteAll();
+  assertIsolatedTestDatabase();
+  if (adminId) {
+    await deleteBulkRefreshMarkers(adminId);
+    await orm.ActivityEvent.where({ type: BULK_FORCE_REFRESH_COMPLETED_EVENT, userId: adminId }).deleteAndCount();
   }
-  for (const id of createdUserIds) {
-    await orm.BattleNetConnection.where({ userId: id }).deleteAll();
-    await orm.ActivityEvent.where({ userId: id }).deleteAll();
-    await orm.User.where({ id }).deleteAll();
+  for (const id of created.characterIds) {
+    await orm.CharacterRaidLockout.where({ characterId: id }).deleteAndCount();
+    await orm.CharacterWeeklyUnavailability.where({ characterId: id }).deleteAndCount();
+    await orm.CharacterPlayableSpec.where({ characterId: id }).deleteAndCount();
   }
+  for (const id of created.userIds) {
+    await orm.BattleNetConnection.where({ userId: id }).deleteAndCount();
+  }
+  await deleteCreatedRows({
+    characterIds: created.characterIds.splice(0),
+    userIds: created.userIds.splice(0),
+  });
   vi.unstubAllEnvs();
 });
 
@@ -807,7 +805,7 @@ describe("Force refresh all", () => {
     const single = await characterOperationsService.syncCharacter(admin, { characterId: fx.healthy!.id, force: true });
     expect(single.status).toBe("SUCCEEDED");
 
-    await orm.ActivityEvent.where({ type: BULK_FORCE_REFRESH_STARTED_EVENT }).update({
+    await orm.ActivityEvent.where({ type: BULK_FORCE_REFRESH_STARTED_EVENT, userId: adminId }).update({
       occurredAt: new Date(Date.now() - 11 * 60_000).toISOString(),
     });
     await expect(characterOperationsService.forceRefreshAll(admin)).resolves.toMatchObject({ eligible: expect.any(Number) });
