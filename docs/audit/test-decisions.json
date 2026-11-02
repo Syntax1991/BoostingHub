@@ -652,10 +652,6 @@
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "tests/unit/lib/domain.test.ts": [
-      "KEEP",
-      "Grab-bag of auth, run state, datetime and lockout checks; kept, but misnamed (see naming table)"
-    ],
     "tests/unit/lib/external-booster-staging.test.ts": [
       "KEEP",
       "Staging helpers and dialog markup. Removed a self-comparison, a duplicate, two copies of external-booster.test.ts and a duplicate key-order test; one misleading title fixed"
@@ -1367,6 +1363,10 @@
     "tests/integration/services/discord-sync.service.test.ts": [
       "REWRITE",
       "assertIsolatedTestDatabase; verified deleteAndCount cleanup (posts/attendance/events/roles); testActor; local setDraftSelection→saveDraftSelection; voice-lane timeouts 30s for publish+start fixtures"
+    ],
+    "tests/unit/lib/auth-run-state-datetime.test.ts": [
+      "KEEP",
+      "Grab-bag of auth, run state, datetime and lockout checks; kept, but misnamed (see naming table)"
     ]
   },
   "tests": {
