@@ -10,8 +10,6 @@ import {
   type AdoptionCandidate,
   type AttachCandidate,
 } from "@/services/community-schedule-occurrence.service";
-import { communityScheduleRepository } from "@/repositories/community-schedule.repository";
-import { DomainError } from "@/lib/errors";
 import {
   describeScheduleCleanupResult,
   SCHEDULE_DRAFT_RELEASE_LABEL,
@@ -278,12 +276,8 @@ export async function listScheduleAttachCandidatesAction(
   try {
     const user = await requireUser();
     const parsed = listScheduleAttachCandidatesSchema.parse(input);
-    const slot = await communityScheduleRepository.findById(parsed.scheduleSlotId);
-    if (!slot) {
-      throw new DomainError("COMMUNITY_SCHEDULE_NOT_FOUND", "Schedule slot was not found.", 404);
-    }
-    const candidates = await communityScheduleOccurrenceService.listAttachCandidates(user, {
-      slot,
+    const candidates = await communityScheduleOccurrenceService.listAttachCandidatesForSlot(user, {
+      scheduleSlotId: parsed.scheduleSlotId,
       windows: parsed.window ? [parsed.window] : undefined,
     });
     return { ok: true, candidates };

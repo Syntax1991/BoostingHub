@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth/auth";
 import { isDevAuthEnabled } from "@/auth/dev-auth";
 import { DomainError } from "@/lib/errors";
-import { userRepository } from "@/repositories/user.repository";
+import { devIdentityService } from "@/services/dev-identity.service";
 import { getDevAuthPassword } from "@/auth/dev-auth";
 import { resolveSafeCallbackPath } from "@/auth/safe-callback-path";
 import { devLoginSchema } from "@/validators/run-filters";
@@ -27,7 +27,7 @@ export async function signInWithDevIdentity(formData: FormData) {
   });
   const callbackURL = resolveSafeCallbackPath(String(formData.get("next") ?? ""));
 
-  const identities = await userRepository.listDevIdentities();
+  const identities = await devIdentityService.list();
   const identity = identities.find((item) => item.id === parsed.userId);
 
   if (!identity?.email) {

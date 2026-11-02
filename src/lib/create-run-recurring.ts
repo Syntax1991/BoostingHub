@@ -4,8 +4,7 @@
  */
 import type { CommunityWeekday, RaidDifficulty, RunLootType } from "@/models/enums";
 import type { ProductSelection } from "@/lib/product-selection";
-import type { ScheduleStartState } from "@/components/manage/community-schedule-start-fields";
-import { scheduleStartPayload } from "@/components/manage/community-schedule-start-fields";
+import { scheduleStartPayload, type ScheduleStartState } from "@/lib/schedule-start";
 import type { CreateSchedulePlanInput } from "@/validators/community-schedule";
 import { DIFFICULTY_ABBREVIATIONS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
 

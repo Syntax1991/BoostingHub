@@ -399,6 +399,17 @@ export const communityScheduleOccurrenceService = {
    * `slot` may be a draft (create dialog) — then only weekday / time / lead /
    * template are used.
    */
+  async listAttachCandidatesForSlot(
+    user: AuthenticatedUser,
+    input: { scheduleSlotId: string; windows?: readonly RaidIdWindow[] },
+  ): Promise<AttachCandidate[]> {
+    const slot = await communityScheduleRepository.findById(input.scheduleSlotId);
+    if (!slot) {
+      throw new DomainError("COMMUNITY_SCHEDULE_NOT_FOUND", "Schedule slot was not found.", 404);
+    }
+    return this.listAttachCandidates(user, { slot, windows: input.windows });
+  },
+
   async listAttachCandidates(
     user: AuthenticatedUser,
     input: {

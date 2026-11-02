@@ -106,6 +106,11 @@ function canViewRunDetail(
  * entirely — hiding buttons is not the authorization boundary.
  */
 export const runDetailService = {
+  async canManageRunById(user: AuthenticatedUser, runId: string): Promise<boolean> {
+    const run = await runRepository.findById(runId);
+    return run !== null && canManageRun(user, run);
+  },
+
   async getRunDetail(user: AuthenticatedUser, runId: string) {
     const run = await runRepository.findById(runId);
     if (!run) {

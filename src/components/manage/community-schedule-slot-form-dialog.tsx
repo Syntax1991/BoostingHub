@@ -1,12 +1,8 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import {
-  DEFAULT_SCHEDULE_START,
-  ScheduleStartField,
-  scheduleStartPayload,
-  type ScheduleStartState,
-} from "@/components/manage/community-schedule-start-fields";
+import { ScheduleStartField } from "@/components/manage/community-schedule-start-fields";
+import { DEFAULT_SCHEDULE_START, scheduleStartPayload, type ScheduleStartState } from "@/lib/schedule-start";
 import { PingRolesField } from "@/components/manage/community-schedule-ping-field";
 import { formatDate } from "@/lib/datetime";
 import type { ScheduleRunCounts } from "@/lib/community-schedule";

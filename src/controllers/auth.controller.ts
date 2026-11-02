@@ -1,11 +1,11 @@
 import { getOptionalUser } from "@/auth/session";
 import { isDevAuthEnabled, isDiscordOAuthConfigured } from "@/auth/dev-auth";
-import { userRepository } from "@/repositories/user.repository";
+import { devIdentityService } from "@/services/dev-identity.service";
 
 export const authPageController = {
   async getLoginPage() {
     const user = await getOptionalUser();
-    const identities = isDevAuthEnabled() ? await userRepository.listDevIdentities() : [];
+    const identities = isDevAuthEnabled() ? await devIdentityService.list() : [];
 
     return {
       user,
