@@ -3,6 +3,7 @@
 Working record for the refactoring before the move to `Syntax1991/ManawyrmHub`. It survives interrupted sessions: read this first when continuing. It is removed before the migration commit.
 
 - **Test decisions:** [test-decisions.json](test-decisions.json) (input) and [test-ledger.tsv](test-ledger.tsv) (one row per discovered test). `UNREVIEWED` means nobody has read that test yet.
+- **Phase reports:** [reports/](reports/) — mandatory `PHASE-<N>.md` at each phase gate (finish → validate → report → commit/push → continue). Reports are not approval checkpoints.
 - **Rules:** one agent, one scope per PR, no merge, no deploy, no production writes, no live Discord changes, no history rewrite. Merges and deploys need the owner's approval.
 
 ## Baseline
@@ -131,7 +132,7 @@ Order follows the assignment. Each line is one PR, stacked on the one before.
 | 4 | MVCS boundaries: app and controllers no longer import repositories; lib no longer imports components | PR #326, awaiting review |
 | 4b | Move pure rules from `src/services` to `src/domain` | PR #327, awaiting review |
 | 5 | Guide code: drop legacy paths, share publisher code | PR #328, awaiting review |
-| 6 | Test cleanup by module | In progress on `test/audit-batch-a`: 328 of 341 live files decided (+1 tombstone), 3277 of 3825 ledger tests reviewed, 548 UNREVIEWED across 13 files |
+| 6 | Test cleanup by module | Phase 1 DONE ([PHASE-1.md](reports/PHASE-1.md)). Phase 2 in progress on `test/audit-batch-a`: 328 of 341 live files decided (+1 tombstone), 3277 of 3825 ledger tests reviewed, 548 UNREVIEWED across 13 files |
 | 7 | Frontend: error, loading and not-found pages; shared dialog effect | PR #329, awaiting review |
 | 8 | Performance, measured: run detail payload, event purge, rate-limit log | PR #330, awaiting review |
 | 9 | Dependencies and final verification | Dependencies audited, no change; TruffleHog scan still invalid |
@@ -349,9 +350,22 @@ Verification:
 
 Found while moving, not changed (feature freeze): four production modules are imported only by tests. They are `components/manage/roster-run-commitments.tsx`, `lib/character-availability.ts`, `lib/roster-candidate-counts.ts` and `repositories/character-availability.repository.ts`. They are dead-code candidates for phase 3, once dynamic imports and framework conventions have been checked.
 
+## Phase status
+
+| Phase | Name | Status | Report |
+| --- | --- | --- | --- |
+| 1 | Centralized test structure | DONE | [PHASE-1.md](reports/PHASE-1.md) |
+| 2 | Test quality audit | IN PROGRESS | — |
+| 3 | Production refactoring / code quality | NOT STARTED | — |
+| 4 | Performance, security, reliability | NOT STARTED | — |
+| 5 | UX and documentation | NOT STARTED | — |
+| 6 | Final validation and readiness | NOT STARTED | — |
+
 ## Continuation point
 
 Handover to Cursor (2026-11-02): Claude left branch `test/audit-batch-a` at local `af6bb59` (1 commit ahead of origin `95c2eaf`, `setDraftSelection`→`saveDraftSelection` for six audited suites) plus uncommitted fixture isolation rewrites for three remaining suites. Cursor recovered that work, fixed one TDZ shadowing bug in `roster-pre-start-replacements`, validated 67/67 twice on `boostting_bot_test_audit` without reset, and recorded the decisions below.
+
+Mandatory phase reporting (2026-11-02): after each phase gate, write `docs/audit/reports/PHASE-<N>.md`, update this ledger, commit and push, then continue automatically. Phase 1 verified and reported; Phase 2 continues (no pause for owner ack).
 
 The test audit is not complete. Order for the rest, smallest risk first:
 
