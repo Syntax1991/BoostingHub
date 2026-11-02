@@ -969,8 +969,8 @@
       "Raider.IO enrichment preference and telemetry"
     ],
     "src/services/management-hub.community-stats.test.ts": [
-      "KEEP",
-      "Community Stats role gate"
+      "REMOVE",
+      "File deleted; its three Community Stats gate cases were MERGED into management-hub.overview.test.ts (see tests map). Stale src/ decision key kept only as a tombstone so the inventory stays auditable"
     ],
     "tests/integration/services/raid-catalog-blizzard-discovery.test.ts": [
       "KEEP",
