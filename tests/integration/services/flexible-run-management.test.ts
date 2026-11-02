@@ -19,6 +19,12 @@ import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
 import { currentWeekFutureIso } from "@tests/fixtures/time";
 import { updateRunSchema } from "@/validators/run";
+import { testActor } from "@tests/fixtures/actors";
+import {
+  assertIsolatedTestDatabase,
+  createTestUser,
+  deleteCreatedRows,
+} from "@tests/fixtures/db-fixtures";
 
 /** Commitments of one Character as seen from a Run in the same raid ID as `runId` (excluding `excludeRunId`). */
 async function commitmentsInRaidIdOf(runId: string, characterId: string, excludeRunId: string) {
@@ -33,57 +39,34 @@ async function commitmentsInRaidIdOf(runId: string, characterId: string, exclude
   ).get(characterId);
 }
 
-
 /**
  * Flexible pre-start Run management: Run edits until Start (signup history
  * never locks), roster acknowledgement (runChangedSinceAck), Save / Update /
  * Publish semantics and the explicit Discord roster repost (postRevision).
  */
 
-const P = "aaaaaaaa-aaaa-4aaa-8aaa-fx";
-const ids = {
-  lead: `${P}0000000001`,
-  admin: `${P}0000000002`,
-  otherLead: `${P}0000000003`,
-  a: `${P}0000000004`,
-  b: `${P}0000000005`,
-  c: `${P}0000000006`,
-  notApproved: `${P}0000000007`,
-  heroicHealer: `${P}0000000008`,
-  revocable: `${P}0000000009`,
+const created = {
+  userIds: [] as string[],
+  characterIds: [] as string[],
+  runIds: [] as string[],
 };
-const allUserIds = Object.values(ids);
+
+let lead: AuthenticatedUser;
+let admin: AuthenticatedUser;
+let otherLead: AuthenticatedUser;
+let userA: AuthenticatedUser;
+let userB: AuthenticatedUser;
+let userC: AuthenticatedUser;
+let notApproved: AuthenticatedUser;
+let heroicHealer: AuthenticatedUser;
+let revocable: AuthenticatedUser;
+
 const CHAN = "fx-run-chan";
 
-function asUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"]): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@fx.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
-const lead = asUser(ids.lead, "Fx Lead", "RAID_LEAD");
-const admin = asUser(ids.admin, "Fx Admin", "ADMIN");
-
-async function createTestUser(id: string, name: string, role: AuthenticatedUser["accountRole"] = "USER") {
-  const now = new Date().toISOString();
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@fx.boostting.local`,
-    emailVerified: true,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole: role,
-    accountStatus: "ACTIVE",
-    createdAt: now,
-    updatedAt: now,
-  });
+async function createUser(name: string, accountRole: AuthenticatedUser["accountRole"] = "USER") {
+  const id = await createTestUser({ name, accountRole });
+  created.userIds.push(id);
+  return testActor(id, accountRole, { name });
 }
 
 /** Account-level Booster role — on the User, not scoped by difficulty. */
@@ -112,6 +95,7 @@ async function createCharacter(userId: string, wowClass: "PRIEST" | "PALADIN") {
     createdAt: now,
     updatedAt: now,
   });
+  created.characterIds.push(id);
   return id;
 }
 
@@ -148,6 +132,7 @@ async function createOpenRun(difficulty: RaidDifficulty = "HEROIC", actor = lead
     actor,
     venomousCreateInput({ scheduledStartAt: futureIso(), difficulty, desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 0 }),
   );
+  created.runIds.push(run.id);
   await runService.openRun(actor, run.id);
   return run.id;
 }
@@ -225,8 +210,8 @@ let heroicChar = "";
 async function publishedRunWithPost(difficulty: RaidDifficulty = "HEROIC") {
   const runId = await createOpenRun(difficulty);
   await discordSyncService.recordRunChannel({ runId, channelId: CHAN });
-  const aSignup = await createSignup(runId, ids.a, aChar, ["HEALER"]);
-  const cSignup = await createSignup(runId, ids.c, cChar, ["TANK"]);
+  const aSignup = await createSignup(runId, userA.id, aChar, ["HEALER"]);
+  const cSignup = await createSignup(runId, userC.id, cChar, ["TANK"]);
   await saveDraft(runId, [
     { signupId: aSignup, selectedRole: "HEALER" },
     { signupId: cSignup, selectedRole: "TANK" },
@@ -236,78 +221,50 @@ async function publishedRunWithPost(difficulty: RaidDifficulty = "HEROIC") {
   return { runId, aSignup, cSignup, firstMessageId: first!.messageId };
 }
 
-/** Best-effort bulk delete for cleanup (`deleteAll` returns a thenable without `.catch`). */
-async function wipe(op: () => PromiseLike<unknown>) {
-  try {
-    await op();
-  } catch {
-    // Already gone or blocked by a row cleaned up later — cleanup is best effort.
-  }
-}
-
 async function cleanupRuns() {
-  for (const raidLeadId of [ids.lead, ids.otherLead, ids.admin]) {
-    const runs = await orm.Run.where({ raidLeadId }).select("id").all();
-    for (const row of runs as Array<{ id: string }>) {
-      const runId = row.id;
-      await wipe(() => orm.UserNotification.where({ runId }).deleteAll());
-      await wipe(() => orm.RunDiscordAnnouncement.where({ runId }).deleteAll());
-      await wipe(() => orm.RunAttendance.where({ runId }).deleteAll());
-      await wipe(() => orm.RunStartSnapshot.where({ runId }).deleteAll());
-      await wipe(() => orm.RunDiscordPost.where({ runId }).deleteAll());
-      const roster = (await orm.RunRoster.where({ runId }).first()) as { id: string } | null;
-      if (roster) {
-        await wipe(() => orm.RunRosterEntry.where({ rosterId: roster.id }).deleteAll());
-        await wipe(() => orm.RunExternalBooster.where({ rosterId: roster.id }).deleteAll());
-        await wipe(() => orm.RunRoster.where({ id: roster.id }).deleteAll());
-      }
-      const signups = await orm.RunSignup.where({ runId }).select("id").all();
-      for (const signup of signups as Array<{ id: string }>) {
-        await wipe(() => orm.RunSignupRole.where({ signupId: signup.id }).deleteAll());
-      }
-      await wipe(() => orm.RunSignup.where({ runId }).deleteAll());
-      await wipe(() => orm.RunRaidContent.where({ runId }).deleteAll());
-      await wipe(() => orm.Run.where({ id: runId }).deleteAll());
-    }
+  assertIsolatedTestDatabase();
+  const runIds = created.runIds.splice(0);
+  for (const userId of created.userIds) {
+    const runs = (await orm.Run.where({ raidLeadId: userId }).select("id").all()) as Array<{ id: string }>;
+    for (const run of runs) if (!runIds.includes(run.id)) runIds.push(run.id);
   }
+  await deleteCreatedRows({ runIds });
 }
 
 async function cleanupAll() {
+  assertIsolatedTestDatabase();
   await cleanupRuns();
-  for (const userId of allUserIds) {
-    await wipe(() => orm.UserNotification.where({ userId }).deleteAll());
-    await wipe(() => orm.ActivityEvent.where({ userId }).deleteAll());
-    await wipe(() => orm.Character.where({ userId }).deleteAll());
-    await wipe(() => orm.User.where({ id: userId }).deleteAll());
+  for (const userId of created.userIds) {
+    await orm.UserNotification.where({ userId }).deleteAndCount();
   }
+  await deleteCreatedRows({
+    characterIds: created.characterIds.splice(0),
+    userIds: created.userIds.splice(0),
+  });
 }
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   await raidRepository.ensureReferenceRaids();
-  await cleanupAll();
-  await createTestUser(ids.lead, "Fx Lead", "RAID_LEAD");
-  await createTestUser(ids.admin, "Fx Admin", "ADMIN");
-  await createTestUser(ids.otherLead, "Fx Other Lead", "RAID_LEAD");
-  for (const [key, name] of [
-    ["a", "Fx A"],
-    ["b", "Fx B"],
-    ["c", "Fx C"],
-    ["notApproved", "Fx Not Approved"],
-    ["heroicHealer", "Fx Heroic Healer"],
-    ["revocable", "Fx Revocable"],
-  ] as const) {
-    await createTestUser(ids[key], name);
+  lead = await createUser("Fx Lead", "RAID_LEAD");
+  admin = await createUser("Fx Admin", "ADMIN");
+  otherLead = await createUser("Fx Other Lead", "RAID_LEAD");
+  userA = await createUser("Fx A");
+  userB = await createUser("Fx B");
+  userC = await createUser("Fx C");
+  notApproved = await createUser("Fx Not Approved");
+  heroicHealer = await createUser("Fx Heroic Healer");
+  revocable = await createUser("Fx Revocable");
+  for (const user of [userA, userB, userC, heroicHealer, revocable]) {
+    await approve(user.id);
   }
-  for (const userId of [ids.a, ids.b, ids.c, ids.heroicHealer, ids.revocable]) {
-    await approve(userId);
-  }
-  await approve(ids.notApproved, false);
-  aChar = await createCharacter(ids.a, "PRIEST");
-  bChar = await createCharacter(ids.b, "PRIEST");
-  cChar = await createCharacter(ids.c, "PALADIN");
-  notApprovedChar = await createCharacter(ids.notApproved, "PRIEST");
-  heroicChar = await createCharacter(ids.heroicHealer, "PRIEST");
-  revocableChar = await createCharacter(ids.revocable, "PRIEST");
+  await approve(notApproved.id, false);
+  aChar = await createCharacter(userA.id, "PRIEST");
+  bChar = await createCharacter(userB.id, "PRIEST");
+  cChar = await createCharacter(userC.id, "PALADIN");
+  notApprovedChar = await createCharacter(notApproved.id, "PRIEST");
+  heroicChar = await createCharacter(heroicHealer.id, "PRIEST");
+  revocableChar = await createCharacter(revocable.id, "PRIEST");
 }, 60_000);
 
 afterEach(async () => {
@@ -324,7 +281,7 @@ describe("Run editing until Start", () => {
     expect((await runRepository.findById(draft.id))?.difficulty).toBe("NORMAL");
 
     const runId = await createOpenRun("NORMAL");
-    const signup = await createSignup(runId, ids.a, aChar, ["HEALER"]);
+    const signup = await createSignup(runId, userA.id, aChar, ["HEALER"]);
     await runService.updateRun(lead, venomousUpdateInput(runId, (await runRepository.findById(runId))!, { difficulty: "HEROIC" }));
     expect((await runRepository.findById(runId))?.difficulty).toBe("HEROIC");
 
@@ -394,7 +351,7 @@ describe("roster acknowledgement after Run edits (runChangedSinceAck)", () => {
     expect(await botPass(runId)).toBeNull();
 
     before = after;
-    await runService.updateRun(admin, venomousUpdateInput(runId, (await runRepository.findById(runId))!, { raidLeadId: ids.otherLead }));
+    await runService.updateRun(admin, venomousUpdateInput(runId, (await runRepository.findById(runId))!, { raidLeadId: otherLead.id }));
     after = await rosterService.getRosterManagementView(admin, runId);
     expect(after.roster.runChangedSinceAck).toBe(false);
     expect(after.roster.version).toBe(before.roster.version + 1);
@@ -409,8 +366,8 @@ describe("NORMAL → HEROIC on a published roster", () => {
   it("keeps signups, lineup and account-level booster approval, recalculates access, blocks Start and Update until a revoked booster is replaced, then Update edits the same message and Start succeeds", async () => {
     const runId = await createOpenRun("NORMAL");
     await discordSyncService.recordRunChannel({ runId, channelId: CHAN });
-    const tankSignup = await createSignup(runId, ids.c, cChar, ["TANK"]);
-    const normalSignup = await createSignup(runId, ids.revocable, revocableChar, ["HEALER"]);
+    const tankSignup = await createSignup(runId, userC.id, cChar, ["TANK"]);
+    const normalSignup = await createSignup(runId, revocable.id, revocableChar, ["HEALER"]);
     await saveDraft(runId, [
       { signupId: tankSignup, selectedRole: "TANK" },
       { signupId: normalSignup, selectedRole: "HEALER" },
@@ -426,7 +383,7 @@ describe("NORMAL → HEROIC on a published roster", () => {
     expect(current.boosters.find((row) => row.id === normalSignup)).toMatchObject({ boosterApproved: true });
 
     // Revoking the healer's Booster role is what now makes the lineup invalid.
-    await orm.User.where({ id: ids.revocable }).update({ isBooster: false });
+    await orm.User.where({ id: revocable.id }).update({ isBooster: false });
 
     current = await view(runId);
     const normalRow = current.boosters.find((row) => row.id === normalSignup)!;
@@ -443,7 +400,7 @@ describe("NORMAL → HEROIC on a published roster", () => {
     expect(current.boosters.find((row) => row.id === normalSignup)?.status).toBe("SELECTED");
 
     // Replace with an approved healer and Update once.
-    const heroicSignup = await createSignup(runId, ids.heroicHealer, heroicChar, ["HEALER"]);
+    const heroicSignup = await createSignup(runId, heroicHealer.id, heroicChar, ["HEALER"]);
     await update(runId, [
       { signupId: tankSignup, selectedRole: "TANK" },
       { signupId: heroicSignup, selectedRole: "HEALER" },
@@ -472,7 +429,7 @@ describe("Save / Update / Publish and the Discord roster message", () => {
   it("first Save refreshes the Roster message; first Publish edits the same message (postRevision 0 → 1)", async () => {
     const runId = await createOpenRun();
     await discordSyncService.recordRunChannel({ runId, channelId: CHAN });
-    const aSignup = await createSignup(runId, ids.a, aChar, ["HEALER"]);
+    const aSignup = await createSignup(runId, userA.id, aChar, ["HEALER"]);
     await saveDraft(runId, [{ signupId: aSignup, selectedRole: "HEALER" }]);
     let current = await view(runId);
     expect(current.roster.publishedAt).toBeNull();
@@ -499,7 +456,7 @@ describe("Save / Update / Publish and the Discord roster message", () => {
 
   it("Update edits M1 in place — three times — and never posts; Save on a published roster also only refreshes", async () => {
     const { runId, aSignup, cSignup, firstMessageId } = await publishedRunWithPost();
-    const bSignup = await createSignup(runId, ids.b, bChar, ["HEALER"]);
+    const bSignup = await createSignup(runId, userB.id, bChar, ["HEALER"]);
 
     for (const healer of [bSignup, aSignup, bSignup]) {
       const before = await view(runId);
@@ -524,7 +481,7 @@ describe("Save / Update / Publish and the Discord roster message", () => {
   it("Update is atomic: a refused Update leaves the published roster, the draft and the dirty state untouched", async () => {
     const { runId, aSignup, cSignup } = await publishedRunWithPost();
     await runService.updateRun(lead, venomousUpdateInput(runId, (await runRepository.findById(runId))!, { lootType: "VIP" }));
-    const normalSignup = await createSignup(runId, ids.notApproved, notApprovedChar, ["HEALER"]);
+    const normalSignup = await createSignup(runId, notApproved.id, notApprovedChar, ["HEALER"]);
     const before = await view(runId);
     await expect(
       update(runId, [
@@ -541,7 +498,7 @@ describe("Save / Update / Publish and the Discord roster message", () => {
 
   it("explicit Publish edits the same Roster message in place; Update keeps that id; republish never appends history", async () => {
     const { runId, cSignup, firstMessageId } = await publishedRunWithPost();
-    const notificationsBefore = (await userNotificationRepository.listForUser(ids.a, 100)).length;
+    const notificationsBefore = (await userNotificationRepository.listForUser(userA.id, 100)).length;
     const lineupBefore = await publishedSelections(runId);
 
     expect(await repost(runId)).toEqual({ postRevision: 2 });
@@ -551,9 +508,9 @@ describe("Save / Update / Publish and the Discord roster message", () => {
     expect(await botPass(runId)).toBeNull();
     // A republish changes no membership/roles and notifies nobody.
     expect(await publishedSelections(runId)).toEqual(lineupBefore);
-    expect((await userNotificationRepository.listForUser(ids.a, 100)).length).toBe(notificationsBefore);
+    expect((await userNotificationRepository.listForUser(userA.id, 100)).length).toBe(notificationsBefore);
 
-    const bSignup = await createSignup(runId, ids.b, bChar, ["HEALER"]);
+    const bSignup = await createSignup(runId, userB.id, bChar, ["HEALER"]);
     await update(runId, [
       { signupId: cSignup, selectedRole: "TANK" },
       { signupId: bSignup, selectedRole: "HEALER" },
@@ -615,7 +572,7 @@ describe("Save / Update / Publish and the Discord roster message", () => {
     expect(await botPass(runId)).toEqual({ mode: "REFRESH", messageId: firstMessageId });
 
     const version = (await view(runId)).roster.version;
-    await rosterService.addRegisteredParticipant(lead, { runId, version, userId: ids.b, characterId: bChar, role: "HEALER" });
+    await rosterService.addRegisteredParticipant(lead, { runId, version, userId: userB.id, characterId: bChar, role: "HEALER" });
     expect((await view(runId)).roster.hasUnpublishedChanges).toBe(true);
     expect((await botPass(runId))?.mode).not.toBe("POST");
     const draft = (await view(runId)).boosters.filter((row) => row.draftSelected).map((row) => ({ signupId: row.id, selectedRole: row.selectedRole }));
@@ -632,7 +589,7 @@ describe("Save / Update / Publish and the Discord roster message", () => {
     const { runId } = await publishedRunWithPost();
     const other = await createOpenRun("HEROIC", lead);
     const version = (await view(runId)).roster.version;
-    await rosterService.addRegisteredParticipant(lead, { runId, version, userId: ids.b, characterId: bChar, role: "HEALER" });
+    await rosterService.addRegisteredParticipant(lead, { runId, version, userId: userB.id, characterId: bChar, role: "HEALER" });
     const reserved = (await commitmentsInRaidIdOf(runId, bChar, other));
     expect(reserved?.find((row) => row.runId === runId)?.state).toBe("RESERVED");
     const draft = (await view(runId)).boosters.filter((row) => row.draftSelected).map((row) => ({ signupId: row.id, selectedRole: row.selectedRole }));
@@ -666,7 +623,7 @@ describe("Save / Update / Publish and the Discord roster message", () => {
     expect(await currentRosterMessageId(runId)).toBe(rosterId);
     expect(await botPass(runId)).toBeNull();
 
-    const aSignup = await createSignup(runId, ids.a, aChar, ["HEALER"]);
+    const aSignup = await createSignup(runId, userA.id, aChar, ["HEALER"]);
     await saveDraft(runId, [{ signupId: aSignup, selectedRole: "HEALER" }]);
     expect(await botPass(runId)).toEqual({ mode: "REFRESH", messageId: rosterId });
 
@@ -688,10 +645,10 @@ describe("Add Booster", () => {
     await orm.RunRoster.where({ id: roster!.id }).update({ version: 1, updatedAt: new Date().toISOString() });
     expect((await view(runId)).roster.needsPublishSeed).toBe(true);
 
-    await rosterService.addRegisteredParticipant(lead, { runId, version: 1, userId: ids.b, characterId: bChar, role: "HEALER" });
+    await rosterService.addRegisteredParticipant(lead, { runId, version: 1, userId: userB.id, characterId: bChar, role: "HEALER" });
     const current = await view(runId);
     const draftIds = current.boosters.filter((row) => row.draftSelected).map((row) => row.id);
-    const bSignup = current.boosters.find((row) => row.userId === ids.b)!.id;
+    const bSignup = current.boosters.find((row) => row.userId === userB.id)!.id;
     expect(draftIds.sort()).toEqual([aSignup, cSignup, bSignup].sort());
     expect(current.run.status).toBe("PUBLISHED");
     expect(current.roster.hasUnpublishedChanges).toBe(true);
@@ -716,27 +673,27 @@ describe("Add Booster", () => {
       return result;
     });
     await expect(
-      rosterService.addRegisteredParticipant(lead, { runId, version: 1, userId: ids.b, characterId: bChar, role: "HEALER" }),
+      rosterService.addRegisteredParticipant(lead, { runId, version: 1, userId: userB.id, characterId: bChar, role: "HEALER" }),
     ).rejects.toMatchObject({ code: "ROSTER_ALREADY_CHANGED" });
-    expect(await orm.RunSignup.where({ runId, userId: ids.b }).all()).toHaveLength(0);
+    expect(await orm.RunSignup.where({ runId, userId: userB.id }).all()).toHaveLength(0);
     expect(await orm.RunRosterEntry.where({ rosterId: roster!.id }).all()).toHaveLength(0);
   });
 
   it("works in ROSTERING after a difficulty change: approved boosters stay addable, a non-approved one is refused on any difficulty", async () => {
     const runId = await createOpenRun("NORMAL");
-    const aSignup = await createSignup(runId, ids.a, aChar, ["HEALER"]);
+    const aSignup = await createSignup(runId, userA.id, aChar, ["HEALER"]);
     await saveDraft(runId, [{ signupId: aSignup, selectedRole: "HEALER" }]);
     expect((await runRepository.findById(runId))?.status).toBe("ROSTERING");
     let version = (await view(runId)).roster.version;
-    await rosterService.addRegisteredParticipant(lead, { runId, version, userId: ids.c, characterId: cChar, role: "TANK" });
+    await rosterService.addRegisteredParticipant(lead, { runId, version, userId: userC.id, characterId: cChar, role: "TANK" });
 
     await runService.updateRun(lead, venomousUpdateInput(runId, (await runRepository.findById(runId))!, { difficulty: "HEROIC" }));
     version = (await view(runId)).roster.version;
     await expect(
-      rosterService.addRegisteredParticipant(lead, { runId, version, userId: ids.notApproved, characterId: notApprovedChar, role: "HEALER" }),
+      rosterService.addRegisteredParticipant(lead, { runId, version, userId: notApproved.id, characterId: notApprovedChar, role: "HEALER" }),
     ).rejects.toMatchObject({ code: "BOOSTER_ACCESS_REQUIRED" });
-    await rosterService.addRegisteredParticipant(lead, { runId, version, userId: ids.b, characterId: bChar, role: "HEALER" });
-    expect((await view(runId)).boosters.some((row) => row.userId === ids.b && row.boosterApproved)).toBe(true);
+    await rosterService.addRegisteredParticipant(lead, { runId, version, userId: userB.id, characterId: bChar, role: "HEALER" });
+    expect((await view(runId)).boosters.some((row) => row.userId === userB.id && row.boosterApproved)).toBe(true);
   });
 
   it("is refused once the Run has started", async () => {
@@ -744,7 +701,7 @@ describe("Add Booster", () => {
     await runService.startRun(lead, { runId });
     const version = (await view(runId)).roster.version;
     await expect(
-      rosterService.addRegisteredParticipant(lead, { runId, version, userId: ids.b, characterId: bChar, role: "HEALER" }),
+      rosterService.addRegisteredParticipant(lead, { runId, version, userId: userB.id, characterId: bChar, role: "HEALER" }),
     ).rejects.toMatchObject({ code: "INVALID_ROSTER_SELECTION" });
   });
 });
@@ -865,7 +822,7 @@ describe("stale Edit Run forms", () => {
     const form = await formOpenedOn(runId);
     await runService.setSignupWindow(admin, runId, false);
     await runService.setSignupWindow(admin, runId, true);
-    await createSignup(runId, ids.c, cChar, ["TANK"]);
+    await createSignup(runId, userC.id, cChar, ["TANK"]);
     await runService.updateRun(
       lead,
       venomousUpdateInput(runId, form.run, { expectedEditVersion: form.expectedEditVersion, notes: "still valid" }),
