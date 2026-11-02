@@ -126,8 +126,8 @@ Order follows the assignment. Each line is one PR, stacked on the one before.
 | 2 | Remove dead code | PR #324, awaiting review |
 | 3 | Security headers, bot log body, route-wide bot credential test, session ownership tests | PR #325, awaiting review |
 | 4 | MVCS boundaries: app and controllers no longer import repositories; lib no longer imports components | PR #326, awaiting review |
-| 4b | Move pure rules from `src/services` to `src/domain` | PR open, awaiting review |
-| 5 | Guide code: drop legacy paths, share publisher code | Planned |
+| 4b | Move pure rules from `src/services` to `src/domain` | PR #327, awaiting review |
+| 5 | Guide code: drop legacy paths, share publisher code | PR open, awaiting review |
 | 6 | Test cleanup by module | Planned; 19 of 337 files read |
 | 7 | Frontend: error and loading states, reload consistency | Planned |
 | 8 | Performance, measured: run detail payload, sync p95, event volume | Planned |
@@ -143,6 +143,14 @@ Order follows the assignment. Each line is one PR, stacked on the one before.
 ## Change log
 
 Updated with every batch.
+
+### Batch 5: guide publisher
+
+- `guide-card.ts`, `guide-publisher.ts` and `scripts/publish-guide.mts` replace two near-identical publishers and two scripts. npm script names stay.
+- Removed: old-post fingerprints, `--retire-legacy`, the `complete-payout` key rename, and the canonical verifier only retirement used.
+- A message with a retired key now makes the publisher refuse, like any unknown key.
+- Tests: 5 guide test files. Repeated tests run against both guides from `guide-publisher.test.ts`. New cases: refusing a plan with errors, foreign authors, unmarked messages.
+- Script check: `publish-guide.mts` ran the full replace flow and a final normal publish for both guides against an in-memory Discord. No real Discord call.
 
 ### Batch 4b: pure rules in `src/domain`
 
