@@ -17,12 +17,32 @@ function resolveDeploymentId(): string | undefined {
   }
 }
 
+/**
+ * Browser CSP inventory and rollout notes: docs/audit/CSP-PREPARATION.md.
+ * Report-Only only — do not flip to Content-Security-Policy without owner approval
+ * after observing violations in a real browser session.
+ */
+const CONTENT_SECURITY_POLICY_REPORT_ONLY = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "frame-ancestors 'none'",
+  "object-src 'none'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https://cdn.discordapp.com https://media.discordapp.net",
+  "font-src 'self' data:",
+  "connect-src 'self' https://discord.com https://oauth.battle.net",
+  "form-action 'self' https://discord.com https://oauth.battle.net",
+  "upgrade-insecure-requests",
+].join("; ");
+
 const SECURITY_HEADERS = [
   { key: "Strict-Transport-Security", value: "max-age=15552000" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+  { key: "Content-Security-Policy-Report-Only", value: CONTENT_SECURITY_POLICY_REPORT_ONLY },
 ];
 
 const nextConfig: NextConfig = {
