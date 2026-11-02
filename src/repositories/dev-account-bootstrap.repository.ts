@@ -1,8 +1,6 @@
 import { hasAdminAccess } from "@/auth/authorization";
 import { mapUserRole } from "@/lib/persistence";
-import { db, orm } from "@/lib/prisma";
-
-type TxOrm = typeof orm;
+import { db } from "@/lib/prisma";
 
 export const devAccountBootstrapRepository = {
   /**

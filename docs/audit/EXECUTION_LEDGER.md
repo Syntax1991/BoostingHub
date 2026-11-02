@@ -72,8 +72,8 @@ Confirmed by import analysis of all non-test files. Severity is about real impac
 | A15 | Medium | `src/services/discord-sync.service.ts`, `src/discord-bot/sync-loop.ts` | 2240 and 2289 lines | Split only along tested lanes |
 | A16 | Open | `src/lib/gold.ts` | Payout leftover with no caller. Payouts were removed on purpose in #228 | **Owner decision**, see below |
 | A17 | High | `src/repositories/user.repository.ts` `changeAccountRoleAtomic` | The "lock every Admin-level row" step used `update()`, which in Prisma Next writes only the first matching row. Two Admins demoting each other could leave none | Fixed in `26a80d5` with `updateAndCount()`; an AST scan of every ORM `update()` / `delete()` in `src` found no other multi-row filter |
-| A19 | Low | `discordSyncService.listSyncWork`, `api/bot/discord/sync/route.ts`, `bot-api-client.ts`, `sync-loop.ts` | `raidInvites` is declared and returned but never filled; Raid Invites travel as `notificationDms`. The bot still has a lane and `syncRaidInvite` for it | Remove the lane on both sides (the bot reads it with `?? []`, so either deploy order is safe) |
-| A18 | Low | `src/repositories/*` (40 sites), 10 test files | `((tx.orm as { public?: … }).public ?? (tx.orm as unknown as …)) as …` copied everywhere; `tx.orm.public` is already typed and present at runtime (checked) | Replace with `tx.orm.public` in one refactor commit |
+| A19 | Done | `discordSyncService.listSyncWork`, `api/bot/discord/sync/route.ts`, `bot-api-client.ts`, `sync-loop.ts` | `raidInvites` is declared and returned but never filled; Raid Invites travel as `notificationDms`. The bot still has a lane and `syncRaidInvite` for it | Remove the lane on both sides (the bot reads it with `?? []`, so either deploy order is safe) |
+| A18 | Done | `src/repositories/*` (40 sites), 10 test files | `((tx.orm as { public?: … }).public ?? (tx.orm as unknown as …)) as …` copied everywhere; `tx.orm.public` is already typed and present at runtime (checked) | Replace with `tx.orm.public` in one refactor commit |
 
 Healthy and to be left alone: no import cycles, no repository bypass from components, bot API uses constant-time token comparison, all 127 server actions authenticate directly or through the service they call.
 
@@ -356,7 +356,7 @@ Found while moving, not changed (feature freeze): four production modules are im
 | --- | --- | --- | --- |
 | 1 | Centralized test structure | DONE | [PHASE-1.md](reports/PHASE-1.md) |
 | 2 | Test quality audit | DONE | [PHASE-2.md](reports/PHASE-2.md) |
-| 3 | Production refactoring / code quality | NOT STARTED | — |
+| 3 | Production refactoring / code quality | DONE | [PHASE-3.md](reports/PHASE-3.md) |
 | 4 | Performance, security, reliability | NOT STARTED | — |
 | 5 | UX and documentation | NOT STARTED | — |
 | 6 | Final validation and readiness | NOT STARTED | — |
@@ -392,6 +392,6 @@ Not started: renames from the naming table, other than the move to `src/domain`.
 
 Owner decision (2026-11-02), done in the move above: every test moves to a root-level `tests/` directory (`unit/`, `integration/`, `e2e/`, `fixtures/`, `helpers/`, `setup/`), and `src/` keeps production code only. Tests are classified by what they do: a test that needs the database or several real components is `integration`, whatever its file name. The move is its own structural commit with no behaviour change; the discovered file inventory is compared exactly before and after, and the database guards stay in force.
 
-Open tracked items: A18 and A19 (one commit each), the multi-row `.delete()` cleanups in tests, removing `rosterService.setDraftSelection` once its last caller has moved to `saveDraftSelection`.
+Open tracked items: multi-row `.delete()` cardinality leftovers outside audited suites (if any); A16 `gold.ts` owner decision; deferred naming overlaps. A18/A19/`setDraftSelection`/Phase-2 dead modules done.
 
 Order from here (owner master plan, 2026-11-02): phase 2 finishes the test audit (22 suites remaining after this batch; `setDraftSelection` with the remaining callers; the multi-row `.delete()` cleanups, each checked for intended cardinality and ownership before any change); phase 3 does A18, A19, the four dead-code candidates and a naming review in rename-only commits (no public fields, columns, persisted keys or Discord payloads); then performance, security and reliability with measured before/after; then UX and documentation; then the final validation matrix.

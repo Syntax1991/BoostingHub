@@ -25,8 +25,6 @@ import type {
 import { CONSUMABLE_AUDIT_FACTS_VERSION } from "@/domain/consumable-audit-extract";
 import type { AuditFightFact, AuditPlayerFact } from "@/domain/consumable-audit-policy";
 
-type TxOrm = typeof orm;
-
 export type ConsumableAuditFailureCode =
   | "NOT_CONFIGURED"
   | "REPORT_NOT_FOUND"

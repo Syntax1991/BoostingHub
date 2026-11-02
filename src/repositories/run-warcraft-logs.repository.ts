@@ -18,8 +18,6 @@ import type {
   WclFightStatus,
 } from "@/domain/wcl-fight-assignment";
 
-type TxOrm = typeof orm;
-
 /** Not in the raid: excluded from roster-overlap evidence. */
 const ABSENT: readonly AttendanceStatus[] = ["NO_SHOW", "EXCUSED", "STANDBY"];
 
