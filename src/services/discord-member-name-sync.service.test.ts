@@ -6,6 +6,7 @@ import { rosterRepository } from "@/repositories/roster.repository";
 import { userRepository } from "@/repositories/user.repository";
 import { discordMemberNameSyncService } from "@/services/discord-member-name-sync.service";
 import { syncDiscordRoleAccess } from "@/services/discord-role-access-sync.service";
+import { assertIsolatedTestDatabase, createTestCharacter, deleteCreatedRows, syntheticDiscordId } from "@/test/db-fixtures";
 
 /**
  * Discord → displayed player name (User.name): login-time member read and the
@@ -13,26 +14,28 @@ import { syncDiscordRoleAccess } from "@/services/discord-role-access-sync.servi
  * identity — signups stay keyed by user id.
  */
 
+/** Filled in beforeAll with fresh rows; keys name each fixture's role in the scenarios below. */
 const ids = {
-  nick: "dnm00000-0000-4000-8000-000000000001",
-  global: "dnm00000-0000-4000-8000-000000000002",
-  username: "dnm00000-0000-4000-8000-000000000003",
-  hyphen: "dnm00000-0000-4000-8000-000000000004",
-  departed: "dnm00000-0000-4000-8000-000000000005",
-  outage: "dnm00000-0000-4000-8000-000000000006",
-  lead: "dnm00000-0000-4000-8000-000000000007",
-  outsider: "dnm00000-0000-4000-8000-000000000008",
-  run: "dnm00000-0000-4000-8000-0000000000r1",
-  charNick: "dnm00000-0000-4000-8000-0000000000c1",
-  charTwisting: "dnm00000-0000-4000-8000-0000000000c2",
-  signupNick: "dnm00000-0000-4000-8000-0000000000s1",
-  signupGlobal: "dnm00000-0000-4000-8000-0000000000s2",
+  nick: "",
+  global: "",
+  username: "",
+  hyphen: "",
+  departed: "",
+  outage: "",
+  lead: "",
+  outsider: "",
+  run: "",
 };
-
-const discordIdOf = (userId: string) => `77${userId.replace(/\D/g, "").slice(-16).padStart(16, "0")}`;
+const discordIds = new Map<string, string>();
+const discordIdOf = (userId: string) => discordIds.get(userId)!;
+const created = { runIds: [] as string[], userIds: [] as string[] };
 /** Far future so only this file's Run counts as "upcoming" for the refresh (other test data never reaches it). */
 const RUN_START = "2099-03-06T20:00:00.000Z";
 const REFRESH_NOW = new Date("2099-03-01T12:00:00.000Z");
+
+const GUILD_ID = syntheticDiscordId();
+const BOOSTER_ROLE_ID = syntheticDiscordId();
+const LOOTBUDDY_ROLE_ID = syntheticDiscordId();
 
 const fetchMock = vi.fn();
 /** Discord member per discord user id: object = 200, null = 404 (left the guild), "fail" = HTTP 500. */
@@ -53,14 +56,18 @@ function respond(url: string): Response {
   );
 }
 
-async function createUser(id: string, name: string, extra: Record<string, unknown> = {}) {
+async function createUser(name: string, extra: Record<string, unknown> = {}) {
+  const id = crypto.randomUUID();
+  const discordUserId = syntheticDiscordId();
+  discordIds.set(id, discordUserId);
+  created.userIds.push(id);
   const now = new Date().toISOString();
   await orm.User.create({
     id,
     name,
     email: `${id}@names.test`,
     emailVerified: true,
-    discordUserId: discordIdOf(id),
+    discordUserId,
     discordUsername: `u_${id.slice(-2)}`,
     accountRole: "USER",
     accountStatus: "ACTIVE",
@@ -70,32 +77,17 @@ async function createUser(id: string, name: string, extra: Record<string, unknow
     updatedAt: now,
     ...extra,
   });
+  return id;
 }
 
-async function createCharacter(id: string, userId: string, name: string, realm: string) {
-  const now = new Date().toISOString();
-  await orm.Character.create({
-    id,
-    userId,
-    name,
-    realm,
-    region: "EU",
-    normalizedName: name.toLowerCase(),
-    normalizedRealm: realm.toLowerCase(),
-    wowClass: "MAGE",
-    specialization: "Fire",
-    primaryRole: "RANGED_DPS",
-    itemLevel: 330,
-    isActive: true,
-    createdAt: now,
-    updatedAt: now,
-  });
+function createMage(userId: string, name: string, realm: string) {
+  return createTestCharacter({ userId, name, realm, wowClass: "MAGE", specialization: "Fire", primaryRole: "RANGED_DPS", itemLevel: 330 });
 }
 
-async function createSignup(id: string, userId: string, characterId: string | null) {
+async function createSignup(userId: string, characterId: string | null) {
   const now = new Date().toISOString();
   await orm.RunSignup.create({
-    id,
+    id: crypto.randomUUID(),
     runId: ids.run,
     userId,
     characterId,
@@ -119,29 +111,22 @@ const stored = async (id: string) =>
     discordNameSyncedAt: string | null;
   };
 
-async function cleanup() {
-  await orm.RunSignup.where({ runId: ids.run }).deleteAndCount().catch(() => {});
-  await orm.RunRoster.where({ runId: ids.run }).deleteAndCount().catch(() => {});
-  await orm.RunRaidContent.where({ runId: ids.run }).deleteAndCount().catch(() => {});
-  await orm.Run.where({ id: ids.run }).deleteAndCount().catch(() => {});
-  for (const id of [ids.charNick, ids.charTwisting]) await orm.Character.where({ id }).deleteAndCount().catch(() => {});
-  for (const id of Object.values(ids)) await orm.User.where({ id }).deleteAndCount().catch(() => {});
-}
-
 beforeAll(async () => {
-  await cleanup();
-  await createUser(ids.nick, "Epsilon");
-  await createUser(ids.global, "Old Global");
-  await createUser(ids.username, "Old Username");
-  await createUser(ids.hyphen, "Old Hyphen");
-  await createUser(ids.departed, "Departed", { discordGuildNickname: "Dep-Antonidas", discordGlobalName: "Zeta" });
-  await createUser(ids.outage, "Kept Name", { discordGuildNickname: "Kept", discordGlobalName: "Kept Global" });
-  await createUser(ids.lead, "Lead Old", { accountRole: "RAID_LEAD" });
-  await createUser(ids.outsider, "Outsider");
+  assertIsolatedTestDatabase();
+  ids.nick = await createUser("Epsilon");
+  ids.global = await createUser("Old Global");
+  ids.username = await createUser("Old Username");
+  ids.hyphen = await createUser("Old Hyphen");
+  ids.departed = await createUser("Departed", { discordGuildNickname: "Dep-Antonidas", discordGlobalName: "Zeta" });
+  ids.outage = await createUser("Kept Name", { discordGuildNickname: "Kept", discordGlobalName: "Kept Global" });
+  ids.lead = await createUser("Lead Old", { accountRole: "RAID_LEAD" });
+  ids.outsider = await createUser("Outsider");
   // Known realms come from stored Characters.
-  await createCharacter(ids.charNick, ids.nick, "Gamma", "Antonidas");
-  await createCharacter(ids.charTwisting, ids.global, "Delta", "Twisting Nether");
+  const nickCharacterId = await createMage(ids.nick, "Gamma", "Antonidas");
+  const twistingCharacterId = await createMage(ids.global, "Delta", "Twisting Nether");
   const now = new Date().toISOString();
+  ids.run = crypto.randomUUID();
+  created.runIds.push(ids.run);
   await orm.Run.create({
     id: ids.run,
     title: "Fri 21:00 HC Unsaved 8/8 Lead Old",
@@ -160,8 +145,8 @@ beforeAll(async () => {
     updatedAt: now,
   });
   await orm.RunRaidContent.create({ id: crypto.randomUUID(), runId: ids.run, raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 8, createdAt: now });
-  await createSignup(ids.signupNick, ids.nick, ids.charNick);
-  await createSignup(ids.signupGlobal, ids.global, ids.charTwisting);
+  await createSignup(ids.nick, nickCharacterId);
+  await createSignup(ids.global, twistingCharacterId);
 });
 
 beforeEach(() => {
@@ -170,9 +155,9 @@ beforeEach(() => {
   fetchMock.mockImplementation(async (url: URL | string) => respond(String(url)));
   vi.stubGlobal("fetch", fetchMock);
   vi.stubEnv("DISCORD_BOT_TOKEN", "test-bot-token");
-  vi.stubEnv("DISCORD_GUILD_ID", "1526980300000000509");
-  vi.stubEnv("DISCORD_BOOSTER_ROLE_ID", "1527022800000000104");
-  vi.stubEnv("DISCORD_LOOTBUDDY_ROLE_ID", "1527024300000000704");
+  vi.stubEnv("DISCORD_GUILD_ID", GUILD_ID);
+  vi.stubEnv("DISCORD_BOOSTER_ROLE_ID", BOOSTER_ROLE_ID);
+  vi.stubEnv("DISCORD_LOOTBUDDY_ROLE_ID", LOOTBUDDY_ROLE_ID);
   vi.stubEnv("DEV_ACCOUNT_BOOTSTRAP_ENABLED", "false");
 });
 
@@ -181,9 +166,8 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-afterAll(async () => {
-  await cleanup();
-});
+// Signups go with the Run; Characters with their Users.
+afterAll(() => deleteCreatedRows(created));
 
 describe("login: one guild member read refreshes roles and the displayed name", () => {
   it("server nickname wins; a known realm suffix is dropped; raw names are stored", async () => {
@@ -266,7 +250,7 @@ describe("bot refresh: people of upcoming Runs, at most once a day, never while 
   });
 
   it("a Discord failure stops the pass and keeps every last known name", async () => {
-    await orm.User.where({ id: ids.lead }).update({ discordNameSyncedAt: null });
+    await orm.User.where({ id: ids.lead }).update({ name: "Alpha", discordNameSyncedAt: null });
     members.set(discordIdOf(ids.lead), "fail");
     const result = await discordMemberNameSyncService.runDuePass(REFRESH_NOW);
     expect(result).toMatchObject({ status: "DONE", refreshed: 0, stoppedOnError: true });
@@ -274,6 +258,8 @@ describe("bot refresh: people of upcoming Runs, at most once a day, never while 
   });
 
   it("Group by Player shows the resolved names, alphabetically, grouped by user id (never by name)", async () => {
+    await orm.User.where({ id: ids.nick }).update({ name: "Gam" });
+    await orm.User.where({ id: ids.global }).update({ name: "Delta" });
     const tiles = (await rosterRepository.listSignups(ids.run)).map((signup) => ({
       id: signup.id,
       userId: signup.userId,
@@ -293,6 +279,7 @@ describe("bot refresh: people of upcoming Runs, at most once a day, never while 
   });
 
   it("not configured: no Discord read at all", async () => {
+    await orm.User.where({ id: ids.nick }).update({ discordGuildNickname: "Gam", discordNameSyncedAt: null });
     vi.stubEnv("DISCORD_BOT_TOKEN", "");
     expect(await discordMemberNameSyncService.runDuePass(REFRESH_NOW)).toEqual({ status: "NOT_CONFIGURED" });
     expect(fetchMock).not.toHaveBeenCalled();

@@ -7,6 +7,7 @@ import {
   type WarcraftLogsReportMetadata,
 } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
 import { snowflakeAtTime } from "@/lib/discord-snowflake";
+import { SEED_IDS } from "@/prisma/seed-ids";
 import { runConsumableAuditRepository } from "@/repositories/run-consumable-audit.repository";
 import { runWarcraftLogsRepository } from "@/repositories/run-warcraft-logs.repository";
 import { scheduledJobLockRepository } from "@/repositories/scheduled-job-lock.repository";
@@ -23,6 +24,7 @@ import { POST as discoveryPost } from "@/app/api/bot/warcraft-logs/discoveries/r
 import { PUT as cursorPut } from "@/app/api/bot/warcraft-logs/channels/[channelId]/cursor/route";
 import { POST as tickPost } from "@/app/api/bot/warcraft-logs/auto-audit/route";
 import { GET as syncGet } from "@/app/api/bot/discord/sync/route";
+import { assertIsolatedTestDatabase, syntheticDiscordId } from "@/test/db-fixtures";
 
 /**
  * Central discovery end to end: the log bot's report link in a dedicated log
@@ -30,11 +32,12 @@ import { GET as syncGet } from "@/app/api/bot/discord/sync/route";
  * (window 14:00–15:20) by its fights → linked → audited by the existing
  * automatic audit. WCL is mocked; every row written here is removed again.
  */
-const RUN = "r9999996-9996-4996-8996-999999999996";
+const RUN = SEED_IDS.runs.largeCompleted;
 const TOKEN = "bot-api-test-token-discovery-0123";
-const LOG_CHANNEL = "1553838800000000226";
-const LOG_BOT = "1554176500000000910";
-const OTHER_CHANNEL = "555555555555555555";
+const LOG_CHANNEL = syntheticDiscordId();
+const LOG_BOT = syntheticDiscordId();
+const OTHER_CHANNEL = syntheticDiscordId();
+const UNTRUSTED_AUTHOR = syntheticDiscordId();
 const REPORT = "TestReportCode01";
 const LATE_REPORT = "TestReportCode04";
 const at = (hhmm: string) => new Date(`2026-09-20T${hhmm}:00.000Z`);
@@ -44,6 +47,8 @@ const MESSAGE = snowflakeAtTime(at("14:06"));
 
 let roster: Array<Extract<ConsumableAuditParticipant, { source: "ATTENDANCE" }>> = [];
 let createdSnapshotId: string | null = null;
+/** The seeded Run's own completion time, put back afterwards. */
+let originalCompletedAt: string | null = null;
 
 function metadata(code: string): WarcraftLogsReportMetadata {
   const actorIds = roster.map((_, i) => i + 1);
@@ -83,6 +88,8 @@ async function clear() {
 }
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
+  originalCompletedAt = ((await orm.Run.where({ id: RUN }).first()) as { completedAt: string | null }).completedAt;
   const seen = new Set<string>();
   roster = (await runConsumableAuditRepository.listParticipants(RUN))
     .filter((row): row is Extract<ConsumableAuditParticipant, { source: "ATTENDANCE" }> => row.source === "ATTENDANCE")
@@ -95,14 +102,14 @@ beforeAll(async () => {
   if (!(await orm.RunStartSnapshot.where({ runId: RUN }).first())) {
     createdSnapshotId = crypto.randomUUID();
     const now = new Date().toISOString();
-    await orm.RunStartSnapshot.create({ id: createdSnapshotId, runId: RUN, startedAt: at("14:00").toISOString(), startedById: "33333333-3333-4333-8333-333333333333", createdAt: now, updatedAt: now });
+    await orm.RunStartSnapshot.create({ id: createdSnapshotId, runId: RUN, startedAt: at("14:00").toISOString(), startedById: SEED_IDS.users.thorne, createdAt: now, updatedAt: now });
   }
   await orm.Run.where({ id: RUN }).update({ completedAt: at("15:20").toISOString() });
 });
 afterAll(async () => {
   await clear();
   if (createdSnapshotId) await orm.RunStartSnapshot.where({ id: createdSnapshotId }).deleteAndCount();
-  await orm.Run.where({ id: RUN }).update({ completedAt: null });
+  await orm.Run.where({ id: RUN }).update({ completedAt: originalCompletedAt });
 });
 beforeEach(async () => {
   await clear();
@@ -136,7 +143,7 @@ describe("POST /api/bot/warcraft-logs/discoveries — the server re-checks the s
 
   it("refuses an unconfigured channel, an untrusted author, a bad token and a malformed report code", async () => {
     expect((await record({ channelId: OTHER_CHANNEL })).status).toBe(403);
-    expect((await record({ authorId: "222222222222222222" })).status).toBe(403);
+    expect((await record({ authorId: UNTRUSTED_AUTHOR })).status).toBe(403);
     expect((await discoveryPost(bot("/api/bot/warcraft-logs/discoveries", "POST", {}, "wrong"))).status).toBe(401);
     expect((await record({ reportCode: "not-a-code" })).status).toBe(400);
     expect(await orm.WarcraftLogsReportDiscovery.where({ channelId: OTHER_CHANNEL }).all()).toHaveLength(0);

@@ -56,6 +56,8 @@ export async function createTestCharacter(options: {
   specialization: string | null;
   primaryRole: CharacterRole;
   itemLevel?: number;
+  isActive?: boolean;
+  lastSyncedAt?: string | null;
 }): Promise<string> {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -71,7 +73,8 @@ export async function createTestCharacter(options: {
     specialization: options.specialization,
     primaryRole: options.primaryRole,
     itemLevel: options.itemLevel ?? 700,
-    isActive: true,
+    isActive: options.isActive ?? true,
+    lastSyncedAt: options.lastSyncedAt ?? null,
     createdAt: now,
     updatedAt: now,
   });

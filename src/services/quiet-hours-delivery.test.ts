@@ -1,284 +1,139 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { orm } from "@/lib/prisma";
+import type { AuthenticatedUser } from "@/auth/authorization";
+import { resolveDiscordDelivery } from "@/domain/notification-content";
+import type { NotificationDmPreferences } from "@/repositories/settings.repository";
 import {
   userNotificationRepository,
   type CreateUserNotificationInput,
 } from "@/repositories/user-notification.repository";
 import { settingsService } from "@/services/settings.service";
-import type { AuthenticatedUser } from "@/auth/authorization";
-import { resolveDiscordDelivery } from "@/domain/notification-content";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows, syntheticDiscordId } from "@/test/db-fixtures";
 
-const ids = {
-  user: "qh111111-1111-4111-8111-111111111101",
-  noteFuture: "qh111111-1111-4111-8111-111111111201",
-  notePast: "qh111111-1111-4111-8111-111111111202",
-  noteNull: "qh111111-1111-4111-8111-111111111203",
-  noteSent: "qh111111-1111-4111-8111-111111111204",
-  noteSkipped: "qh111111-1111-4111-8111-111111111205",
-  noteFailed: "qh111111-1111-4111-8111-111111111206",
-  noteDeferredThenSettings: "qh111111-1111-4111-8111-111111111207",
-};
+const DISCORD_ID = syntheticDiscordId();
+const QUIET_HOURS = { enabled: true, start: "22:00", end: "07:00" } as const;
+/** 22:30 Berlin (CET) on a March evening: inside Quiet Hours, which end at 07:00 local = 06:00 UTC. */
+const INSIDE_QUIET_HOURS = new Date("2026-03-10T21:30:00.000Z");
+const QUIET_HOURS_END = "2026-03-11T06:00:00.000Z";
 
-function asUser(id: string): AuthenticatedUser {
+/** Notifications cascade with their User. */
+const created = { userIds: [] as string[] };
+let user: AuthenticatedUser;
+
+function allDmsOn(quietHours: NotificationDmPreferences["quietHours"]): NotificationDmPreferences {
   return {
-    id,
-    name: "Quiet Hours User",
-    email: `${id}@qh.boostting.local`,
-    image: null,
-    discordUserId: "999001",
-    discordUsername: "qhuser",
-    accountRole: "USER",
-    accountStatus: "ACTIVE",
-  };
-}
-
-async function cleanup() {
-  for (const id of Object.values(ids).filter((v) => v !== ids.user)) {
-    try {
-      await orm.UserNotification.where({ id }).delete();
-    } catch {
-      // gone
-    }
-  }
-  try {
-    const rows = await orm.UserNotification.where({ userId: ids.user }).select("id").all();
-    for (const row of rows) {
-      await orm.UserNotification.where({ id: (row as { id: string }).id }).delete();
-    }
-  } catch {
-    // gone
-  }
-  try {
-    await orm.User.where({ id: ids.user }).delete();
-  } catch {
-    // gone
-  }
-}
-
-async function createUser() {
-  await orm.User.create({
-    id: ids.user,
-    name: "Quiet Hours User",
-    email: `${ids.user}@qh.boostting.local`,
-    emailVerified: true,
-    accountRole: "USER",
-    accountStatus: "ACTIVE",
-    discordUserId: "999001",
-    discordUsername: "qhuser",
     discordDmEnabled: true,
     dmRosterSelectedEnabled: true,
     dmRaidInviteEnabled: true,
     dmRunCancelledEnabled: true,
     dmRunRescheduledEnabled: true,
     dmRosterRemovedEnabled: true,
-    discordDmQuietHoursEnabled: false,
-    discordDmQuietHoursStart: null,
-    discordDmQuietHoursEnd: null,
-    timeZone: "Europe/Berlin",
-    defaultCharacterId: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
+    quietHours,
+  };
 }
 
-function baseNote(
-  partial: Partial<CreateUserNotificationInput> & { id: string; sourceKey: string },
-): CreateUserNotificationInput {
-  return {
-    userId: ids.user,
+/** A pending Discord DM notification for the suite's user with a fresh id; returns the input it wrote. */
+async function notify(partial: Partial<CreateUserNotificationInput> = {}) {
+  const id = crypto.randomUUID();
+  const input: CreateUserNotificationInput = {
+    id,
+    userId: user.id,
     type: "ROSTER_SELECTED",
     runId: null,
     signupId: null,
+    sourceKey: `qh-${id}`,
     title: "t",
     message: "m",
     href: "/runs",
     discordDeliveryStatus: "PENDING",
-    discordUserId: "999001",
+    discordUserId: DISCORD_ID,
     discordDeliverAfter: null,
     ...partial,
   };
+  const row = await userNotificationRepository.createIgnoreDuplicate(input);
+  return { input, row };
 }
 
 beforeAll(async () => {
-  await cleanup();
-  await createUser();
+  assertIsolatedTestDatabase();
+  const userId = await createTestUser({ name: "Quiet Hours User", discordUserId: DISCORD_ID });
+  created.userIds.push(userId);
+  user = testActor(userId, "USER", { discordUserId: DISCORD_ID });
 });
 
-afterAll(async () => {
-  await cleanup();
-});
+afterAll(() => deleteCreatedRows(created));
 
 describe("listPendingDiscordDmNotifications deliverAfter filter", () => {
   it("returns null/past/now and excludes future + terminal statuses", async () => {
     const now = new Date("2026-06-15T12:00:00.000Z");
-    await userNotificationRepository.createIgnoreDuplicate(
-      baseNote({
-        id: ids.noteNull,
-        sourceKey: "qh-null",
-        discordDeliverAfter: null,
-        createdAt: "2026-06-15T11:00:00.000Z",
-      }),
-    );
-    await userNotificationRepository.createIgnoreDuplicate(
-      baseNote({
-        id: ids.notePast,
-        sourceKey: "qh-past",
-        discordDeliverAfter: "2026-06-15T11:59:00.000Z",
-        createdAt: "2026-06-15T11:01:00.000Z",
-      }),
-    );
-    await userNotificationRepository.createIgnoreDuplicate(
-      baseNote({
-        id: ids.noteFuture,
-        sourceKey: "qh-future",
-        discordDeliverAfter: "2026-06-15T12:01:00.000Z",
-        createdAt: "2026-06-15T11:02:00.000Z",
-      }),
-    );
-    await userNotificationRepository.createIgnoreDuplicate(
-      baseNote({
-        id: ids.noteSent,
-        sourceKey: "qh-sent",
-        discordDeliveryStatus: "SENT",
-        createdAt: "2026-06-15T11:03:00.000Z",
-      }),
-    );
-    await userNotificationRepository.createIgnoreDuplicate(
-      baseNote({
-        id: ids.noteSkipped,
-        sourceKey: "qh-skipped",
-        discordDeliveryStatus: "SKIPPED",
-        discordUserId: null,
-        createdAt: "2026-06-15T11:04:00.000Z",
-      }),
-    );
-    await userNotificationRepository.createIgnoreDuplicate(
-      baseNote({
-        id: ids.noteFailed,
-        sourceKey: "qh-failed",
-        discordDeliveryStatus: "FAILED_PERMANENT",
-        createdAt: "2026-06-15T11:05:00.000Z",
-      }),
-    );
-
-    // Exactly now
-    await userNotificationRepository.createIgnoreDuplicate(
-      baseNote({
-        id: "qh111111-1111-4111-8111-111111111208",
-        sourceKey: "qh-now",
-        discordDeliverAfter: now.toISOString(),
-        createdAt: "2026-06-15T11:06:00.000Z",
-      }),
-    );
+    const minutesFromNow = (minutes: number) => new Date(now.getTime() + minutes * 60_000).toISOString();
+    const deliverable = [
+      await notify({ discordDeliverAfter: null }),
+      await notify({ discordDeliverAfter: minutesFromNow(-1) }),
+      await notify({ discordDeliverAfter: now.toISOString() }),
+    ];
+    await notify({ discordDeliverAfter: minutesFromNow(1) });
+    await notify({ discordDeliveryStatus: "SENT" });
+    await notify({ discordDeliveryStatus: "SKIPPED", discordUserId: null });
+    await notify({ discordDeliveryStatus: "FAILED_PERMANENT" });
 
     const pending = await userNotificationRepository.listPendingDiscordDmNotifications(50, now);
-    const keys = pending
-      .filter((row) => row.userId === ids.user && row.sourceKey.startsWith("qh-"))
-      .map((row) => row.sourceKey)
-      .sort();
-    expect(keys).toEqual(["qh-now", "qh-null", "qh-past"].sort());
+    const mine = pending.filter((row) => row.userId === user.id).map((row) => row.sourceKey).sort();
+    expect(mine).toEqual(deliverable.map(({ input }) => input.sourceKey).sort());
     expect(pending.every((row) => row.discordDeliveryStatus === "PENDING")).toBe(true);
   });
 });
 
 describe("Quiet Hours snapshot non-retroactive", () => {
   it("keeps deliverAfter when Quiet Hours later disabled", async () => {
-    const actor = asUser(ids.user);
-    await settingsService.updateNotificationDmPreferences(actor, {
-      discordDmEnabled: true,
-      dmRosterSelectedEnabled: true,
-      dmRaidInviteEnabled: true,
-      dmRunCancelledEnabled: true,
-      dmRunRescheduledEnabled: true,
-      dmRosterRemovedEnabled: true,
-      quietHours: { enabled: true, start: "22:00", end: "07:00" },
-    });
+    await settingsService.updateNotificationDmPreferences(user, allDmsOn(QUIET_HOURS));
 
     const delivery = resolveDiscordDelivery({
       discordDmEnabled: true,
       eventDmEnabled: true,
-      discordUserId: "999001",
-      quietHours: { enabled: true, start: "22:00", end: "07:00" },
+      discordUserId: DISCORD_ID,
+      quietHours: QUIET_HOURS,
       timeZone: "Europe/Berlin",
-      now: new Date("2026-03-10T21:30:00.000Z"),
+      now: INSIDE_QUIET_HOURS,
     });
-    expect(delivery.discordDeliverAfter).toBe("2026-03-11T06:00:00.000Z");
+    expect(delivery.discordDeliverAfter).toBe(QUIET_HOURS_END);
 
-    const created = await userNotificationRepository.createIgnoreDuplicate(
-      baseNote({
-        id: ids.noteDeferredThenSettings,
-        sourceKey: "qh-snapshot-defer",
-        discordDeliveryStatus: delivery.status,
-        discordUserId: delivery.discordUserId,
-        discordDeliverAfter: delivery.discordDeliverAfter,
-      }),
-    );
-    expect(created?.discordDeliverAfter).toBe("2026-03-11T06:00:00.000Z");
-
-    await settingsService.updateNotificationDmPreferences(actor, {
-      discordDmEnabled: true,
-      dmRosterSelectedEnabled: true,
-      dmRaidInviteEnabled: true,
-      dmRunCancelledEnabled: true,
-      dmRunRescheduledEnabled: true,
-      dmRosterRemovedEnabled: true,
-      quietHours: { enabled: false, start: "22:00", end: "07:00" },
+    const { row, input } = await notify({
+      discordDeliveryStatus: delivery.status,
+      discordUserId: delivery.discordUserId,
+      discordDeliverAfter: delivery.discordDeliverAfter,
     });
-    await settingsService.updateRegionalPreferences(actor, { timeZone: "America/New_York" });
+    expect(row?.discordDeliverAfter).toBe(QUIET_HOURS_END);
 
-    const again = await userNotificationRepository.findById(ids.noteDeferredThenSettings);
-    expect(again?.discordDeliverAfter).toBe("2026-03-11T06:00:00.000Z");
+    await settingsService.updateNotificationDmPreferences(user, allDmsOn({ ...QUIET_HOURS, enabled: false }));
+    await settingsService.updateRegionalPreferences(user, { timeZone: "America/New_York" });
+
+    expect((await userNotificationRepository.findById(input.id!))?.discordDeliverAfter).toBe(QUIET_HOURS_END);
   });
 
   it("keeps SKIPPED when master later enabled", async () => {
-    const skipped = await userNotificationRepository.createIgnoreDuplicate(
-      baseNote({
-        id: "qh111111-1111-4111-8111-111111111209",
-        sourceKey: "qh-snapshot-skipped",
-        discordDeliveryStatus: "SKIPPED",
-        discordUserId: null,
-        discordDeliverAfter: null,
-      }),
-    );
-    expect(skipped?.discordDeliveryStatus).toBe("SKIPPED");
+    const { row, input } = await notify({ discordDeliveryStatus: "SKIPPED", discordUserId: null });
+    expect(row?.discordDeliveryStatus).toBe("SKIPPED");
 
-    await settingsService.updateNotificationDmPreferences(asUser(ids.user), {
-      discordDmEnabled: true,
-      dmRosterSelectedEnabled: true,
-      dmRaidInviteEnabled: true,
-      dmRunCancelledEnabled: true,
-      dmRunRescheduledEnabled: true,
-      dmRosterRemovedEnabled: true,
-      quietHours: { enabled: false, start: "22:00", end: "07:00" },
-    });
+    await settingsService.updateNotificationDmPreferences(user, allDmsOn({ ...QUIET_HOURS, enabled: false }));
 
-    const again = await userNotificationRepository.findById("qh111111-1111-4111-8111-111111111209");
+    const again = await userNotificationRepository.findById(input.id!);
     expect(again?.discordDeliveryStatus).toBe("SKIPPED");
     expect(again?.discordDeliverAfter).toBeNull();
   });
 });
 
-describe("resolveDiscordDelivery covers all event toggles conceptually", () => {
-  const eventKeys = [
-    "dmRosterSelectedEnabled",
-    "dmRaidInviteEnabled",
-    "dmRunCancelledEnabled",
-    "dmRunRescheduledEnabled",
-    "dmRosterRemovedEnabled",
-  ] as const;
-
-  for (const key of eventKeys) {
-    it(`${key} OFF → SKIPPED`, () => {
-      expect(
-        resolveDiscordDelivery({
-          discordDmEnabled: true,
-          eventDmEnabled: false,
-          discordUserId: "1",
-          quietHours: { enabled: true, start: "22:00", end: "07:00" },
-          timeZone: "Europe/Berlin",
-          now: new Date("2026-03-10T21:30:00.000Z"),
-        }),
-      ).toEqual({ status: "SKIPPED", discordUserId: null, discordDeliverAfter: null });
-    });
-  }
+describe("resolveDiscordDelivery with an event DM switched off", () => {
+  it("is SKIPPED even inside Quiet Hours with the master switch on", () => {
+    expect(
+      resolveDiscordDelivery({
+        discordDmEnabled: true,
+        eventDmEnabled: false,
+        discordUserId: DISCORD_ID,
+        quietHours: QUIET_HOURS,
+        timeZone: "Europe/Berlin",
+        now: INSIDE_QUIET_HOURS,
+      }),
+    ).toEqual({ status: "SKIPPED", discordUserId: null, discordDeliverAfter: null });
+  });
 });

@@ -196,7 +196,7 @@ describe("Run DM identity — the shared compact content title", () => {
   });
 
   it("dmLink renders a masked link with the URL in angle brackets", () => {
-    expect(dmLink("Open Run", "https://manawyrm-boosting.com/runs/r1")).toBe("[Open Run](<https://manawyrm-boosting.com/runs/r1>)");
+    expect(dmLink("Open Run", EXAMPLE_URL)).toBe(`[Open Run](<${EXAMPLE_URL}>)`);
   });
 });
 

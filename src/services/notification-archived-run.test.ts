@@ -1,136 +1,97 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { orm } from "@/lib/prisma";
-import { venomousCreateInput } from "@/lib/test-run-input";
+import { anyContentRunInput } from "@/lib/test-run-input";
 import type { DiscordDeliveryStatus, NotificationType } from "@/models/enums";
 import { raidRepository } from "@/repositories/raid.repository";
 import { userNotificationRepository } from "@/repositories/user-notification.repository";
 import { discordSyncService } from "@/services/discord-sync.service";
 import { runService } from "@/services/run.service";
+import { testActor } from "@/test/actors";
+import {
+  assertIsolatedTestDatabase,
+  createTestUser,
+  deleteCreatedRows,
+  syntheticDiscordId,
+} from "@/test/db-fixtures";
+import { CURRENT_WEEK_RUN_START, HOUR_MS, RAID_WEEK_TEST_CLOCK, freezeSystemTime, restoreSystemTime } from "@/test/time";
 
-const ids = {
-  lead: "n4444444-4444-4444-8444-444444444401",
-  player: "n4444444-4444-4444-8444-444444444402",
-};
-const DISCORD_ID = "930000000000000001";
-const createdRunIds: string[] = [];
+const PLAYER_DISCORD_ID = syntheticDiscordId();
+/** Notifications cascade with their User and Run. */
+const created = { runIds: [] as string[], userIds: [] as string[] };
+let lead: AuthenticatedUser;
+let playerId = "";
 
-function asUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"]): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@narchived.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
+/** An OPEN Run of the suite's Raid Lead, an hour after the previous one (no reservation overlap). */
+async function createOpenRun(): Promise<string> {
+  const scheduledStartAt = new Date(Date.parse(CURRENT_WEEK_RUN_START) + created.runIds.length * HOUR_MS).toISOString();
+  const run = await runService.createRun(lead, anyContentRunInput({ scheduledStartAt }));
+  created.runIds.push(run.id);
+  await runService.openRun(lead, run.id);
+  return run.id;
 }
 
-async function createTestUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"], discordUserId: string | null) {
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@narchived.boostting.local`,
-    emailVerified: true,
-    discordUserId,
-    discordUsername: discordUserId ? `u${discordUserId}` : null,
-    accountRole,
-    accountStatus: "ACTIVE",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
+/** A cancelled Run the app has archived (archival itself is covered elsewhere). */
+async function createArchivedCancelledRun(): Promise<string> {
+  const runId = await createOpenRun();
+  await runService.cancelRun(lead, runId);
+  await orm.Run.where({ id: runId }).update({ archivedAt: new Date().toISOString() });
+  return runId;
 }
 
-async function cleanup() {
-  for (const userId of Object.values(ids)) {
-    const notes = await orm.UserNotification.where({ userId }).select("id").all();
-    for (const row of notes) {
-      await orm.UserNotification.where({ id: (row as { id: string }).id }).delete();
-    }
-  }
-  for (const runId of createdRunIds.splice(0)) {
-    await orm.Run.where({ id: runId }).delete().catch(() => undefined);
-  }
-  for (const userId of Object.values(ids)) {
-    await orm.User.where({ id: userId }).delete().catch(() => undefined);
-  }
-}
-
-const lead = asUser(ids.lead, "Archive Lead", "RAID_LEAD");
-
-async function createRun(): Promise<string> {
-  const created = await runService.createRun(
-    lead,
-    venomousCreateInput({
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      scheduledStartAt: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000 + createdRunIds.length * 3_600_000).toISOString(),
-      desiredTankCount: 1,
-      desiredHealerCount: 1,
-      desiredDpsCount: 1,
-    }),
-  );
-  createdRunIds.push(created.id);
-  return created.id;
-}
-
-async function notify(runId: string, type: NotificationType, status: DiscordDeliveryStatus, key: string) {
+/** A Discord-DM notification for the player about `runId`; returns its id. */
+async function notify(runId: string, type: NotificationType, status: DiscordDeliveryStatus) {
+  const id = crypto.randomUUID();
   await userNotificationRepository.createIgnoreDuplicate({
-    userId: ids.player,
+    id,
+    userId: playerId,
     type,
     runId,
     signupId: null,
-    sourceKey: `archived-test:${key}`,
+    sourceKey: `archived-test:${id}`,
     title: type,
     message: type,
     href: `/runs/${runId}`,
     discordDeliveryStatus: status,
-    discordUserId: status === "SKIPPED" ? null : DISCORD_ID,
+    discordUserId: status === "SKIPPED" ? null : PLAYER_DISCORD_ID,
     discordDeliverAfter: null,
   });
-  const row = (await orm.UserNotification.where({ sourceKey: `archived-test:${key}` }).first()) as { id: string };
-  return row.id;
+  return id;
 }
 
 async function statusOf(id: string) {
   return (await userNotificationRepository.findById(id))?.discordDeliveryStatus;
 }
 
-let archivedRunId = "";
-let activeRunId = "";
-
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
+  freezeSystemTime(RAID_WEEK_TEST_CLOCK, { advance: true });
   await raidRepository.ensureReferenceRaids();
-  await cleanup();
-  await createTestUser(ids.lead, "Archive Lead", "RAID_LEAD", null);
-  await createTestUser(ids.player, "Archive Player", "USER", DISCORD_ID);
-  await orm.User.where({ id: ids.lead }).update({ isBooster: true });
-
-  archivedRunId = await createRun();
-  await runService.openRun(lead, archivedRunId);
-  await runService.cancelRun(lead, archivedRunId);
-  // Fixture: an app-archived cancelled Run (archival itself is covered elsewhere).
-  await orm.Run.where({ id: archivedRunId }).update({ archivedAt: new Date().toISOString() });
-
-  activeRunId = await createRun();
-  await runService.openRun(lead, activeRunId);
+  const leadId = await createTestUser({ name: "Archive Lead", accountRole: "RAID_LEAD", isBooster: true });
+  playerId = await createTestUser({ name: "Archive Player", discordUserId: PLAYER_DISCORD_ID });
+  created.userIds.push(leadId, playerId);
+  lead = testActor(leadId, "RAID_LEAD");
 });
 
 afterAll(async () => {
-  await cleanup();
+  try {
+    await deleteCreatedRows(created);
+  } finally {
+    restoreSystemTime();
+  }
 });
 
 describe("Discord DM lane — archived Run notifications", () => {
   it("terminalizes PENDING RUN_CANCELLED / RUN_RESCHEDULED / RUN_SCOPE_CHANGED on an archived Run as SKIPPED without handing them to the bot", async () => {
-    const cancelled = await notify(archivedRunId, "RUN_CANCELLED", "PENDING", "a-cancel");
-    const rescheduled = await notify(archivedRunId, "RUN_RESCHEDULED", "PENDING", "a-resched");
-    const scope = await notify(archivedRunId, "RUN_SCOPE_CHANGED", "PENDING", "a-scope");
-    const alreadySent = await notify(archivedRunId, "RUN_CANCELLED", "SENT", "a-sent");
-    const alreadySkipped = await notify(archivedRunId, "RUN_CANCELLED", "SKIPPED", "a-skipped");
-    const failed = await notify(archivedRunId, "RUN_CANCELLED", "FAILED_PERMANENT", "a-failed");
-    const active = await notify(activeRunId, "RUN_RESCHEDULED", "PENDING", "b-active");
+    const archivedRunId = await createArchivedCancelledRun();
+    const activeRunId = await createOpenRun();
+    const cancelled = await notify(archivedRunId, "RUN_CANCELLED", "PENDING");
+    const rescheduled = await notify(archivedRunId, "RUN_RESCHEDULED", "PENDING");
+    const scope = await notify(archivedRunId, "RUN_SCOPE_CHANGED", "PENDING");
+    const alreadySent = await notify(archivedRunId, "RUN_CANCELLED", "SENT");
+    const alreadySkipped = await notify(archivedRunId, "RUN_CANCELLED", "SKIPPED");
+    const failed = await notify(archivedRunId, "RUN_CANCELLED", "FAILED_PERMANENT");
+    const active = await notify(activeRunId, "RUN_RESCHEDULED", "PENDING");
 
     const work = await discordSyncService.listSyncWork();
     const dmIds = new Set(work.notificationDms.map((item) => item.notificationId));
@@ -155,8 +116,9 @@ describe("Discord DM lane — archived Run notifications", () => {
   });
 
   it("skip is compare-and-set: concurrent / repeated calls stay SKIPPED and never touch SENT", async () => {
-    const pending = await notify(archivedRunId, "RUN_CANCELLED", "PENDING", "c-pending");
-    const sent = await notify(archivedRunId, "RUN_CANCELLED", "SENT", "c-sent");
+    const archivedRunId = await createArchivedCancelledRun();
+    const pending = await notify(archivedRunId, "RUN_CANCELLED", "PENDING");
+    const sent = await notify(archivedRunId, "RUN_CANCELLED", "SENT");
 
     const results = await Promise.all([
       userNotificationRepository.skipPendingDiscordDelivery(pending),
@@ -174,14 +136,11 @@ describe("Discord DM lane — archived Run notifications", () => {
   });
 
   it("refuses delivery authority once the Run is archived, even while the row is still PENDING", async () => {
-    const pending = await notify(activeRunId, "RUN_SCOPE_CHANGED", "PENDING", "d-late-archive");
+    const runId = await createOpenRun();
+    const pending = await notify(runId, "RUN_SCOPE_CHANGED", "PENDING");
     expect(await discordSyncService.getNotificationDmDeliveryAuthority(pending)).toEqual({ deliver: true });
 
-    await orm.Run.where({ id: activeRunId }).update({ archivedAt: new Date().toISOString() });
-    try {
-      expect(await discordSyncService.getNotificationDmDeliveryAuthority(pending)).toEqual({ deliver: false });
-    } finally {
-      await orm.Run.where({ id: activeRunId }).update({ archivedAt: null });
-    }
+    await orm.Run.where({ id: runId }).update({ archivedAt: new Date().toISOString() });
+    expect(await discordSyncService.getNotificationDmDeliveryAuthority(pending)).toEqual({ deliver: false });
   });
 });

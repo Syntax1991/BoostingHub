@@ -1019,6 +1019,90 @@
     "src/services/signup-note.test.ts": [
       "KEEP",
       "Signup notes and raid short names through the embed"
+    ],
+    "src/services/character-delete-actions.test.ts": [
+      "REWRITE",
+      "Shared fixtures, verified cleanup (the pre-existing Platform Owner keeps all but the Characters created here), expectDomainError"
+    ],
+    "src/services/notification-archived-run.test.ts": [
+      "REWRITE",
+      "Fresh users and Runs per test (no shared mutable Run), frozen raid week, synthetic snowflake, verified cleanup"
+    ],
+    "src/services/character-wcl-performance.ranking-scope.test.ts": [
+      "REWRITE",
+      "One file-level mock restore (a describe leaked spies), named clock, structured value assertion instead of JSON substring checks"
+    ],
+    "src/services/management-hub.overview.test.ts": [
+      "REWRITE",
+      "Users created once with fresh ids instead of delete-and-recreate before every test; absorbed the unique checks of management-hub.community-stats.test.ts"
+    ],
+    "src/services/character-warcraft-logs.service.test.ts": [
+      "REWRITE",
+      "User creation errors were swallowed and the users never deleted; fresh users, verified cleanup, one WCL reset helper"
+    ],
+    "src/services/signup.service.test.ts": [
+      "REWRITE",
+      "Pending, scheduled with the createBoosterSignup batch: writes onto shared seed Runs, tests depend on order (revived flag, withdrawn row), main user of the test-only method"
+    ],
+    "src/services/run-preflight.service.test.ts": [
+      "KEEP",
+      "Pure preflight rules with explicit check ids"
+    ],
+    "src/services/community-stats.service.test.ts": [
+      "KEEP",
+      "Pure aggregation; WOW_CLASSES is the domain definition, not the code under test"
+    ],
+    "src/services/signup-my-runs-terminal-filter.test.ts": [
+      "REWRITE",
+      "The repository mock re-implemented the status filter, so the exclusion tests passed without the service's own filter; now rows pass through unfiltered (mutation-checked) and the requested statuses are asserted literally"
+    ],
+    "src/services/run-raid-lead-bootstrap.test.ts": [
+      "REWRITE",
+      "Fresh ids, schedule links and slots tracked and removed first (Run deletion is restricted), no broad raidLeadId sweep, no swallowed errors"
+    ],
+    "src/services/settings.service.test.ts": [
+      "REWRITE",
+      "The defaults tests checked values the suite wrote itself; bare fixture users now prove the real column defaults; fresh owner per test"
+    ],
+    "src/services/roster-character-sync.service.test.ts": [
+      "REWRITE",
+      "Fresh owner, Characters and Run per test via the service (no fixed raid row), verified cleanup, exact result objects"
+    ],
+    "src/services/schedule-conflict-integrity.test.ts": [
+      "REWRITE",
+      "Fixed November 2026 dates would have failed once past; frozen raid week; swallowed setup removed; leaked users deleted; the 2h boundary is now an explicit product value; two unrelated truthy assertions dropped"
+    ],
+    "src/services/notification-dm-run-identity.test.ts": [
+      "KEEP",
+      "DM hierarchy for every builder; the dmLink example no longer uses the production domain (tests domain builders, misplaced)"
+    ],
+    "src/services/user-management.admin-page.test.ts": [
+      "REWRITE",
+      "Fresh users per test instead of fixed ids deleted and recreated; the DISABLED filter is checked on the suite's own users, not the whole database"
+    ],
+    "src/services/quiet-hours-delivery.test.ts": [
+      "REWRITE",
+      "Fresh user and notification ids, synthetic snowflake; a five-test loop that never used its variable is one test"
+    ],
+    "src/services/warcraft-logs-discovery.test.ts": [
+      "REWRITE",
+      "Seed run and user via SEED_IDS, synthetic snowflakes for channel and authors, the seeded completedAt restored instead of forced to null"
+    ],
+    "src/services/run-lifecycle-announcement-atomicity.test.ts": [
+      "REWRITE",
+      "Fresh lead, frozen raid week, verified cleanup; an unused admin dropped"
+    ],
+    "src/services/character-schedule-commitments.service.test.ts": [
+      "REWRITE",
+      "Swallowed user creation and role grants removed, users deleted, frozen raid week, explicit 3h spacing, styling-class pins dropped (component test misplaced)"
+    ],
+    "src/services/character-sync-matrix.test.ts": [
+      "REWRITE",
+      "Shared fixtures and verified cleanup; the global bulk-cooldown marker clear is documented as the one justified outside-row delete"
+    ],
+    "src/services/discord-member-name-sync.service.test.ts": [
+      "REWRITE",
+      "Real-looking guild and role ids replaced by synthetic ones; fresh ids; later tests set up the names they start from instead of inheriting them"
     ]
   },
   "tests": {
@@ -1162,10 +1246,6 @@
       "REWRITE",
       "Added the WITHDRAWN exclusion against the real roster view"
     ],
-    "src/lib/wcl-performance-display.test.ts::formatWclPerformanceRaidLine > renders Bundle multi-role lines without collapsing raids": [
-      "REWRITE",
-      "Absorbed the exact metric-label assertions"
-    ],
     "src/app/api/bot/bot-routes.test.ts::GET /api/bot/discord/sync — channel reconciliation contract > exposes a channels array alongside signups/roster/start, with exactly the fields the bot needs": [
       "REWRITE",
       "Bucket asserted as exactly CURRENT under the frozen clock; start instant checked"
@@ -1181,6 +1261,22 @@
     "src/app/api/bot/runs/[runId]/archive/archive-route.test.ts::POST /api/bot/runs/:runId/archive (Discord Archive Run button) > the Run's Raid Lead archives a completed Run (once)": [
       "REWRITE",
       "No longer relies on the previous test completing the Run; repeated archive keeps the first timestamp"
+    ],
+    "src/lib/wcl-performance-display.test.ts::roster WCL performance display copy > renders Bundle multi-role lines without collapsing raids": [
+      "REWRITE",
+      "Absorbed the exact metric-label assertions"
+    ],
+    "src/services/signup-my-runs-terminal-filter.test.ts::signupService.getMyRuns — terminal Run filter > loads only signups on upcoming Runs from the repository": [
+      "REWRITE",
+      "Replaces a constant echo with the literal statuses the service requests"
+    ],
+    "src/services/quiet-hours-delivery.test.ts::resolveDiscordDelivery with an event DM switched off > is SKIPPED even inside Quiet Hours with the master switch on": [
+      "REWRITE",
+      "One test for the five identical loop cases"
+    ],
+    "src/services/schedule-conflict-integrity.test.ts::schedule conflict integrity > surfaces reservation conflicts after a cross-run time edit and clears at exactly 2h": [
+      "REWRITE",
+      "Boundary from an explicit product value, not the implementation constant"
     ]
   },
   "removed": {
@@ -1559,6 +1655,42 @@
     "src/services/run-detail.service.test.ts::canonical run routes > builds /runs/[runId] as the entity URL and maps manage actions to tabs": [
       "MERGE",
       "Moved to src/lib/run-routes.test.ts; the seed-id variants repeated the run-1 cases"
+    ],
+    "src/services/management-hub.community-stats.test.ts::managementHubService Community Stats gate > does not fetch or return Community Stats for RAID_LEAD": [
+      "MERGE",
+      "Same mocks and gate as management-hub.overview.test.ts; its characters-card check moved there"
+    ],
+    "src/services/management-hub.community-stats.test.ts::managementHubService Community Stats gate > fetches and returns Community Stats for ADMIN": [
+      "MERGE",
+      "Covered by the overview ADMIN test; the per-role equality only echoed the mock"
+    ],
+    "src/services/management-hub.community-stats.test.ts::managementHubService Community Stats gate > fetches and returns Community Stats for OWNER": [
+      "MERGE",
+      "Moved into the overview OWNER test"
+    ],
+    "src/services/quiet-hours-delivery.test.ts::resolveDiscordDelivery covers all event toggles conceptually > dmRosterSelectedEnabled OFF → SKIPPED": [
+      "MERGE",
+      "Loop variable never reached the function; one test remains"
+    ],
+    "src/services/quiet-hours-delivery.test.ts::resolveDiscordDelivery covers all event toggles conceptually > dmRaidInviteEnabled OFF → SKIPPED": [
+      "MERGE",
+      "Identical input"
+    ],
+    "src/services/quiet-hours-delivery.test.ts::resolveDiscordDelivery covers all event toggles conceptually > dmRunCancelledEnabled OFF → SKIPPED": [
+      "MERGE",
+      "Identical input"
+    ],
+    "src/services/quiet-hours-delivery.test.ts::resolveDiscordDelivery covers all event toggles conceptually > dmRunRescheduledEnabled OFF → SKIPPED": [
+      "MERGE",
+      "Identical input"
+    ],
+    "src/services/quiet-hours-delivery.test.ts::resolveDiscordDelivery covers all event toggles conceptually > dmRosterRemovedEnabled OFF → SKIPPED": [
+      "MERGE",
+      "Identical input"
+    ],
+    "src/services/signup-my-runs-terminal-filter.test.ts::signupService.getMyRuns — terminal Run filter > reuses UPCOMING_RUN_STATUSES for the active set": [
+      "REWRITE",
+      "Constant echo; replaced by the repository-call contract test"
     ]
   }
 }

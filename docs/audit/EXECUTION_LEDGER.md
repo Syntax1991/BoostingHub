@@ -260,8 +260,17 @@ Refactored so far:
 
 The test audit is not complete. Order for the rest, smallest risk first:
 
-1. Done on branch `test/audit-batch-a`: `src/repositories` (11 files), `src/components` (39), `src/discord-bot` (37), `src/lib` (88), `src/domain` (22), `src/services` batch 1 (24 files).
+1. Done on branch `test/audit-batch-a`: `src/repositories` (11 files), `src/components` (39), `src/discord-bot` (37), `src/lib` (88), `src/domain` (22), `src/services` batches 1–2 (45 files, the smallest by line count, through `discord-member-name-sync.service.test.ts`).
 2. Next: the rest of `src/services` (smallest first, `node todo.cjs src` lists them), `src/guides/guide-replace.test.ts`. Each file now also gets the fixture rules above; files already audited get a fixture sweep afterwards (local `asUser`, `expectDomainCode`, fixed-id pre-cleans, swallowed `.catch(() => {})` cleanups).
+3. Open from batch 2: `src/services/signup.service.test.ts` is classified REWRITE but not yet rewritten. It writes onto shared seed Runs, its tests depend on order, and it is the main caller of the test-only `signupService.createBoosterSignup`. It is rewritten in the batch that removes that method (13 files, 75 uses), because the replacement production entry point (`setCharacterOffers`) has different semantics: complete offer set, no backups, no `DUPLICATE_SIGNUP`.
+
+Services batch 2 notes worth keeping:
+
+- `schedule-conflict-integrity.test.ts` used fixed November 2026 dates. Run creation rejects past starts, so it would have failed for good after 10 November 2026. It now uses the frozen raid-week clock.
+- `signup-my-runs-terminal-filter.test.ts` mocked the repository with a re-implementation of its status filter, so the service's own terminal-Run filter was untested. Mutation check: with that filter removed, 7 rewritten tests fail (none did before).
+- `settings.service.test.ts` "defaults" tests asserted values the suite had written itself; they now prove the column defaults.
+- `warcraft-logs-discovery.test.ts` and `discord-member-name-sync.service.test.ts` used real-looking Discord snowflakes (log channel, log bot, guild, role ids). They are now synthetic per run.
+- `character-sync-matrix.test.ts` clears earlier `CHARACTER_BULK_FORCE_REFRESH_STARTED` markers before its bulk run: the cooldown reads the latest marker community-wide. It is the one documented delete of rows a suite did not create, limited to that marker type on the isolated test DB.
 3. For each file: read every test, record a decision in `docs/audit/test-decisions.json`, change what the decision says, then rebuild `docs/audit/test-ledger.tsv` from `vitest list --json`.
 4. After that, remove methods only tests call, such as `signupService.createBoosterSignup` (74 uses) and `rosterService.setDraftSelection` (78 uses). Move their tests to the production entry points first.
 5. Then shared helpers for `createTestUser` (36 copies), `createCharacter` (29) and `createUser` (26), and `restoreMocks` for the 52 files that never reset mocks.

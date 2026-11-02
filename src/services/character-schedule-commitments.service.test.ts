@@ -2,17 +2,17 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
-import { orm } from "@/lib/prisma";
 import { venomousCreateInput } from "@/lib/test-run-input";
-import { CROSS_RUN_RESERVATION_MIN_GAP_MS } from "@/repositories/signup.repository";
-import { boostingRoleService } from "@/services/boosting-role.service";
 import { characterScheduleCommitmentsService } from "@/services/character-schedule-commitments.service";
 import { characterService } from "@/services/character.service";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
 import { CharacterScheduleCommitmentsSection } from "@/components/characters/character-schedule-commitments-section";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { expectDomainError } from "@/test/domain-error";
+import { CURRENT_WEEK_RUN_START, DAY_MS, HOUR_MS, RAID_WEEK_TEST_CLOCK, freezeSystemTime, restoreSystemTime } from "@/test/time";
 
 // Warcraft Logs auto-link enrichment runs after Character writes/syncs; keep it
 // offline (a real WARCRAFT_LOGS_* in .env would otherwise hit the live API).
@@ -24,57 +24,11 @@ vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOr
   },
 }));
 
-const ids = {
-  owner: "cccccccc-cccc-4ccc-8ccc-csc000000001",
-  other: "cccccccc-cccc-4ccc-8ccc-csc000000002",
-  lead: "cccccccc-cccc-4ccc-8ccc-csc000000003",
-  admin: "cccccccc-cccc-4ccc-8ccc-csc000000004",
-};
-
-const createdCharacterIds: string[] = [];
-const createdRunIds: string[] = [];
-
-function asUser(
-  id: string,
-  name: string,
-  accountRole: AuthenticatedUser["accountRole"] = "USER",
-): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@csc.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
-
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    expect(isDomainError(error) && error.code).toBe(code);
-  }
-}
-
-async function ensureUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"]) {
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@csc.boostting.local`,
-    emailVerified: false,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }).catch(() => {});
-}
+/** Runs cascade; Characters and their availability blocks go with the owner. */
+const created = { runIds: [] as string[], userIds: [] as string[] };
+let owner: AuthenticatedUser;
+let other: AuthenticatedUser;
+let lead: AuthenticatedUser;
 
 async function createOpenRun(lead: AuthenticatedUser, scheduledStartAt: string) {
   const run = await runService.createRun(
@@ -86,52 +40,33 @@ async function createOpenRun(lead: AuthenticatedUser, scheduledStartAt: string) 
       desiredDpsCount: 0,
     }),
   );
-  createdRunIds.push(run.id);
+  created.runIds.push(run.id);
   await runService.openRun(lead, run.id);
   return run;
 }
 
-async function cleanupRun(runId: string) {
-  const roster = await orm.RunRoster.where({ runId }).first();
-  if (roster) {
-    const rosterId = (roster as { id: string }).id;
-    await orm.RunRosterEntry.where({ rosterId }).delete().catch(() => {});
-    await orm.RunRoster.where({ id: rosterId }).delete().catch(() => {});
-  }
-  const signups = (await orm.RunSignup.where({ runId }).all()) as Array<{ id: string }>;
-  for (const signup of signups) {
-    await orm.RunSignupRole.where({ signupId: signup.id }).delete().catch(() => {});
-  }
-  await orm.RunSignup.where({ runId }).delete().catch(() => {});
-  await orm.RunRaidContent.where({ runId }).delete().catch(() => {});
-  await orm.Run.where({ id: runId }).delete().catch(() => {});
-}
-
 beforeAll(async () => {
-  await ensureUser(ids.owner, "CSC Owner", "USER");
-  await ensureUser(ids.other, "CSC Other", "USER");
-  await ensureUser(ids.lead, "CSC Lead", "RAID_LEAD");
-  await ensureUser(ids.admin, "CSC Admin", "ADMIN");
+  assertIsolatedTestDatabase();
+  freezeSystemTime(RAID_WEEK_TEST_CLOCK, { advance: true });
+  const ownerId = await createTestUser({ name: "CSC Owner", isBooster: true });
+  const otherId = await createTestUser({ name: "CSC Other" });
+  const leadId = await createTestUser({ name: "CSC Lead", accountRole: "RAID_LEAD" });
+  created.userIds.push(ownerId, otherId, leadId);
+  owner = testActor(ownerId);
+  other = testActor(otherId);
+  lead = testActor(leadId, "RAID_LEAD");
 });
 
 afterAll(async () => {
-  for (const runId of createdRunIds) {
-    await cleanupRun(runId);
-  }
-  for (const id of createdCharacterIds) {
-    await orm.Character.where({ id }).delete().catch(() => {});
+  try {
+    await deleteCreatedRows(created);
+  } finally {
+    restoreSystemTime();
   }
 });
 
 describe("characterScheduleCommitmentsService", () => {
-  const owner = asUser(ids.owner, "CSC Owner");
-  const other = asUser(ids.other, "CSC Other");
-  const lead = asUser(ids.lead, "CSC Lead", "RAID_LEAD");
-  const admin = asUser(ids.admin, "CSC Admin", "ADMIN");
-
   it("lists SELECTED reservations, omits PENDING-only, rejects foreign owners", async () => {
-    await boostingRoleService.setRole(admin, { userId: ids.owner, role: "BOOSTER", enabled: true });
-
     const character = await characterService.createCharacter(owner, {
       name: "Commitstorm",
       realm: "Twisting Nether",
@@ -140,17 +75,14 @@ describe("characterScheduleCommitmentsService", () => {
       specialization: "Restoration",
       itemLevel: 700,
     });
-    createdCharacterIds.push(character.id);
 
     const empty = await characterScheduleCommitmentsService.listForOwner(owner, character.id);
     expect(empty).toEqual([]);
 
-    const t0 = Date.now() + 3 * 24 * 60 * 60 * 1000;
+    // Three hours apart: both signups can coexist (the minimum gap is two hours).
+    const t0 = Date.parse(CURRENT_WEEK_RUN_START);
     const runPending = await createOpenRun(lead, new Date(t0).toISOString());
-    const runSelected = await createOpenRun(
-      lead,
-      new Date(t0 + CROSS_RUN_RESERVATION_MIN_GAP_MS + 60_000).toISOString(),
-    );
+    const runSelected = await createOpenRun(lead, new Date(t0 + 3 * HOUR_MS).toISOString());
 
     await signupService.createBoosterSignup(owner, {
       runId: runPending.id,
@@ -186,15 +118,10 @@ describe("characterScheduleCommitmentsService", () => {
     expect(details.scheduleCommitments).toHaveLength(1);
     expect(details.scheduleCommitments[0]?.runId).toBe(runSelected.id);
 
-    await expectDomainCode(
-      characterScheduleCommitmentsService.listForOwner(other, character.id),
-      "CHARACTER_NOT_OWNED",
-    );
+    await expectDomainError(characterScheduleCommitmentsService.listForOwner(other, character.id), "CHARACTER_NOT_OWNED");
   });
 
   it("includes draft-selected reservations and ignores deprecated manual blocks", async () => {
-    await boostingRoleService.setRole(admin, { userId: ids.owner, role: "BOOSTER", enabled: true }).catch(() => {});
-
     const character = await characterService.createCharacter(owner, {
       name: "Draftstorm",
       realm: "Twisting Nether",
@@ -203,9 +130,8 @@ describe("characterScheduleCommitmentsService", () => {
       specialization: "Restoration",
       itemLevel: 700,
     });
-    createdCharacterIds.push(character.id);
 
-    const start = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+    const start = new Date(Date.parse(CURRENT_WEEK_RUN_START) + DAY_MS);
     const run = await createOpenRun(lead, start.toISOString());
     const signup = await signupService.createBoosterSignup(owner, {
       runId: run.id,
@@ -229,7 +155,7 @@ describe("characterScheduleCommitmentsService", () => {
     const { characterAvailabilityRepository } = await import(
       "@/repositories/character-availability.repository"
     );
-    const block = await characterAvailabilityRepository.create({
+    await characterAvailabilityRepository.create({
       characterId: character.id,
       startsAt: new Date(start.getTime() - 60 * 60 * 1000).toISOString(),
       endsAt: new Date(start.getTime() + 60 * 60 * 1000).toISOString(),
@@ -239,8 +165,6 @@ describe("characterScheduleCommitmentsService", () => {
     const afterBlock = await characterScheduleCommitmentsService.listForOwner(owner, character.id);
     expect(afterBlock).toHaveLength(1);
     expect(afterBlock[0]?.scheduleConflicts).toEqual([]);
-
-    await orm.CharacterAvailabilityBlock.where({ id: block.id }).delete().catch(() => {});
   });
 });
 
@@ -281,9 +205,7 @@ describe("CharacterScheduleCommitmentsSection", () => {
     );
     expect(withConflict).toContain("Thu 21:00 HC Unsaved 8/8 Lead");
     expect(withConflict).toContain("Draft roster");
-    expect(withConflict).toContain("text-danger");
     expect(withConflict).toContain("Schedule conflict");
-    expect(withConflict).toContain("border-danger");
     expect(withConflict).toContain("Another Manawyrm Hub Run");
     expect(withConflict).toContain(`/runs/r1`);
     expect(withConflict).not.toContain("Draft selected");

@@ -1,19 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
-import { orm } from "@/lib/prisma";
 import { venomousCreateInput, venomousUpdateInput } from "@/lib/test-run-input";
 import { runRepository } from "@/repositories/run.repository";
 import { characterAvailabilityRepository } from "@/repositories/character-availability.repository";
-import { CROSS_RUN_RESERVATION_MIN_GAP_MS } from "@/repositories/signup.repository";
-import { boostingRoleService } from "@/services/boosting-role.service";
-import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
-import { lockoutService } from "@/services/lockout.service";
 import { characterWeeklyAvailabilityService } from "@/services/character-weekly-availability.service";
 import { characterService } from "@/services/character.service";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { expectDomainError } from "@/test/domain-error";
+import { CURRENT_WEEK_RUN_START, HOUR_MS, RAID_WEEK_TEST_CLOCK, freezeSystemTime, restoreSystemTime } from "@/test/time";
 
 // Warcraft Logs auto-link enrichment runs after Character writes/syncs; keep it
 // offline (a real WARCRAFT_LOGS_* in .env would otherwise hit the live API).
@@ -25,117 +23,65 @@ vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOr
   },
 }));
 
-const ids = {
-  owner: "bbbbbbbb-bbbb-4bbb-8bbb-sci000000001",
-  lead: "bbbbbbbb-bbbb-4bbb-8bbb-sci000000002",
-  admin: "bbbbbbbb-bbbb-4bbb-8bbb-sci000000003",
-};
+/** The product rule under test: a Character's Runs must start at least two hours apart. */
+const RESERVATION_GAP_MS = 2 * HOUR_MS;
 
-const createdCharacterIds: string[] = [];
-const createdBlockIds: string[] = [];
-const createdRunIds: string[] = [];
+/** Runs (signups, rosters) cascade; Characters and their availability blocks go with the owner. */
+const created = { runIds: [] as string[], userIds: [] as string[] };
+let owner: AuthenticatedUser;
+let lead: AuthenticatedUser;
 
-function asUser(
-  id: string,
-  name: string,
-  accountRole: AuthenticatedUser["accountRole"] = "USER",
-): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@sci.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
+const at = (hoursAfterBase: number) => new Date(Date.parse(CURRENT_WEEK_RUN_START) + hoursAfterBase * HOUR_MS).toISOString();
 
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    expect(isDomainError(error) && error.code).toBe(code);
-  }
-}
-
-async function ensureUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"]) {
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@sci.boostting.local`,
-    emailVerified: false,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }).catch(() => {});
-}
-
-async function createOpenRun(
-  lead: AuthenticatedUser,
-  scheduledStartAt: string,
-  targets: { tanks?: number; healers?: number; dps?: number } = {},
-) {
+async function createOpenRun(scheduledStartAt: string, targets: { healers?: number; dps?: number }) {
   const run = await runService.createRun(
     lead,
     venomousCreateInput({
       scheduledStartAt,
-      desiredTankCount: targets.tanks ?? 0,
+      desiredTankCount: 0,
       desiredHealerCount: targets.healers ?? 0,
       desiredDpsCount: targets.dps ?? 0,
     }),
   );
-  createdRunIds.push(run.id);
+  created.runIds.push(run.id);
   await runService.openRun(lead, run.id);
   return run;
 }
 
-async function cleanupRun(runId: string) {
-  const roster = await orm.RunRoster.where({ runId }).first();
-  if (roster) {
-    const rosterId = (roster as { id: string }).id;
-    await orm.RunRosterEntry.where({ rosterId }).delete().catch(() => {});
-    await orm.RunRoster.where({ id: rosterId }).delete().catch(() => {});
-  }
-  const signups = (await orm.RunSignup.where({ runId }).all()) as Array<{ id: string }>;
-  for (const signup of signups) {
-    await orm.RunSignupRole.where({ signupId: signup.id }).delete().catch(() => {});
-  }
-  await orm.RunSignup.where({ runId }).delete().catch(() => {});
-  await orm.RunRaidContent.where({ runId }).delete().catch(() => {});
-  await orm.Run.where({ id: runId }).delete().catch(() => {});
+/** Draft-selects the owner's signup of `characterId` on `runId` in `role`; returns the refreshed view. */
+async function draftSelect(runId: string, characterId: string, role: "HEALER" | "RANGED_DPS") {
+  const view = await rosterService.getRosterManagementView(lead, runId);
+  const signup = view.boosters.find((row) => row.character?.id === characterId)!;
+  await rosterService.saveDraftSelection(lead, {
+    runId,
+    version: view.roster.version,
+    selections: [{ signupId: signup.id, selectedRole: role }],
+  });
+  return rosterService.getRosterManagementView(lead, runId);
 }
 
+const ownerRow = (view: Awaited<ReturnType<typeof rosterService.getRosterManagementView>>, characterId: string) =>
+  view.boosters.find((row) => row.character?.id === characterId)!;
+
 beforeAll(async () => {
-  await ensureUser(ids.owner, "SCI Owner", "USER");
-  await ensureUser(ids.lead, "SCI Lead", "RAID_LEAD");
-  await ensureUser(ids.admin, "SCI Admin", "ADMIN");
+  assertIsolatedTestDatabase();
+  freezeSystemTime(RAID_WEEK_TEST_CLOCK, { advance: true });
+  const ownerId = await createTestUser({ name: "SCI Owner", isBooster: true });
+  const leadId = await createTestUser({ name: "SCI Lead", accountRole: "RAID_LEAD" });
+  created.userIds.push(ownerId, leadId);
+  owner = testActor(ownerId);
+  lead = testActor(leadId, "RAID_LEAD");
 });
 
 afterAll(async () => {
-  for (const id of createdBlockIds) {
-    await orm.CharacterAvailabilityBlock.where({ id }).delete().catch(() => {});
-  }
-  for (const runId of createdRunIds) {
-    await cleanupRun(runId);
-  }
-  for (const id of createdCharacterIds) {
-    await orm.CharacterAvailabilityBlock.where({ characterId: id }).delete().catch(() => {});
-    await orm.Character.where({ id }).delete().catch(() => {});
+  try {
+    await deleteCreatedRows(created);
+  } finally {
+    restoreSystemTime();
   }
 });
 
 describe("schedule conflict integrity", () => {
-  const owner = asUser(ids.owner, "SCI Owner");
-  const lead = asUser(ids.lead, "SCI Lead", "RAID_LEAD");
-  const admin = asUser(ids.admin, "SCI Admin", "ADMIN");
-
   it("ignores deprecated CharacterAvailabilityBlock rows for roster, My Runs, and weekly availability", async () => {
     const character = await characterService.createCharacter(owner, {
       name: "Scisyn",
@@ -145,37 +91,22 @@ describe("schedule conflict integrity", () => {
       specialization: "Restoration",
       itemLevel: 640,
     });
-    createdCharacterIds.push(character.id);
-    await boostingRoleService.setRole(admin, { userId: ids.owner, role: "BOOSTER", enabled: true }).catch(() => {});
+    const start = at(0);
+    const run = await createOpenRun(start, { healers: 1 });
+    await signupService.createBoosterSignup(owner, { runId: run.id, characterId: character.id, role: "HEALER", isBackup: false });
+    await draftSelect(run.id, character.id, "HEALER");
 
-    const run = await createOpenRun(lead, "2026-11-10T18:00:00.000Z", { healers: 1 });
-    await signupService.createBoosterSignup(owner, {
-      runId: run.id,
+    // A legacy block covering the whole Run.
+    await characterAvailabilityRepository.create({
       characterId: character.id,
-      role: "HEALER",
-      isBackup: false,
-    });
-
-    const before = await rosterService.getRosterManagementView(lead, run.id);
-    const candidate = before.boosters.find((row) => row.character?.id === character.id)!;
-    await rosterService.saveDraftSelection(lead, {
-      runId: run.id,
-      version: before.roster.version,
-      selections: [{ signupId: candidate.id, selectedRole: "HEALER" }],
-    });
-
-    const block = await characterAvailabilityRepository.create({
-      characterId: character.id,
-      startsAt: "2026-11-10T17:00:00.000Z",
-      endsAt: "2026-11-10T20:00:00.000Z",
+      startsAt: at(-1),
+      endsAt: at(2),
       reason: "External boost",
     });
-    createdBlockIds.push(block.id);
 
-    const conflicted = await rosterService.getRosterManagementView(lead, run.id);
-    const conflictedRow = conflicted.boosters.find((row) => row.character?.id === character.id);
-    expect(conflictedRow?.draftSelected).toBe(true);
-    expect(conflictedRow?.scheduleConflicts).toEqual([]);
+    const view = await rosterService.getRosterManagementView(lead, run.id);
+    expect(ownerRow(view, character.id).draftSelected).toBe(true);
+    expect(ownerRow(view, character.id).scheduleConflicts).toEqual([]);
 
     const myRuns = await signupService.getMyRuns(owner);
     const mine = [...myRuns.pending, ...myRuns.selected].find((row) => row.runId === run.id);
@@ -184,14 +115,8 @@ describe("schedule conflict integrity", () => {
     const weekly = await characterWeeklyAvailabilityService.getCurrentForOwner(owner, character.id);
     expect(weekly.status).toBe("AVAILABLE");
 
-    expect(getRegionalWeeklyReset("EU").resetIdentifier).toBeTruthy();
-    expect(lockoutService.getResetIdentifierForRun("EU", "2026-11-10T18:00:00.000Z")).toBeTruthy();
-
-    await rosterService.publishRoster(lead, {
-      runId: run.id,
-      version: conflicted.roster.version,
-      acknowledgeWarnings: true,
-    });
+    // Publishing is not blocked by the legacy row either.
+    await rosterService.publishRoster(lead, { runId: run.id, version: view.roster.version, acknowledgeWarnings: true });
   });
 
   it("surfaces reservation conflicts after a cross-run time edit and clears at exactly 2h", async () => {
@@ -203,71 +128,38 @@ describe("schedule conflict integrity", () => {
       specialization: "Affliction",
       itemLevel: 625,
     });
-    createdCharacterIds.push(character.id);
-    await boostingRoleService.setRole(admin, { userId: ids.owner, role: "BOOSTER", enabled: true }).catch(() => {});
+    // Run A, then Run B three hours later: far enough apart to start with.
+    const runA = await createOpenRun(at(24), { dps: 1 });
+    const runB = await createOpenRun(at(27), { dps: 1 });
 
-    const runA = await createOpenRun(lead, "2026-11-13T17:00:00.000Z", { dps: 1 });
-    const runB = await createOpenRun(lead, "2026-11-13T20:00:00.000Z", { dps: 1 });
-    expect(CROSS_RUN_RESERVATION_MIN_GAP_MS).toBe(2 * 60 * 60 * 1000);
+    await signupService.createBoosterSignup(owner, { runId: runA.id, characterId: character.id, role: "RANGED_DPS", isBackup: false });
+    await draftSelect(runA.id, character.id, "RANGED_DPS");
 
-    await signupService.createBoosterSignup(owner, {
-      runId: runA.id,
-      characterId: character.id,
-      role: "RANGED_DPS",
-      isBackup: false,
-    });
-    const viewA = await rosterService.getRosterManagementView(lead, runA.id);
-    const signupA = viewA.boosters.find((item) => item.character?.id === character.id)!;
-    await rosterService.saveDraftSelection(lead, {
-      runId: runA.id,
-      version: viewA.roster.version,
-      selections: [{ signupId: signupA.id, selectedRole: "RANGED_DPS" }],
-    });
-
-    await signupService.createBoosterSignup(owner, {
-      runId: runB.id,
-      characterId: character.id,
-      role: "RANGED_DPS",
-      isBackup: false,
-    });
+    await signupService.createBoosterSignup(owner, { runId: runB.id, characterId: character.id, role: "RANGED_DPS", isBackup: false });
     let viewB = await rosterService.getRosterManagementView(lead, runB.id);
-    const signupB = viewB.boosters.find((item) => item.character?.id === character.id)!;
-    expect(signupB.scheduleConflicts).toEqual([]);
-    await rosterService.saveDraftSelection(lead, {
-      runId: runB.id,
-      version: viewB.roster.version,
-      selections: [{ signupId: signupB.id, selectedRole: "RANGED_DPS" }],
-    });
+    expect(ownerRow(viewB, character.id).scheduleConflicts).toEqual([]);
+    await draftSelect(runB.id, character.id, "RANGED_DPS");
 
-    const loadedB = await runRepository.findById(runB.id);
+    // Run B moves to 90 minutes after Run A: the picked Character is now double-booked.
     await runService.updateRun(
       lead,
-      venomousUpdateInput(runB.id, loadedB!, { scheduledStartAt: "2026-11-13T18:30:00.000Z" }),
+      venomousUpdateInput(runB.id, (await runRepository.findById(runB.id))!, { scheduledStartAt: at(25.5) }),
     );
     viewB = await rosterService.getRosterManagementView(lead, runB.id);
-    const conflictedB = viewB.boosters.find((item) => item.character?.id === character.id)!;
-    expect(conflictedB.draftSelected).toBe(true);
-    expect(conflictedB.scheduleConflicts.some((c) => c.source === "RUN_RESERVATION")).toBe(true);
-    await expectDomainCode(
-      rosterService.publishRoster(lead, {
-        runId: runB.id,
-        version: viewB.roster.version,
-        acknowledgeWarnings: true,
-      }),
+    expect(ownerRow(viewB, character.id).draftSelected).toBe(true);
+    expect(ownerRow(viewB, character.id).scheduleConflicts.some((c) => c.source === "RUN_RESERVATION")).toBe(true);
+    await expectDomainError(
+      rosterService.publishRoster(lead, { runId: runB.id, version: viewB.roster.version, acknowledgeWarnings: true }),
       "ROSTER_HAS_SCHEDULE_CONFLICTS",
     );
 
-    const loadedExact = await runRepository.findById(runB.id);
+    // Exactly the minimum gap is allowed again.
+    const exactGap = new Date(Date.parse(at(24)) + RESERVATION_GAP_MS).toISOString();
     await runService.updateRun(
       lead,
-      venomousUpdateInput(runB.id, loadedExact!, {
-        scheduledStartAt: new Date(
-          Date.parse("2026-11-13T17:00:00.000Z") + CROSS_RUN_RESERVATION_MIN_GAP_MS,
-        ).toISOString(),
-      }),
+      venomousUpdateInput(runB.id, (await runRepository.findById(runB.id))!, { scheduledStartAt: exactGap }),
     );
     viewB = await rosterService.getRosterManagementView(lead, runB.id);
-    const clearedB = viewB.boosters.find((item) => item.character?.id === character.id)!;
-    expect(clearedB.scheduleConflicts.filter((c) => c.source === "RUN_RESERVATION")).toEqual([]);
+    expect(ownerRow(viewB, character.id).scheduleConflicts.filter((c) => c.source === "RUN_RESERVATION")).toEqual([]);
   });
 });

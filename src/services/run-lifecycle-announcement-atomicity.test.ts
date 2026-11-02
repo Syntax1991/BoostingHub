@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { orm } from "@/lib/prisma";
 import { venomousCreateInput, venomousUpdateInput } from "@/lib/test-run-input";
 import { raidRepository } from "@/repositories/raid.repository";
 import {
@@ -10,79 +9,24 @@ import {
 } from "@/repositories/run-discord-announcement.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { runService } from "@/services/run.service";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { CURRENT_WEEK_RUN_START, DAY_MS, HOUR_MS, RAID_WEEK_TEST_CLOCK, freezeSystemTime, restoreSystemTime } from "@/test/time";
 
-const ids = {
-  lead: "b5555555-5555-4555-8555-555555555501",
-  admin: "b5555555-5555-4555-8555-555555555502",
-};
+/** Announcements cascade with their Run. */
+const created = { runIds: [] as string[], userIds: [] as string[] };
+let lead: AuthenticatedUser;
 
-const createdRunIds: string[] = [];
-let scheduleSlot = 0;
-function futureIso(days = 14) {
-  const slot = scheduleSlot++;
-  return new Date(Date.now() + days * 24 * 60 * 60 * 1000 + slot * 3 * 60 * 60 * 1000).toISOString();
+/** Each Run three hours after the previous one, from the frozen week's Saturday. */
+function nextStart() {
+  return new Date(Date.parse(CURRENT_WEEK_RUN_START) + created.runIds.length * 3 * HOUR_MS).toISOString();
 }
 
-function asUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"]): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@atomic.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
-
-async function createTestUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"]) {
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@atomic.boostting.local`,
-    emailVerified: true,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-    discordDmEnabled: true,
-    dmRosterSelectedEnabled: true,
-    dmRaidInviteEnabled: true,
-    dmRunCancelledEnabled: true,
-    dmRunRescheduledEnabled: true,
-    dmRosterRemovedEnabled: true,
-    timeZone: "Europe/Berlin",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
-}
-
-async function cleanupAll() {
-  for (const runId of createdRunIds.splice(0)) {
-    const announcements = await orm.RunDiscordAnnouncement.where({ runId }).select("id").all();
-    for (const row of announcements) {
-      await orm.RunDiscordAnnouncement.where({ id: (row as { id: string }).id }).delete();
-    }
-    try {
-      await orm.Run.where({ id: runId }).delete();
-    } catch {
-      // gone
-    }
-  }
-  for (const userId of Object.values(ids)) {
-    try {
-      await orm.User.where({ id: userId }).delete();
-    } catch {
-      // gone
-    }
-  }
-}
-
-const lead = asUser(ids.lead, "Atomic Lead", "RAID_LEAD");
+/** A reschedule target well clear of every Run's slot. */
+const rescheduleTarget = (daysLater: number) => new Date(Date.parse(CURRENT_WEEK_RUN_START) + daysLater * DAY_MS).toISOString();
 
 async function openRun(scheduledStartAt: string) {
-  const created = await runService.createRun(
+  const run = await runService.createRun(
     lead,
     venomousCreateInput({
       scheduledStartAt,
@@ -91,20 +35,26 @@ async function openRun(scheduledStartAt: string) {
       desiredDpsCount: 1,
     }),
   );
-  createdRunIds.push(created.id);
-  await runService.openRun(lead, created.id);
-  return created.id;
+  created.runIds.push(run.id);
+  await runService.openRun(lead, run.id);
+  return run.id;
 }
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
+  freezeSystemTime(RAID_WEEK_TEST_CLOCK, { advance: true });
   await raidRepository.ensureReferenceRaids();
-  await cleanupAll();
-  await createTestUser(ids.lead, "Atomic Lead", "RAID_LEAD");
-  await createTestUser(ids.admin, "Atomic Admin", "ADMIN");
+  const leadId = await createTestUser({ name: "Atomic Lead", accountRole: "RAID_LEAD" });
+  created.userIds.push(leadId);
+  lead = testActor(leadId, "RAID_LEAD");
 });
 
 afterAll(async () => {
-  await cleanupAll();
+  try {
+    await deleteCreatedRows(created);
+  } finally {
+    restoreSystemTime();
+  }
 });
 
 /** Reschedule path of the pre-start Run edit: Run fields + RUN_RESCHEDULED in one transaction. */
@@ -119,7 +69,7 @@ function updateWithAnnouncement(
 
 describe("lifecycle announcement atomicity", () => {
   it("successful cancel persists CANCELLED and RUN_CANCELLED announcement together", async () => {
-    const runId = await openRun(futureIso());
+    const runId = await openRun(nextStart());
     await runService.cancelRun(lead, runId);
     const run = await runRepository.findById(runId);
     expect(run?.status).toBe("CANCELLED");
@@ -134,7 +84,7 @@ describe("lifecycle announcement atomicity", () => {
   });
 
   it("announcement insert failure during cancel rolls back — Run stays open", async () => {
-    const runId = await openRun(futureIso());
+    const runId = await openRun(nextStart());
     const before = await runRepository.findById(runId);
     expect(before?.status).toBe("OPEN");
 
@@ -158,7 +108,7 @@ describe("lifecycle announcement atomicity", () => {
   });
 
   it("Run mutation failure during cancel creates no announcement", async () => {
-    const runId = await openRun(futureIso());
+    const runId = await openRun(nextStart());
     const before = await runRepository.findById(runId);
 
     await expect(
@@ -180,7 +130,7 @@ describe("lifecycle announcement atomicity", () => {
   });
 
   it("cancel transactionally rejects when Run is already CANCELLED", async () => {
-    const runId = await openRun(futureIso());
+    const runId = await openRun(nextStart());
     await runService.cancelRun(lead, runId);
     const before = await runRepository.findById(runId);
     expect(before?.status).toBe("CANCELLED");
@@ -201,14 +151,14 @@ describe("lifecycle announcement atomicity", () => {
   });
 
   it("successful reschedule persists scheduleRevision and RUN_RESCHEDULED together", async () => {
-    const runId = await openRun(futureIso());
+    const runId = await openRun(nextStart());
     const before = await runRepository.findById(runId);
-    const nextStart = futureIso(20);
-    await runService.updateRun(lead, venomousUpdateInput(runId, before!, { scheduledStartAt: nextStart }));
+    const newStart = rescheduleTarget(6);
+    await runService.updateRun(lead, venomousUpdateInput(runId, before!, { scheduledStartAt: newStart }));
 
     const after = await runRepository.findById(runId);
     expect(after?.scheduleRevision).toBe(1);
-    expect(Date.parse(after!.scheduledStartAt)).toBe(Date.parse(nextStart));
+    expect(Date.parse(after!.scheduledStartAt)).toBe(Date.parse(newStart));
     const announcement = await runDiscordAnnouncementRepository.findBySourceKey(
       runRescheduledChannelSourceKey(runId, 1),
     );
@@ -217,15 +167,15 @@ describe("lifecycle announcement atomicity", () => {
   });
 
   it("reschedule announcement insert failure rolls back schedule and revision", async () => {
-    const runId = await openRun(futureIso());
+    const runId = await openRun(nextStart());
     const before = await runRepository.findById(runId);
-    const nextStart = futureIso(21);
+    const newStart = rescheduleTarget(7);
 
     await expect(
       updateWithAnnouncement(
         runId,
         {
-          scheduledStartAt: nextStart,
+          scheduledStartAt: newStart,
           scheduleRevision: before!.scheduleRevision + 1,
           title: before!.title,
         },
@@ -234,7 +184,7 @@ describe("lifecycle announcement atomicity", () => {
           type: "RUN_RESCHEDULED",
           sourceKey: runRescheduledChannelSourceKey(runId, before!.scheduleRevision + 1),
           previousScheduledStartAt: before!.scheduledStartAt,
-          scheduledStartAt: nextStart,
+          scheduledStartAt: newStart,
           productLabel: "x",
           difficulty: "HEROIC",
           lootType: "UNSAVED",
@@ -254,15 +204,15 @@ describe("lifecycle announcement atomicity", () => {
   });
 
   it("reschedule Run mutation failure creates no announcement", async () => {
-    const runId = await openRun(futureIso());
+    const runId = await openRun(nextStart());
     const before = await runRepository.findById(runId);
-    const nextStart = futureIso(22);
+    const newStart = rescheduleTarget(8);
 
     await expect(
       updateWithAnnouncement(
         runId,
         {
-          scheduledStartAt: nextStart,
+          scheduledStartAt: newStart,
           scheduleRevision: before!.scheduleRevision + 1,
         },
         {
@@ -270,7 +220,7 @@ describe("lifecycle announcement atomicity", () => {
           type: "RUN_RESCHEDULED",
           sourceKey: runRescheduledChannelSourceKey(runId, before!.scheduleRevision + 1),
           previousScheduledStartAt: before!.scheduledStartAt,
-          scheduledStartAt: nextStart,
+          scheduledStartAt: newStart,
           productLabel: "x",
           difficulty: "HEROIC",
           lootType: "UNSAVED",

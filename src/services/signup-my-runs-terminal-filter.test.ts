@@ -1,23 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AuthenticatedUser } from "@/auth/authorization";
 import type { RunStatus, SignupStatus } from "@/models/enums";
-import { UPCOMING_RUN_STATUSES } from "@/models/enums";
 import { rosterRepository } from "@/repositories/roster.repository";
 import type { SignupListRecord } from "@/repositories/signup.repository";
 import { signupRepository } from "@/repositories/signup.repository";
 import * as scheduleConflictService from "@/services/character-schedule-conflict.service";
 import { signupService } from "@/services/signup.service";
+import { testActor } from "@/test/actors";
 
-const user: AuthenticatedUser = {
-  id: "user-my-runs",
-  name: "My Runs User",
-  email: "my-runs@test.local",
-  image: null,
-  discordUserId: null,
-  discordUsername: null,
-  accountRole: "USER",
-  accountStatus: "ACTIVE",
-};
+const user = testActor("user-my-runs");
 
 function makeSignup(input: {
   id: string;
@@ -73,14 +63,17 @@ describe("signupService.getMyRuns — terminal Run filter", () => {
       new Map(),
     );
     vi.spyOn(rosterRepository, "listDraftSelectedRolesBySignupIds").mockResolvedValue(new Map());
-    // The repository filters by Run status in the query; emulate it over the fixtures each test supplies.
-    vi.spyOn(signupRepository, "listByUserIdForRunStatuses").mockImplementation(async (userId, statuses) =>
-      (await signupRepository.listByUserId(userId)).filter((signup) => statuses.includes(signup.run.status)),
-    );
   });
 
+  /*
+   * The repository already narrows by Run status (run-list-bounds.test.ts). Each test hands the
+   * service its rows unfiltered, so the exclusions below prove the service's own filter.
+   */
+  const repositoryReturns = (rows: SignupListRecord[]) =>
+    vi.spyOn(signupRepository, "listByUserIdForRunStatuses").mockResolvedValue(rows);
+
   it("includes OPEN + PENDING under pending", async () => {
-    vi.spyOn(signupRepository, "listByUserId").mockResolvedValue([
+    repositoryReturns([
       makeSignup({ id: "s1", runId: "r-open", runStatus: "OPEN", status: "PENDING" }),
     ]);
     const mine = await signupService.getMyRuns(user);
@@ -91,7 +84,7 @@ describe("signupService.getMyRuns — terminal Run filter", () => {
   });
 
   it("includes ROSTERING + NOT_SELECTED under notSelected", async () => {
-    vi.spyOn(signupRepository, "listByUserId").mockResolvedValue([
+    repositoryReturns([
       makeSignup({ id: "s2", runId: "r-rost", runStatus: "ROSTERING", status: "NOT_SELECTED" }),
     ]);
     const mine = await signupService.getMyRuns(user);
@@ -99,7 +92,7 @@ describe("signupService.getMyRuns — terminal Run filter", () => {
   });
 
   it("includes PUBLISHED + SELECTED under selected", async () => {
-    vi.spyOn(signupRepository, "listByUserId").mockResolvedValue([
+    repositoryReturns([
       makeSignup({ id: "s3", runId: "r-pub", runStatus: "PUBLISHED", status: "SELECTED" }),
     ]);
     const mine = await signupService.getMyRuns(user);
@@ -108,7 +101,7 @@ describe("signupService.getMyRuns — terminal Run filter", () => {
   });
 
   it("includes OPEN + PENDING draft pick under selected as DRAFT", async () => {
-    vi.spyOn(signupRepository, "listByUserId").mockResolvedValue([
+    repositoryReturns([
       makeSignup({ id: "s-draft", runId: "r-open-draft", runStatus: "OPEN", status: "PENDING" }),
       makeSignup({ id: "s-offer", runId: "r-open-draft", runStatus: "OPEN", status: "PENDING" }),
     ]);
@@ -124,7 +117,7 @@ describe("signupService.getMyRuns — terminal Run filter", () => {
   });
 
   it("includes IN_PROGRESS + SELECTED under selected", async () => {
-    vi.spyOn(signupRepository, "listByUserId").mockResolvedValue([
+    repositoryReturns([
       makeSignup({ id: "s4", runId: "r-ip", runStatus: "IN_PROGRESS", status: "SELECTED" }),
     ]);
     const mine = await signupService.getMyRuns(user);
@@ -132,7 +125,7 @@ describe("signupService.getMyRuns — terminal Run filter", () => {
   });
 
   it("excludes COMPLETED + SELECTED from every bucket", async () => {
-    vi.spyOn(signupRepository, "listByUserId").mockResolvedValue([
+    repositoryReturns([
       makeSignup({ id: "s5", runId: "r-done", runStatus: "COMPLETED", status: "SELECTED" }),
     ]);
     const mine = await signupService.getMyRuns(user);
@@ -140,7 +133,7 @@ describe("signupService.getMyRuns — terminal Run filter", () => {
   });
 
   it("excludes COMPLETED + NOT_SELECTED from every bucket", async () => {
-    vi.spyOn(signupRepository, "listByUserId").mockResolvedValue([
+    repositoryReturns([
       makeSignup({ id: "s6", runId: "r-done2", runStatus: "COMPLETED", status: "NOT_SELECTED" }),
     ]);
     const mine = await signupService.getMyRuns(user);
@@ -148,7 +141,7 @@ describe("signupService.getMyRuns — terminal Run filter", () => {
   });
 
   it("excludes CANCELLED + PENDING from every bucket", async () => {
-    vi.spyOn(signupRepository, "listByUserId").mockResolvedValue([
+    repositoryReturns([
       makeSignup({ id: "s7", runId: "r-cancel", runStatus: "CANCELLED", status: "PENDING" }),
     ]);
     const mine = await signupService.getMyRuns(user);
@@ -156,7 +149,7 @@ describe("signupService.getMyRuns — terminal Run filter", () => {
   });
 
   it("excludes CANCELLED + WITHDRAWN from every bucket", async () => {
-    vi.spyOn(signupRepository, "listByUserId").mockResolvedValue([
+    repositoryReturns([
       makeSignup({ id: "s8", runId: "r-cancel2", runStatus: "CANCELLED", status: "WITHDRAWN" }),
     ]);
     const mine = await signupService.getMyRuns(user);
@@ -164,16 +157,15 @@ describe("signupService.getMyRuns — terminal Run filter", () => {
   });
 
   it("excludes DRAFT signup rows from every bucket", async () => {
-    vi.spyOn(signupRepository, "listByUserId").mockResolvedValue([
+    repositoryReturns([
       makeSignup({ id: "s9", runId: "r-draft", runStatus: "DRAFT", status: "PENDING" }),
     ]);
     const mine = await signupService.getMyRuns(user);
     expect(allBuckets(mine)).toEqual([]);
-    expect(UPCOMING_RUN_STATUSES.includes("DRAFT")).toBe(false);
   });
 
   it("keeps WITHDRAWN visible only for upcoming Runs", async () => {
-    vi.spyOn(signupRepository, "listByUserId").mockResolvedValue([
+    repositoryReturns([
       makeSignup({ id: "s10", runId: "r-open-w", runStatus: "OPEN", status: "WITHDRAWN" }),
       makeSignup({ id: "s11", runId: "r-done-w", runStatus: "COMPLETED", status: "WITHDRAWN" }),
     ]);
@@ -193,7 +185,7 @@ describe("signupService.getMyRuns — terminal Run filter", () => {
     vi.spyOn(scheduleConflictService, "getScheduleConflictsForCharacters").mockResolvedValue(
       new Map([["char-s12", [conflict]]]),
     );
-    vi.spyOn(signupRepository, "listByUserId").mockResolvedValue([
+    repositoryReturns([
       makeSignup({
         id: "s12",
         runId: "r-active",
@@ -214,7 +206,7 @@ describe("signupService.getMyRuns — terminal Run filter", () => {
     const spy = vi
       .spyOn(scheduleConflictService, "getScheduleConflictsForCharacters")
       .mockResolvedValue(new Map());
-    vi.spyOn(signupRepository, "listByUserId").mockResolvedValue([
+    repositoryReturns([
       makeSignup({
         id: "s13",
         runId: "r-completed",
@@ -241,7 +233,9 @@ describe("signupService.getMyRuns — terminal Run filter", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("reuses UPCOMING_RUN_STATUSES for the active set", () => {
-    expect([...UPCOMING_RUN_STATUSES]).toEqual(["OPEN", "ROSTERING", "PUBLISHED", "IN_PROGRESS"]);
+  it("loads only signups on upcoming Runs from the repository", async () => {
+    const load = repositoryReturns([]);
+    await signupService.getMyRuns(user);
+    expect(load).toHaveBeenCalledWith(user.id, ["OPEN", "ROSTERING", "PUBLISHED", "IN_PROGRESS"]);
   });
 });

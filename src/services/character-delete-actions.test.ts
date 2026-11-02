@@ -2,7 +2,6 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
@@ -29,6 +28,9 @@ import {
   OWNER_CHARACTER_DELETE_PROTECTED_COPY,
 } from "@/services/character-operations.service";
 import { characterService } from "@/services/character.service";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { expectDomainError } from "@/test/domain-error";
 import { parseCharacterOperationsFilters } from "@/validators/character-operations";
 
 /**
@@ -42,36 +44,12 @@ const userIds: string[] = [];
 let owner: AuthenticatedUser;
 let admin: AuthenticatedUser;
 let platformOwner: AuthenticatedUser;
-let createdOwnerCharacterIds: string[] = [];
-
-function asUser(id: string, accountRole: AuthenticatedUser["accountRole"]): AuthenticatedUser {
-  return {
-    id,
-    name: `Dela ${accountRole} ${token}`,
-    email: `${id}@delete-actions.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
+const createdOwnerCharacterIds: string[] = [];
 
 async function createUser(accountRole: AuthenticatedUser["accountRole"]) {
-  const id = crypto.randomUUID();
-  const now = new Date().toISOString();
-  await orm.User.create({
-    id,
-    name: `Dela ${accountRole} ${token}`,
-    email: `${id}@delete-actions.boostting.local`,
-    emailVerified: true,
-    accountRole,
-    accountStatus: "ACTIVE",
-    createdAt: now,
-    updatedAt: now,
-  });
+  const id = await createTestUser({ name: `Dela ${accountRole} ${token}`, accountRole });
   userIds.push(id);
-  return asUser(id, accountRole);
+  return testActor(id, accountRole);
 }
 
 let nameCounter = 0;
@@ -94,22 +72,17 @@ const dialogTitle = (character: { name: string; realm: string }) =>
 const count = (html: string, needle: string) => html.split(needle).length - 1;
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   owner = await createUser("USER");
   admin = await createUser("ADMIN");
   // Only one OWNER may exist: reuse it when present (never deleted here), else create one.
   const existing = (await orm.User.where({ accountRole: "OWNER" }).select("id").first()) as { id: string } | null;
-  platformOwner = existing ? asUser(existing.id, "OWNER") : await createUser("OWNER");
+  platformOwner = existing ? testActor(existing.id, "OWNER") : await createUser("OWNER");
 });
 
-afterAll(async () => {
-  for (const id of createdOwnerCharacterIds) await orm.Character.where({ id }).deleteAll();
-  for (const userId of userIds) {
-    await orm.Character.where({ userId }).deleteAll();
-    await orm.ActivityEvent.where({ userId }).deleteAll();
-    await orm.User.where({ id: userId }).delete();
-  }
-  createdOwnerCharacterIds = [];
-});
+// The suite's own users take their Characters with them; a pre-existing Platform Owner keeps
+// everything except the Characters created on it here.
+afterAll(() => deleteCreatedRows({ characterIds: createdOwnerCharacterIds, userIds }));
 
 describe("owner /characters list", () => {
   it("every owned row has a permanent Delete (confirmation wired), separate from Deactivate", async () => {
@@ -141,8 +114,7 @@ describe("owner /characters list", () => {
 
   it("the owner action can never target someone else's Character", async () => {
     const foreign = await createCharacter(admin);
-    const error = await characterService.deleteCharacter(owner, foreign.id).catch((caught) => caught);
-    expect(isDomainError(error) && error.code).toBe("CHARACTER_NOT_OWNED");
+    await expectDomainError(characterService.deleteCharacter(owner, foreign.id), "CHARACTER_NOT_OWNED");
     expect(await characterRepository.findById(foreign.id)).not.toBeNull();
   });
 });
@@ -171,8 +143,7 @@ describe("admin /manage/characters list", () => {
     const asOwner = await characterOperationsService.getListPage(platformOwner, parseCharacterOperationsFilters({ query: ownerCharacter.name }));
     expect(asOwner.rows.find((row) => row.id === ownerCharacter.id)?.deleteBlockedReason).toBeNull();
 
-    const error = await characterOperationsService.deleteCharacter(admin, ownerCharacter.id).catch((caught) => caught);
-    expect(isDomainError(error) && error.code).toBe("OWNER_ROLE_PROTECTED");
+    await expectDomainError(characterOperationsService.deleteCharacter(admin, ownerCharacter.id), "OWNER_ROLE_PROTECTED");
     expect(await characterRepository.findById(ownerCharacter.id)).not.toBeNull();
   });
 

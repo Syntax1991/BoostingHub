@@ -1,5 +1,4 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import type { AuthenticatedUser } from "@/auth/authorization";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { db, orm } from "@/lib/prisma";
 import { seededProductSelection, venomousCreateInput } from "@/lib/test-run-input";
@@ -14,6 +13,8 @@ import { communityScheduleOccurrenceService } from "@/services/community-schedul
 import { planRaidLeadBoosterSignups } from "@/services/run-raid-lead-bootstrap.service";
 import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, deleteCreatedRows } from "@/test/db-fixtures";
 import { freezeSystemTime, restoreSystemTime, SCHEDULE_TEST_CLOCK } from "@/test/time";
 
 /**
@@ -24,23 +25,22 @@ import { freezeSystemTime, restoreSystemTime, SCHEDULE_TEST_CLOCK } from "@/test
  */
 
 const ids = {
-  lead: "b0075000-0000-4000-8000-000000000001",
-  admin: "b0075000-0000-4000-8000-000000000002",
-  other: "b0075000-0000-4000-8000-000000000003",
-  lead2: "b0075000-0000-4000-8000-000000000004",
-  plainLead: "b0075000-0000-4000-8000-000000000005",
+  lead: crypto.randomUUID(),
+  admin: crypto.randomUUID(),
+  other: crypto.randomUUID(),
+  lead2: crypto.randomUUID(),
+  plainLead: crypto.randomUUID(),
 };
 
-function actor(id: string, name: string, accountRole: AuthenticatedUser["accountRole"]): AuthenticatedUser {
-  return { id, name, email: `${id}@boot.local`, image: null, discordUserId: null, discordUsername: null, accountRole, accountStatus: "ACTIVE" };
-}
-const lead = actor(ids.lead, "Nyxara", "RAID_LEAD");
-const admin = actor(ids.admin, "Boot Admin", "ADMIN");
-const lead2 = actor(ids.lead2, "Boot Lead Two", "RAID_LEAD");
-const plainLead = actor(ids.plainLead, "Boot Plain Lead", "RAID_LEAD");
+const lead = testActor(ids.lead, "RAID_LEAD", { name: "Nyxara" });
+const admin = testActor(ids.admin, "ADMIN", { name: "Boot Admin" });
+const other = testActor(ids.other, "USER", { name: "Boot Other" });
+const lead2 = testActor(ids.lead2, "RAID_LEAD", { name: "Boot Lead Two" });
+const plainLead = testActor(ids.plainLead, "RAID_LEAD", { name: "Boot Plain Lead" });
 
 const chars: Record<string, string> = {};
 const createdRunIds: string[] = [];
+const createdSlotIds: string[] = [];
 let templateId = "";
 
 async function character(key: string, userId: string, wowClass: WowClass, specialization: string, primaryRole: CharacterRole, opts: { active?: boolean; playable?: string[] } = {}) {
@@ -86,31 +86,21 @@ async function signupsOf(runId: string) {
   return out;
 }
 
+/** Schedule links restrict Run deletion, so they go first; Characters cascade with their Users. */
 async function cleanup() {
-  const runIds = new Set(createdRunIds.splice(0));
-  for (const userId of Object.values(ids)) {
-    for (const row of (await orm.Run.where({ raidLeadId: userId }).select("id").all()) as Array<{ id: string }>) runIds.add(row.id);
-  }
-  for (const runId of runIds) {
-    await orm.CommunityScheduleRun.where({ runId }).delete().catch(() => {});
-    await orm.Run.where({ id: runId }).delete().catch(() => {});
-  }
-  for (const userId of Object.values(ids)) {
-    await orm.CommunityScheduleSlot.where({ raidLeadId: userId }).delete().catch(() => {});
-  }
-  if (templateId) await orm.RunTemplate.where({ id: templateId }).delete().catch(() => {});
-  for (const userId of Object.values(ids)) {
-    await orm.Character.where({ userId }).delete().catch(() => {});
-    await orm.ActivityEvent.where({ userId }).delete().catch(() => {});
-    await orm.User.where({ id: userId }).delete().catch(() => {});
-  }
+  assertIsolatedTestDatabase();
+  for (const runId of createdRunIds) await orm.CommunityScheduleRun.where({ runId }).deleteAndCount();
+  for (const id of createdSlotIds) await orm.CommunityScheduleSlot.where({ id }).deleteAndCount();
+  await deleteCreatedRows({ runIds: createdRunIds });
+  if (templateId) await orm.RunTemplate.where({ id: templateId }).deleteAndCount();
+  await deleteCreatedRows({ userIds: Object.values(ids) });
 }
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   await raidRepository.ensureReferenceRaids();
-  await cleanup();
   const now = new Date().toISOString();
-  for (const [u, isBooster] of [[lead, true], [admin, true], [actor(ids.other, "Boot Other", "USER"), true], [lead2, true], [plainLead, false]] as const) {
+  for (const [u, isBooster] of [[lead, true], [admin, true], [other, true], [lead2, true], [plainLead, false]] as const) {
     await orm.User.create({
       id: u.id, name: u.name, email: u.email, emailVerified: true, accountRole: u.accountRole, accountStatus: "ACTIVE",
       isBooster, createdAt: now, updatedAt: now,
@@ -213,6 +203,7 @@ describe("Raid Lead Character bootstrap on Run creation", () => {
       weekday: "FRIDAY", localStartTime: "19:45", label: "Bootstrap", notes: null, raidLeadId: ids.lead,
       runTemplateId: templateId, autoCreateRun: false, runMode: "INHOUSE", createdById: ids.admin, updatedById: ids.admin,
     });
+    createdSlotIds.push(slot.id);
     const materialized = await communityScheduleMaterializationService.materializeOccurrence(
       { kind: "SYSTEM" },
       { scheduleSlotId: slot.id, window: "NEXT", now: new Date("2027-01-15T12:00:00.000Z") },
@@ -228,6 +219,7 @@ describe("Raid Lead Character bootstrap on Run creation", () => {
       weekday: "FRIDAY", localStartTime: "19:45", label: "Bootstrap attach", notes: null, raidLeadId: ids.lead2,
       runTemplateId: templateId, autoCreateRun: false, runMode: "INHOUSE", createdById: ids.admin, updatedById: ids.admin,
     });
+    createdSlotIds.push(slot2.id);
     await communityScheduleOccurrenceService.attachExistingRun(admin, {
       scheduleSlotId: slot2.id, runId: existing.id, now: new Date("2027-01-22T12:00:00.000Z"),
     });

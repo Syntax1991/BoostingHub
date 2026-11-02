@@ -1,51 +1,18 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
 import { resetWarcraftLogsClientTokenCacheForTests } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
 import { characterService } from "@/services/character.service";
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { expectDomainError } from "@/test/domain-error";
 
-const ids = {
-  owner: "cccccccc-cccc-4ccc-8ccc-wcl000000001",
-  other: "cccccccc-cccc-4ccc-8ccc-wcl000000002",
-};
-
-const createdCharacterIds: string[] = [];
+/** Characters cascade with their owner, so the users are all there is to delete. */
+const created = { userIds: [] as string[] };
 const fetchMock = vi.fn();
-
-function asUser(
-  id: string,
-  name: string,
-  accountRole: AuthenticatedUser["accountRole"] = "USER",
-): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@wcl.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
-
-async function ensureUser(id: string, name: string) {
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@wcl.boostting.local`,
-    emailVerified: false,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole: "USER",
-    accountStatus: "ACTIVE",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }).catch(() => {});
-}
+let owner: AuthenticatedUser;
+let other: AuthenticatedUser;
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -54,42 +21,51 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function mockWclSuccess(canonicalID: number, id = canonicalID) {
-  fetchMock
-    .mockResolvedValueOnce(jsonResponse({ access_token: "t", expires_in: 3600, token_type: "Bearer" }))
-    .mockResolvedValueOnce(
-      jsonResponse({
-        data: {
-          characterData: {
-            character: {
-              id,
-              canonicalID,
-              name: "Wclsyn",
-              server: { slug: "kazzak", region: { slug: "eu" } },
-            },
-          },
+const tokenResponse = () => jsonResponse({ access_token: "t", expires_in: 3600, token_type: "Bearer" });
+
+/** The OAuth token, then a character lookup that finds `canonicalID`. */
+function mockWclFound(canonicalID: number) {
+  fetchMock.mockResolvedValueOnce(tokenResponse()).mockResolvedValueOnce(
+    jsonResponse({
+      data: {
+        characterData: {
+          character: { id: canonicalID, canonicalID, name: "Wclsyn", server: { slug: "kazzak", region: { slug: "eu" } } },
         },
-      }),
-    );
+      },
+    }),
+  );
 }
 
 function mockWclNotFound() {
   fetchMock
-    .mockResolvedValueOnce(jsonResponse({ access_token: "t", expires_in: 3600, token_type: "Bearer" }))
+    .mockResolvedValueOnce(tokenResponse())
     .mockResolvedValueOnce(jsonResponse({ data: { characterData: { character: null } } }));
 }
 
+/** Fresh WCL client state: credentials configured, no cached token, no queued responses. */
+function resetWcl() {
+  vi.stubEnv("WARCRAFT_LOGS_CLIENT_ID", "wcl-client");
+  vi.stubEnv("WARCRAFT_LOGS_CLIENT_SECRET", "wcl-secret");
+  resetWarcraftLogsClientTokenCacheForTests();
+  fetchMock.mockReset();
+}
+
+async function storedWarcraftLogsId(characterId: string) {
+  return ((await orm.Character.where({ id: characterId }).first()) as { warcraftLogsId: string | null }).warcraftLogsId;
+}
+
 beforeAll(async () => {
-  await ensureUser(ids.owner, "WCL Owner");
-  await ensureUser(ids.other, "WCL Other");
+  assertIsolatedTestDatabase();
+  const ownerId = await createTestUser({ name: "WCL Owner" });
+  const otherId = await createTestUser({ name: "WCL Other" });
+  created.userIds.push(ownerId, otherId);
+  owner = testActor(ownerId);
+  other = testActor(otherId);
 });
 
 beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
-  resetWarcraftLogsClientTokenCacheForTests();
-  vi.stubEnv("WARCRAFT_LOGS_CLIENT_ID", "wcl-client");
-  vi.stubEnv("WARCRAFT_LOGS_CLIENT_SECRET", "wcl-secret");
-  fetchMock.mockReset();
+  resetWcl();
 });
 
 afterEach(() => {
@@ -98,21 +74,13 @@ afterEach(() => {
   resetWarcraftLogsClientTokenCacheForTests();
 });
 
-afterAll(async () => {
-  for (const id of createdCharacterIds) {
-    await orm.Character.where({ id }).delete().catch(() => {});
-  }
-});
+afterAll(() => deleteCreatedRows(created));
 
 describe("characterWarcraftLogsService", () => {
-  const owner = asUser(ids.owner, "WCL Owner");
-  const other = asUser(ids.other, "WCL Other");
-
   it("persists a discovered ID when missing and isolates create from WCL failure", async () => {
-    mockWclSuccess(424242);
-    // Bypass Blizzard for createCharacter unit path used by tests that call createCharacter directly
-    // — createCharacter itself now auto-links.
-    const created = await characterService.createCharacter(owner, {
+    // createCharacter links Warcraft Logs itself.
+    mockWclFound(424242);
+    const linked = await characterService.createCharacter(owner, {
       name: "Wclsyn",
       realm: "Kazzak",
       region: "EU",
@@ -120,15 +88,12 @@ describe("characterWarcraftLogsService", () => {
       specialization: "Restoration",
       itemLevel: 640,
     });
-    createdCharacterIds.push(created.id);
-    expect(created.warcraftLogsId).toBe("424242");
+    expect(linked.warcraftLogsId).toBe("424242");
 
-    // Failure isolation: NOT_FOUND leaves Character intact with null ID
-    vi.stubEnv("WARCRAFT_LOGS_CLIENT_ID", "wcl-client");
-    resetWarcraftLogsClientTokenCacheForTests();
-    fetchMock.mockReset();
+    // NOT_FOUND still creates the Character, without an id.
+    resetWcl();
     mockWclNotFound();
-    const missing = await characterService.createCharacter(owner, {
+    const unlinked = await characterService.createCharacter(owner, {
       name: "Wclnone",
       realm: "Draenor",
       region: "EU",
@@ -136,8 +101,7 @@ describe("characterWarcraftLogsService", () => {
       specialization: "Frost",
       itemLevel: 600,
     });
-    createdCharacterIds.push(missing.id);
-    expect(missing.warcraftLogsId).toBeNull();
+    expect(unlinked.warcraftLogsId).toBeNull();
   });
 
   it("does not overwrite an existing different ID and rejects wrong owner", async () => {
@@ -149,27 +113,21 @@ describe("characterWarcraftLogsService", () => {
       specialization: "Holy",
       itemLevel: 610,
     });
-    createdCharacterIds.push(character.id);
-    // Clear auto-link from create (may have failed or not configured mid-test); force a stored ID.
     await orm.Character.where({ id: character.id }).update({ warcraftLogsId: "111" });
 
-    resetWarcraftLogsClientTokenCacheForTests();
-    fetchMock.mockReset();
-    mockWclSuccess(222);
+    resetWcl();
+    mockWclFound(222);
     const mismatch = await characterWarcraftLogsService.linkForOwner(owner, character.id);
     expect(mismatch).toEqual({ status: "MISMATCH", storedId: "111", discoveredId: "222" });
-    const reloaded = await orm.Character.where({ id: character.id }).first();
-    expect((reloaded as { warcraftLogsId: string | null }).warcraftLogsId).toBe("111");
+    expect(await storedWarcraftLogsId(character.id)).toBe("111");
 
-    resetWarcraftLogsClientTokenCacheForTests();
-    fetchMock.mockReset();
-    mockWclSuccess(111);
+    resetWcl();
+    mockWclFound(111);
     const same = await characterWarcraftLogsService.linkForOwner(owner, character.id);
     expect(same).toEqual({ status: "ALREADY_LINKED", warcraftLogsId: "111" });
 
-    await expect(characterWarcraftLogsService.linkForOwner(other, character.id)).rejects.toSatisfy(
-      (error: unknown) => isDomainError(error) && error.code === "CHARACTER_NOT_OWNED",
-    );
+    await expectDomainError(characterWarcraftLogsService.linkForOwner(other, character.id), "CHARACTER_NOT_OWNED");
+    expect(await storedWarcraftLogsId(character.id)).toBe("111");
   });
 
   it("returns NOT_CONFIGURED and TEMPORARY_FAILURE without mutating identity", async () => {
@@ -181,23 +139,17 @@ describe("characterWarcraftLogsService", () => {
       specialization: "Affliction",
       itemLevel: 605,
     });
-    createdCharacterIds.push(character.id);
     await orm.Character.where({ id: character.id }).update({ warcraftLogsId: null });
 
     vi.stubEnv("WARCRAFT_LOGS_CLIENT_ID", "");
     vi.stubEnv("WARCRAFT_LOGS_CLIENT_SECRET", "");
-    const missingConfig = await characterWarcraftLogsService.linkForOwner(owner, character.id);
-    expect(missingConfig).toEqual({ status: "NOT_CONFIGURED" });
+    expect(await characterWarcraftLogsService.linkForOwner(owner, character.id)).toEqual({ status: "NOT_CONFIGURED" });
 
-    vi.stubEnv("WARCRAFT_LOGS_CLIENT_ID", "wcl-client");
-    vi.stubEnv("WARCRAFT_LOGS_CLIENT_SECRET", "wcl-secret");
-    resetWarcraftLogsClientTokenCacheForTests();
-    fetchMock.mockReset();
+    resetWcl();
     fetchMock.mockResolvedValueOnce(jsonResponse({ error: "down" }, 503));
     const temporary = await characterWarcraftLogsService.linkForOwner(owner, character.id);
     expect(temporary.status).toBe("TEMPORARY_FAILURE");
-    const reloaded = await orm.Character.where({ id: character.id }).first();
-    expect((reloaded as { warcraftLogsId: string | null }).warcraftLogsId).toBeNull();
+    expect(await storedWarcraftLogsId(character.id)).toBeNull();
   });
 
   it("skips network when tryAutoLinkIfMissing already has an ID", async () => {
@@ -209,7 +161,6 @@ describe("characterWarcraftLogsService", () => {
       specialization: "Restoration",
       itemLevel: 615,
     });
-    createdCharacterIds.push(character.id);
     await orm.Character.where({ id: character.id }).update({ warcraftLogsId: "555" });
     fetchMock.mockReset();
     const result = await characterWarcraftLogsService.tryAutoLinkIfMissing(character.id);

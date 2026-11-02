@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { DomainError, isDomainError } from "@/lib/errors";
+import { DomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
 import { releaseCharacterSyncLock, tryAcquireCharacterSyncLock } from "@/lib/character-sync-lock";
 
@@ -36,6 +36,9 @@ import {
 } from "@/services/character-operations.service";
 import { characterService } from "@/services/character.service";
 import { scheduledCharacterSyncService } from "@/services/scheduled-character-sync.service";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { expectDomainError } from "@/test/domain-error";
 
 /**
  * SYNC DOMAIN RULE across every entry point: being ACTIVE decides WHETHER a
@@ -56,34 +59,10 @@ const fx = {} as Record<"A" | "B" | "C" | "D", { id: string; name: string }>;
 /** Blizzard's public-profile ids per fixture (B's is what a public sync must NEVER stamp). */
 const PROFILE_IDS = { A: "790001", B: "790002", C: "790003", D: "790004" } as const;
 
-function asUser(id: string, accountRole: AuthenticatedUser["accountRole"]): AuthenticatedUser {
-  return {
-    id,
-    name: `Sync ${accountRole} ${token}`,
-    email: `${id}@sync-matrix.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
-
 async function createUser(accountRole: AuthenticatedUser["accountRole"]) {
-  const id = crypto.randomUUID();
-  const now = new Date().toISOString();
-  await orm.User.create({
-    id,
-    name: `Sync ${accountRole} ${token}`,
-    email: `${id}@sync-matrix.boostting.local`,
-    emailVerified: true,
-    accountRole,
-    accountStatus: "ACTIVE",
-    createdAt: now,
-    updatedAt: now,
-  });
+  const id = await createTestUser({ name: `Sync ${accountRole} ${token}`, accountRole });
   userIds.push(id);
-  return asUser(id, accountRole);
+  return testActor(id, accountRole);
 }
 
 async function createFixture(user: AuthenticatedUser, suffix: string) {
@@ -110,11 +89,6 @@ async function row(key: keyof typeof fx) {
   return (await characterRepository.findById(fx[key].id))!;
 }
 
-async function expectCode(promise: Promise<unknown>, code: string) {
-  const error = await promise.then(() => null).catch((caught) => caught);
-  expect(isDomainError(error) ? error.code : error).toBe(code);
-}
-
 /** B never receives ids; A and C keep exactly their stored ids; D is never touched. */
 async function expectIdentityInvariants() {
   expect(await row("A")).toMatchObject({ blizzardCharacterId: PROFILE_IDS.A, blizzardRealmId: "1301" });
@@ -130,6 +104,7 @@ function syncedSince(since: number) {
 }
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   vi.stubEnv("BLIZZARD_CLIENT_ID", "test-client-id");
   vi.stubEnv("BLIZZARD_CLIENT_SECRET", "test-client-secret");
   vi.stubEnv("BLIZZARD_REDIRECT_URI", "http://localhost:3000/api/integrations/battlenet/callback");
@@ -152,14 +127,13 @@ beforeAll(async () => {
   await characterRepository.setActive(fx.D.id, false);
 });
 
+// Connections, Characters and the suite's own activity (bulk markers included) go with the users.
 afterAll(async () => {
-  for (const userId of userIds) {
-    await orm.BattleNetConnection.where({ userId }).deleteAll();
-    await orm.Character.where({ userId }).deleteAll();
-    await orm.ActivityEvent.where({ userId }).deleteAll();
-    await orm.User.where({ id: userId }).delete();
+  try {
+    await deleteCreatedRows({ userIds });
+  } finally {
+    vi.unstubAllEnvs();
   }
-  vi.unstubAllEnvs();
 });
 
 beforeEach(async () => {
@@ -198,7 +172,7 @@ describe("sync matrix: ACTIVE decides whether, linkage decides how", () => {
     await characterBlizzardSyncService.refreshCharacter(owner, fx.A.id);
     await characterBlizzardSyncService.refreshCharacter(owner, fx.B.id);
     await characterBlizzardSyncService.refreshCharacter(noConnOwner, fx.C.id);
-    await expectCode(characterBlizzardSyncService.refreshCharacter(owner, fx.D.id), "CHARACTER_INACTIVE");
+    await expectDomainError(characterBlizzardSyncService.refreshCharacter(owner, fx.D.id), "CHARACTER_INACTIVE");
 
     for (const key of ["A", "B", "C"] as const) expect(await syncedSince(since)(key)).toBe(true);
     expect((await row("B")).itemLevel).toBe(655);
@@ -206,12 +180,12 @@ describe("sync matrix: ACTIVE decides whether, linkage decides how", () => {
     await expectIdentityInvariants();
 
     // Normal 60s cooldown applies to the public path too.
-    await expectCode(characterBlizzardSyncService.refreshCharacter(owner, fx.B.id), "BLIZZARD_REFRESH_COOLDOWN");
+    await expectDomainError(characterBlizzardSyncService.refreshCharacter(owner, fx.B.id), "BLIZZARD_REFRESH_COOLDOWN");
     // Per-Character lock applies to the public path too.
     await makeStale();
     const held = await tryAcquireCharacterSyncLock(fx.B.id);
     try {
-      await expectCode(characterBlizzardSyncService.refreshCharacter(owner, fx.B.id), "CHARACTER_SYNC_IN_PROGRESS");
+      await expectDomainError(characterBlizzardSyncService.refreshCharacter(owner, fx.B.id), "CHARACTER_SYNC_IN_PROGRESS");
     } finally {
       await releaseCharacterSyncLock(held!);
     }
@@ -245,12 +219,12 @@ describe("sync matrix: ACTIVE decides whether, linkage decides how", () => {
       expect(outcome.status).toBe("SUCCEEDED");
     }
     for (const force of [false, true]) {
-      await expectCode(characterOperationsService.syncCharacter(admin, { characterId: fx.D.id, force }), "CHARACTER_SYNC_NOT_ELIGIBLE");
+      await expectDomainError(characterOperationsService.syncCharacter(admin, { characterId: fx.D.id, force }), "CHARACTER_SYNC_NOT_ELIGIBLE");
     }
     for (const key of ["A", "B", "C"] as const) expect(await syncedSince(since)(key)).toBe(true);
     await expectIdentityInvariants();
 
-    await expectCode(characterOperationsService.syncCharacter(admin, { characterId: fx.B.id, force: false }), "BLIZZARD_REFRESH_COOLDOWN");
+    await expectDomainError(characterOperationsService.syncCharacter(admin, { characterId: fx.B.id, force: false }), "BLIZZARD_REFRESH_COOLDOWN");
     for (const key of ["A", "B", "C"] as const) {
       const forced = await characterOperationsService.syncCharacter(admin, { characterId: fx[key].id, force: true });
       expect(forced.status).toBe("SUCCEEDED");
@@ -259,13 +233,15 @@ describe("sync matrix: ACTIVE decides whether, linkage decides how", () => {
 
     const held = await tryAcquireCharacterSyncLock(fx.C.id);
     try {
-      await expectCode(characterOperationsService.syncCharacter(admin, { characterId: fx.C.id, force: true }), "CHARACTER_SYNC_IN_PROGRESS");
+      await expectDomainError(characterOperationsService.syncCharacter(admin, { characterId: fx.C.id, force: true }), "CHARACTER_SYNC_IN_PROGRESS");
     } finally {
       await releaseCharacterSyncLock(held!);
     }
   });
 
   it("admin Force refresh all: eligible = every active Character (A/B/C), never retired D", async () => {
+    // The bulk cooldown is community-wide (latest marker of any admin). Earlier suites' markers
+    // are the only rows outside this suite it removes, so the run is not refused as too recent.
     await orm.ActivityEvent.where({ type: BULK_FORCE_REFRESH_STARTED_EVENT }).deleteAll();
     const since = Date.now();
 
@@ -274,7 +250,6 @@ describe("sync matrix: ACTIVE decides whether, linkage decides how", () => {
     for (const key of ["A", "B", "C"] as const) expect(await syncedSince(since)(key)).toBe(true);
     expect(await syncedSince(since)("D")).toBe(false);
     await expectIdentityInvariants();
-    await orm.ActivityEvent.where({ type: BULK_FORCE_REFRESH_STARTED_EVENT }).deleteAll();
   });
 
   it("scheduler: stale A/B/C are candidates (only A through a connection); retired D is not", async () => {

@@ -9,6 +9,10 @@ import {
 } from "@/services/character-wcl-performance.service";
 
 const ZONE = 53;
+/** Cached rows are judged fresh or stale against this instant. */
+const NOW = new Date("2026-10-22T12:00:00.000Z");
+
+afterEach(() => vi.restoreAllMocks());
 
 function raid(overrides: Partial<CatalogRaid> & Pick<CatalogRaid, "id" | "name">): CatalogRaid {
   return {
@@ -61,8 +65,6 @@ describe("effectiveWclRankingEncounterId", () => {
 });
 
 describe("roster WCL performance ranking scope", () => {
-  afterEach(() => vi.restoreAllMocks());
-
   it("Kith'ix and Venomous Abyss are fetched separately (encounter vs zone-wide)", async () => {
     vi.spyOn(warcraftLogsApiClient, "isConfigured").mockReturnValue(true);
     const fetch = vi.spyOn(warcraftLogsApiClient, "fetchZoneRankings").mockResolvedValue({
@@ -86,7 +88,7 @@ describe("roster WCL performance ranking scope", () => {
         },
       ],
       catalog: buildRaidCatalog([VENOMOUS, KITHIX, TIDEBOUND]),
-      now: new Date("2026-10-22T12:00:00.000Z"),
+      now: NOW,
     });
 
     const scopes = fetch.mock.calls.map(([args]) => `${args.zoneId}:${args.encounterId ?? "zone"}`).sort();
@@ -145,20 +147,20 @@ describe("sharedZoneEncounterScope", () => {
         },
       ],
       catalog: buildRaidCatalog([VENOMOUS, KITHIX]),
-      now: new Date("2026-10-22T12:00:00.000Z"),
+      now: NOW,
     });
 
     expect(upsert).toHaveBeenCalledWith(
       expect.objectContaining({ metricKey: `dps:Fire${RAID_SCOPED_METRIC_SUFFIX}`, bestPct: 65 }),
     );
-    expect(JSON.stringify(result.get("s1"))).toContain("65");
-    expect(JSON.stringify(result.get("s1"))).not.toContain("99");
+    // The fresh raid-scoped value, not the stale zone-wide 99.
+    expect(result.get("s1")).toEqual([
+      expect.objectContaining({ raidId: VENOMOUS.id, roles: [expect.objectContaining({ bestPct: 65, avgPct: 45 })] }),
+    ]);
   });
 });
 
 describe("roster segments mark zone vs encounter ranking", () => {
-  afterEach(() => vi.restoreAllMocks());
-
   it("Venomous is zone (all bosses); Kith'ix is encounter (single boss)", async () => {
     vi.spyOn(warcraftLogsApiClient, "isConfigured").mockReturnValue(true);
     vi.spyOn(warcraftLogsApiClient, "fetchZoneRankings").mockResolvedValue({
@@ -189,7 +191,7 @@ describe("roster segments mark zone vs encounter ranking", () => {
         },
       ],
       catalog: buildRaidCatalog([VENOMOUS, KITHIX, TIDEBOUND]),
-      now: new Date("2026-10-22T12:00:00.000Z"),
+      now: NOW,
     });
 
     const segments = result.get("s1") ?? [];

@@ -1,7 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { orm } from "@/lib/prisma";
-import type { AccountRole } from "@/models/enums";
 import { WOW_CLASSES } from "@/models/enums";
 
 const getStatsMock = vi.fn();
@@ -33,12 +31,8 @@ vi.mock("@/services/operational-analytics.service", () => ({
 }));
 
 import { managementHubService } from "@/services/management-hub.service";
-
-const ids = {
-  lead: "aaaaaaaa-aaaa-4aaa-8aaa-ov0000000001",
-  admin: "aaaaaaaa-aaaa-4aaa-8aaa-ov0000000002",
-  owner: "aaaaaaaa-aaaa-4aaa-8aaa-ov0000000003",
-};
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
 
 const SAMPLE_STATS = {
   activeBoosters: 57,
@@ -56,45 +50,26 @@ const SAMPLE_STATS = {
   multiRole: { characters: 10, boosters: 4 },
 };
 
-function asUser(id: string, name: string, accountRole: AccountRole): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@ov.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
-
-async function createUser(id: string, name: string, accountRole: AccountRole) {
-  const now = new Date().toISOString();
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@ov.boostting.local`,
-    emailVerified: true,
-    accountRole: accountRole === "OWNER" ? "ADMIN" : accountRole,
-    accountStatus: "ACTIVE",
-    createdAt: now,
-    updatedAt: now,
-  });
-}
-
-async function cleanup() {
-  for (const id of Object.values(ids)) {
-    await orm.User.where({ id }).delete().catch(() => {});
-  }
-}
+const created = { userIds: [] as string[] };
+let lead: AuthenticatedUser;
+let admin: AuthenticatedUser;
+let owner: AuthenticatedUser;
 
 beforeAll(async () => {
-  await cleanup();
+  assertIsolatedTestDatabase();
+  const leadId = await createTestUser({ name: "OV Lead", accountRole: "RAID_LEAD" });
+  const adminId = await createTestUser({ name: "OV Admin", accountRole: "ADMIN" });
+  // OWNER is a singleton DB role: store ADMIN and pass OWNER on the actor.
+  const ownerId = await createTestUser({ name: "OV Owner", accountRole: "ADMIN" });
+  created.userIds.push(leadId, adminId, ownerId);
+  lead = testActor(leadId, "RAID_LEAD");
+  admin = testActor(adminId, "ADMIN");
+  owner = testActor(ownerId, "OWNER");
 });
 
-beforeEach(async () => {
-  await cleanup();
+afterAll(() => deleteCreatedRows(created));
+
+beforeEach(() => {
   getStatsMock.mockReset();
   getSystemPageMock.mockReset();
   getAnalyticsReportMock.mockReset();
@@ -121,18 +96,11 @@ beforeEach(async () => {
     selectedSignups: 20,
     runsWithExternalBoosters: 1,
   });
-  await createUser(ids.lead, "OV Lead", "RAID_LEAD");
-  await createUser(ids.admin, "OV Admin", "ADMIN");
-  await createUser(ids.owner, "OV Owner", "OWNER");
-});
-
-afterAll(async () => {
-  await cleanup();
 });
 
 describe("managementHubService balanced Overview cards", () => {
   it("ADMIN receives five cards with Users consolidating boosting-access state", async () => {
-    const overview = await managementHubService.getOverview(asUser(ids.admin, "OV Admin", "ADMIN"));
+    const overview = await managementHubService.getOverview(admin);
     expect(overview.cards).toHaveLength(5);
     expect(overview.cards.map((card) => card.id)).toEqual([
       "runs",
@@ -169,7 +137,7 @@ describe("managementHubService balanced Overview cards", () => {
     });
     expect(JSON.stringify(analytics.metrics)).not.toMatch(/payout|settlement|gold|revenue/i);
     expect(getAnalyticsReportMock).toHaveBeenCalledTimes(1);
-    expect(getAnalyticsReportMock).toHaveBeenCalledWith(expect.objectContaining({ id: ids.admin }));
+    expect(getAnalyticsReportMock).toHaveBeenCalledWith(expect.objectContaining({ id: admin.id }));
 
     const runs = overview.cards.find((card) => card.id === "runs")!;
     expect(runs.metrics.map((m) => m.label)).toEqual([
@@ -184,7 +152,7 @@ describe("managementHubService balanced Overview cards", () => {
   });
 
   it("OWNER receives the same Admin-level overview cards", async () => {
-    const overview = await managementHubService.getOverview(asUser(ids.owner, "OV Owner", "OWNER"));
+    const overview = await managementHubService.getOverview(owner);
     expect(overview.cards.map((card) => card.id)).toEqual([
       "runs",
       "users",
@@ -194,13 +162,16 @@ describe("managementHubService balanced Overview cards", () => {
     ]);
     expect(getSystemPageMock).toHaveBeenCalledTimes(1);
     expect(getAnalyticsReportMock).toHaveBeenCalledTimes(1);
+    expect(overview.communityStats).toEqual(SAMPLE_STATS);
+    expect(getStatsMock).toHaveBeenCalledTimes(1);
   });
 
   it("RAID_LEAD does not receive System/Analytics cards and does not call Admin-only services", async () => {
-    const overview = await managementHubService.getOverview(asUser(ids.lead, "OV Lead", "RAID_LEAD"));
+    const overview = await managementHubService.getOverview(lead);
     expect(overview.cards.some((card) => card.id === "system")).toBe(false);
     expect(overview.cards.some((card) => card.id === "analytics")).toBe(false);
     expect(overview.cards.some((card) => card.id === "runs")).toBe(true);
+    expect(overview.cards.some((card) => card.id === "characters")).toBe(false);
     expect(overview.communityStats).toBeNull();
     expect(getSystemPageMock).not.toHaveBeenCalled();
     expect(getAnalyticsReportMock).not.toHaveBeenCalled();
