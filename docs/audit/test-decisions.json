@@ -1335,6 +1335,10 @@
     "tests/integration/services/run-mass-create.service.test.ts": [
       "REWRITE",
       "Owned users via createTestUser; deleteCreatedRows for runs/templates; expectDomainError; assertIsolatedTestDatabase; DISABLED lead via accountStatus"
+    ],
+    "tests/integration/services/character-blizzard-import.service.test.ts": [
+      "REWRITE",
+      "Owned users via createTestUser; verified BattleNet/lockout deleteAndCount cleanup; expectDomainError; suite tracker avoids created local shadowing"
     ]
   },
   "tests": {
