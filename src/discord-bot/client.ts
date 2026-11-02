@@ -1,4 +1,4 @@
-import { Client, Events } from "discord.js";
+import { Client, Events, RESTEvents, type RateLimitData } from "discord.js";
 import { BOT_GATEWAY_INTENTS } from "@/discord-bot/intents";
 import { BotApiClient } from "@/discord-bot/bot-api-client";
 import { parseCharacterScopedCustomId, parseCustomId } from "@/discord-bot/custom-ids";
@@ -36,9 +36,16 @@ import { recordDiscordBotReady } from "@/lib/discord/discord-integration-events"
  * is intentionally thin — every actual rule (eligibility, authorization,
  * offer reconciliation) lives behind the Bot API, never here.
  */
+/** A wait on Discord's rate limit holds up the whole sync pass, so each one leaves a line. */
+export function logRateLimit(info: RateLimitData) {
+  const { method, route, scope, global, limit, retryAfter } = info;
+  console.warn("[discord-bot] rate limited", { method, route, scope, global, limit, retryAfter });
+}
+
 export function createBotClient(env: BotEnv): Client {
   const api = new BotApiClient(env);
   const client = new Client({ intents: [...BOT_GATEWAY_INTENTS] });
+  client.rest.on(RESTEvents.RateLimited, logRateLimit);
 
   client.once(Events.ClientReady, (readyClient) => {
     console.log(`[discord-bot] logged in as ${readyClient.user.tag}`);

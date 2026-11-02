@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { BOOSTER_GUIDE_CARDS, boosterGuidePublisher } from "@/guides/booster-guide";
 import { buildGuideComponents, hashGuideAssetBytes, type GuideCard } from "@/guides/guide-card";
 import type { GuidePublisher } from "@/guides/guide-publisher";
-import { RAIDLEAD_GUIDE_CARDS, raidleadGuidePublisher } from "@/guides/raidlead-guide";
+import { raidleadGuidePublisher } from "@/guides/raidlead-guide";
 import {
   DiscordHttpError,
   discordHttpErrorFrom,
