@@ -138,6 +138,7 @@ describe("integrationEventRepository / service", () => {
       limit: 10,
     });
     expect(remaining.some((row) => row.id === IDS[1])).toBe(true);
+    await expect(orm.IntegrationEvent.where({ id: IDS[0] }).first()).resolves.toBeNull();
 
     const oldGone = await orm.IntegrationEvent.where({ id: IDS[0] }).first();
     expect(oldGone).toBeNull();

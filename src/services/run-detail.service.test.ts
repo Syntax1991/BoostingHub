@@ -107,6 +107,7 @@ describe("runDetailService", () => {
     const own = await runDetailService.getRunDetail(thorne, ids.weekend);
     expect(own.permissions.canManageRun).toBe(true);
     expect(own.manager?.run.id).toBe(ids.weekend);
+    expect(Object.keys(own.manager?.groups ?? {})).toEqual(["lootbuddies"]);
     expect(own.permissions.canViewManagerSignups).toBe(true);
 
     const other = await runDetailService.getRunDetail(thorne, ids.normal);

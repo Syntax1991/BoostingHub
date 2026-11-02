@@ -1,3 +1,4 @@
+import { pgPool } from "@/lib/pg-pool";
 import { orm } from "@/lib/prisma";
 import {
   asNumberOrNull,
@@ -117,17 +118,13 @@ export const integrationEventRepository = {
   },
 
   /** Delete events strictly older than `olderThanIso`. Returns deleted count. */
+  /** Deletes one bounded batch; the caller repeats until a batch comes back short. */
   async deleteOlderThan(olderThanIso: string): Promise<number> {
-    // Bounded maintenance: load ids then delete (no bulk-delete API used elsewhere).
-    const rows = (await orm.IntegrationEvent.where((event) => event.createdAt.lt(olderThanIso))
-      .select("id")
-      .limit(5000)
-      .all()) as Array<Record<string, unknown>>;
-    let deleted = 0;
-    for (const row of rows) {
-      await orm.IntegrationEvent.where({ id: asString(row.id) }).delete();
-      deleted += 1;
-    }
-    return deleted;
+    const result = await pgPool.query(
+      `DELETE FROM integration_event
+       WHERE id IN (SELECT id FROM integration_event WHERE "createdAt" < $1 LIMIT 5000)`,
+      [olderThanIso],
+    );
+    return result.rowCount ?? 0;
   },
 };

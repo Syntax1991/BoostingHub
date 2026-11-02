@@ -12,10 +12,10 @@ import { AddStrikeButton } from "@/components/runs/add-strike-button";
 import { CHARACTER_ROLE_LABELS, CLASS_LABELS, LOOTBUDDY_MODE_LABELS, LOOTBUDDY_VERIFICATION_LABELS } from "@/lib/labels";
 import { formatContentLockoutLines, formatContentLockoutTooltip } from "@/lib/run-content-lockouts";
 import type { RunDetailView } from "@/services/run-detail.service";
-import type { RosterManagementView } from "@/services/roster.service";
+import type { RosterClientView } from "@/services/roster.service";
 import type { WowClass } from "@/models/enums";
 
-type ManagerSignup = RosterManagementView["groups"]["tanks"][number];
+type ManagerSignup = RosterClientView["boosters"][number];
 
 function boosterLockoutLines(signup: ManagerSignup): string[] {
   if (signup.participationType !== "BOOSTER" || !signup.character) return [];
