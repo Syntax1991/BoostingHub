@@ -1163,6 +1163,18 @@
     "src/services/raid-lockout-informational.test.ts": [
       "REWRITE",
       "Fresh saved Character per test; the lockout helper reuses an existing row instead of deleting it with errors swallowed; exact offer counts"
+    ],
+    "src/services/strike.service.test.ts": [
+      "REWRITE",
+      "Fresh users; strikes (which restrict deleting their subject and creator) removed first, then verified cleanup; no swallowed deletes"
+    ],
+    "src/services/character-weekly-availability.service.test.ts": [
+      "REWRITE",
+      "Own owner, Characters and Raid Lead instead of seeded users, seeded Characters and the seeded admin; one Run helper replaces three 12-line blocks; the Booster grant through the seeded admin is unnecessary with a Booster owner"
+    ],
+    "src/services/raid-catalog-lifecycle.test.ts": [
+      "REWRITE",
+      "Fresh users and verified cleanup in dependency order; the fixed f00dface ids stay because they are the mocked catalog entry under test"
     ]
   },
   "tests": {

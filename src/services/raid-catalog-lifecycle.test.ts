@@ -1,16 +1,16 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { blizzardApiClient } from "@/integrations/blizzard/blizzard-api-client";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { normalizeCharacterIdentity } from "@/lib/character-identity";
-import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
 import { serializeEncounterIds } from "@/lib/raid-catalog";
-import { venomousCreateInput } from "@/lib/test-run-input";
-import type { AccountRole } from "@/models/enums";
+import { anyContentRunInput } from "@/lib/test-run-input";
 import { raidRepository } from "@/repositories/raid.repository";
 import { productPlanningService } from "@/services/product-planning.service";
 import { raidCatalogService } from "@/services/raid-catalog.service";
 import { runService } from "@/services/run.service";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestCharacter, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { expectDomainError } from "@/test/domain-error";
 
 /**
  * Raid lifecycle in the Raid Catalog: Delete (unused), Archive / Restore
@@ -60,29 +60,10 @@ vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOr
   },
 }));
 
-const ids = {
-  admin: "c0a7e100-0000-4000-8000-000000000001",
-  lead: "c0a7e100-0000-4000-8000-000000000002",
-  user: "c0a7e100-0000-4000-8000-000000000003",
-  booster: "c0a7e100-0000-4000-8000-000000000004",
-};
-
-function actor(id: string, accountRole: AccountRole): AuthenticatedUser {
-  return {
-    id,
-    name: `Lifecycle ${accountRole}`,
-    email: `${id}@lifecycle.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
-
-const admin = actor(ids.admin, "ADMIN");
-const lead = actor(ids.lead, "RAID_LEAD");
-const user = actor(ids.user, "USER");
+let admin: AuthenticatedUser;
+let lead: AuthenticatedUser;
+let user: AuthenticatedUser;
+const userIds: string[] = [];
 
 const createdRaidIds: string[] = [];
 const createdProductIds: string[] = [];
@@ -91,16 +72,6 @@ let characterId = "";
 // The admin-owned raid of FAKE_INSTANCE — created before any write path runs the bootstrap.
 let keptRaidId = "";
 let keptBossId = "";
-
-async function expectCode(promise: Promise<unknown>, code: string) {
-  let caught: unknown;
-  try {
-    await promise;
-  } catch (error) {
-    caught = error;
-  }
-  expect(isDomainError(caught) ? caught.code : caught).toBe(code);
-}
 
 async function newRaid(name: string, bossNames: string[] = ["Boss"]) {
   const { raidId } = await raidCatalogService.createRaid(admin, {
@@ -184,60 +155,40 @@ async function row(raidId: string) {
   return (await raidCatalogService.getPage(admin)).raids.find((raid) => raid.id === raidId);
 }
 
+/**
+ * Runs and products first (they reference raids), then the raids with their lockouts and bosses
+ * (the mocked fixture raid included, if a test inserted it), then the users with their Character.
+ */
 async function cleanup() {
-  for (const id of createdRunIds) await orm.Run.where({ id }).delete().catch(() => {});
-  for (const id of createdProductIds) await orm.Product.where({ id }).delete().catch(() => {});
+  await deleteCreatedRows({ runIds: createdRunIds });
+  for (const id of createdProductIds) await orm.Product.where({ id }).deleteAndCount();
   for (const id of [...createdRaidIds, FAKE_SEED_RAID_ID]) {
-    await orm.CharacterRaidLockout.where({ raidId: id }).delete().catch(() => {});
-    await orm.Raid.where({ id }).delete().catch(() => {});
+    await orm.CharacterRaidLockout.where({ raidId: id }).deleteAndCount();
+    await orm.Raid.where({ id }).deleteAndCount();
   }
-  await orm.Character.where({ userId: ids.booster }).delete().catch(() => {});
-  for (const id of Object.values(ids)) {
-    await orm.ActivityEvent.where({ userId: id }).delete().catch(() => {});
-    await orm.User.where({ id }).delete().catch(() => {});
-  }
+  await deleteCreatedRows({ userIds });
   raidRepository.invalidateCatalogMemo();
 }
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   vi.spyOn(blizzardApiClient, "getJournalInstanceIndex").mockResolvedValue([]);
   vi.spyOn(blizzardApiClient, "getJournalInstance").mockResolvedValue(null);
-  await cleanup();
-  const now = new Date().toISOString();
-  for (const [id, role] of [
-    [ids.admin, "ADMIN"],
-    [ids.lead, "RAID_LEAD"],
-    [ids.user, "USER"],
-    [ids.booster, "USER"],
-  ] as const) {
-    await orm.User.create({
-      id,
-      name: id,
-      email: `${id}@lifecycle.local`,
-      emailVerified: true,
-      accountRole: role,
-      accountStatus: "ACTIVE",
-      isBooster: false,
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
-  characterId = crypto.randomUUID();
-  await orm.Character.create({
-    id: characterId,
-    userId: ids.booster,
+  const adminId = await createTestUser({ name: "Lifecycle ADMIN", accountRole: "ADMIN" });
+  const leadId = await createTestUser({ name: "Lifecycle RAID_LEAD", accountRole: "RAID_LEAD" });
+  const userId = await createTestUser({ name: "Lifecycle USER" });
+  const boosterId = await createTestUser({ name: "Lifecycle Booster" });
+  userIds.push(adminId, leadId, userId, boosterId);
+  admin = testActor(adminId, "ADMIN");
+  lead = testActor(leadId, "RAID_LEAD");
+  user = testActor(userId);
+  characterId = await createTestCharacter({
+    userId: boosterId,
     name: "Lifecyclo",
     realm: "Lifecycle",
-    normalizedName: normalizeCharacterIdentity("Lifecyclo"),
-    normalizedRealm: normalizeCharacterIdentity("Lifecycle"),
-    region: "EU",
     wowClass: "MAGE",
     specialization: "Frost",
     primaryRole: "RANGED_DPS",
-    itemLevel: 700,
-    isActive: true,
-    createdAt: now,
-    updatedAt: now,
   });
   const kept = await insertRaid({ name: "QA Lair (admin import)" });
   keptRaidId = kept.id;
@@ -260,7 +211,7 @@ describe("Delete Raid", () => {
     await newProduct("QA_LIFECYCLE_REFERENCED", raidId);
     const referenced = (await row(raidId))!;
     expect(referenced.actions).toEqual({ delete: false, removeDuplicate: false, archive: true, restore: false });
-    await expectCode(raidCatalogService.deleteRaid(admin, raidId), "CONTENT_RAID_IN_USE");
+    await expectDomainError(raidCatalogService.deleteRaid(admin, raidId), "CONTENT_RAID_IN_USE");
     expect((await raidRepository.loadCatalog()).findById(raidId)).not.toBeNull();
   });
 });
@@ -278,7 +229,7 @@ describe("Archive / Restore Raid", () => {
       blizzardInstanceId: null,
     });
     const productId = await newProduct("QA_LIFECYCLE_ARCHIVE", raidId);
-    const run = await runService.createRun(lead, venomousCreateInput());
+    const run = await runService.createRun(lead, anyContentRunInput());
     createdRunIds.push(run.id);
     await orm.RunRaidContent.create({
       id: crypto.randomUUID(),
@@ -297,14 +248,14 @@ describe("Archive / Restore Raid", () => {
     const archived = (await row(raidId))!;
     expect(archived.archived).toBe(true);
     expect(archived.actions).toEqual({ delete: false, removeDuplicate: false, archive: false, restore: true });
-    await expectCode(raidCatalogService.archiveRaid(admin, raidId), "CONTENT_RAID_ARCHIVED");
+    await expectDomainError(raidCatalogService.archiveRaid(admin, raidId), "CONTENT_RAID_ARCHIVED");
 
     // Excluded from every new selection path.
     expect((await raidRepository.listAvailableForRuns()).map((raid) => raid.id)).not.toContain(raidId);
     expect((await productPlanningService.listSelectable()).map((product) => product.id)).not.toContain(productId);
     expect((await productPlanningService.listActive()).map((product) => product.id)).not.toContain(productId);
-    await expectCode(productPlanningService.expandNewSelection({ productId }), "RUN_PRODUCT_UNAVAILABLE");
-    await expectCode(
+    await expectDomainError(productPlanningService.expandNewSelection({ productId }), "RUN_PRODUCT_UNAVAILABLE");
+    await expectDomainError(
       raidCatalogService.createProduct(admin, {
         name: "QA_LIFECYCLE_NEW_WITH_ARCHIVED",
         active: true,
@@ -339,18 +290,17 @@ describe("Archive / Restore Raid", () => {
     expect(await orm.RunRaidContent.where({ runId: run.id, raidId }).all()).toHaveLength(1);
     expect((await raidRepository.listAvailableForRuns()).map((raid) => raid.id)).toContain(raidId);
     expect((await productPlanningService.listSelectable()).map((product) => product.id)).toContain(productId);
-    await expectCode(raidCatalogService.restoreRaid(admin, raidId), "CONTENT_RAID_NOT_ARCHIVED");
+    await expectDomainError(raidCatalogService.restoreRaid(admin, raidId), "CONTENT_RAID_NOT_ARCHIVED");
 
-    await orm.Run.where({ id: run.id }).delete();
   });
 
   it("refuses USER and RAID_LEAD for archive, restore, remove duplicate and delete", async () => {
     const raidId = await newRaid("QA Denied Raid");
     for (const denied of [user, lead]) {
-      await expectCode(raidCatalogService.archiveRaid(denied, raidId), "NOT_AUTHORIZED");
-      await expectCode(raidCatalogService.restoreRaid(denied, raidId), "NOT_AUTHORIZED");
-      await expectCode(raidCatalogService.removeDuplicateRaid(denied, raidId), "NOT_AUTHORIZED");
-      await expectCode(raidCatalogService.deleteRaid(denied, raidId), "NOT_AUTHORIZED");
+      await expectDomainError(raidCatalogService.archiveRaid(denied, raidId), "NOT_AUTHORIZED");
+      await expectDomainError(raidCatalogService.restoreRaid(denied, raidId), "NOT_AUTHORIZED");
+      await expectDomainError(raidCatalogService.removeDuplicateRaid(denied, raidId), "NOT_AUTHORIZED");
+      await expectDomainError(raidCatalogService.deleteRaid(denied, raidId), "NOT_AUTHORIZED");
     }
     expect((await row(raidId))!.archived).toBe(false);
   });
@@ -379,7 +329,7 @@ describe("duplicate raids (same Blizzard instance)", () => {
     expect(kept.duplicateOf).toBeNull();
     expect(kept.actions.removeDuplicate).toBe(false);
     expect(kept.actions.delete).toBe(false);
-    await expectCode(raidCatalogService.removeDuplicateRaid(admin, keptRaidId), "CONTENT_RAID_NOT_DUPLICATE");
+    await expectDomainError(raidCatalogService.removeDuplicateRaid(admin, keptRaidId), "CONTENT_RAID_NOT_DUPLICATE");
 
     const result = await raidCatalogService.removeDuplicateRaid(admin, FAKE_SEED_RAID_ID);
     expect(result).toMatchObject({ keptRaidName: "QA Lair (admin import)", droppedLockouts: 1, movedLockouts: 1 });
@@ -400,7 +350,7 @@ describe("duplicate raids (same Blizzard instance)", () => {
     const usedCopy = (await row(copy.id))!;
     expect(usedCopy.duplicateOf).toBeNull();
     expect(usedCopy.actions).toEqual({ delete: false, removeDuplicate: false, archive: true, restore: false });
-    await expectCode(raidCatalogService.removeDuplicateRaid(admin, copy.id), "CONTENT_RAID_NOT_DUPLICATE");
+    await expectDomainError(raidCatalogService.removeDuplicateRaid(admin, copy.id), "CONTENT_RAID_NOT_DUPLICATE");
     expect(await orm.Raid.where({ id: copy.id }).first()).not.toBeNull();
   });
 });

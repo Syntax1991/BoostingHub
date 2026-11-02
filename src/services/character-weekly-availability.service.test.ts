@@ -1,81 +1,55 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import { characterWeeklyAvailabilityRepository } from "@/repositories/character-weekly-availability.repository";
 import { characterWeeklyAvailabilityService } from "@/services/character-weekly-availability.service";
 import { lockoutService } from "@/services/lockout.service";
-import { venomousCreateInput } from "@/lib/test-run-input";
+import { anyContentRunInput } from "@/lib/test-run-input";
 import { runService } from "@/services/run.service";
 import { rosterService } from "@/services/roster.service";
 import { signupService } from "@/services/signup.service";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestCharacter, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { expectDomainError } from "@/test/domain-error";
+import { DAY_MS } from "@/test/time";
 
-const ids = {
-  kael: "11111111-1111-4111-8111-111111111111",
-  mira: "22222222-2222-4222-8222-222222222222",
-  thorne: "33333333-3333-4333-8333-333333333333",
-  kaelResto: "c1111111-1111-4111-8111-111111111111",
-  kaelEle: "c1111111-1111-4111-8111-111111111112",
-  miraChar: "c2222222-2222-4222-8222-222222222222",
-};
+/** Runs cascade; Characters and their availability rows go with the owners. */
+const created = { runIds: [] as string[], userIds: [] as string[] };
+const ids = { kael: "", kaelResto: "", kaelEle: "" };
+let kael: AuthenticatedUser;
+let mira: AuthenticatedUser;
+let lead: AuthenticatedUser;
 
-const createdRunIds: string[] = [];
-
-function asUser(
-  id: string,
-  name: string,
-  accountRole: AuthenticatedUser["accountRole"] = "USER",
-): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@dev.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
-
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    expect(isDomainError(error) && error.code).toBe(code);
-  }
-}
-
-const kael = asUser(ids.kael, "Kael Stormhowl");
-const mira = asUser(ids.mira, "Mira Dawnward");
-const thorne = asUser(ids.thorne, "Thorne Ironvein", "RAID_LEAD");
-
-afterAll(async () => {
-  for (const characterId of [ids.kaelResto, ids.kaelEle, ids.miraChar]) {
-    await orm.CharacterWeeklyUnavailability.where({ characterId }).delete().catch(() => {});
-  }
-  for (const runId of createdRunIds) {
-    const roster = await orm.RunRoster.where({ runId }).first();
-    if (roster) {
-      await orm.RunRosterEntry.where({ rosterId: (roster as { id: string }).id }).delete().catch(() => {});
-      await orm.RunRoster.where({ id: (roster as { id: string }).id }).delete().catch(() => {});
-    }
-    const signups = await orm.RunSignup.where({ runId }).select("id").all();
-    for (const signup of signups as Array<{ id: string }>) {
-      await orm.RunSignupRole.where({ signupId: signup.id }).delete().catch(() => {});
-    }
-    await orm.RunSignup.where({ runId }).delete().catch(() => {});
-    await orm.RunRaidContent.where({ runId }).delete().catch(() => {});
-    await orm.Run.where({ id: runId }).delete().catch(() => {});
-  }
+beforeAll(async () => {
+  assertIsolatedTestDatabase();
+  ids.kael = await createTestUser({ name: "Weekly Owner", isBooster: true });
+  const miraId = await createTestUser({ name: "Weekly Other" });
+  const leadId = await createTestUser({ name: "Weekly Lead", accountRole: "RAID_LEAD" });
+  created.userIds.push(ids.kael, miraId, leadId);
+  kael = testActor(ids.kael);
+  mira = testActor(miraId);
+  lead = testActor(leadId, "RAID_LEAD");
+  const shaman = (name: string, specialization: string, primaryRole: "HEALER" | "RANGED_DPS") =>
+    createTestCharacter({ userId: ids.kael, name, realm: "Twisting Nether", wowClass: "SHAMAN", specialization, primaryRole });
+  ids.kaelResto = await shaman("Weeklyresto", "Restoration", "HEALER");
+  ids.kaelEle = await shaman("Weeklyele", "Elemental", "RANGED_DPS");
 });
+
+afterAll(() => deleteCreatedRows(created));
+
+/** An OPEN Run of the suite's Raid Lead `days` from now. */
+async function openRun(difficulty: "HEROIC" | "MYTHIC", days: number) {
+  const scheduledStartAt = new Date(Date.now() + days * DAY_MS).toISOString();
+  const run = await runService.createRun(lead, anyContentRunInput({ difficulty, scheduledStartAt }));
+  created.runIds.push(run.id);
+  await runService.openRun(lead, run.id);
+  return { id: run.id, scheduledStartAt };
+}
 
 describe("characterWeeklyAvailabilityService", () => {
   it("defaults to Available when no current-reset record exists", async () => {
     const current = getRegionalWeeklyReset("EU").resetIdentifier;
-    await characterWeeklyAvailabilityRepository.clearUnavailable(ids.kaelResto, current);
     const projection = await characterWeeklyAvailabilityService.getCurrentForOwner(kael, ids.kaelResto);
     expect(projection.status).toBe("AVAILABLE");
     expect(projection.unavailableDifficulties).toEqual([]);
@@ -116,7 +90,7 @@ describe("characterWeeklyAvailabilityService", () => {
   });
 
   it("rejects unavailable with zero difficulties and clears on Available", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       characterWeeklyAvailabilityService.setCurrentResetAvailability(kael, {
         characterId: ids.kaelResto,
         available: false,
@@ -169,7 +143,7 @@ describe("characterWeeklyAvailabilityService", () => {
   });
 
   it("rejects foreign Character ownership", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       characterWeeklyAvailabilityService.setCurrentResetAvailability(mira, {
         characterId: ids.kaelResto,
         available: false,
@@ -180,25 +154,8 @@ describe("characterWeeklyAvailabilityService", () => {
   });
 
   it("blocks matching difficulty signup/selection and allows other difficulties", async () => {
-    const heroicRun = await runService.createRun(
-      thorne,
-      venomousCreateInput({
-        difficulty: "HEROIC",
-        lootType: "UNSAVED",
-        venomousPlannedBossCount: 8,
-        scheduledStartAt: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString(),
-        desiredTankCount: 2,
-        desiredHealerCount: 4,
-        desiredDpsCount: 14,
-      }),
-    );
-    createdRunIds.push(heroicRun.id);
-    await runService.openRun(thorne, heroicRun.id);
-    const heroicView = await rosterService.getRosterManagementView(thorne, heroicRun.id);
-    const resetForRun = lockoutService.getResetIdentifierForRun(
-      "EU",
-      heroicView.run.scheduledStartAt,
-    );
+    const heroicRun = await openRun("HEROIC", 4);
+    const resetForRun = lockoutService.getResetIdentifierForRun("EU", heroicRun.scheduledStartAt);
 
     await characterWeeklyAvailabilityRepository.replaceUnavailableDifficulties(
       ids.kaelResto,
@@ -206,7 +163,7 @@ describe("characterWeeklyAvailabilityService", () => {
       ["HEROIC"],
     );
 
-    await expectDomainCode(
+    await expectDomainError(
       signupService.createBoosterSignup(kael, {
         runId: heroicRun.id,
         characterId: ids.kaelResto,
@@ -216,27 +173,8 @@ describe("characterWeeklyAvailabilityService", () => {
       "CHARACTER_UNAVAILABLE",
     );
 
-    // Ensure Kael holds the Booster role so the non-matching difficulty path is not
-    // blocked by Booster access — only weekly availability should gate Heroic.
-    const { boostingRoleService } = await import("@/services/boosting-role.service");
-    const admin = asUser("44444444-4444-4444-8444-444444444444", "Aelira Softstep", "ADMIN");
-    // Granting a role the User already holds is a no-op.
-    await boostingRoleService.setRole(admin, { userId: ids.kael, role: "BOOSTER", enabled: true });
-
-    const mythicRun = await runService.createRun(
-      thorne,
-      venomousCreateInput({
-        difficulty: "MYTHIC",
-        lootType: "UNSAVED",
-        venomousPlannedBossCount: 8,
-        scheduledStartAt: new Date(Date.now() + 4.5 * 24 * 60 * 60 * 1000).toISOString(),
-        desiredTankCount: 2,
-        desiredHealerCount: 4,
-        desiredDpsCount: 14,
-      }),
-    );
-    createdRunIds.push(mythicRun.id);
-    await runService.openRun(thorne, mythicRun.id);
+    // The owner holds the Booster role, so only weekly availability gates Heroic here.
+    const mythicRun = await openRun("MYTHIC", 4.5);
 
     const mythicSignup = await signupService.createBoosterSignup(kael, {
       runId: mythicRun.id,
@@ -259,9 +197,9 @@ describe("characterWeeklyAvailabilityService", () => {
       resetForRun,
       ["HEROIC"],
     );
-    const view = await rosterService.getRosterManagementView(thorne, heroicRun.id);
-    await expectDomainCode(
-      rosterService.setDraftSelection(thorne, {
+    const view = await rosterService.getRosterManagementView(lead, heroicRun.id);
+    await expectDomainError(
+      rosterService.setDraftSelection(lead, {
         runId: heroicRun.id,
         signupId: signup.id,
         selected: true,
@@ -272,23 +210,8 @@ describe("characterWeeklyAvailabilityService", () => {
   });
 
   it("keeps existing selection when later marked Unavailable and blocks publish until cleared", async () => {
-    const scheduledStartAt = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString();
-    const run = await runService.createRun(
-      thorne,
-      venomousCreateInput({
-        difficulty: "HEROIC",
-        lootType: "UNSAVED",
-        venomousPlannedBossCount: 8,
-        scheduledStartAt,
-        desiredTankCount: 2,
-        desiredHealerCount: 4,
-        desiredDpsCount: 14,
-      }),
-    );
-    createdRunIds.push(run.id);
-    await runService.openRun(thorne, run.id);
-
-    const resetForRun = lockoutService.getResetIdentifierForRun("EU", scheduledStartAt);
+    const run = await openRun("HEROIC", 5);
+    const resetForRun = lockoutService.getResetIdentifierForRun("EU", run.scheduledStartAt);
     await characterWeeklyAvailabilityRepository.clearUnavailable(ids.kaelResto, resetForRun);
 
     const signup = await signupService.createBoosterSignup(kael, {
@@ -297,8 +220,8 @@ describe("characterWeeklyAvailabilityService", () => {
       role: "HEALER",
       isBackup: false,
     });
-    let view = await rosterService.getRosterManagementView(thorne, run.id);
-    await rosterService.setDraftSelection(thorne, {
+    let view = await rosterService.getRosterManagementView(lead, run.id);
+    await rosterService.setDraftSelection(lead, {
       runId: run.id,
       signupId: signup.id,
       selected: true,
@@ -310,7 +233,7 @@ describe("characterWeeklyAvailabilityService", () => {
       resetForRun,
       ["HEROIC"],
     );
-    view = await rosterService.getRosterManagementView(thorne, run.id);
+    view = await rosterService.getRosterManagementView(lead, run.id);
     const selected = view.boosters.find((item) => item.id === signup.id);
     expect(selected?.draftSelected).toBe(true);
     expect(selected?.scheduleConflicts.some((row) => row.source === "WEEKLY_UNAVAILABLE")).toBe(
@@ -320,8 +243,8 @@ describe("characterWeeklyAvailabilityService", () => {
       "Heroic",
     );
 
-    await expectDomainCode(
-      rosterService.publishRoster(thorne, {
+    await expectDomainError(
+      rosterService.publishRoster(lead, {
         runId: run.id,
         version: view.roster.version,
         acknowledgeWarnings: true,
@@ -330,7 +253,7 @@ describe("characterWeeklyAvailabilityService", () => {
     );
 
     await characterWeeklyAvailabilityRepository.clearUnavailable(ids.kaelResto, resetForRun);
-    view = await rosterService.getRosterManagementView(thorne, run.id);
+    view = await rosterService.getRosterManagementView(lead, run.id);
     expect(
       view.boosters.find((item) => item.id === signup.id)?.scheduleConflicts.some(
         (row) => row.source === "WEEKLY_UNAVAILABLE",
@@ -341,9 +264,8 @@ describe("characterWeeklyAvailabilityService", () => {
   it("ignores deprecated CharacterAvailabilityBlock rows", async () => {
     const current = getRegionalWeeklyReset("EU");
     await characterWeeklyAvailabilityRepository.clearUnavailable(ids.kaelResto, current.resetIdentifier);
-    const blockId = crypto.randomUUID();
     await orm.CharacterAvailabilityBlock.create({
-      id: blockId,
+      id: crypto.randomUUID(),
       characterId: ids.kaelResto,
       startsAt: current.start.toISOString(),
       endsAt: current.end.toISOString(),
@@ -354,8 +276,6 @@ describe("characterWeeklyAvailabilityService", () => {
 
     const projection = await characterWeeklyAvailabilityService.getCurrentForOwner(kael, ids.kaelResto);
     expect(projection.status).toBe("AVAILABLE");
-
-    await orm.CharacterAvailabilityBlock.where({ id: blockId }).delete();
   });
 });
 
