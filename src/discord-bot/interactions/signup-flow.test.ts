@@ -748,9 +748,7 @@ describe("Quick Signup button", () => {
     });
     const closedInteraction = fakeInteraction("user-a");
     await quickSignup(closedInteraction, closed, RUN_ID);
-    expect(closedInteraction.editReply).toHaveBeenCalledWith({
-      content: expect.stringMatching(/not open|closed/i),
-    });
+    expect(closedInteraction.editReply).toHaveBeenCalledWith({ content: "Signups are closed for this run." });
     expect(requestImmediateSync).not.toHaveBeenCalled();
 
     vi.mocked(requestImmediateSync).mockClear();

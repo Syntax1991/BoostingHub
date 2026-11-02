@@ -58,6 +58,7 @@ describe("reconcileRunVoiceChannels — creation", () => {
     expect(a.createVoiceChannel).toHaveBeenCalledTimes(1);
     expect(a.createVoiceChannel).toHaveBeenCalledWith("Raid with Gamma");
     expect(a.recordVoiceChannel).toHaveBeenCalledWith("run-1", "222");
+    expect(a.createdDelete).not.toHaveBeenCalled();
     expect(resolved.get("run-1")).toBe("222");
   });
 
@@ -84,7 +85,7 @@ describe("reconcileRunVoiceChannels — creation", () => {
 });
 
 describe("reconcileRunVoiceChannels — create → persist atomicity", () => {
-  it("A: persist failure → created once, record tried once, compensating delete, NOT in the resolved map", async () => {
+  it("persist failure → created once, record tried once, compensating delete, NOT in the resolved map", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const a = adapters({ recordFails: new Error("bot api 503") });
     const resolved = await reconcileRunVoiceChannels(a.value, [item("PROVISION", null)]);
@@ -96,7 +97,7 @@ describe("reconcileRunVoiceChannels — create → persist atomicity", () => {
     error.mockRestore();
   });
 
-  it("D: persist AND compensation fail → not resolved, high-signal ORPHANED error with run and channel id, no throw", async () => {
+  it("persist AND compensation fail → not resolved, high-signal ORPHANED error with run and channel id, no throw", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const a = adapters({ recordFails: new Error("bot api 503"), compensationFails: missingPermissions() });
     const resolved = await reconcileRunVoiceChannels(a.value, [item("PROVISION", null)]);
@@ -105,14 +106,6 @@ describe("reconcileRunVoiceChannels — create → persist atomicity", () => {
     expect(orphan).toContain("run-1");
     expect(orphan).toContain("222");
     error.mockRestore();
-  });
-
-  it("E: normal success → persisted, then resolved; no compensation", async () => {
-    const a = adapters();
-    const resolved = await reconcileRunVoiceChannels(a.value, [item("PROVISION", null)]);
-    expect(a.recordVoiceChannel).toHaveBeenCalledWith("run-1", "222");
-    expect(a.createdDelete).not.toHaveBeenCalled();
-    expect(resolved.get("run-1")).toBe("222");
   });
 
   it("Unknown-Channel recreate whose persist fails leaves the run resolved to null (never the unpersisted id)", async () => {
@@ -216,26 +209,12 @@ describe("reconcileRunVoiceChannels — terminal / app-archived (RETIRE_IF_EMPTY
     expect(a.createVoiceChannel).not.toHaveBeenCalled();
   });
 
-  it("Example B: occupied 5 → 2 → 0 connected — deleted only on the poll after the last user leaves", async () => {
-    for (const members of [5, 2]) {
-      const channel = voice(members);
-      const a = adapters({ channel });
-      await reconcileRunVoiceChannels(a.value, [item("RETIRE_IF_EMPTY")]);
-      expect(channel.delete).not.toHaveBeenCalled();
-      expect(a.clearVoiceChannel).not.toHaveBeenCalled();
-    }
-    const channel = voice(0);
-    const a = adapters({ channel });
-    await reconcileRunVoiceChannels(a.value, [item("RETIRE_IF_EMPTY")]);
-    expect(channel.delete).toHaveBeenCalledTimes(1);
-    expect(a.clearVoiceChannel).toHaveBeenCalledWith("run-1", "voice-1");
-  });
-
-  it("Unknown Channel clears the id", async () => {
+  it("Unknown Channel clears the id and never creates a channel for a terminal Run", async () => {
     const a = adapters({ channel: () => { throw unknownChannel(); } });
     const resolved = await reconcileRunVoiceChannels(a.value, [item("RETIRE_IF_EMPTY")]);
     expect(a.clearVoiceChannel).toHaveBeenCalledWith("run-1", "voice-1");
     expect(resolved.get("run-1")).toBeNull();
+    expect(a.createVoiceChannel).not.toHaveBeenCalled();
   });
 
   it("delete hitting Unknown Channel (already gone) still clears the id", async () => {
@@ -265,12 +244,6 @@ describe("reconcileRunVoiceChannels — terminal / app-archived (RETIRE_IF_EMPTY
     const a = adapters({ channel: { kind: "other" } });
     await reconcileRunVoiceChannels(a.value, [item("RETIRE_IF_EMPTY")]);
     expect(a.clearVoiceChannel).not.toHaveBeenCalled();
-  });
-
-  it("never creates a channel for a terminal Run", async () => {
-    const a = adapters({ channel: () => { throw unknownChannel(); } });
-    await reconcileRunVoiceChannels(a.value, [item("RETIRE_IF_EMPTY")]);
-    expect(a.createVoiceChannel).not.toHaveBeenCalled();
   });
 });
 

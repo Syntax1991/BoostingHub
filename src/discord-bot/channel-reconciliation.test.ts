@@ -126,13 +126,6 @@ describe("reconcileExistingRunChannel — name drift", () => {
     expect(result).toEqual({ status: "ok", channelId: "chan-1" });
   });
 
-  it("name already correct: setName is not called", async () => {
-    const channel = fakeChannel({ name: "sat-2200-hc-gamma", parentId: ACTIVE_CATEGORY });
-    await reconcileExistingRunChannel(fetcherFor(channel), envConfigured, item({ desiredChannelName: "sat-2200-hc-gamma" }));
-
-    expect(channel.setName).not.toHaveBeenCalled();
-  });
-
   it("already fully correct: neither setName nor setParent is called (full idempotency)", async () => {
     const channel = fakeChannel({ name: "sat-2200-hc-gamma", parentId: ACTIVE_CATEGORY });
     await reconcileExistingRunChannel(fetcherFor(channel), envConfigured, item({ desiredChannelName: "sat-2200-hc-gamma" }));
@@ -446,18 +439,6 @@ describe("reconcileWeekSectionPositions — drift correction", () => {
     ]);
 
     expect(orderedChannelIds(setPositions)).toEqual([CURRENT_MARKER, NEXT_MARKER, "chan-1"]);
-  });
-
-  it("category drift: a channel outside the category (per reconcileExistingRunChannel) is a separate concern — position reconciliation only orders channels already listed as children", async () => {
-    const children = [child(CURRENT_MARKER, 0), child(NEXT_MARKER, 10), child("chan-1", 15)];
-    const setPositions = vi.fn().mockResolvedValue(undefined) as PositionSetter;
-
-    const result = await reconcileWeekSectionPositions(listerFor(children), setPositions, weekEnv, [
-      weekItem({ targetBucket: "CURRENT", existingRunChannelId: "chan-1" }),
-    ]);
-
-    // chan-1 and #next-id both change relative index.
-    expect(result).toEqual({ status: "ok", moved: 2 });
   });
 });
 

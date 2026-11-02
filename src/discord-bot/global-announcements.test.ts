@@ -11,7 +11,6 @@ import {
   buildQuickSignupReleaseAnnouncementContent,
   syncGlobalAnnouncements,
 } from "@/discord-bot/global-announcements";
-import { loadBotEnv } from "@/discord-bot/env";
 import { syncOnce } from "@/discord-bot/sync-loop";
 import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
@@ -98,7 +97,7 @@ describe("syncGlobalAnnouncements", () => {
     };
   }
 
-  it("1. env unset → no send", async () => {
+  it("env unset → no send", async () => {
     const { client, send } = makeClient();
     const api = makeApi(false);
     await syncGlobalAnnouncements(client, { discordAnnouncementChannelId: null }, api);
@@ -106,7 +105,7 @@ describe("syncGlobalAnnouncements", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it("2–6. configured and unsent → one send to destination with content + persist key", async () => {
+  it("configured and unsent → one send to destination with content + persist key", async () => {
     const { client, send } = makeClient();
     const api = makeApi(false);
     await syncGlobalAnnouncements(client, { discordAnnouncementChannelId: ANNOUNCEMENT_CHANNEL_ID }, api);
@@ -129,7 +128,7 @@ describe("syncGlobalAnnouncements", () => {
     });
   });
 
-  it("7–8 / 12. subsequent poll / restart / deleted message → no duplicate when recorded", async () => {
+  it("subsequent poll / restart / deleted message → no duplicate when recorded", async () => {
     const { client, send } = makeClient();
     const api = makeApi(true);
     await syncGlobalAnnouncements(client, { discordAnnouncementChannelId: ANNOUNCEMENT_CHANNEL_ID }, api);
@@ -138,7 +137,7 @@ describe("syncGlobalAnnouncements", () => {
     expect(api.recordGlobalAnnouncement).not.toHaveBeenCalled();
   });
 
-  it("9–10. send failure → no persist; later retry can send once", async () => {
+  it("send failure → no persist; later retry can send once", async () => {
     const failingSend = vi.fn().mockRejectedValueOnce(new Error("send failed")).mockResolvedValueOnce({
       id: "msg-retry-1",
     });
@@ -157,7 +156,7 @@ describe("syncGlobalAnnouncements", () => {
     });
   });
 
-  it("11. invalid/non-text channel → no crash, no persist", async () => {
+  it("invalid/non-text channel → no crash, no persist", async () => {
     const { client, send } = makeClient({ textBased: false });
     const api = makeApi(false);
     await expect(
@@ -178,7 +177,7 @@ describe("syncGlobalAnnouncements", () => {
 });
 
 describe("syncOnce — announcement failure does not block Discord sync", () => {
-  it("13. announcement failure → normal sync continues", async () => {
+  it("announcement failure → normal sync continues", async () => {
     const { Collection } = await import("discord.js");
     const { clearGuildEmojiCache } = await import("@/discord-bot/class-emoji-lookup");
     clearGuildEmojiCache();
@@ -238,19 +237,5 @@ describe("syncOnce — announcement failure does not block Discord sync", () => 
     await expect(syncOnce(client, env, api)).resolves.toBeUndefined();
     expect(listSyncWork).toHaveBeenCalled();
     expect(getGlobalAnnouncement).toHaveBeenCalledWith("quick-signup-release-v1");
-  });
-});
-
-describe("loadBotEnv — announcement channel optional", () => {
-  it("startup succeeds when DISCORD_ANNOUNCEMENT_CHANNEL_ID is unset", () => {
-    const env = loadBotEnv({
-      DISCORD_BOT_TOKEN: "token",
-      DISCORD_APPLICATION_ID: "app",
-      DISCORD_GUILD_ID: "guild",
-      DISCORD_RUN_CATEGORY_ID: "category",
-      BOOSTINGHUB_API_BASE_URL: "http://localhost:3000",
-      BOOSTINGHUB_BOT_API_TOKEN: "bot-token",
-    } as unknown as NodeJS.ProcessEnv);
-    expect(env.discordAnnouncementChannelId).toBeNull();
   });
 });

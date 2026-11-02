@@ -76,7 +76,6 @@ describe("buildRaidInviteMessage", () => {
     // VIP once: the meta line names the Run type, the assignment does not repeat it.
     expect(text).toContain("Assignment: Healer · Testmist (Monk)\n");
     expect(text).toContain("Channel: <#1550000000000000001>");
-    expect(text).toContain("<#1550000000000000001>");
     expect(text).not.toMatch(/unknown/i);
     expect(text).not.toMatch(/ - vip/i);
     expect((text.match(/VIP/g) ?? []).length).toBe(1);

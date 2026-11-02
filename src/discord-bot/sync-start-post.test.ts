@@ -6,8 +6,6 @@ import { syncOnce } from "@/discord-bot/sync-loop";
 import { clearGuildEmojiCache } from "@/discord-bot/class-emoji-lookup";
 import { formatFinalSetupLfgLine } from "@/lib/run-start-message";
 import { finalSetupAllowedMentions, renderRunStartMessageText } from "@/discord-bot/messages/run-start-message";
-import { buildSignupEmbed } from "@/discord-bot/embeds/signup-embed";
-import { buildRosterEmbed } from "@/discord-bot/embeds/roster-embed";
 
 // The Guild emoji snapshot cache is process-wide; start every test cold.
 beforeEach(() => clearGuildEmojiCache());
@@ -176,8 +174,6 @@ describe("syncOnce — Final Setup explicit allowedMentions", () => {
     // The LFG footer is fixed Manawyrm branding — no Raid Lead name / HM.
     const footer = payload.content.slice(payload.content.lastIndexOf("\n") + 1);
     expect(footer).toBe(formatFinalSetupLfgLine());
-    expect(footer).not.toContain("Gamma");
-    expect(footer).not.toContain("pwned");
     expect(payload.content.match(/LFG Manawyrm/g)).toHaveLength(1);
     expect(payload.content).not.toContain("LFG HM");
   });
@@ -399,61 +395,6 @@ describe("syncOnce — Final Setup links the Run's temporary Voice channel", () 
 
     expect(contentOf(dmSend)).toContain("Voice: <#777>");
     expect(contentOf(send)).toContain("Voice: <#777>");
-  });
-});
-
-describe("Signup / Roster embeds unchanged by Final Setup LFG", () => {
-  it("does not put the Final Setup LFG line into signup or roster embeds", () => {
-    const signup = buildSignupEmbed({
-      runId: "r1",
-      runTitle: "Test",
-      raidName: "The Venomous Abyss",
-      productLabel: "The Venomous Abyss",
-      contentSummary: "The Venomous Abyss 8/8",
-      titleCoverage: "8/8",
-      raidLeadName: "Alpha",
-      raidLeadDiscordUserId: null,
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      scheduledStartAt: "2026-09-18T17:00:00.000Z",
-      runStatus: "OPEN",
-      signupWindowOpen: true,
-      uniqueSignupCount: 0,
-      roleStatus: {
-        tank: { signed: 0, picked: 0, target: 2 },
-        healer: { signed: 0, picked: 0, target: 4 },
-        dps: { signed: 0, picked: 0, target: 14 },
-        lootbuddy: { signed: 0, picked: 0 },
-      },
-      members: {
-        signed: { tanks: [], healers: [], dps: [], lootbuddies: [] },
-        picked: { tanks: [], healers: [], dps: [], lootbuddies: [] },
-      },
-      discordRolePing: true,
-    });
-    const roster = buildRosterEmbed({
-      runId: "r1",
-      runTitle: "Test",
-      raidName: "Venomous Abyss",
-      productLabel: "The Venomous Abyss",
-      contentSummary: "The Venomous Abyss 8/8",
-      difficulty: "HEROIC",
-      publishedAt: "2026-09-18T12:00:00.000Z",
-      version: 1,
-      targets: { tanks: 2, healers: 4, dps: 14, lootbuddies: 0 },
-      groups: { tanks: [], healers: [], meleeDps: [], rangedDps: [], unspecifiedDps: [], lootbuddies: [] },
-      totalSelected: 0,
-    });
-
-    const signupBlob = JSON.stringify(signup.data);
-    const rosterBlob = JSON.stringify(roster.data);
-    // The Raid Lead LFG footer belongs to Final Setup only.
-    expect(signupBlob).not.toContain("LFG Manawyrm");
-    expect(rosterBlob).not.toContain("LFG Manawyrm");
-    expect(signupBlob).not.toContain("LFG HM");
-    expect(rosterBlob).not.toContain("LFG HM");
-    expect(signup.data.title || signup.data.description).toBeTruthy();
-    expect(roster.data.title).toBeTruthy();
   });
 });
 

@@ -46,29 +46,29 @@ describe("application capability (GET /applications/@me flags)", () => {
 });
 
 describe("classifyMessageContent", () => {
-  it("1–3. text is TEXT: a member's, another bot's, or this app's own", () => {
+  it("text is TEXT: a member's, another bot's, or this app's own", () => {
     expect(classifyMessageContent({ ...empty, content: "hi\nthere" }, "AVAILABLE")).toBe("TEXT");
     expect(classifyMessageContent({ ...empty, content: "Sample Logs: new report" }, "AVAILABLE")).toBe("TEXT");
     expect(classifyMessageContent({ ...empty, authoredByApp: true, content: "Final Setup" }, "AVAILABLE")).toBe("TEXT");
   });
 
-  it("4–6. embed-, attachment- or sticker-only with access → NON_TEXT (as are component / poll only)", () => {
+  it("embed-, attachment- or sticker-only with access → NON_TEXT (as are component / poll only)", () => {
     for (const key of ["hasEmbeds", "hasAttachments", "hasStickers", "hasComponents", "hasPoll"] as const) {
       expect(classifyMessageContent({ ...empty, [key]: true }, "AVAILABLE")).toBe("NON_TEXT");
     }
   });
 
-  it("7. a member's message with every restricted field empty and access off → UNAVAILABLE (never 'no text')", () => {
+  it("a member's message with every restricted field empty and access off → UNAVAILABLE (never 'no text')", () => {
     expect(classifyMessageContent(empty, "UNAVAILABLE")).toBe("UNAVAILABLE");
   });
 
-  it("8–9. the app's own message is classified from its delivered payload even with access off", () => {
+  it("the app's own message is classified from its delivered payload even with access off", () => {
     expect(classifyMessageContent({ ...empty, authoredByApp: true, hasEmbeds: true }, "UNAVAILABLE")).toBe("NON_TEXT");
     expect(classifyMessageContent({ ...empty, authoredByApp: true, content: "Raidboost Announce" }, "UNAVAILABLE")).toBe("TEXT");
     expect(classifyMessageContent({ ...empty, authoredByApp: true }, "UNAVAILABLE")).toBe("NON_TEXT");
   });
 
-  it("10. an empty member message while access is unknown → UNKNOWN", () => {
+  it("an empty member message while access is unknown → UNKNOWN", () => {
     expect(classifyMessageContent(empty, "UNKNOWN")).toBe("UNKNOWN");
   });
 

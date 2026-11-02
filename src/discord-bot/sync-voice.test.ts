@@ -249,13 +249,13 @@ describe("syncOnce — temporary Run voice channels", () => {
     const existing = (action: VoiceItem["action"], id = "333"): VoiceItem => ({ ...provision, existingVoiceChannelId: id, action });
     const deleteSpy = (channels: Map<string, unknown>, id: string) => (channels.get(id) as { delete: ReturnType<typeof vi.fn> }).delete;
 
-    it("1. env unset + PROVISION → no create", async () => {
+    it("env unset + PROVISION → no create", async () => {
       const { client, create } = makeClient();
       await syncOnce(client, noEnv(), makeApi([provision]));
       expect(create).not.toHaveBeenCalled();
     });
 
-    it("2. env unset + IN_PROGRESS existing voice → still reconciled (fetched/renamed), no create, id kept", async () => {
+    it("env unset + IN_PROGRESS existing voice → still reconciled (fetched/renamed), no create, id kept", async () => {
       const { client, create, fetchChannel, channels } = makeClient({ existingVoice: { "333": 0 } });
       (channels.get("333") as { name: string }).name = "Raid with Epsilon";
       const api = makeApi([existing("RECONCILE")]);
@@ -267,9 +267,9 @@ describe("syncOnce — temporary Run voice channels", () => {
     });
 
     it.each([
-      ["3. COMPLETED", 0, true],
-      ["4. COMPLETED occupied", 2, false],
-      ["5. CANCELLED", 0, true],
+      ["COMPLETED", 0, true],
+      ["COMPLETED occupied", 2, false],
+      ["CANCELLED", 0, true],
     ])("env unset + %s existing voice (members %i) → cleanup still runs", async (_label, members, deleted) => {
       const { client, channels } = makeClient({ existingVoice: { "333": members } });
       const api = makeApi([existing("RETIRE_IF_EMPTY")]);
@@ -283,7 +283,7 @@ describe("syncOnce — temporary Run voice channels", () => {
       }
     });
 
-    it("6. invalid configured category + terminal empty voice → cleanup STILL happens", async () => {
+    it("invalid configured category + terminal empty voice → cleanup STILL happens", async () => {
       const { client, channels } = makeClient({ voiceCategoryType: ChannelType.GuildText, existingVoice: { "333": 0 } });
       const api = makeApi([existing("RETIRE_IF_EMPTY")]);
       await syncOnce(client, botEnv(), api);
@@ -291,7 +291,7 @@ describe("syncOnce — temporary Run voice channels", () => {
       expect(api.recordDiscordState).toHaveBeenCalledWith(RUN_ID, { kind: "clear-voice-channel", channelId: "333" });
     });
 
-    it("7. invalid configured category + PROVISION → no create, while another Run's existing voice is still reconciled", async () => {
+    it("invalid configured category + PROVISION → no create, while another Run's existing voice is still reconciled", async () => {
       const error = vi.spyOn(console, "error").mockImplementation(() => {});
       const { client, create, fetchChannel } = makeClient({ voiceCategoryType: ChannelType.GuildText, existingVoice: { "333": 0 } });
       await syncOnce(client, botEnv(), makeApi([provision, { ...existing("RECONCILE"), runId: "run-other" }]));
@@ -316,7 +316,7 @@ describe("syncOnce — temporary Run voice channels", () => {
       return api;
     }
 
-    it("B. persist fails, compensation succeeds → channel deleted, same-pass Raid Invite has NO Voice line", async () => {
+    it("persist fails, compensation succeeds → channel deleted, same-pass Raid Invite has NO Voice line", async () => {
       const error = vi.spyOn(console, "error").mockImplementation(() => {});
       const { client, create, dmSend, channels } = makeClient({ nextVoiceId: "222" });
       await syncOnce(client, botEnv(), failingVoiceRecordApi([provision], [raidInviteDm(RUN_ID, null)]));
@@ -328,7 +328,7 @@ describe("syncOnce — temporary Run voice channels", () => {
       error.mockRestore();
     });
 
-    it("C. retry: the next poll still PROVISIONs and links exactly the new, persisted channel", async () => {
+    it("retry: the next poll still PROVISIONs and links exactly the new, persisted channel", async () => {
       const error = vi.spyOn(console, "error").mockImplementation(() => {});
       const first = makeClient({ nextVoiceId: "222" });
       await syncOnce(first.client, botEnv(), failingVoiceRecordApi([provision], []));
@@ -343,7 +343,7 @@ describe("syncOnce — temporary Run voice channels", () => {
       expect(content.match(/Voice: <#\d+>/g)).toEqual(["Voice: <#333>"]);
     });
 
-    it("D. persist AND compensation fail → no Voice link, ORPHANED error names run + channel, sync survives", async () => {
+    it("persist AND compensation fail → no Voice link, ORPHANED error names run + channel, sync survives", async () => {
       const error = vi.spyOn(console, "error").mockImplementation(() => {});
       const { client, dmSend } = makeClient({ nextVoiceId: "222", createdDeleteFails: Object.assign(new Error("Missing Permissions"), { code: 50013 }) });
       await expect(syncOnce(client, botEnv(), failingVoiceRecordApi([provision], [raidInviteDm(RUN_ID, null)]))).resolves.toBeUndefined();

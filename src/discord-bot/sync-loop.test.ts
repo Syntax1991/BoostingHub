@@ -775,7 +775,7 @@ describe("syncOnce — roster post: persistent message + Publish ack", () => {
 });
 
 describe("syncOnce — same-pass first-channel positioning", () => {
-  it("A: first CURRENT channel lands between markers in the SAME pass", async () => {
+  it("first CURRENT channel lands between markers in the SAME pass", async () => {
     const children = new Map<string, Child>([
       [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
       [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
@@ -811,7 +811,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
     expect(serverOrder()).toEqual([CURRENT_MARKER, createdIds[0], NEXT_MARKER]);
   });
 
-  it("B: retries same-pass when fresh Discord order stays wrong after first setPositions", async () => {
+  it("retries same-pass when fresh Discord order stays wrong after first setPositions", async () => {
     const children = new Map<string, Child>([
       [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
       [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
@@ -845,13 +845,13 @@ describe("syncOnce — same-pass first-channel positioning", () => {
     );
 
     expect(createdIds).toHaveLength(1);
-    expect(setPositions.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(setPositions).toHaveBeenCalledTimes(2);
     // Cache alone can look correct after first write — must not hide server lag.
     expect(cacheOrder()).toEqual([CURRENT_MARKER, createdIds[0], NEXT_MARKER]);
     expect(serverOrder()).toEqual([CURRENT_MARKER, createdIds[0], NEXT_MARKER]);
   });
 
-  it("C: bounded failure — stops after max attempts when fresh never converges", async () => {
+  it("bounded failure — stops after max attempts when fresh never converges", async () => {
     const children = new Map<string, Child>([
       [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
       [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
@@ -889,7 +889,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
     errorSpy.mockRestore();
   });
 
-  it("D: brand-new NEXT channel stays below #next-id in the SAME pass", async () => {
+  it("brand-new NEXT channel stays below #next-id in the SAME pass", async () => {
     const children = new Map<string, Child>([
       [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
       [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
@@ -923,7 +923,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
     expect(serverOrder()).toEqual([CURRENT_MARKER, NEXT_MARKER, createdIds[0]]);
   });
 
-  it("E: existing + newly created CURRENT stay chronological", async () => {
+  it("existing + newly created CURRENT stay chronological", async () => {
     const existing = "chan-tue-1500";
     const children = new Map<string, Child>([
       [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
@@ -968,7 +968,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
     expect(serverOrder()).toEqual([CURRENT_MARKER, existing, createdIds[0], NEXT_MARKER]);
   });
 
-  it("F: multiple newly created CURRENT channels order chronologically", async () => {
+  it("multiple newly created CURRENT channels order chronologically", async () => {
     const children = new Map<string, Child>([
       [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
       [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
@@ -1015,7 +1015,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
     expect(serverOrder()).toEqual([CURRENT_MARKER, createdIds[1], createdIds[0], NEXT_MARKER]);
   });
 
-  it("G: signup message send failure still converges positioning", async () => {
+  it("signup message send failure still converges positioning", async () => {
     const children = new Map<string, Child>([
       [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
       [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
@@ -1050,7 +1050,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
     expect(serverOrder()).toEqual([CURRENT_MARKER, createdIds[0], NEXT_MARKER]);
   });
 
-  it("H: already correct order — no unnecessary setPositions", async () => {
+  it("already correct order — no unnecessary setPositions", async () => {
     const existing = "chan-already-correct";
     const children = new Map<string, Child>([
       [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
@@ -1081,7 +1081,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
     expect(setPositions).not.toHaveBeenCalled();
   });
 
-  it("I: ARCHIVE target does not provision or position into CURRENT/NEXT", async () => {
+  it("ARCHIVE target does not provision or position into CURRENT/NEXT", async () => {
     const children = new Map<string, Child>([
       [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
       [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
@@ -1111,50 +1111,9 @@ describe("syncOnce — same-pass first-channel positioning", () => {
       }),
     );
 
-    // Signup path still may create if API returned the item — but section item is null for ARCHIVE.
-    // If a channel was created it must not force a CURRENT/NEXT reorder solely for ARCHIVE.
-    if (createdIds.length > 0) {
-      expect(setPositions).not.toHaveBeenCalled();
-    }
-  });
-
-  it("J: cache view alone cannot hide a wrong fresh server order", async () => {
-    const children = new Map<string, Child>([
-      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
-      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
-    ]);
-    const { client, createdIds, setPositions, cacheOrder, serverOrder } = makeDiscordClient(children, {
-      freshAppliesAfterSetPositionsCalls: 2,
-    });
-
-    await syncOnce(
-      client,
-      botEnv(),
-      makeApi({
-        channels: [],
-        signups: [
-          {
-            runId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
-            existingChannelId: null,
-            existingMessageId: null,
-            existingRunChannelId: null,
-            desiredChannelName: "tue-1800-hc-unsaved-lead",
-            targetBucket: "CURRENT",
-            scheduledStartAt: "2026-09-15T16:00:00.000Z",
-            allowChannelCreate: true,
-            embed: signupEmbed("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", "2026-09-15T16:00:00.000Z"),
-          },
-        ],
-        roster: [],
-        start: [],
-      }),
-    );
-
+    // The signup lane still creates the channel, but an ARCHIVE item has no week section to order.
     expect(createdIds).toHaveLength(1);
-    expect(setPositions.mock.calls.length).toBe(2);
-    // After settle, both views match — proving we did not stop on cache alone.
-    expect(cacheOrder()).toEqual(serverOrder());
-    expect(serverOrder()).toEqual([CURRENT_MARKER, createdIds[0], NEXT_MARKER]);
+    expect(setPositions).not.toHaveBeenCalled();
   });
 });
 
@@ -1493,53 +1452,6 @@ describe("syncOnce — UserNotification DMs", () => {
     await syncOnce(client as never, botEnv(), api);
     expect(sendDm).not.toHaveBeenCalled();
     expect(api.recordNotificationDmDelivery).not.toHaveBeenCalled();
-  });
-
-  it("marks FAILED_PERMANENT when Discord rejects the notification DM", async () => {
-    const children = new Map<string, Child>([
-      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
-      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
-    ]);
-    const sendDm = vi.fn().mockRejectedValue({ code: 50007, message: "Cannot send messages to this user" });
-    const { client } = makeDiscordClient(children);
-    (client as { users: { fetch: ReturnType<typeof vi.fn> } }).users = {
-      fetch: vi.fn().mockResolvedValue({ id: "discord-user-4", send: sendDm }),
-    };
-    const api = makeApi({ channels: [], signups: [], roster: [] });
-    (api.listSyncWork as ReturnType<typeof vi.fn>).mockResolvedValue({
-      channels: [],
-      signups: [],
-      roster: [],
-      start: [],
-      raidInvites: [],
-      notificationDms: [
-        {
-          notificationId: "cccccccc-cccc-4ccc-8ccc-ccccccccccc2",
-          type: "RAID_INVITE",
-          discordUserId: "discord-user-4",
-          runId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4",
-          signupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb4",
-          runChannelId: null,
-          productLabel: "Venom & Tide",
-          scheduledStartAt: "2026-09-16T13:30:00.000Z",
-          previousScheduledStartAt: null,
-          difficulty: "HEROIC",
-          lootType: "VIP",
-          participationType: "BOOSTER",
-          selectedRole: "HEALER",
-          characterName: "Testmist",
-          wowClass: "MONK",
-        },
-      ],
-    });
-
-    await syncOnce(client as never, botEnv(), api);
-
-    expect(api.recordDiscordState).toHaveBeenCalledWith("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4", {
-      kind: "notification-dm",
-      notificationId: "cccccccc-cccc-4ccc-8ccc-ccccccccccc2",
-      result: "FAILED_PERMANENT",
-    });
   });
 
   it("leaves PENDING on transient Discord errors (does not record delivery)", async () => {
@@ -1890,7 +1802,6 @@ describe("syncOnce — Run lifecycle channel announcements", () => {
 
     const runChannel = client.channels.cache.get("run-chan") as { send: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
     expect(runChannel.send).toHaveBeenCalledTimes(3);
-    const firstEmbed = runChannel.send.mock.calls[0][0] as { embeds: Array<{ data?: { title?: string }; title?: string }> };
     const titles = runChannel.send.mock.calls.map((call) => {
       const payload = call[0] as { embeds: Array<{ data?: { title?: string }; toJSON?: () => { title?: string } }> };
       const embed = payload.embeds[0];
@@ -1899,7 +1810,6 @@ describe("syncOnce — Run lifecycle channel announcements", () => {
     expect(titles[0]).toContain("📅 Rescheduled");
     expect(titles[1]).toContain("📅 Rescheduled");
     expect(titles[2]).toContain("Run Cancelled");
-    void firstEmbed;
 
     expect(api.recordDiscordState).toHaveBeenCalledWith("run-life", {
       kind: "run-announcement",
@@ -2599,7 +2509,7 @@ describe("syncOnce — persistent CURRENT/NEXT Schedule posts", () => {
     };
   }
 
-  it("X/Y: creates exactly one Schedule message per marker and records state (pins once)", async () => {
+  it("creates exactly one Schedule message per marker and records state (pins once)", async () => {
     const { client, pinSpies } = makeDiscordClient(markerChildren());
     const api = makeApi({
       channels: [],
@@ -2635,7 +2545,7 @@ describe("syncOnce — persistent CURRENT/NEXT Schedule posts", () => {
     expect(pinSpies.get(`msg-${NEXT_MARKER}-1`)).toHaveBeenCalledTimes(1);
   });
 
-  it("A: converged message still exists — fetch only, no edit/send/record", async () => {
+  it("converged message still exists — fetch only, no edit/send/record", async () => {
     const { client, editSpies, messagesFetchSpies } = makeDiscordClient(markerChildren(), {
       editableMessageIds: new Set(["sched-current", "sched-next"]),
     });
@@ -2672,7 +2582,7 @@ describe("syncOnce — persistent CURRENT/NEXT Schedule posts", () => {
     expect(api.recordScheduleState).not.toHaveBeenCalled();
   });
 
-  it("B: converged message manually deleted (10008) — one replacement without needsUpdate", async () => {
+  it("converged message manually deleted (10008) — one replacement without needsUpdate", async () => {
     const { client, pinSpies } = makeDiscordClient(markerChildren(), {
       editableMessageIds: new Set(["sched-next"]),
       messageFetchErrors: new Map([["deleted-converged", { code: 10008 }]]),
@@ -2715,7 +2625,7 @@ describe("syncOnce — persistent CURRENT/NEXT Schedule posts", () => {
     expect(pinSpies.get(`msg-${CURRENT_MARKER}-1`)).toHaveBeenCalledTimes(1);
   });
 
-  it("C: stale content + existing message — edit in place, no replacement", async () => {
+  it("stale content + existing message — edit in place, no replacement", async () => {
     const { client, editSpies } = makeDiscordClient(markerChildren(), {
       editableMessageIds: new Set(["sched-current", "sched-next"]),
     });
@@ -2749,7 +2659,7 @@ describe("syncOnce — persistent CURRENT/NEXT Schedule posts", () => {
     );
   });
 
-  it("D: stale content + confirmed Unknown Message — one replacement", async () => {
+  it("stale content + confirmed Unknown Message — one replacement", async () => {
     const { client } = makeDiscordClient(markerChildren(), {
       messageFetchErrors: new Map([["gone-stale", { code: 10008 }]]),
       editableMessageIds: new Set(["sched-next"]),
@@ -2786,7 +2696,7 @@ describe("syncOnce — persistent CURRENT/NEXT Schedule posts", () => {
     );
   });
 
-  it("E: stale content + transient network error — no replacement, identity kept", async () => {
+  it("stale content + transient network error — no replacement, identity kept", async () => {
     const { client } = makeDiscordClient(markerChildren(), {
       messageFetchErrors: new Map([["sched-current", new Error("ECONNRESET")]]),
       editableMessageIds: new Set(["sched-next"]),
@@ -2817,7 +2727,7 @@ describe("syncOnce — persistent CURRENT/NEXT Schedule posts", () => {
     expect(api.recordScheduleState).not.toHaveBeenCalled();
   });
 
-  it("F: stale content + Missing Access / Missing Permissions — no replacement", async () => {
+  it("stale content + Missing Access / Missing Permissions — no replacement", async () => {
     for (const code of [50001, 50013] as const) {
       const { client } = makeDiscordClient(markerChildren(), {
         messageFetchErrors: new Map([["sched-current", { code }]]),
@@ -2850,7 +2760,7 @@ describe("syncOnce — persistent CURRENT/NEXT Schedule posts", () => {
     }
   });
 
-  it("G: converged content + transient fetch error — no replacement", async () => {
+  it("converged content + transient fetch error — no replacement", async () => {
     const { client } = makeDiscordClient(markerChildren(), {
       messageFetchErrors: new Map([["sched-current", new Error("timeout")]]),
       editableMessageIds: new Set(["sched-next"]),
@@ -2930,7 +2840,7 @@ describe("syncOnce — persistent CURRENT/NEXT Schedule posts", () => {
     expect(deleteMessageSpies.get("old-sched-msg")).toHaveBeenCalledTimes(1);
   });
 
-  it("AA: Schedule sync failure does not block archive / signup work", async () => {
+  it("Schedule sync failure does not block archive / signup work", async () => {
     const children = new Map<string, Child>([
       [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
       [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],

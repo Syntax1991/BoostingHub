@@ -62,7 +62,7 @@ function rosterData(overrides: Partial<RosterEmbedData> = {}): RosterEmbedData {
 }
 
 describe("Discord Signup vs Roster embeds", () => {
-  it("A: signups only — volunteers appear on Signup, not on empty Roster", () => {
+  it("signups only — volunteers appear on Signup, not on empty Roster", () => {
     const volunteer = member({
       signupId: "s1",
       userId: "u1",
@@ -95,7 +95,7 @@ describe("Discord Signup vs Roster embeds", () => {
     expect(roster.fields?.every((f) => f.value === "No players selected yet.")).toBe(true);
   });
 
-  it("B: selected players remain on Signup and appear on Roster", () => {
+  it("selected players remain on Signup and appear on Roster", () => {
     const selected = member({
       signupId: "s2",
       userId: "u2",
@@ -146,7 +146,7 @@ describe("Discord Signup vs Roster embeds", () => {
     expect(roster.fields?.find((f) => f.name?.includes("Healers"))?.value).toContain("<@202>");
   });
 
-  it("C: external booster appears on Roster only", () => {
+  it("external booster appears on Roster only", () => {
     const signup = buildSignupEmbed(signupData({ uniqueSignupCount: 0 })).toJSON();
     const roster = buildRosterEmbed(
       rosterData({
@@ -176,7 +176,7 @@ describe("Discord Signup vs Roster embeds", () => {
     expect(roster.fields?.find((f) => f.name?.includes("DPS"))?.value).toContain("@dawn");
   });
 
-  it("D: lootbuddy stays separate from Tank/Heal/DPS on both embeds", () => {
+  it("lootbuddy stays separate from Tank/Heal/DPS on both embeds", () => {
     const loot = member({
       signupId: "lb1",
       userId: "ulb",
@@ -225,10 +225,5 @@ describe("Discord Signup vs Roster embeds", () => {
     expect(signup.fields?.some((f) => f.name?.startsWith("💰 Lootbuddies"))).toBe(true);
     expect(roster.fields?.some((f) => f.name?.includes("Lootbuddies (1/3)"))).toBe(true);
     expect(roster.fields?.find((f) => f.name?.includes("Tanks"))?.value).not.toContain("<@303>");
-  });
-
-  it("E: Signup and Roster are independently titled messages", () => {
-    expect(buildSignupEmbed(signupData()).toJSON().title).not.toBe("Roster");
-    expect(buildRosterEmbed(rosterData()).toJSON().title).toBe("Roster");
   });
 });

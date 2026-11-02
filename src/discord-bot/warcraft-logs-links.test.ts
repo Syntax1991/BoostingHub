@@ -270,10 +270,6 @@ describe("Warcraft Logs links and Discord Message Content access", () => {
     expect(result).toEqual({ cursor: "1003", reachedEnd: true, blocked: false });
   });
 
-  it("an untrusted author's visible link stays ignored", () => {
-    expect(findTrustedReportLinks([message({ id: "1", authorId: BOOSTER, content: URL_A })], trusted)).toEqual([]);
-  });
-
   it("a retiring channel with withheld content finishes its final scan at once — archival is never held back", async () => {
     const channel = fakeChannel(Array.from({ length: 250 }, (_, i) => logBotPost(String(1000 + i), "text", false)));
     const saveCursor = vi.fn(async () => {});

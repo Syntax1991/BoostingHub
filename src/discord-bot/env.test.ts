@@ -14,7 +14,9 @@ function baseEnv(overrides: Record<string, string | undefined> = {}): NodeJS.Pro
 
 describe("loadBotEnv — required variables", () => {
   it("throws listing every missing required variable", () => {
-    expect(() => loadBotEnv({} as unknown as NodeJS.ProcessEnv)).toThrow(/DISCORD_BOT_TOKEN/);
+    expect(() => loadBotEnv({} as unknown as NodeJS.ProcessEnv)).toThrow(
+      "Missing required Discord bot environment variable(s): DISCORD_BOT_TOKEN, DISCORD_APPLICATION_ID, DISCORD_GUILD_ID, BOOSTINGHUB_API_BASE_URL, BOOSTINGHUB_BOT_API_TOKEN",
+    );
   });
 
   it("throws when neither DISCORD_RUN_CATEGORY_ID nor the legacy signup channel is configured", () => {

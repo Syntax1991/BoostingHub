@@ -18,7 +18,6 @@ import { parseCustomId } from "@/discord-bot/custom-ids";
 import {
   DISCORD_EMBED_FIELD_COUNT_LIMIT,
   DISCORD_EMBED_FIELD_VALUE_LIMIT,
-  chunkEmbedFieldLines,
 } from "@/lib/discord-embed-field-chunking";
 import type { WowClass } from "@/models/enums";
 
@@ -177,13 +176,6 @@ describe("participant lines", () => {
     expect(groupSignupMembersByUser(offers)).toHaveLength(1);
     expect(formatSignupParticipantGroupLine(offers, INDICATORS)).toBe(`${INDICATORS.PALADIN} ${INDICATORS.MAGE} <@1>`);
     expect(formatSignupParticipantGroupLine(offers, null)).toBe("<@1>");
-  });
-
-  it("chunkEmbedFieldLines never splits a line, never drops lines, and keeps order", () => {
-    const lines = Array.from({ length: 80 }, (_, index) => `<@${100000000000000000 + index}> <:mage:1549226600000000125>`);
-    const chunks = chunkEmbedFieldLines(lines);
-    expect(chunks.flat()).toEqual(lines);
-    for (const chunk of chunks) expect(chunk.join("\n").length).toBeLessThanOrEqual(DISCORD_EMBED_FIELD_VALUE_LIMIT);
   });
 });
 
@@ -445,11 +437,6 @@ describe("buildSignupEmbed — section spacing", () => {
     const withoutNotes = buildSignupEmbed(rosterData(6, 2), { runUrl: RUN_URL }).toJSON().fields ?? [];
     expect(withoutNotes.find((field) => field.name.includes("Lootbuddies"))!.value.endsWith(GAP)).toBe(false);
     expect(withoutNotes.some((field) => field.name.includes("Notes"))).toBe(false);
-  });
-
-  it("spacing never pushes a 25-signup roster with notes past Discord limits", () => {
-    const notes = Array.from({ length: 6 }, (_, index) => note(`s${index}`, snowflake(700000 + index), "can also play Ele"));
-    expectWithinDiscordLimits(rosterData(25, 6, notes));
   });
 });
 

@@ -355,6 +355,150 @@
     "src/components/characters/character-offspec-display.test.ts": [
       "KEEP",
       "Offspec display across user, detail and admin views. One test compared a pure function with itself around a render; removed. Numbering dropped from titles"
+    ],
+    "src/discord-bot/client.quick-signup.test.ts": [
+      "KEEP",
+      "Source scan that the quick-signup button reaches its handler; weak but the only routing guard"
+    ],
+    "src/discord-bot/intents.test.ts": [
+      "KEEP",
+      "Gateway intents stay minimal and come from one list"
+    ],
+    "src/discord-bot/format.test.ts": [
+      "KEEP",
+      "Pure formatting helpers"
+    ],
+    "src/discord-bot/interactions/error-copy.test.ts": [
+      "KEEP",
+      "Domain code to Discord copy, server message fallback"
+    ],
+    "src/discord-bot/embeds/raidboost-announce.test.ts": [
+      "KEEP",
+      "Exact announce text and allowedMentions"
+    ],
+    "src/discord-bot/transcript-fetch.test.ts": [
+      "KEEP",
+      "Paging, cap, attachment metadata only"
+    ],
+    "src/discord-bot/custom-ids.test.ts": [
+      "KEEP",
+      "Round trips and rejection of foreign ids"
+    ],
+    "src/discord-bot/interactions/cancel-handler.test.ts": [
+      "KEEP",
+      "Cancel, reason modal, withdraw with reason"
+    ],
+    "src/discord-bot/discord-api-errors.test.ts": [
+      "KEEP",
+      "Permanent vs retryable Discord errors"
+    ],
+    "src/discord-bot/interactions/archive-handler.test.ts": [
+      "KEEP",
+      "Confirm step, server refusal, keep"
+    ],
+    "src/discord-bot/commands/guide.test.ts": [
+      "KEEP",
+      "Guide channels, never the old threads"
+    ],
+    "src/discord-bot/commands/mysignups.test.ts": [
+      "KEEP",
+      "Grouping per Run and selection states"
+    ],
+    "src/discord-bot/embeds/run-lifecycle-announcement.test.ts": [
+      "KEEP",
+      "Embeds link the Run, no URL without a base URL"
+    ],
+    "src/discord-bot/sync-emoji-cache.test.ts": [
+      "KEEP",
+      "One emoji fetch per pass and TTL reuse through syncOnce"
+    ],
+    "src/discord-bot/messages/run-start-message.test.ts": [
+      "KEEP",
+      "Mapping into the shared Final Setup renderer"
+    ],
+    "src/discord-bot/voice-presence-report.test.ts": [
+      "KEEP",
+      "Snapshot limits, trusted cache, report interval"
+    ],
+    "src/discord-bot/interactions/signup-staging.test.ts": [
+      "KEEP",
+      "Session isolation and TTL"
+    ],
+    "src/discord-bot/message-content.test.ts": [
+      "KEEP",
+      "Message Content classification. Spec numbers dropped from titles"
+    ],
+    "src/discord-bot/sync-run-help-ping.test.ts": [
+      "KEEP",
+      "Ping roles delivery, authority, never pings twice"
+    ],
+    "src/discord-bot/env.test.ts": [
+      "KEEP",
+      "Bot env parsing. The first test named every missing variable but checked one; it now checks the full message"
+    ],
+    "src/discord-bot/messages/raid-invite-message.test.ts": [
+      "KEEP",
+      "Exact invite text with Channel and Voice lines. One assertion repeated the one before it"
+    ],
+    "src/discord-bot/archive-transcript.test.ts": [
+      "KEEP",
+      "Ticket Tool layout and a byte-exact regression snapshot"
+    ],
+    "src/discord-bot/transcript-content.test.ts": [
+      "KEEP",
+      "Withheld content marked unavailable, HTML escaping"
+    ],
+    "src/discord-bot/embeds/signup-roster-split.test.ts": [
+      "KEEP",
+      "Signup vs Roster embed content. The title-only test repeated the first test"
+    ],
+    "src/discord-bot/global-announcements.test.ts": [
+      "KEEP",
+      "One-time announcement and its failure isolation. The env test repeated env.test.ts"
+    ],
+    "src/discord-bot/embeds/roster-embed.test.ts": [
+      "KEEP",
+      "Roster embed fields, footer and links"
+    ],
+    "src/discord-bot/class-emoji-lookup.test.ts": [
+      "KEEP",
+      "Emoji cache TTL, single flight, eviction and failure paths"
+    ],
+    "src/discord-bot/sync-voice.test.ts": [
+      "KEEP",
+      "Voice lane through syncOnce. Assertions are Discord calls, which are the output of this code. Spec numbers dropped from titles"
+    ],
+    "src/discord-bot/voice-channels.test.ts": [
+      "KEEP",
+      "Voice channel state machine and pool. Three duplicates merged into the tests they repeated"
+    ],
+    "src/discord-bot/embeds/signup-embed.test.ts": [
+      "KEEP",
+      "Signup embed layout and Discord limits. The chunking test moved to discord-embed-field-chunking.test.ts; one limit test repeated the limits loop"
+    ],
+    "src/discord-bot/warcraft-logs-links.test.ts": [
+      "KEEP",
+      "Cursor-based log scanning, retry and horizon rules. One test repeated a case of the first test"
+    ],
+    "src/discord-bot/sync-start-post.test.ts": [
+      "KEEP",
+      "Final Setup post, allowedMentions and voice line. Removed two assertions on names that never occur in the data and a test whose builders cannot produce the line it checked for"
+    ],
+    "src/discord-bot/interactions/signup-flow.test.ts": [
+      "KEEP",
+      "Staging flow and Quick Signup. One regex accepted any wording; it now checks the exact copy"
+    ],
+    "src/discord-bot/channel-reconciliation.test.ts": [
+      "KEEP",
+      "Channel moves, renames, week section ordering. Two tests repeated others with the same input"
+    ],
+    "src/discord-bot/sync-loop.test.ts": [
+      "KEEP",
+      "End-to-end sync pass against a Discord fake. One conditional test could assert nothing and now asserts both outcomes; three duplicates merged; dead code removed; letter prefixes dropped"
+    ],
+    "src/lib/discord-embed-field-chunking.test.ts": [
+      "KEEP",
+      "Chunking rules; gained the ordering test from signup-embed.test.ts"
     ]
   },
   "tests": {
@@ -429,6 +573,30 @@
     "src/components/runs/run-creation-success-path.test.ts::runCreateSuccessPath > redirects multiple created Runs to Manage Runs with massCreated count": [
       "REWRITE",
       "Redundant negative assertion removed"
+    ],
+    "src/discord-bot/env.test.ts::loadBotEnv — required variables > throws listing every missing required variable": [
+      "REWRITE",
+      "Checked one name; now checks the full list"
+    ],
+    "src/discord-bot/interactions/signup-flow.test.ts::Quick Signup button > renders Booster-access and signup-closed domain errors through describeBotApiError": [
+      "REWRITE",
+      "Regex accepted any wording; now exact copy"
+    ],
+    "src/discord-bot/sync-loop.test.ts::syncOnce — same-pass first-channel positioning > ARCHIVE target does not provision or position into CURRENT/NEXT": [
+      "REWRITE",
+      "Assertion was inside an if and could run zero times; now asserts the channel is created and not positioned"
+    ],
+    "src/discord-bot/sync-loop.test.ts::syncOnce — same-pass first-channel positioning > retries same-pass when fresh Discord order stays wrong after first setPositions": [
+      "REWRITE",
+      "Absorbs the exact call count of its duplicate"
+    ],
+    "src/discord-bot/voice-channels.test.ts::reconcileRunVoiceChannels — terminal / app-archived (RETIRE_IF_EMPTY) > Unknown Channel clears the id and never creates a channel for a terminal Run": [
+      "REWRITE",
+      "Merged with the no-create test of the same input"
+    ],
+    "src/discord-bot/sync-start-post.test.ts::syncOnce — Final Setup explicit allowedMentions > send: only unique, non-null selected roster Discord ids may be mentioned; no @everyone/@here/role parsing": [
+      "REWRITE",
+      "Removed checks for names that are not in the data"
     ]
   },
   "removed": {
@@ -487,6 +655,58 @@
     "src/components/runs/signup-dialog.wcl.test.ts::BoosterCharacterChecklist Warcraft Logs links > still shows WCL for a reservation-blocked Booster Character with an id (second copy)": [
       "MERGE",
       "Duplicate title and scenario; its conflicting-run assertion moved into the first copy"
+    ],
+    "src/discord-bot/sync-loop.test.ts::syncOnce — same-pass first-channel positioning > J: cache view alone cannot hide a wrong fresh server order": [
+      "MERGE",
+      "Same setup and checks as the retry test"
+    ],
+    "src/discord-bot/sync-loop.test.ts::syncOnce — UserNotification DMs > marks FAILED_PERMANENT when Discord rejects the notification DM": [
+      "MERGE",
+      "Same as the 50007 case of the failure classification table"
+    ],
+    "src/discord-bot/sync-start-post.test.ts::Signup / Roster embeds unchanged by Final Setup LFG > does not put the Final Setup LFG line into signup or roster embeds": [
+      "REMOVE",
+      "The embed builders never use the LFG line, so the check cannot fail"
+    ],
+    "src/discord-bot/global-announcements.test.ts::loadBotEnv — announcement channel optional > startup succeeds when DISCORD_ANNOUNCEMENT_CHANNEL_ID is unset": [
+      "MERGE",
+      "Covered by env.test.ts"
+    ],
+    "src/discord-bot/channel-reconciliation.test.ts::reconcileExistingRunChannel — name drift > name already correct: setName is not called": [
+      "MERGE",
+      "Subset of the fully-correct test with the same input"
+    ],
+    "src/discord-bot/channel-reconciliation.test.ts::reconcileWeekSectionPositions — drift correction > category drift: a channel outside the category (per reconcileExistingRunChannel) is a separate concern — position reconciliation only orders channels already listed as children": [
+      "MERGE",
+      "Same input and result as the CURRENT drift test"
+    ],
+    "src/discord-bot/warcraft-logs-links.test.ts::Warcraft Logs links and Discord Message Content access > an untrusted author's visible link stays ignored": [
+      "MERGE",
+      "Same case as message 2 of the first findTrustedReportLinks test"
+    ],
+    "src/discord-bot/voice-channels.test.ts::reconcileRunVoiceChannels — create → persist atomicity > E: normal success → persisted, then resolved; no compensation": [
+      "MERGE",
+      "Its one extra assertion moved into the first PROVISION test"
+    ],
+    "src/discord-bot/voice-channels.test.ts::reconcileRunVoiceChannels — terminal / app-archived (RETIRE_IF_EMPTY) > Example B: occupied 5 → 2 → 0 connected — deleted only on the poll after the last user leaves": [
+      "MERGE",
+      "Repeats the occupied and empty cases above it"
+    ],
+    "src/discord-bot/voice-channels.test.ts::reconcileRunVoiceChannels — terminal / app-archived (RETIRE_IF_EMPTY) > never creates a channel for a terminal Run": [
+      "MERGE",
+      "Merged into the Unknown Channel test with the same input"
+    ],
+    "src/discord-bot/embeds/signup-embed.test.ts::buildSignupEmbed — section spacing > spacing never pushes a 25-signup roster with notes past Discord limits": [
+      "MERGE",
+      "The limits loop already checks 25 boosters with notes"
+    ],
+    "src/discord-bot/embeds/signup-embed.test.ts::participant lines > chunkEmbedFieldLines never splits a line, never drops lines, and keeps order": [
+      "MERGE",
+      "Moved to src/lib/discord-embed-field-chunking.test.ts"
+    ],
+    "src/discord-bot/embeds/signup-roster-split.test.ts::Discord Signup vs Roster embeds > E: Signup and Roster are independently titled messages": [
+      "MERGE",
+      "Same title checks as the first test"
     ]
   }
 }
