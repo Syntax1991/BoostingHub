@@ -21,6 +21,7 @@ import {
 import { customPingSchema } from "@/validators/roster";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
+import { assertIsolatedTestDatabase } from "@tests/fixtures/db-fixtures";
 import { venomousCreateInput } from "@tests/fixtures/test-run-input";
 import { WOW_CLASSES, type WowClass } from "@/models/enums";
 import { raidRepository } from "@/repositories/raid.repository";
@@ -61,29 +62,31 @@ const otherLead = asUser(ids.otherLead, "RAID_LEAD");
 const admin = asUser(ids.admin, "ADMIN");
 
 async function cleanupRun(runId: string) {
-  await orm.RunDiscordAnnouncement.where({ runId }).delete().catch(() => {});
-  await orm.RunDiscordPost.where({ runId }).delete().catch(() => {});
+  assertIsolatedTestDatabase();
+  await orm.RunDiscordAnnouncement.where({ runId }).deleteAndCount();
+  await orm.RunDiscordPost.where({ runId }).deleteAndCount();
   const roster = (await orm.RunRoster.where({ runId }).first()) as { id: string } | null;
   if (roster) {
-    await orm.RunExternalBooster.where({ rosterId: roster.id }).delete().catch(() => {});
-    await orm.RunRosterEntry.where({ rosterId: roster.id }).delete().catch(() => {});
-    await orm.RunRoster.where({ id: roster.id }).delete().catch(() => {});
+    await orm.RunExternalBooster.where({ rosterId: roster.id }).deleteAndCount();
+    await orm.RunRosterEntry.where({ rosterId: roster.id }).deleteAndCount();
+    await orm.RunRoster.where({ id: roster.id }).deleteAndCount();
   }
   const signups = (await orm.RunSignup.where({ runId }).select("id").all()) as Array<{ id: string }>;
   for (const signup of signups) {
-    await orm.RunSignupRole.where({ signupId: signup.id }).delete().catch(() => {});
-    await orm.RunSignup.where({ id: signup.id }).delete().catch(() => {});
+    await orm.RunSignupRole.where({ signupId: signup.id }).deleteAndCount();
+    await orm.RunSignup.where({ id: signup.id }).deleteAndCount();
   }
-  await orm.RunDomainEvent?.where({ runId }).delete().catch(() => {});
-  await orm.Run.where({ id: runId }).delete().catch(() => {});
+  await orm.RunDomainEvent?.where({ runId }).deleteAndCount();
+  await orm.Run.where({ id: runId }).deleteAndCount();
 }
 
 async function cleanupUsers() {
+  assertIsolatedTestDatabase();
   for (const userId of Object.values(ids)) {
     const runs = (await orm.Run.where({ raidLeadId: userId }).select("id").all()) as Array<{ id: string }>;
     for (const run of runs) await cleanupRun(run.id);
-    await orm.Character.where({ userId }).delete().catch(() => {});
-    await orm.User.where({ id: userId }).delete().catch(() => {});
+    await orm.Character.where({ userId }).deleteAndCount();
+    await orm.User.where({ id: userId }).deleteAndCount();
   }
 }
 

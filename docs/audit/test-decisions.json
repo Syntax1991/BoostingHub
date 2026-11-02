@@ -1343,6 +1343,10 @@
     "tests/integration/services/notification-roster-events.test.ts": [
       "REWRITE",
       "Migrated setDraftSelection→saveDraftSelection adapter; fixtures respect one-booster-per-user; Save Roster notifies (production); assertIsolated + deleteAndCount cleanup"
+    ],
+    "tests/integration/services/late-fill-help.integration.test.ts": [
+      "REWRITE",
+      "assertIsolatedTestDatabase; verified deleteAndCount cleanup (no swallowed .delete().catch); saveDraftSelection already used"
     ]
   },
   "tests": {

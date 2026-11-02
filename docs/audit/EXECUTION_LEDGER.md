@@ -132,7 +132,7 @@ Order follows the assignment. Each line is one PR, stacked on the one before.
 | 4 | MVCS boundaries: app and controllers no longer import repositories; lib no longer imports components | PR #326, awaiting review |
 | 4b | Move pure rules from `src/services` to `src/domain` | PR #327, awaiting review |
 | 5 | Guide code: drop legacy paths, share publisher code | PR #328, awaiting review |
-| 6 | Test cleanup by module | Phase 1 DONE ([PHASE-1.md](reports/PHASE-1.md)). Phase 2 in progress on `test/audit-batch-a`: 335 of 341 live files decided (+1 tombstone), 3536 of 3825 ledger tests reviewed, 289 UNREVIEWED across 6 files |
+| 6 | Test cleanup by module | Phase 1 DONE ([PHASE-1.md](reports/PHASE-1.md)). Phase 2 in progress on `test/audit-batch-a`: 336 of 341 live files decided (+1 tombstone), 3594 of 3825 ledger tests reviewed, 231 UNREVIEWED across 5 files |
 | 7 | Frontend: error, loading and not-found pages; shared dialog effect | PR #329, awaiting review |
 | 8 | Performance, measured: run detail payload, event purge, rate-limit log | PR #330, awaiting review |
 | 9 | Dependencies and final verification | Dependencies audited, no change; TruffleHog scan still invalid |
