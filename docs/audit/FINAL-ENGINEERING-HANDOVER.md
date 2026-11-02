@@ -1,15 +1,29 @@
 # Final engineering freeze and handover
 
+Audit-branch freeze note after the six-phase master audit. This **supplements** the canonical product handover; it does not replace it.
+
+Related documents: [HANDOVER.md](../HANDOVER.md) (canonical status, debt, takeover), [DOCUMENTATION-COMPLIANCE.md](DOCUMENTATION-COMPLIANCE.md), [reports/FINAL-ACCEPTANCE-REVIEW.md](reports/FINAL-ACCEPTANCE-REVIEW.md), [DEVELOPER.md](../DEVELOPER.md), [DEPLOYMENT.md](../DEPLOYMENT.md), [OPERATIONS.md](../OPERATIONS.md).
+
 | Field | Value |
 | --- | --- |
 | Date | 2026-11-02 |
 | Branch | `test/audit-batch-a` |
 | Acceptance HEAD | `755c971` (suite evidence + acceptance report) |
-| Freeze | This documentation commit on top of `755c971`; branch tip after push is the freeze HEAD |
 | Acceptance | [FINAL-ACCEPTANCE-REVIEW.md](reports/FINAL-ACCEPTANCE-REVIEW.md) — **ACCEPTED WITH DOCUMENTED RISKS** |
-| Status | **Engineering freeze.** No further audit phases. No merge, deploy, or production action from this document. |
+| Status | **Engineering freeze** on further audit phases. Documentation compliance and CSP Report-Only prep may still land on this branch when owner-authorized. No merge, deploy, or production action from this document. |
 
-This is the owner-facing freeze note after the six-phase master audit. Broader product/operator handover (access, secrets, Discord apps) remains in [HANDOVER.md](../HANDOVER.md).
+## Contents
+
+- [1. Git freeze state](#1-git-freeze-state)
+- [2. Architecture (as left by the audit)](#2-architecture-as-left-by-the-audit)
+- [3. Tests and validation](#3-tests-and-validation)
+- [4. Database safety](#4-database-safety)
+- [5. Deployment prerequisites (owner-approved only)](#5-deployment-prerequisites-owner-approved-only)
+- [6. Completed engineering vs owner/ops tasks](#6-completed-engineering-vs-ownerops-tasks)
+- [7. Remaining owner items (acceptance risks)](#7-remaining-owner-items-acceptance-risks)
+- [8. Known risks (short)](#8-known-risks-short)
+- [9. Freeze confirmation checklist](#9-freeze-confirmation-checklist)
+- [10. Stop](#10-stop)
 
 ---
 
@@ -146,10 +160,10 @@ Do not create a `production` branch or new repository as part of this freeze.
 
 ### CSP — Content-Security-Policy
 
-- **State:** Not set. Other headers ship from `next.config.ts` (HSTS, nosniff, frame deny, referrer, permissions; `poweredByHeader: false`).
-- **Risk:** Weaker XSS defense-in-depth.
-- **Severity:** Medium (gap), not an observed exploit in the audit.
-- **Owner action:** Inventory inline scripts and image hosts → Report-Only in staging → enforce. Do not flip on blindly from the panel.
+- **State:** Inventory and **Report-Only** preparation on the audit branch — see [CSP-PREPARATION.md](CSP-PREPARATION.md) and [OPERATIONS.md](../OPERATIONS.md#content-security-policy). Other headers already ship from `next.config.ts`.
+- **Risk:** Weaker XSS defense-in-depth until enforce; Report-Only can surface violations without blocking users.
+- **Severity:** Medium (gap) until enforce is proven safe.
+- **Owner action:** Review Report-Only reports in a staging/production window → tighten → flip to enforcing CSP. Do not enable a different CSP from the hosting panel.
 
 ### Apache `X-Powered-By: PleskLin`
 
@@ -196,11 +210,13 @@ Operator notes also live in [OPERATIONS.md](../OPERATIONS.md#security-checklist)
 
 ## 10. Stop
 
-Engineering work on the master audit is finished. A16 is closed. Await the owner’s decision on merge, the three remaining ops items (CSP, Apache header, rate-limit journal), and any production release.
+Engineering work on the master audit is finished. A16 is closed. Documentation compliance corrections and CSP Report-Only preparation are recorded under `docs/audit/`. Await the owner’s decision on merge, CSP **enforce**, Apache header, rate-limit journal, and any production release.
 
 Primary pointers:
 
 - Acceptance: [reports/FINAL-ACCEPTANCE-REVIEW.md](reports/FINAL-ACCEPTANCE-REVIEW.md)
+- Documentation compliance: [DOCUMENTATION-COMPLIANCE.md](DOCUMENTATION-COMPLIANCE.md)
+- CSP prep: [CSP-PREPARATION.md](CSP-PREPARATION.md)
 - Ledger: [EXECUTION_LEDGER.md](EXECUTION_LEDGER.md)
 - Product/operator handover: [../HANDOVER.md](../HANDOVER.md)
 - Deploy / ops: [../DEPLOYMENT.md](../DEPLOYMENT.md), [../OPERATIONS.md](../OPERATIONS.md)

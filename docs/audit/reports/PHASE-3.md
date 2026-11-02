@@ -85,3 +85,7 @@ Integration tests that proved legacy `CharacterAvailabilityBlock` rows are ignor
 ## RELEASE SAFETY
 
 No merges, deployments, production database writes, live Discord operations, force-pushes, history rewrites, or new repository creation. Wire change for A19 is additive-safe for older bots that already ignored empty `raidInvites` (`?? []`); this branch removes the field for co-deployed web+bot.
+
+## Errata (after this phase)
+
+- **A16:** This report correctly left `src/lib/gold.ts` for an owner decision. The owner later approved deletion; the file is gone on `test/audit-batch-a` (commit `5169ef6`). Do not treat the deferred wording above as current.

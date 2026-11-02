@@ -28,6 +28,7 @@ Values and the private server details (access, certificate, provider account) ar
 - [Restore (operator decision only)](#restore-operator-decision-only)
 - [Operational dependencies](#operational-dependencies)
 - [Security checklist](#security-checklist)
+- [Content Security Policy](#content-security-policy)
 - [Operational non-goals](#operational-non-goals)
 
 ## Runtime overview
@@ -480,11 +481,16 @@ Backups are stored on the production host only. An off-site copy is not document
 - Ops scripts never print secret values. Use `env-status.py` rather than `cat .env`.
 - Development switches (`DEV_AUTH_ENABLED`, `DEV_ACCOUNT_BOOTSTRAP_ENABLED`) stay `false`.
 - **`npm run db:seed` deletes existing data** and replaces it with test fixtures. Never run it on the server. It refuses `NODE_ENV=production`, the production database, non-local hosts, extra connection parameters and any database not named in `SEED_CONFIRM_DATABASE`. To recover data, use the restore procedure, never the seed.
-- Next.js already suppresses `X-Powered-By: Next.js` (`poweredByHeader: false`). The Apache/Plesk reverse proxy may still emit `X-Powered-By: PleskLin`. Unset that header in the hosting panel (or `Header unset X-Powered-By`) — it is server config, not an application deploy.
-- There is still no Content-Security-Policy. Do not enable an enforcing CSP from the panel without an inventory of inline scripts and image hosts first (see audit acceptance report).
+- Next.js sends these headers on every path (`next.config.ts`): `Strict-Transport-Security` (15552000 s), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` (camera/microphone/geolocation disabled). `poweredByHeader` is false.
+- Next.js already suppresses `X-Powered-By: Next.js`. The Apache/Plesk reverse proxy may still emit `X-Powered-By: PleskLin`. Unset that header in the hosting panel (or `Header unset X-Powered-By`) — it is server config, not an application deploy.
+- Content-Security-Policy: see [Content Security Policy](#content-security-policy). Do not enable an **enforcing** CSP from the hosting panel without matching the app inventory.
 - After a Discord-bot deploy, confirm rate-limit waits with
   `journalctl -u boostinghub-discord-bot --since "1 hour ago" | grep 'rate limited'`.
   The bot logs each Discord REST rate-limit wait; absence of lines does not prove the sync is fast, only that no wait was observed in that window.
+
+## Content Security Policy
+
+Status on the audit branch: **Report-Only preparation** in `next.config.ts` (not enforcing). Inventory and rollout notes: [docs/audit/CSP-PREPARATION.md](audit/CSP-PREPARATION.md). Owner decision required before flipping to enforce or changing production headers outside the app.
 
 ## Operational non-goals
 

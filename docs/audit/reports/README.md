@@ -1,7 +1,9 @@
 # Audit phase reports
 
 Branch: `test/audit-batch-a`. Authoritative status: [../EXECUTION_LEDGER.md](../EXECUTION_LEDGER.md).  
-**Freeze / owner handover:** [../FINAL-ENGINEERING-HANDOVER.md](../FINAL-ENGINEERING-HANDOVER.md).
+**Freeze / owner handover:** [../FINAL-ENGINEERING-HANDOVER.md](../FINAL-ENGINEERING-HANDOVER.md).  
+**Documentation compliance:** [../DOCUMENTATION-COMPLIANCE.md](../DOCUMENTATION-COMPLIANCE.md).  
+**CSP preparation:** [../CSP-PREPARATION.md](../CSP-PREPARATION.md).
 
 | Phase | Report | Focus |
 | --- | --- | --- |

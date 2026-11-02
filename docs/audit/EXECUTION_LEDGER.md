@@ -1,10 +1,13 @@
 # Refactoring execution ledger
 
-Working record for the refactoring before the move to `Syntax1991/ManawyrmHub`. It survives interrupted sessions: read this first when continuing. It is removed before the migration commit.
+Working record for the refactoring before the move to `Syntax1991/ManawyrmHub`. It survives interrupted sessions. It is removed before the migration commit.
 
-- **Test decisions:** [test-decisions.json](test-decisions.json) (input) and [test-ledger.tsv](test-ledger.tsv) (one row per discovered test). `UNREVIEWED` means nobody has read that test yet.
-- **Phase reports:** [reports/](reports/) — mandatory `PHASE-<N>.md` at each phase gate (finish → validate → report → commit/push → continue). Reports are not approval checkpoints.
+**Current status (2026-11-02):** Phases 1–6 complete. Acceptance: **ACCEPTED WITH DOCUMENTED RISKS** ([reports/FINAL-ACCEPTANCE-REVIEW.md](reports/FINAL-ACCEPTANCE-REVIEW.md)). Engineering freeze: [FINAL-ENGINEERING-HANDOVER.md](FINAL-ENGINEERING-HANDOVER.md). A16 closed. Documentation compliance: [DOCUMENTATION-COMPLIANCE.md](DOCUMENTATION-COMPLIANCE.md). Sections below the baseline and continuation notes are **historical working notes** — prefer the freeze note and phase reports for current facts when they disagree with older continuation paragraphs.
+
+- **Test decisions:** [test-decisions.json](test-decisions.json) (input) and [test-ledger.tsv](test-ledger.tsv) (one row per discovered test). `UNREVIEWED` means nobody has read that test yet (count is now 0).
+- **Phase reports:** [reports/](reports/) — mandatory `PHASE-<N>.md` at each phase gate (finish → validate → report → commit/push → continue). Reports are historical gate evidence, not living product docs. Canonical product docs remain under `docs/*.md` (see [README.md](../../README.md)).
 - **Rules:** one agent, one scope per PR, no merge, no deploy, no production writes, no live Discord changes, no history rewrite. Merges and deploys need the owner's approval.
+- **`hardcoding-findings.md`:** promised earlier; **not authored** (Phase 5). Treat as optional owner-commissioned inventory, not a missing gate failure.
 
 ## Baseline
 
@@ -369,7 +372,7 @@ Phase 2 complete. See [PHASE-2.md](reports/PHASE-2.md). Full suite 341 files / 3
 
 Master audit Phases 1–6 complete on `test/audit-batch-a` — see [PHASE-6.md](reports/PHASE-6.md).  
 **Acceptance review:** [FINAL-ACCEPTANCE-REVIEW.md](reports/FINAL-ACCEPTANCE-REVIEW.md) — verdict **ACCEPTED WITH DOCUMENTED RISKS**. Fresh suite ×2 on `boostting_bot_test_audit` (338/3801) without reset.  
-**Engineering freeze:** [FINAL-ENGINEERING-HANDOVER.md](FINAL-ENGINEERING-HANDOVER.md). A16 (`gold.ts`) removed on owner approval. Remaining owner items: CSP, Apache `X-Powered-By`, post-deploy rate-limit journal. No further audit phases. Stop for owner decision before merge/deploy.
+**Engineering freeze:** [FINAL-ENGINEERING-HANDOVER.md](FINAL-ENGINEERING-HANDOVER.md). A16 (`gold.ts`) removed on owner approval. Documentation compliance: [DOCUMENTATION-COMPLIANCE.md](DOCUMENTATION-COMPLIANCE.md). CSP Report-Only prep: [CSP-PREPARATION.md](CSP-PREPARATION.md). Remaining owner items: CSP **enforce**, Apache `X-Powered-By`, post-deploy rate-limit journal. No further audit phases. Stop for owner decision before merge/deploy.
 
 
 Handover to Cursor (2026-11-02): Claude left branch `test/audit-batch-a` at local `af6bb59` (1 commit ahead of origin `95c2eaf`, `setDraftSelection`→`saveDraftSelection` for six audited suites) plus uncommitted fixture isolation rewrites for three remaining suites. Cursor recovered that work, fixed one TDZ shadowing bug in `roster-pre-start-replacements`, validated 67/67 twice on `boostting_bot_test_audit` without reset, and recorded the decisions below.

@@ -81,3 +81,8 @@ No new production-facing perf change this phase — prior wins remain the baseli
 ## RELEASE SAFETY
 
 No merges, deployments, production database writes, live Discord operations, force-pushes, history rewrites, or new repository creation. Dependency override is lockfile-scoped and verified with `npm audit --omit=dev`.
+
+## Errata (after this phase)
+
+- **A16:** Deferred here; later deleted on owner approval (`5169ef6`).
+- **CSP:** Deferred here; Report-Only preparation landed later on the audit branch — see [../CSP-PREPARATION.md](../CSP-PREPARATION.md). Enforcement remains an owner decision.

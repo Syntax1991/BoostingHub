@@ -178,7 +178,6 @@ Require the service token only.
 | `roster` | `channelId`, `messageId`, optional `postRevision`, `classEmojiFingerprint` | Records the roster message; `postRevision` acknowledges an explicit Publish |
 | `start` | `channelId`, `messageId`, optional `voiceChannelId` | Records the Final Setup post |
 | `archive-artifacts` | `closeMessageId`, `transcriptMessageId`, `transcriptHtml` (max 5 MB), `transcriptFilename` | Stores archive message ids and the transcript |
-| `raid-invite` | `signupId` | Appends to the legacy invite list |
 | `wcl-scan-cursor` | `channelId`, `messageId` | Advances the Run channel's scan cursor, forward only |
 | `notification-dm` | `notificationId`, `result: SENT\|FAILED_PERMANENT` | Records a Run notification's DM outcome |
 | `run-announcement` | `announcementId`, `result: SENT\|SKIPPED\|FAILED_PERMANENT` | Records a channel announcement's outcome |

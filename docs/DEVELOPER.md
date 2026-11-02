@@ -176,7 +176,7 @@ Application and business rules: Boosting Roles (Booster / Lootbuddy grant/revoke
 
 #### Repository
 
-Prisma 8 access lives here (`orm.Model` via `src/lib/prisma.ts`). Views and most controllers never import Prisma.
+Prisma 8 access lives here (`orm.Model` via `src/lib/prisma.ts`). Inside `db.transaction`, use `tx.orm.public` (typed `typeof orm`) — do not cast `tx.orm` through `unknown`. Views and most controllers never import Prisma.
 
 #### External integrations
 
@@ -344,7 +344,7 @@ It is safe to re-run. It is not random. Seed is a fixture, not required producti
 
 Default password: `dev-login-only` (override with `DEV_AUTH_PASSWORD`).
 
-Tests under `tests/integration/` run against `TEST_DATABASE_URL`, which `npm run test:db:reset` migrates and seeds. Audited suites create their own users, Characters and Runs with fresh ids and delete exactly those rows; they may read seeded rows through `SEED_IDS` (`src/prisma/seed-ids.ts`). Suites still open in the test audit (`docs/audit/EXECUTION_LEDGER.md`) can mutate seeded rows: `tests/integration/services/roster.service.test.ts` mutates **Roster Lab Heroic**, so re-seed after it if you need the original demo rows.
+Tests under `tests/integration/` run against `TEST_DATABASE_URL`, which `npm run test:db:reset` migrates and seeds. Most audited suites create their own users, Characters and Runs with fresh ids and delete exactly those rows; they may read seeded rows through `SEED_IDS` (`src/prisma/seed-ids.ts`). A few suites still mutate seeded Roster Lab fixtures (notably `tests/integration/services/roster.service.test.ts` for **Roster Lab Heroic**); re-seed after them if you need the original demo rows. The test audit on `test/audit-batch-a` is complete — see [docs/audit/FINAL-ENGINEERING-HANDOVER.md](audit/FINAL-ENGINEERING-HANDOVER.md).
 
 ### Temporary Prisma Postgres
 
@@ -738,7 +738,7 @@ npm run build
 
 - Pure, fully unit-tested: `custom-ids.ts`, `format.ts`, `discord-channel-name.ts`'s `buildDiscordRunChannelName`, `wow-run-week.ts`'s `classifyRunWeek` (basic classification, half-open boundary equality, winter/summer, and both DST transitions — with an explicit test proving the CURRENT→NEXT gap is *not* a fixed 168 UTC hours across a transition), `discord-schedule.ts` (Schedule eligibility, CURRENT/NEXT filtering, ordering, signature convergence, empty state, format-version bump), `embeds/signup-embed.ts`, `embeds/roster-embed.ts`, `bot-api-client.ts` (mocked `fetch`, including `listSyncWork`'s `channels[]`), `env.ts`'s `loadBotEnv` (the one active category, independent marker-channel resolution, and the ARCHIVE category), `interactions/error-copy.ts`, `interactions/signup-flow.ts`'s `buildSelectOptions`/`parseSelectedOffers`, `commands/mysignups.ts`'s `formatMySignups`, `channel-reconciliation.ts`'s `reconcileExistingRunChannel`/`reconcileChannels` (CURRENT/NEXT sharing one category, ARCHIVE move, rename, missing-category, missing-channel, failure-isolation), and `reconcileWeekSectionPositions` (chronological CURRENT/NEXT ordering, manual drift correction, marker identity/name/parent never touched even though their position may appear in the payload, unmanaged channels keep their relative position, missing/invalid marker config, ARCHIVE items ignored — all against fake position lists, no discord.js or live token needed). Schedule edit-in-place / deleted-message recovery / failure isolation vs archive+signup: `sync-loop.test.ts`. Service lane: `discord-schedule-sync.test.ts`.
 - Bot API routes: tested by calling the exported Route Handler functions directly with constructed `NextRequest`s (`tests/integration/app/api/bot/bot-routes.test.ts`), including a contract test asserting `GET /api/bot/discord/sync` exposes `channels` alongside `signups`/`roster`, each carrying `targetBucket` and `scheduledStartAt` — no live Discord credentials required.
-- `discord-sync.service.ts`: tested against the real dev database like every other Service, including channel provisioning/idempotency/rename, the independent `channels` lane, and weekly target resolution with an injectable `now` — CURRENT/NEXT eligible for first provisioning, PAST/FUTURE blocked, app archival overriding week classification, and a same-Run rollover test (NEXT → CURRENT across two `listSyncWork` calls with no Run mutation in between) (`src/services/discord-sync.service.test.ts`).
+- `discord-sync.service.ts`: tested against the real test database like every other Service, including channel provisioning/idempotency/rename, the independent `channels` lane, and weekly target resolution with an injectable `now` — CURRENT/NEXT eligible for first provisioning, PAST/FUTURE blocked, app archival overriding week classification, and a same-Run rollover test (NEXT → CURRENT across two `listSyncWork` calls with no Run mutation in between) (`tests/integration/services/discord-sync.service.test.ts`).
 - The discord.js Client wiring itself (`client.ts`, `sync-loop.ts`'s actual channel fetch/create/message send/edit/`setPositions` calls, `register-commands.ts`) cannot be unit-tested without a live bot token — it was verified structurally (typecheck, production build, and a boot smoke test against Discord's own token validation) rather than end-to-end. `sync-loop.ts` is kept as thin as possible specifically so the real reconciliation *logic* lives in the unit-tested `channel-reconciliation.ts` instead.
 
 ## Authentication and authorization
@@ -4064,6 +4064,8 @@ Decisions a new maintainer should know before changing them. The detailed rules 
 | External jobs are one-shot processes under systemd timers | The app owns no timer; PostgreSQL advisory locks prevent overlap |
 | No financial domain | Removed on purpose (migration `20261009T1352_remove_payout_settlement`) |
 | Schema changes only move forward | Rollback never reverses a migration; a restore is a separate operator decision |
+| HTTP security headers from `next.config.ts` | HSTS, nosniff, frame denial, referrer and permissions policies; `poweredByHeader: false`. CSP is Report-Only until an inventory is proven safe — see [OPERATIONS.md](OPERATIONS.md#security-checklist) |
+| Discord sync: Raid Invites only as `notificationDms` | Empty `raidInvites` lane removed (audit A19); web and bot must co-deploy |
 
 ## Git workflow
 
