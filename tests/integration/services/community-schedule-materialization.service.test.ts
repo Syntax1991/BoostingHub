@@ -5,7 +5,6 @@ import {
   COMMUNITY_SCHEDULE_TIME_ZONE,
   resolveScheduleSlotOccurrence,
 } from "@/lib/community-schedule";
-import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
 import { TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
@@ -17,113 +16,25 @@ import { communityScheduleService } from "@/services/community-schedule.service"
 import { communityScheduleOccurrenceService } from "@/services/community-schedule-occurrence.service";
 import { runService } from "@/services/run.service";
 import { venomousCreateInput } from "@tests/fixtures/test-run-input";
+import { testActor } from "@tests/fixtures/actors";
+import {
+  assertIsolatedTestDatabase,
+  createTestUser,
+  deleteCreatedRows,
+} from "@tests/fixtures/db-fixtures";
+import { expectDomainError } from "@tests/helpers/domain-error";
 
-/** Distinct from character.service.test.ts (`cm…`) and community-schedule.service.test.ts (`cs…`). */
-const ids = {
-  user: "aaaaaaaa-aaaa-4aaa-8aaa-csm000000001",
-  lead: "aaaaaaaa-aaaa-4aaa-8aaa-csm000000002",
-  otherLead: "aaaaaaaa-aaaa-4aaa-8aaa-csm000000003",
-  admin: "aaaaaaaa-aaaa-4aaa-8aaa-csm000000004",
+const owned = {
+  runIds: [] as string[],
+  userIds: [] as string[],
+  slotIds: [] as string[],
+  templateIds: [] as string[],
 };
 
-const testUserIds = new Set(Object.values(ids));
-
-function asUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"]): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@csm.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
-
-async function createUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"]) {
-  const existing = await orm.User.where({ id }).first();
-  if (existing) {
-    await orm.User.where({ id }).update({
-      name,
-      email: `${id}@csm.boostting.local`,
-      accountRole,
-      accountStatus: "ACTIVE",
-      updatedAt: new Date().toISOString(),
-    });
-    return;
-  }
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@csm.boostting.local`,
-    emailVerified: true,
-    accountRole,
-    accountStatus: "ACTIVE",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
-}
-
-async function cleanupMaterializationData() {
-  const slots = await orm.CommunityScheduleSlot.all();
-  const ownSlots = slots.filter((row) => {
-    const slot = row as { id: string; raidLeadId: string; createdById: string };
-    return testUserIds.has(slot.raidLeadId) || testUserIds.has(slot.createdById);
-  });
-  const ownSlotIds = new Set(ownSlots.map((row) => String((row as { id: string }).id)));
-
-  const links = await orm.CommunityScheduleRun.all();
-  for (const row of links) {
-    const link = row as { id: string; runId: string; scheduleSlotId: string | null };
-    if (link.scheduleSlotId == null) {
-      // Retired Schedule Drafts keep their (released) provenance row.
-      const run = (await orm.Run.where({ id: link.runId }).first()) as { raidLeadId: string } | null;
-      if (!run || !testUserIds.has(run.raidLeadId)) continue;
-    } else if (!ownSlotIds.has(link.scheduleSlotId)) {
-      continue;
-    }
-    await orm.RunDomainEvent.where({ runId: link.runId }).delete().catch(() => {});
-    await orm.CommunityScheduleRun.where({ id: link.id }).delete().catch(() => {});
-    await orm.RunRoster.where({ runId: link.runId }).delete().catch(() => {});
-    await orm.RunRaidContent.where({ runId: link.runId }).delete().catch(() => {});
-    await orm.Run.where({ id: link.runId }).delete().catch(() => {});
-  }
-
-  for (const row of ownSlots) {
-    await orm.CommunityScheduleSlot.where({ id: String((row as { id: string }).id) }).delete().catch(() => {});
-  }
-
-  const testCreators = new Set(Object.values(ids));
-  const templates = await orm.RunTemplate.all();
-  for (const row of templates) {
-    const createdById = String((row as { createdById: string }).createdById);
-    if (testCreators.has(createdById)) {
-      await orm.RunTemplate.where({ id: String((row as { id: string }).id) }).delete().catch(() => {});
-    }
-  }
-}
-
-async function cleanupUsers() {
-  await cleanupMaterializationData();
-  for (const id of Object.values(ids)) {
-    await orm.ActivityEvent.where({ userId: id }).delete().catch(() => {});
-    await orm.User.where({ id }).delete().catch(() => {});
-  }
-}
-
-async function expectCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected ${code}`);
-  } catch (error) {
-    expect(isDomainError(error) && error.code).toBe(code);
-  }
-}
-
-const user = asUser(ids.user, "CSM User", "USER");
-const lead = asUser(ids.lead, "CSM Lead", "RAID_LEAD");
-const admin = asUser(ids.admin, "CSM Admin", "ADMIN");
+let user: AuthenticatedUser;
+let lead: AuthenticatedUser;
+let otherLead: AuthenticatedUser;
+let admin: AuthenticatedUser;
 
 let templateId = "";
 
@@ -135,17 +46,14 @@ const NEXT_WINDOW = "2027-01-20T05:00:00.000Z";
 /** Monday 18 Jan 2027 12:00 CET — the weekly Draft release for the NEXT_WINDOW raid ID. */
 const RELEASE_NOW = new Date("2027-01-18T11:00:00.000Z");
 
-// Deterministic wall clock (see SCHEDULE_TEST_CLOCK); Run creation reads the real clock.
-beforeEach(() => freezeSystemTime(SCHEDULE_TEST_CLOCK, { advance: true }));
-afterEach(() => restoreSystemTime());
+async function createUser(name: string, accountRole: AuthenticatedUser["accountRole"]) {
+  const id = await createTestUser({ name, accountRole });
+  owned.userIds.push(id);
+  return testActor(id, accountRole, { name });
+}
 
-beforeAll(async () => {
-  await cleanupUsers();
-  await createUser(ids.user, "CSM User", "USER");
-  await createUser(ids.lead, "CSM Lead", "RAID_LEAD");
-  await createUser(ids.otherLead, "CSM Other Lead", "RAID_LEAD");
-  await createUser(ids.admin, "CSM Admin", "ADMIN");
-  await raidRepository.ensureReferenceRaids();
+async function ensureSharedTemplate() {
+  if (templateId && (await orm.RunTemplate.where({ id: templateId }).first())) return templateId;
   templateId = await runTemplateRepository.create({
     name: "CSM Materialize Template",
     difficulty: "HEROIC" as const,
@@ -155,33 +63,89 @@ beforeAll(async () => {
     desiredHealerCount: 4,
     desiredDpsCount: 14,
     notes: null,
-    createdById: ids.lead,
-    updatedById: ids.lead,
+    createdById: lead.id,
+    updatedById: lead.id,
   });
+  owned.templateIds.push(templateId);
+  return templateId;
+}
+
+async function deleteOwnedScheduleRows() {
+  assertIsolatedTestDatabase();
+  for (const userId of owned.userIds) {
+    const byCreator = (await orm.CommunityScheduleSlot.where({ createdById: userId }).select("id").all()) as Array<{
+      id: string;
+    }>;
+    const byLead = (await orm.CommunityScheduleSlot.where({ raidLeadId: userId }).select("id").all()) as Array<{
+      id: string;
+    }>;
+    for (const slot of [...byCreator, ...byLead]) {
+      await orm.CommunityScheduleRun.where({ scheduleSlotId: slot.id }).deleteAndCount();
+      await orm.CommunityScheduleSlot.where({ id: slot.id }).deleteAndCount();
+    }
+  }
+  for (const id of owned.slotIds.splice(0)) {
+    await orm.CommunityScheduleRun.where({ scheduleSlotId: id }).deleteAndCount();
+    await orm.CommunityScheduleSlot.where({ id }).deleteAndCount();
+  }
+  // Keep the shared suite template; delete others owned by suite users.
+  for (const id of owned.templateIds.splice(0)) {
+    if (id === templateId) {
+      owned.templateIds.push(id);
+      continue;
+    }
+    await orm.CommunityScheduleSlot.where({ runTemplateId: id }).deleteAndCount();
+    await orm.RunTemplate.where({ id }).deleteAndCount();
+  }
+  for (const userId of owned.userIds) {
+    const templates = (await orm.RunTemplate.where({ createdById: userId }).select("id").all()) as Array<{ id: string }>;
+    for (const template of templates) {
+      if (template.id === templateId) continue;
+      await orm.CommunityScheduleSlot.where({ runTemplateId: template.id }).deleteAndCount();
+      await orm.RunTemplate.where({ id: template.id }).deleteAndCount();
+    }
+  }
+  const runIds = owned.runIds.splice(0);
+  for (const runId of runIds) await orm.CommunityScheduleRun.where({ runId }).deleteAndCount();
+  await deleteCreatedRows({ runIds });
+  for (const userId of owned.userIds) {
+    await orm.ActivityEvent.where({ userId }).deleteAndCount();
+    const runs = (await orm.Run.where({ raidLeadId: userId }).select("id").all()) as Array<{ id: string }>;
+    for (const run of runs) {
+      await orm.CommunityScheduleRun.where({ runId: run.id }).deleteAndCount();
+      await deleteCreatedRows({ runIds: [run.id] });
+    }
+  }
+}
+
+// Deterministic wall clock (see SCHEDULE_TEST_CLOCK); Run creation reads the real clock.
+beforeEach(() => freezeSystemTime(SCHEDULE_TEST_CLOCK, { advance: true }));
+afterEach(() => restoreSystemTime());
+
+beforeAll(async () => {
+  assertIsolatedTestDatabase();
+  await raidRepository.ensureReferenceRaids();
+  user = await createUser("CSM User", "USER");
+  lead = await createUser("CSM Lead", "RAID_LEAD");
+  otherLead = await createUser("CSM Other Lead", "RAID_LEAD");
+  admin = await createUser("CSM Admin", "ADMIN");
+  await ensureSharedTemplate();
 });
 
 beforeEach(async () => {
-  await cleanupMaterializationData();
-  if (!(await orm.RunTemplate.where({ id: templateId }).first())) {
-    templateId = await runTemplateRepository.create({
-    name: "CSM Materialize Template",
-    difficulty: "HEROIC" as const,
-    lootType: "UNSAVED" as const,
-    contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 8 }],
-    desiredTankCount: 2,
-    desiredHealerCount: 4,
-    desiredDpsCount: 14,
-    notes: null,
-    createdById: ids.lead,
-    updatedById: ids.lead,
-  });
-  }
+  await deleteOwnedScheduleRows();
+  await ensureSharedTemplate();
 });
 
 afterAll(async () => {
-  await cleanupUsers();
+  await deleteOwnedScheduleRows();
+  if (templateId) {
+    await orm.CommunityScheduleSlot.where({ runTemplateId: templateId }).deleteAndCount();
+    await orm.RunTemplate.where({ id: templateId }).deleteAndCount();
+    templateId = "";
+  }
+  await deleteCreatedRows({ userIds: owned.userIds.splice(0) });
 });
-
 
 /** A signup row (withdrawn counts too): the Run is no longer Schedule-owned. */
 async function addSignup(runId: string, userId: string, status: "PENDING" | "WITHDRAWN" = "PENDING") {
@@ -206,13 +170,13 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       weekday: "FRIDAY",
       localStartTime: "19:45",
       label: "HC VIP",
-      raidLeadId: ids.lead,
+      raidLeadId: lead.id,
       notes: null,
       runTemplateId: templateId,
       autoCreateRun: false,
       runMode: "INHOUSE",
     });
-    await expectCode(
+    await expectDomainError(
       communityScheduleMaterializationService.materializeOccurrence(
         { kind: "USER", user },
         { scheduleSlotId: slot.id, window: "NEXT" },
@@ -227,7 +191,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       weekday: "FRIDAY",
       localStartTime: "19:45",
       label: "LABEL MUST NOT BECOME TITLE",
-      raidLeadId: ids.lead,
+      raidLeadId: lead.id,
       notes: null,
       runTemplateId: templateId,
       autoCreateRun: false,
@@ -258,13 +222,13 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       createdById: string | null;
     } | null;
     expect(link?.createdByKind).toBe("USER");
-    expect(link?.createdById).toBe(ids.lead);
+    expect(link?.createdById).toBe(lead.id);
     const events = await orm.RunDomainEvent.where({ runId: result.runId }).all();
     const created = events.find((row) => (row as { type: string }).type === "RUN_CREATED") as
       | { actorKind: string; actorUserId: string | null }
       | undefined;
     expect(created?.actorKind).toBe("USER");
-    expect(created?.actorUserId).toBe(ids.lead);
+    expect(created?.actorUserId).toBe(lead.id);
   });
 
   it("a time with Ping roles on creates Runs that ping; an edit without the field keeps it", async () => {
@@ -273,7 +237,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       weekday: "FRIDAY",
       localStartTime: "19:45",
       label: "Ping",
-      raidLeadId: ids.lead,
+      raidLeadId: lead.id,
       notes: null,
       runTemplateId: templateId,
       autoCreateRun: false,
@@ -295,7 +259,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
         weekday: "FRIDAY",
         localStartTime: "19:45",
         label: "Ping renamed",
-        raidLeadId: ids.lead,
+        raidLeadId: lead.id,
         notes: null,
         runTemplateId: templateId,
         autoCreateRun: false,
@@ -311,7 +275,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
         weekday: "FRIDAY",
         localStartTime: "19:45",
         label: "Ping renamed",
-        raidLeadId: ids.lead,
+        raidLeadId: lead.id,
         notes: null,
         runTemplateId: templateId,
         autoCreateRun: false,
@@ -329,13 +293,13 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       weekday: "FRIDAY",
       localStartTime: "19:45",
       label: "HC VIP",
-      raidLeadId: ids.lead,
+      raidLeadId: lead.id,
       notes: null,
       runTemplateId: templateId,
       autoCreateRun: false,
       runMode: "INHOUSE",
     });
-    await expectCode(
+    await expectDomainError(
       communityScheduleMaterializationService.materializeOccurrence(
         { kind: "USER", user: lead },
         { scheduleSlotId: slot.id, window: "CURRENT", now },
@@ -350,7 +314,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       weekday: "FRIDAY",
       localStartTime: "19:45",
       label: "HC VIP",
-      raidLeadId: ids.lead,
+      raidLeadId: lead.id,
       notes: null,
       runTemplateId: templateId,
       autoCreateRun: false,
@@ -374,7 +338,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       weekday: "FRIDAY",
       localStartTime: "19:45",
       label: "HC VIP",
-      raidLeadId: ids.lead,
+      raidLeadId: lead.id,
       notes: null,
       runTemplateId: templateId,
       autoCreateRun: false,
@@ -403,7 +367,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
         weekday: "FRIDAY",
         localStartTime: "20:00",
         label: "HC VIP Late",
-        raidLeadId: ids.lead,
+        raidLeadId: lead.id,
         notes: null,
         runTemplateId: templateId,
         autoCreateRun: false,
@@ -420,7 +384,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
     expect(retired.cancelledFromSignupsOpen).toBe(true);
     expect(retired.signupsOpen).toBe(false);
     expect(retired.archivedAt).not.toBeNull();
-    expect(retired.archivedById).toBe(ids.admin);
+    expect(retired.archivedById).toBe(admin.id);
     expect(Date.parse(String(retired.scheduledStartAt))).toBe(Date.parse(beforeOccurrence.scheduledStartAt));
     const events = (await orm.RunDomainEvent.where({ runId: first.runId }).all()) as Array<{ type: string }>;
     expect(events.some((event) => event.type === "RUN_SCHEDULE_DRAFT_RETIRED")).toBe(true);
@@ -458,20 +422,20 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       desiredHealerCount: 4,
       desiredDpsCount: 14,
       notes: null,
-      createdById: ids.otherLead,
-      updatedById: ids.otherLead,
+      createdById: otherLead.id,
+      updatedById: otherLead.id,
     });
     const { slot } = await communityScheduleService.createSlot(admin, {
       weekday: "FRIDAY",
       localStartTime: "19:45",
       label: "HC VIP",
-      raidLeadId: ids.otherLead,
+      raidLeadId: otherLead.id,
       notes: null,
       runTemplateId: otherTemplateId,
       autoCreateRun: false,
       runMode: "INHOUSE",
     });
-    await expectCode(
+    await expectDomainError(
       communityScheduleMaterializationService.materializeOccurrence(
         { kind: "USER", user: lead },
         { scheduleSlotId: slot.id, window: "NEXT" },
@@ -491,8 +455,8 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       desiredDpsCount: 14,
       desiredLootbuddyCount: 0,
       notes: null,
-      createdById: ids.admin,
-      updatedById: ids.admin,
+      createdById: admin.id,
+      updatedById: admin.id,
     });
     const now = new Date("2027-02-05T12:00:00.000Z");
 
@@ -500,7 +464,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       weekday: "MONDAY",
       localStartTime: "19:00",
       label: "Inherit comp",
-      raidLeadId: ids.lead,
+      raidLeadId: lead.id,
       notes: null,
       runTemplateId: sharedTemplateId,
       autoCreateRun: false,
@@ -510,7 +474,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       weekday: "TUESDAY",
       localStartTime: "19:00",
       label: "Override comp",
-      raidLeadId: ids.otherLead,
+      raidLeadId: otherLead.id,
       notes: null,
       runTemplateId: sharedTemplateId,
       autoCreateRun: false,
@@ -574,7 +538,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       desiredDpsCount: 10,
       desiredLootbuddyCount: 0,
       notes: null,
-      updatedById: ids.admin,
+      updatedById: admin.id,
     });
 
     const pageAfterTemplateEdit = await communityScheduleService.getPage(admin, now);
@@ -640,13 +604,13 @@ describe("communityScheduleMaterializationService.runPass", () => {
       weekday: "FRIDAY",
       localStartTime: "19:45",
       label: "Auto HC",
-      raidLeadId: ids.lead,
+      raidLeadId: lead.id,
       notes: null,
       runTemplateId: templateId,
       autoCreateRun: true,
       runMode: "INHOUSE",
-      createdById: ids.admin,
-      updatedById: ids.admin,
+      createdById: admin.id,
+      updatedById: admin.id,
     });
     const before = await orm.Run.select("id").all();
     const result = await communityScheduleMaterializationService.runPass(now);
@@ -657,7 +621,7 @@ describe("communityScheduleMaterializationService.runPass", () => {
     const after = await orm.Run.select("id").all();
     expect(after.length).toBeGreaterThan(before.length);
 
-    const ownSlots = await orm.CommunityScheduleSlot.where({ raidLeadId: ids.lead }).all();
+    const ownSlots = await orm.CommunityScheduleSlot.where({ raidLeadId: lead.id }).all();
     const ownSlotIds = new Set(ownSlots.map((s) => String((s as { id: string }).id)));
     const links = await orm.CommunityScheduleRun.all();
     const ownSystemLink = links.find((row) => {
@@ -698,7 +662,7 @@ describe("communityScheduleMaterializationService.runPass", () => {
       weekday: "TUESDAY",
       localStartTime: "20:00",
       label: "Release",
-      raidLeadId: ids.lead,
+      raidLeadId: lead.id,
       notes: null,
       runTemplateId: templateId,
       autoCreateRun: true,
@@ -735,7 +699,7 @@ describe("communityScheduleMaterializationService.runPass", () => {
     const plan = await communityScheduleService.createSchedulePlan(
       admin,
       {
-        raidLeadId: ids.lead,
+        raidLeadId: lead.id,
         runSetup: { mode: "existing", templateId },
         slots: [{ weekday: "FRIDAY", localStartTime: "19:45", runMode: "INHOUSE" }],
         autoCreateRun: true,
@@ -746,7 +710,7 @@ describe("communityScheduleMaterializationService.runPass", () => {
     const added = await communityScheduleService.addTimesToSetup(
       admin,
       {
-        raidLeadId: ids.lead,
+        raidLeadId: lead.id,
         runTemplateId: templateId,
         slots: [{ weekday: "SATURDAY", localStartTime: "20:00", runMode: "INHOUSE" }],
         autoCreateRun: false,
@@ -762,7 +726,7 @@ describe("communityScheduleMaterializationService.runPass", () => {
         weekday: "SATURDAY",
         localStartTime: "20:00",
         label: "Enabled",
-        raidLeadId: ids.lead,
+        raidLeadId: lead.id,
         notes: null,
         runTemplateId: templateId,
         autoCreateRun: true,
@@ -787,7 +751,7 @@ describe("communityScheduleMaterializationService.runPass", () => {
 
   it("bulk auto-create plan: the release pass creates the Drafts; a second pass is idempotent", async () => {
     const plan = await communityScheduleService.createSchedulePlan(admin, {
-      raidLeadId: ids.lead,
+      raidLeadId: lead.id,
       runSetup: { mode: "existing", templateId },
       slots: [
         { weekday: "FRIDAY", localStartTime: "19:45", runMode: "INHOUSE" },
@@ -816,7 +780,7 @@ describe("communityScheduleMaterializationService.runPass", () => {
     // This test is about "now": the wall clock is exactly `now` (Run creation reads it).
     freezeSystemTime(now, { advance: true });
     const plan = await communityScheduleService.createSchedulePlan(admin, {
-      raidLeadId: ids.lead,
+      raidLeadId: lead.id,
       runSetup: { mode: "existing", templateId },
       slots: [{ weekday: "WEDNESDAY", localStartTime: "00:30", runMode: "INHOUSE" }],
       autoCreateRun: false,
@@ -828,11 +792,11 @@ describe("communityScheduleMaterializationService.runPass", () => {
       localStartTime: "00:30",
       label: "Boundary",
       notes: null,
-      raidLeadId: ids.lead,
+      raidLeadId: lead.id,
       runTemplateId: templateId,
       autoCreateRun: true,
       runMode: "INHOUSE",
-      updatedById: ids.admin,
+      updatedById: admin.id,
     });
 
     const pass = await communityScheduleMaterializationService.runPass(now);
@@ -905,14 +869,14 @@ describe("communityScheduleMaterializationService.runPass", () => {
       desiredHealerCount: 4,
       desiredDpsCount: 14,
       notes: null,
-      createdById: ids.admin,
-      updatedById: ids.admin,
+      createdById: admin.id,
+      updatedById: admin.id,
     });
 
     const bundlePlan = await communityScheduleService.createSchedulePlan(
       admin,
       {
-        raidLeadId: ids.lead,
+        raidLeadId: lead.id,
         runSetup: { mode: "existing", templateId: bundleTemplateId },
         slots: [{ weekday: "FRIDAY", localStartTime: "21:00", runMode: "INHOUSE" }],
         autoCreateRun: true,
@@ -931,7 +895,7 @@ describe("communityScheduleMaterializationService.runPass", () => {
     const venomousPlan = await communityScheduleService.createSchedulePlan(
       admin,
       {
-        raidLeadId: ids.lead,
+        raidLeadId: lead.id,
         runSetup: { mode: "existing", templateId },
         slots: [{ weekday: "SATURDAY", localStartTime: "21:00", runMode: "INHOUSE" }],
         autoCreateRun: true,
@@ -952,7 +916,7 @@ describe("communityScheduleMaterializationService.runPass", () => {
   it("manual Create Run and SYSTEM auto-create race to one link (no orphans)", async () => {
     const now = RELEASE_NOW;
     const plan = await communityScheduleService.createSchedulePlan(admin, {
-      raidLeadId: ids.lead,
+      raidLeadId: lead.id,
       runSetup: { mode: "existing", templateId },
       slots: [{ weekday: "FRIDAY", localStartTime: "19:45", runMode: "INHOUSE" }],
       autoCreateRun: false,
@@ -971,11 +935,11 @@ describe("communityScheduleMaterializationService.runPass", () => {
       localStartTime: "19:45",
       label: "Race",
       notes: null,
-      raidLeadId: ids.lead,
+      raidLeadId: lead.id,
       runTemplateId: templateId,
       autoCreateRun: true,
       runMode: "INHOUSE",
-      updatedById: ids.admin,
+      updatedById: admin.id,
     });
     const auto = await communityScheduleMaterializationService.runPass(now);
     expect(auto.status).toBe("COMPLETED");
@@ -1010,7 +974,7 @@ describe("communityScheduleMaterializationService.runPass", () => {
   it("editing Run Setup after materialize does not change the existing Run snapshot", async () => {
     const now = new Date("2027-01-15T12:00:00.000Z");
     const plan = await communityScheduleService.createSchedulePlan(admin, {
-      raidLeadId: ids.lead,
+      raidLeadId: lead.id,
       runSetup: { mode: "existing", templateId },
       slots: [{ weekday: "FRIDAY", localStartTime: "19:45", runMode: "INHOUSE" }],
       autoCreateRun: false,
@@ -1042,7 +1006,7 @@ describe("communityScheduleMaterializationService.runPass", () => {
       desiredHealerCount: 4,
       desiredDpsCount: 14,
       notes: null,
-      updatedById: ids.admin,
+      updatedById: admin.id,
     });
 
     const after = (await orm.Run.where({ id: result.runId }).first()) as {
@@ -1067,7 +1031,7 @@ describe("communityScheduleMaterializationService.runPass", () => {
       desiredHealerCount: 4,
       desiredDpsCount: 14,
       notes: null,
-      updatedById: ids.admin,
+      updatedById: admin.id,
     });
   });
 });
@@ -1121,7 +1085,7 @@ async function linkFor(slotId: string, windowStartAt: string) {
 
 function planInput(slot: Record<string, unknown>, extra: Record<string, unknown> = {}) {
   return {
-    raidLeadId: ids.lead,
+    raidLeadId: lead.id,
     runSetup: { mode: "existing" as const, templateId },
     slots: [{ weekday: "FRIDAY" as const, localStartTime: "19:45", runMode: "INHOUSE" as const, ...slot }],
     autoCreateRun: true,
@@ -1157,7 +1121,7 @@ describe("Schedule activation boundary", () => {
     expect(early.status === "COMPLETED" && early.skippedBeforeStart).toBe(1);
 
     // Manual Create Run and Use existing Run respect the boundary too.
-    await expectCode(
+    await expectDomainError(
       communityScheduleMaterializationService.materializeOccurrence(
         { kind: "USER", user: admin },
         { scheduleSlotId: slotId, window: "CURRENT", now: OCC_NOW },
@@ -1167,7 +1131,7 @@ describe("Schedule activation boundary", () => {
     const preBoundaryRun = await manualRun("2027-01-15T19:00:00.000Z");
     const candidates = await communityScheduleOccurrenceService.listAttachCandidates(admin, { slot, now: OCC_NOW });
     expect(candidates.some((row) => row.runId === preBoundaryRun)).toBe(false);
-    await expectCode(
+    await expectDomainError(
       communityScheduleOccurrenceService.attachExistingRun(admin, {
         scheduleSlotId: slotId,
         runId: preBoundaryRun,
@@ -1186,7 +1150,7 @@ describe("Schedule activation boundary", () => {
 
   it("draft-slot picker (create dialog) excludes occurrences before the chosen Starts", async () => {
     const existing = await manualRun("2027-01-15T19:00:00.000Z");
-    const draftSlot = { weekday: "FRIDAY" as const, localStartTime: "19:45", raidLeadId: ids.lead, runTemplateId: templateId };
+    const draftSlot = { weekday: "FRIDAY" as const, localStartTime: "19:45", raidLeadId: lead.id, runTemplateId: templateId };
     const all = await communityScheduleOccurrenceService.listAttachCandidates(admin, { slot: draftSlot, now: OCC_NOW });
     expect(all.some((row) => row.runId === existing)).toBe(true);
     const skipped = await communityScheduleOccurrenceService.listAttachCandidates(admin, {
@@ -1195,7 +1159,7 @@ describe("Schedule activation boundary", () => {
     });
     expect(skipped.some((row) => row.runId === existing)).toBe(false);
     // Creating with Skip first + that Run as first occurrence is refused atomically (no slot left behind).
-    await expectCode(
+    await expectDomainError(
       communityScheduleService.createSchedulePlan(
         admin,
         planInput({ attachRunId: existing }, { start: { mode: "SKIP_FIRST" } }),
@@ -1316,7 +1280,7 @@ describe("Schedule-owned Draft lifecycle (cleanup on Schedule changes)", () => {
 
   it("time change protects a Run someone signed up for (even withdrawn) and a past Run", async () => {
     const { currentRunId, nextRunId, base } = await slotWithDrafts();
-    await addSignup(nextRunId, ids.user, "WITHDRAWN");
+    await addSignup(nextRunId, user.id, "WITHDRAWN");
     const openedBefore = await runSnapshot(nextRunId);
     // After Fri 15 Jan 19:45 CET started: the CURRENT Draft is in the past.
     const afterStart = new Date("2027-01-15T20:00:00.000Z");
@@ -1384,8 +1348,8 @@ describe("Schedule-owned Draft lifecycle (cleanup on Schedule changes)", () => {
       desiredHealerCount: 4,
       desiredDpsCount: 14,
       notes: null,
-      createdById: ids.admin,
-      updatedById: ids.admin,
+      createdById: admin.id,
+      updatedById: admin.id,
     });
     const plan = await communityScheduleService.createSchedulePlan(
       admin,
@@ -1431,7 +1395,7 @@ describe("Schedule-owned Draft lifecycle (cleanup on Schedule changes)", () => {
           weekday: "SATURDAY",
           localStartTime: "20:00",
           label: slot.label,
-          raidLeadId: ids.lead,
+          raidLeadId: lead.id,
           notes: null,
           runTemplateId: templateId,
           autoCreateRun: true,
@@ -1450,7 +1414,7 @@ describe("Schedule-owned Draft lifecycle (cleanup on Schedule changes)", () => {
     for (const link of links) {
       expect(link.occurrenceStartAt).toBe("2027-01-23T19:00:00.000Z");
     }
-    const liveFridayDrafts = (await orm.Run.where({ raidLeadId: ids.lead, status: "OPEN" }).all()).filter(
+    const liveFridayDrafts = (await orm.Run.where({ raidLeadId: lead.id, status: "OPEN" }).all()).filter(
       (row) => Date.parse(String((row as { scheduledStartAt: string }).scheduledStartAt)) === Date.parse("2027-01-22T18:45:00.000Z") &&
         (row as { archivedAt: string | null }).archivedAt == null,
     );
@@ -1550,7 +1514,7 @@ describe("Attach existing Run to a Schedule occurrence", () => {
       desiredHealerCount: 4,
       desiredDpsCount: 13,
       notes: null,
-      updatedById: ids.admin,
+      updatedById: admin.id,
     } as never);
     await communityScheduleService.updateSlot(
       admin,
@@ -1590,24 +1554,24 @@ describe("Attach existing Run to a Schedule occurrence", () => {
     const second = await manualRun("2027-01-15T20:30:00.000Z");
 
     await communityScheduleOccurrenceService.attachExistingRun(admin, { scheduleSlotId: slotId, runId: first, now: OCC_NOW });
-    await expectCode(
+    await expectDomainError(
       communityScheduleOccurrenceService.attachExistingRun(admin, { scheduleSlotId: otherSlotId, runId: first, now: OCC_NOW }),
       "COMMUNITY_SCHEDULE_RUN_ALREADY_ATTACHED",
     );
-    await expectCode(
+    await expectDomainError(
       communityScheduleOccurrenceService.attachExistingRun(admin, { scheduleSlotId: slotId, runId: second, now: OCC_NOW }),
       "COMMUNITY_SCHEDULE_OCCURRENCE_FULFILLED",
     );
 
     const cancelled = await manualRun("2027-01-22T19:00:00.000Z");
     await runService.cancelRun(lead, cancelled);
-    await expectCode(
+    await expectDomainError(
       communityScheduleOccurrenceService.attachExistingRun(admin, { scheduleSlotId: slotId, runId: cancelled, now: OCC_NOW }),
       "COMMUNITY_SCHEDULE_RUN_NOT_ATTACHABLE",
     );
 
     // A week later the 15 Jan Run belongs to a past raid ID.
-    await expectCode(
+    await expectDomainError(
       communityScheduleOccurrenceService.attachExistingRun(admin, {
         scheduleSlotId: otherSlotId,
         runId: second,
@@ -1628,11 +1592,11 @@ describe("Attach existing Run to a Schedule occurrence", () => {
       localStartTime: "19:45",
       label: "Race",
       notes: null,
-      raidLeadId: ids.lead,
+      raidLeadId: lead.id,
       runTemplateId: templateId,
       autoCreateRun: true,
       runMode: "INHOUSE",
-      updatedById: ids.admin,
+      updatedById: admin.id,
     });
 
     const [attach, auto] = await Promise.allSettled([

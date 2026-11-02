@@ -1303,6 +1303,10 @@
     "tests/integration/services/community-schedule.service.test.ts": [
       "REWRITE",
       "Owned users via createTestUser (OWNER actor over ADMIN row); slots-before-templates FK cleanup; deleteAndCount + deleteCreatedRows; expectDomainError; frozen SCHEDULE_TEST_CLOCK"
+    ],
+    "tests/integration/services/community-schedule-materialization.service.test.ts": [
+      "REWRITE",
+      "Owned users via createTestUser; shared template recreated per test; slots-before-templates FK cleanup; deleteAndCount + deleteCreatedRows; expectDomainError; frozen OCC_NOW/RELEASE_NOW"
     ]
   },
   "tests": {
