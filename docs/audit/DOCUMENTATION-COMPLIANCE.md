@@ -58,7 +58,7 @@ There is **no** markdownlint / link-check npm script in `package.json`. Validati
 | `docs/audit/reports/FINAL-ACCEPTANCE-REVIEW.md` | COMPLIANT | Evidence report | Kept; A16 closure already recorded |
 | `docs/audit/FINAL-ENGINEERING-HANDOVER.md` | DUPLICATED risk → clarified | Canonical handover is HANDOVER.md | Freeze note now states it supplements HANDOVER, does not replace it |
 | `docs/HANDOVER.md` audit pointers | COMPLIANT after prior A16 update | Owner status | Points at audit freeze + open ops items |
-| `docs/audit/hardcoding-findings.md` | NEEDS OWNER DECISION | Ledger promised file | Never authored; optional inventory — not invented retrospectively |
+| `docs/audit/hardcoding-findings.md` | DECLINED (owner 2026-11-02) | Ledger promised file | Documentation suggestion closed; does not mark a code defect |
 | Phase 5 API/DEVELOPER A19 notes | COMPLIANT | Rule 10 | Raid Invite / `notificationDms` already described; API table gap was residual |
 
 ## Corrections applied
@@ -84,7 +84,8 @@ There is **no** markdownlint / link-check npm script in `package.json`. Validati
 
 | Item | Classification | Notes |
 | --- | --- | --- |
-| `hardcoding-findings.md` absent | NEEDS OWNER DECISION | Optional; do not fabricate a retrospective scan |
+| `hardcoding-findings.md` absent | DECLINED | Owner closed the documentation suggestion; no fabricated inventory |
 | EXECUTION_LEDGER historical continuation paragraphs | OUTDATED (retained) | Banner directs readers to freeze/acceptance for current status; full rewrite would destroy working history |
 | Large suite logs under `docs/audit/reports/` | COMPLIANT as evidence | Unusual for product docs; appropriate for audit acceptance |
-| Enforcing CSP | NEEDS OWNER DECISION | Report-Only only until owner approves enforce after staging |
+| Enforcing CSP | NEEDS OWNER DECISION | Report-Only shipped; enforce only after browser observation |
+| Canonical doc set | CONFIRMED | Owner: six files under `docs/` only — no new structure |

@@ -3,8 +3,9 @@
 | Field | Value |
 | --- | --- |
 | Branch | `test/audit-batch-a` |
-| Status | **Report-Only prepared** in `next.config.ts` (not enforcing) |
+| Status | **Report-Only prepared** in `next.config.ts` (not enforcing). Confirmed: no `Content-Security-Policy` enforcing header |
 | Owner decision | Required before flipping to `Content-Security-Policy` (enforcing) or changing host-panel CSP |
+| Canonical docs | Product truth remains the six `docs/*.md` files; this file is audit prep only |
 | Related | [OPERATIONS.md § Content Security Policy](../OPERATIONS.md#content-security-policy), [DEVELOPER.md § Technical decisions](../DEVELOPER.md#technical-decisions) |
 
 ## Contents

@@ -65,11 +65,11 @@ Runtime test count **3801** (was 3824 at Phase 2 gate; −23 total):
 | A16 | `src/lib/gold.ts` unreferenced after payouts removal (#228) | **Done** — deleted on owner approval |
 | A12 | 12× `window.location.reload` | Optional per-site `router.refresh` review |
 | A14 / A15 | Roster builder / discord-sync size | Split only with dedicated tests |
-| CSP | Content-Security-Policy | Inventory inline scripts/images, then ship |
+| CSP | Content-Security-Policy | Report-Only shipped later; **enforce** still owner decision |
 | Apache | `X-Powered-By: PleskLin` | Server config |
 | Rate-limit stalls | 15–25 s sync hypothesis | Confirm via production `journalctl` after deploy |
 | Naming overlaps | Dual `lib`/`services` stems | Product ownership before renames |
-| Hardcoding findings doc | Ledger promised `hardcoding-findings.md` | Optional retrospective inventory |
+| Hardcoding findings doc | Ledger promised `hardcoding-findings.md` | **Declined** by owner (2026-11-02) — docs suggestion only |
 | Ledger vs runtime count | Historical 3825 row accounting | Cosmetic reconcile if desired |
 
 ## RELEASE SAFETY

@@ -24,6 +24,7 @@ Related documents: [HANDOVER.md](../HANDOVER.md) (canonical status, debt, takeov
 - [8. Known risks (short)](#8-known-risks-short)
 - [9. Freeze confirmation checklist](#9-freeze-confirmation-checklist)
 - [10. Stop](#10-stop)
+- [11. Release readiness checklist (owner/ops)](#11-release-readiness-checklist-ownerops)
 
 ---
 
@@ -160,10 +161,9 @@ Do not create a `production` branch or new repository as part of this freeze.
 
 ### CSP — Content-Security-Policy
 
-- **State:** Inventory and **Report-Only** preparation on the audit branch — see [CSP-PREPARATION.md](CSP-PREPARATION.md) and [OPERATIONS.md](../OPERATIONS.md#content-security-policy). Other headers already ship from `next.config.ts`.
-- **Risk:** Weaker XSS defense-in-depth until enforce; Report-Only can surface violations without blocking users.
-- **Severity:** Medium (gap) until enforce is proven safe.
-- **Owner action:** Review Report-Only reports in a staging/production window → tighten → flip to enforcing CSP. Do not enable a different CSP from the hosting panel.
+- **State:** `Content-Security-Policy-Report-Only` in `next.config.ts` (commit `c1ad066`). **No** enforcing `Content-Security-Policy` header. Unit test asserts Report-Only present and enforcing header absent. Details: [CSP-PREPARATION.md](CSP-PREPARATION.md), [OPERATIONS.md](../OPERATIONS.md#content-security-policy).
+- **Limitations:** `'unsafe-inline'` / `'unsafe-eval'` on scripts for Next compatibility; no `report-uri` collector — violations appear in browser consoles only.
+- **Owner action:** After deploy, observe Report-Only → tighten if needed → flip to enforce in a dedicated change. Do not add a conflicting CSP in Apache.
 
 ### Apache `X-Powered-By: PleskLin`
 
@@ -204,19 +204,42 @@ Operator notes also live in [OPERATIONS.md](../OPERATIONS.md#security-checklist)
 - [x] No unfinished audit code changes pending
 - [x] No untracked temporary audit scripts in `docs/audit/reports/`
 - [x] A16 `src/lib/gold.ts` removed after owner approval (post-freeze)
+- [x] Six canonical docs confirmed authoritative; `hardcoding-findings.md` declined by owner
+- [x] CSP Report-Only non-enforcing
 - [x] No merge, deploy, production DB, live Discord, or new repository from this freeze
 
 ---
 
 ## 10. Stop
 
-Engineering work on the master audit is finished. A16 is closed. Documentation compliance corrections and CSP Report-Only preparation are recorded under `docs/audit/`. Await the owner’s decision on merge, CSP **enforce**, Apache header, rate-limit journal, and any production release.
+Engineering work on the master audit is finished. A16 is closed. Canonical documentation remains the six `docs/*.md` files only. Await owner merge/release and the ops checklist below.
 
 Primary pointers:
 
+- Canonical docs: [DEVELOPER](../DEVELOPER.md), [API](../API.md), [USER](../USER.md), [DEPLOYMENT](../DEPLOYMENT.md), [OPERATIONS](../OPERATIONS.md), [HANDOVER](../HANDOVER.md)
 - Acceptance: [reports/FINAL-ACCEPTANCE-REVIEW.md](reports/FINAL-ACCEPTANCE-REVIEW.md)
 - Documentation compliance: [DOCUMENTATION-COMPLIANCE.md](DOCUMENTATION-COMPLIANCE.md)
 - CSP prep: [CSP-PREPARATION.md](CSP-PREPARATION.md)
 - Ledger: [EXECUTION_LEDGER.md](EXECUTION_LEDGER.md)
-- Product/operator handover: [../HANDOVER.md](../HANDOVER.md)
-- Deploy / ops: [../DEPLOYMENT.md](../DEPLOYMENT.md), [../OPERATIONS.md](../OPERATIONS.md)
+
+---
+
+## 11. Release readiness checklist (owner/ops)
+
+Engineering quality gates on this branch are green. The following are **operational / owner** steps — not further audit phases. Do not treat Report-Only as enforcement.
+
+**Before / with release**
+
+- [ ] Owner-approved PR merge of `test/audit-batch-a` into the release line (`main` today)
+- [ ] Co-deploy **web + Discord bot** (A19 removed empty `raidInvites` from the sync payload)
+- [ ] Run the [production smoke checklist](../DEPLOYMENT.md#production-smoke-checklist)
+
+**After deploy — remaining prerequisites**
+
+| # | Action | How | Done when |
+| --- | --- | --- | --- |
+| 1 | **CSP observation** | Browse Discord sign-in, Battle.net connect, Characters, Runs, pages with Discord avatars; watch browser console for Report-Only CSP violations | Violations reviewed; decide tighten vs flip to enforce ([CSP-PREPARATION.md](CSP-PREPARATION.md)). Enforcing header still **absent** until that decision |
+| 2 | **Apache `X-Powered-By`** | Hosting panel or `Header unset X-Powered-By` | `curl -sI https://…` shows no `X-Powered-By: PleskLin` |
+| 3 | **Rate-limit journal** | `journalctl -u boostinghub-discord-bot --since "1 hour ago" \| grep 'rate limited'` | Lines reviewed (or confirmed none); sync-stall hypothesis accepted or dismissed |
+
+Canonical smoke and ops detail: [DEPLOYMENT.md](../DEPLOYMENT.md), [OPERATIONS.md](../OPERATIONS.md#security-checklist).
