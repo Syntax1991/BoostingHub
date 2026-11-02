@@ -1331,6 +1331,10 @@
     "tests/integration/services/roster-selection-warning.integration.test.ts": [
       "REWRITE",
       "assertIsolatedTestDatabase; verified deleteAndCount cleanup (no swallowed deleteIfPresent); testActor; saveDraftSelection already used"
+    ],
+    "tests/integration/services/run-mass-create.service.test.ts": [
+      "REWRITE",
+      "Owned users via createTestUser; deleteCreatedRows for runs/templates; expectDomainError; assertIsolatedTestDatabase; DISABLED lead via accountStatus"
     ]
   },
   "tests": {

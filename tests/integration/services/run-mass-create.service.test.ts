@@ -14,83 +14,41 @@ import {
   primaryRaidIdFromRun,
   venomousCreateInput,
   venomousPlannedFromRun, seededProductSelection } from "@tests/fixtures/test-run-input";
+import { testActor } from "@tests/fixtures/actors";
+import {
+  assertIsolatedTestDatabase,
+  createTestUser,
+  deleteCreatedRows,
+} from "@tests/fixtures/db-fixtures";
+import { expectDomainError } from "@tests/helpers/domain-error";
 
 const raidId = VENOMOUS_ABYSS_RAID_ID;
-const ids = {
-  user: "aaaaaaaa-aaaa-4aaa-8aaa-mc0000000001",
-  lead: "aaaaaaaa-aaaa-4aaa-8aaa-mc0000000002",
-  otherLead: "aaaaaaaa-aaaa-4aaa-8aaa-mc0000000003",
-  admin: "aaaaaaaa-aaaa-4aaa-8aaa-mc0000000004",
-  disabledLead: "aaaaaaaa-aaaa-4aaa-8aaa-mc0000000005",
+
+const created = {
+  userIds: [] as string[],
+  runIds: [] as string[],
+  templateIds: [] as string[],
 };
 
-const createdRunIds: string[] = [];
-const createdTemplateIds: string[] = [];
+let user: AuthenticatedUser;
+let lead: AuthenticatedUser;
+let otherLead: AuthenticatedUser;
+let admin: AuthenticatedUser;
+let disabledLead: AuthenticatedUser;
 
-function asUser(
-  id: string,
-  name: string,
-  accountRole: AuthenticatedUser["accountRole"] = "USER",
-  accountStatus: AuthenticatedUser["accountStatus"] = "ACTIVE",
-): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@mctest.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus,
-  };
-}
-
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    if (error instanceof Error && error.message === `Expected domain error ${code}`) {
-      throw error;
-    }
-    expect(isDomainError(error) && error.code).toBe(code);
-  }
-}
-
-async function createTestUser(
-  id: string,
+async function createUser(
   name: string,
   accountRole: AuthenticatedUser["accountRole"],
   accountStatus: AuthenticatedUser["accountStatus"] = "ACTIVE",
 ) {
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@mctest.boostting.local`,
-    emailVerified: true,
-    accountRole,
-    accountStatus,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
-}
-
-async function deleteIfPresent(table: "User" | "Run", id: string) {
-  try {
-    if (table === "User") await orm.User.where({ id }).delete();
-    else await orm.Run.where({ id }).delete();
-  } catch {
-    // Already gone.
-  }
+  const id = await createTestUser({ name, accountRole, accountStatus });
+  created.userIds.push(id);
+  return testActor(id, accountRole, { name, accountStatus });
 }
 
 function futureIso(days = 7) {
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 }
-
-const user = asUser(ids.user, "MassCreate User");
-const lead = asUser(ids.lead, "MassCreate Lead", "RAID_LEAD");
-const admin = asUser(ids.admin, "MassCreate Admin", "ADMIN");
 
 function defaultsFor(overrides: Partial<CreateManyRunsInput["defaults"]> = {}): CreateManyRunsInput["defaults"] {
   return {
@@ -123,68 +81,64 @@ async function countRostersForRuns(runIds: string[]): Promise<number> {
 }
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   await raidRepository.ensureReferenceRaids();
-  for (const id of [ids.user, ids.lead, ids.otherLead, ids.admin, ids.disabledLead]) {
-    await deleteIfPresent("User", id);
-  }
-  await createTestUser(ids.user, "MassCreate User", "USER");
-  await createTestUser(ids.lead, "MassCreate Lead", "RAID_LEAD");
-  await createTestUser(ids.otherLead, "MassCreate Other Lead", "RAID_LEAD");
-  await createTestUser(ids.admin, "MassCreate Admin", "ADMIN");
-  await createTestUser(ids.disabledLead, "MassCreate Disabled Lead", "RAID_LEAD", "DISABLED");
+  user = await createUser("MassCreate User", "USER");
+  lead = await createUser("MassCreate Lead", "RAID_LEAD");
+  otherLead = await createUser("MassCreate Other Lead", "RAID_LEAD");
+  admin = await createUser("MassCreate Admin", "ADMIN");
+  disabledLead = await createUser("MassCreate Disabled Lead", "RAID_LEAD", "DISABLED");
 });
 
 afterAll(async () => {
-  for (const id of createdRunIds) {
-    await deleteIfPresent("Run", id);
+  assertIsolatedTestDatabase();
+  for (const id of created.templateIds.splice(0)) {
+    await orm.RunTemplate.where({ id }).deleteAndCount();
   }
-  for (const id of createdTemplateIds) {
-    try {
-      await orm.RunTemplate.where({ id }).delete();
-    } catch {
-      // Already gone.
-    }
-  }
-  for (const id of [ids.user, ids.lead, ids.otherLead, ids.admin, ids.disabledLead]) {
-    await deleteIfPresent("User", id);
-  }
+  await deleteCreatedRows({
+    runIds: created.runIds.splice(0),
+    userIds: created.userIds.splice(0),
+  });
 });
 
 afterEach(async () => {
-  // Sweep anything the current test created but didn't itself track, so a
-  // rejected batch never leaks rows into the next test's assertions.
-  const stray = await orm.Run.where({ raidLeadId: ids.lead }).select("id").all();
+  assertIsolatedTestDatabase();
+  const stray = await orm.Run.where({ raidLeadId: lead.id }).select("id").all();
   for (const row of stray) {
     const id = String((row as { id: string }).id);
-    if (!createdRunIds.includes(id)) {
-      await deleteIfPresent("Run", id);
+    if (!created.runIds.includes(id)) {
+      await deleteCreatedRows({ runIds: [id] });
     }
+  }
+  await deleteCreatedRows({ runIds: created.runIds.splice(0) });
+  for (const id of created.templateIds.splice(0)) {
+    await orm.RunTemplate.where({ id }).deleteAndCount();
   }
 });
 
 describe("runService.createManyRuns — authorization", () => {
   it("A: USER is forbidden, and no Run is created", async () => {
-    const before = await orm.Run.where({ raidLeadId: ids.user }).select("id").all();
-    await expectDomainCode(
+    const before = await orm.Run.where({ raidLeadId: user.id }).select("id").all();
+    await expectDomainError(
       runService.createManyRuns(user, { defaults: defaultsFor(), runs: rowsOf(1) }),
       "NOT_AUTHORIZED",
     );
-    const after = await orm.Run.where({ raidLeadId: ids.user }).select("id").all();
+    const after = await orm.Run.where({ raidLeadId: user.id }).select("id").all();
     expect(after.length).toBe(before.length);
   });
 
   it("B: RAID_LEAD is allowed", async () => {
     const result = await runService.createManyRuns(lead, { defaults: defaultsFor(), runs: rowsOf(2) });
-    createdRunIds.push(...result.ids);
+    created.runIds.push(...result.ids);
     expect(result.ids).toHaveLength(2);
   });
 
   it("C: ADMIN is allowed", async () => {
     const result = await runService.createManyRuns(admin, {
-      defaults: defaultsFor({ raidLeadId: ids.lead }),
+      defaults: defaultsFor({ raidLeadId: lead.id }),
       runs: rowsOf(2, 30),
     });
-    createdRunIds.push(...result.ids);
+    created.runIds.push(...result.ids);
     expect(result.ids).toHaveLength(2);
   });
 });
@@ -197,46 +151,46 @@ describe("runService.createManyRuns — batch size", () => {
 
   it("1 row succeeds", async () => {
     const result = await runService.createManyRuns(lead, { defaults: defaultsFor(), runs: rowsOf(1, 60) });
-    createdRunIds.push(...result.ids);
+    created.runIds.push(...result.ids);
     expect(result.ids).toHaveLength(1);
   });
 
   it("25 rows succeeds", async () => {
     const result = await runService.createManyRuns(lead, { defaults: defaultsFor(), runs: rowsOf(25, 100) });
-    createdRunIds.push(...result.ids);
+    created.runIds.push(...result.ids);
     expect(result.ids).toHaveLength(25);
   });
 
   it("26 rows is rejected structurally, with 0 runs created", async () => {
-    const before = await orm.Run.where({ raidLeadId: ids.lead }).select("id").all();
+    const before = await orm.Run.where({ raidLeadId: lead.id }).select("id").all();
     const parsed = createManyRunsSchema.safeParse({ defaults: defaultsFor(), runs: rowsOf(26, 200) });
     expect(parsed.success).toBe(false);
-    const after = await orm.Run.where({ raidLeadId: ids.lead }).select("id").all();
+    const after = await orm.Run.where({ raidLeadId: lead.id }).select("id").all();
     expect(after.length).toBe(before.length);
   });
 });
 
 describe("runService.createManyRuns — raid lead authority", () => {
   it("RAID_LEAD forging another manager's id via defaults is rejected, 0 Runs created", async () => {
-    const before = await orm.Run.where({ raidLeadId: ids.otherLead }).select("id").all();
-    await expectDomainCode(
+    const before = await orm.Run.where({ raidLeadId: otherLead.id }).select("id").all();
+    await expectDomainError(
       runService.createManyRuns(lead, {
-        defaults: defaultsFor({ raidLeadId: ids.otherLead }),
+        defaults: defaultsFor({ raidLeadId: otherLead.id }),
         runs: rowsOf(2, 300),
       }),
       "RUN_RAID_LEAD_INVALID",
     );
-    const after = await orm.Run.where({ raidLeadId: ids.otherLead }).select("id").all();
+    const after = await orm.Run.where({ raidLeadId: otherLead.id }).select("id").all();
     expect(after.length).toBe(before.length);
   });
 
   it("RAID_LEAD forging another manager's id via a row override is rejected, 0 Runs created", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       runService.createManyRuns(lead, {
         defaults: defaultsFor(),
         runs: [
           { scheduledStartAt: futureIso(310) },
-          { scheduledStartAt: futureIso(311), overrides: { raidLeadId: ids.otherLead } },
+          { scheduledStartAt: futureIso(311), overrides: { raidLeadId: otherLead.id } },
         ],
       }),
       "RUN_RAID_LEAD_INVALID",
@@ -247,21 +201,21 @@ describe("runService.createManyRuns — raid lead authority", () => {
 
   it("ADMIN assigning a valid eligible raid lead succeeds", async () => {
     const result = await runService.createManyRuns(admin, {
-      defaults: defaultsFor({ raidLeadId: ids.lead }),
+      defaults: defaultsFor({ raidLeadId: lead.id }),
       runs: rowsOf(1, 320),
     });
-    createdRunIds.push(...result.ids);
+    created.runIds.push(...result.ids);
     const run = await runRepository.findById(result.ids[0]!);
-    expect(run?.raidLeadId).toBe(ids.lead);
+    expect(run?.raidLeadId).toBe(lead.id);
   });
 
   it("ADMIN assigning a disabled (non-eligible) raid lead rejects the entire batch", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       runService.createManyRuns(admin, {
-        defaults: defaultsFor({ raidLeadId: ids.lead }),
+        defaults: defaultsFor({ raidLeadId: lead.id }),
         runs: [
           { scheduledStartAt: futureIso(330) },
-          { scheduledStartAt: futureIso(331), overrides: { raidLeadId: ids.disabledLead } },
+          { scheduledStartAt: futureIso(331), overrides: { raidLeadId: disabledLead.id } },
         ],
       }),
       "RUN_RAID_LEAD_INVALID",
@@ -327,7 +281,7 @@ describe("runService.createManyRuns — raid availability", () => {
 
 describe("runService.createManyRuns — schedule rules", () => {
   it("one invalid timestamp rejects the whole batch, no partial writes", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       runService.createManyRuns(lead, {
         defaults: defaultsFor(),
         runs: [{ scheduledStartAt: futureIso(420) }, { scheduledStartAt: "not-a-real-date" }],
@@ -340,7 +294,7 @@ describe("runService.createManyRuns — schedule rules", () => {
 
   it("one materially-past row rejects the whole batch, no partial writes", async () => {
     const pastIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    await expectDomainCode(
+    await expectDomainError(
       runService.createManyRuns(lead, {
         defaults: defaultsFor(),
         runs: [{ scheduledStartAt: futureIso(430) }, { scheduledStartAt: pastIso }],
@@ -354,7 +308,7 @@ describe("runService.createManyRuns — schedule rules", () => {
 
 describe("runService.createManyRuns — loot type rules", () => {
   it("an invalid difficulty+lootType combination in one row rejects the whole batch", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       runService.createManyRuns(lead, {
         defaults: defaultsFor(),
         runs: [
@@ -379,7 +333,7 @@ describe("runService.createManyRuns — loot type rules", () => {
         },
       ],
     });
-    createdRunIds.push(...result.ids);
+    created.runIds.push(...result.ids);
     const [a, b] = await Promise.all(result.ids.map((id) => runRepository.findById(id)));
     expect(a?.lootType).toBe("COMMUNITY");
     expect(a?.title).toContain("HC Community");
@@ -391,7 +345,7 @@ describe("runService.createManyRuns — loot type rules", () => {
 
 describe("runService.createManyRuns — boss count rules", () => {
   it("venomousPlannedBossCount exceeding the effective raid's total rejects the whole batch", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       runService.createManyRuns(lead, {
         defaults: defaultsFor(),
         runs: [
@@ -423,7 +377,7 @@ describe("runService.createManyRuns — boss count rules", () => {
         },
       ],
     });
-    createdRunIds.push(...result.ids);
+    created.runIds.push(...result.ids);
     const run = await runRepository.findById(result.ids[0]!);
     expect(venomousPlannedFromRun(run)).toBe(raid!.totalBossCount);
   });
@@ -431,7 +385,7 @@ describe("runService.createManyRuns — boss count rules", () => {
 
 describe("runService.createManyRuns — composition rules", () => {
   it("a negative composition count in one row rejects the whole batch", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       runService.createManyRuns(lead, {
         defaults: defaultsFor(),
         runs: [
@@ -446,7 +400,7 @@ describe("runService.createManyRuns — composition rules", () => {
   });
 
   it("an out-of-range composition count in one row rejects the whole batch", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       runService.createManyRuns(lead, {
         defaults: defaultsFor(),
         runs: [
@@ -471,7 +425,7 @@ describe("runService.createManyRuns — notes override semantics", () => {
         { scheduledStartAt: futureIso(492), overrides: { notes: null } },
       ],
     });
-    createdRunIds.push(...result.ids);
+    created.runIds.push(...result.ids);
 
     const [inherited, overridden, cleared] = await Promise.all(result.ids.map((id) => runRepository.findById(id)));
     expect(inherited?.notes).toBe("Bring buyers");
@@ -492,7 +446,7 @@ describe("runService.createManyRuns — title derivation", () => {
         },
       ],
     });
-    createdRunIds.push(...result.ids);
+    created.runIds.push(...result.ids);
 
     const [a, b] = await Promise.all(result.ids.map((id) => runRepository.findById(id)));
     expect(a?.title).toContain("HC");
@@ -508,7 +462,7 @@ describe("runService.createManyRuns — title derivation", () => {
 describe("runService.createManyRuns — DRAFT state", () => {
   it("every created run is DRAFT, signups closed, not archived", async () => {
     const result = await runService.createManyRuns(lead, { defaults: defaultsFor(), runs: rowsOf(3, 510) });
-    createdRunIds.push(...result.ids);
+    created.runIds.push(...result.ids);
 
     const runs = await Promise.all(result.ids.map((id) => runRepository.findById(id)));
     for (const run of runs) {
@@ -522,7 +476,7 @@ describe("runService.createManyRuns — DRAFT state", () => {
 describe("runService.createManyRuns — initial rosters", () => {
   it("a successful 5-row batch creates exactly 5 Runs and 5 initial RunRoster rows, no entries", async () => {
     const result = await runService.createManyRuns(lead, { defaults: defaultsFor(), runs: rowsOf(5, 520) });
-    createdRunIds.push(...result.ids);
+    created.runIds.push(...result.ids);
 
     expect(await countBatchRuns(result.ids)).toBe(5);
     expect(await countRostersForRuns(result.ids)).toBe(5);
@@ -540,7 +494,7 @@ describe("runService.createManyRuns — initial rosters", () => {
 describe("runService.createManyRuns — no Discord state", () => {
   it("no RunDiscordPost exists for any freshly mass-created Run", async () => {
     const result = await runService.createManyRuns(lead, { defaults: defaultsFor(), runs: rowsOf(2, 530) });
-    createdRunIds.push(...result.ids);
+    created.runIds.push(...result.ids);
 
     for (const id of result.ids) {
       expect(await runDiscordPostRepository.findByRunId(id)).toBeNull();
@@ -564,7 +518,7 @@ describe("runService.createManyRuns — single vs one-row bulk equivalence", () 
         notes: "Parity check",
       }),
     );
-    createdRunIds.push(single.id);
+    created.runIds.push(single.id);
 
     const bulk = await runService.createManyRuns(lead, {
       defaults: defaultsFor({
@@ -577,7 +531,7 @@ describe("runService.createManyRuns — single vs one-row bulk equivalence", () 
       }),
       runs: [{ scheduledStartAt }],
     });
-    createdRunIds.push(...bulk.ids);
+    created.runIds.push(...bulk.ids);
 
     const singleRun = await runRepository.findById(single.id);
     const bulkRun = await runRepository.findById(bulk.ids[0]!);
@@ -625,7 +579,7 @@ describe("runService.createManyRuns — input order preserved", () => {
       defaults: defaultsFor(),
       runs: schedules.map((scheduledStartAt) => ({ scheduledStartAt })),
     });
-    createdRunIds.push(...result.ids);
+    created.runIds.push(...result.ids);
 
     const runs = await Promise.all(result.ids.map((id) => runRepository.findById(id)));
     // Compared as parsed timestamps, never as raw strings — the driver
@@ -645,7 +599,7 @@ describe("runRepository.createManyDraftsAtomic — atomic rollback", () => {
       difficulty: "HEROIC" as const,
       lootType: "UNSAVED" as const,
       scheduledStartAt: futureIso(700),
-      raidLeadId: ids.lead,
+      raidLeadId: lead.id,
       notes: null,
       desiredTankCount: 2,
       desiredHealerCount: 4,
@@ -681,7 +635,7 @@ describe("runService.createManyRuns — templateId integration", () => {
       desiredDpsCount: 14,
       notes: "Template notes",
     });
-    createdTemplateIds.push(template.id);
+    created.templateIds.push(template.id);
 
     // Raid Lead stays on the form defaults; the template supplies composition
     // and other planning fields unless overridden per row.
@@ -690,10 +644,10 @@ describe("runService.createManyRuns — templateId integration", () => {
       runs: rowsOf(1, 800),
       templateId: template.id,
     });
-    createdRunIds.push(...result.ids);
+    created.runIds.push(...result.ids);
 
     const run = await runRepository.findById(result.ids[0]!);
-    expect(run?.raidLeadId).toBe(ids.lead);
+    expect(run?.raidLeadId).toBe(lead.id);
     expect(run?.notes).toBe("Template notes");
     expect(primaryRaidIdFromRun(run)).toBe(VENOMOUS_ABYSS_RAID_ID);
     expect(run?.contents).toHaveLength(1);
@@ -711,17 +665,17 @@ describe("runService.createManyRuns — templateId integration", () => {
       desiredDpsCount: 14,
       notes: null,
     });
-    createdTemplateIds.push(template.id);
+    created.templateIds.push(template.id);
 
     const result = await runService.createManyRuns(admin, {
-      defaults: defaultsFor({ raidLeadId: ids.otherLead }),
+      defaults: defaultsFor({ raidLeadId: otherLead.id }),
       runs: rowsOf(1, 810),
       templateId: template.id,
     });
-    createdRunIds.push(...result.ids);
+    created.runIds.push(...result.ids);
 
     const run = await runRepository.findById(result.ids[0]!);
-    expect(run?.raidLeadId).toBe(ids.otherLead);
+    expect(run?.raidLeadId).toBe(otherLead.id);
   });
 
   it("RAID_LEAD may use any usable global template", async () => {
@@ -735,14 +689,14 @@ describe("runService.createManyRuns — templateId integration", () => {
       desiredDpsCount: 14,
       notes: null,
     });
-    createdTemplateIds.push(template.id);
+    created.templateIds.push(template.id);
 
     const result = await runService.createManyRuns(lead, {
       defaults: defaultsFor(),
       runs: rowsOf(1, 820),
       templateId: template.id,
     });
-    createdRunIds.push(...result.ids);
+    created.runIds.push(...result.ids);
     expect(result.ids).toHaveLength(1);
   });
 
@@ -757,16 +711,16 @@ describe("runService.createManyRuns — templateId integration", () => {
       desiredDpsCount: 14,
       notes: null,
     });
-    createdTemplateIds.push(template.id);
+    created.templateIds.push(template.id);
 
     const result = await runService.createManyRuns(admin, {
-      defaults: defaultsFor({ raidLeadId: ids.otherLead }),
+      defaults: defaultsFor({ raidLeadId: otherLead.id }),
       runs: rowsOf(2, 830),
       templateId: template.id,
     });
-    createdRunIds.push(...result.ids);
+    created.runIds.push(...result.ids);
     const run = await runRepository.findById(result.ids[0]!);
-    expect(run?.raidLeadId).toBe(ids.otherLead);
+    expect(run?.raidLeadId).toBe(otherLead.id);
   });
 
   it("RAID_LEAD forging another lead via row override is rejected, 0 Runs created", async () => {
@@ -780,14 +734,14 @@ describe("runService.createManyRuns — templateId integration", () => {
       desiredDpsCount: 14,
       notes: null,
     });
-    createdTemplateIds.push(template.id);
+    created.templateIds.push(template.id);
 
-    await expectDomainCode(
+    await expectDomainError(
       runService.createManyRuns(lead, {
         defaults: defaultsFor(),
         runs: [
           { scheduledStartAt: futureIso(840) },
-          { scheduledStartAt: futureIso(841), overrides: { raidLeadId: ids.otherLead } },
+          { scheduledStartAt: futureIso(841), overrides: { raidLeadId: otherLead.id } },
         ],
         templateId: template.id,
       }),
@@ -808,10 +762,10 @@ describe("runService.createManyRuns — templateId integration", () => {
       desiredDpsCount: 14,
       notes: null,
     });
-    createdTemplateIds.push(template.id);
+    created.templateIds.push(template.id);
     await runTemplateService.deactivate(admin, template.id);
 
-    await expectDomainCode(
+    await expectDomainError(
       runService.createManyRuns(lead, { defaults: defaultsFor(), runs: rowsOf(1, 850), templateId: template.id }),
       "RUN_TEMPLATE_UNUSABLE",
     );
@@ -830,17 +784,17 @@ describe("runService.createManyRuns — templateId integration", () => {
       desiredDpsCount: 14,
       notes: "Shared template notes",
     });
-    createdTemplateIds.push(template.id);
+    created.templateIds.push(template.id);
 
     const result = await runService.createManyRuns(lead, {
       defaults: defaultsFor(),
       runs: [{ scheduledStartAt: futureIso(860), overrides: { notes: "Row-specific notes", desiredTankCount: 3 } }],
       templateId: template.id,
     });
-    createdRunIds.push(...result.ids);
+    created.runIds.push(...result.ids);
 
     const run = await runRepository.findById(result.ids[0]!);
-    expect(run?.raidLeadId).toBe(ids.lead);
+    expect(run?.raidLeadId).toBe(lead.id);
     expect(run?.notes).toBe("Row-specific notes");
     expect(run?.desiredTankCount).toBe(3);
   });
@@ -856,19 +810,19 @@ describe("runService.createManyRuns — templateId integration", () => {
       desiredDpsCount: 14,
       notes: null,
     });
-    createdTemplateIds.push(template.id);
+    created.templateIds.push(template.id);
 
     const result = await runService.createManyRuns(lead, {
       defaults: defaultsFor(),
       runs: rowsOf(3, 870),
       templateId: template.id,
     });
-    createdRunIds.push(...result.ids);
+    created.runIds.push(...result.ids);
 
     expect(result.ids).toHaveLength(3);
     const runs = await Promise.all(result.ids.map((id) => runRepository.findById(id)));
     for (const run of runs) {
-      expect(run?.raidLeadId).toBe(ids.lead);
+      expect(run?.raidLeadId).toBe(lead.id);
       expect(run?.status).toBe("DRAFT");
       expect(run?.signupsOpen).toBe(false);
       const roster = await orm.RunRoster.where({ runId: run!.id }).first();
@@ -888,14 +842,14 @@ describe("runService.createManyRuns — templateId integration", () => {
         desiredDpsCount: 14,
         notes: "Original notes",
       });
-      createdTemplateIds.push(template.id);
+      created.templateIds.push(template.id);
 
       const result = await runService.createManyRuns(lead, {
         defaults: defaultsFor(),
         runs: rowsOf(1, 880),
         templateId: template.id,
       });
-      createdRunIds.push(...result.ids);
+      created.runIds.push(...result.ids);
       const before = await runRepository.findById(result.ids[0]!);
 
       await runTemplateService.updateTemplate(admin, {
@@ -932,14 +886,14 @@ describe("runService.createManyRuns — templateId integration", () => {
         desiredDpsCount: 14,
         notes: null,
       });
-      createdTemplateIds.push(template.id);
+      created.templateIds.push(template.id);
 
       const result = await runService.createManyRuns(lead, {
         defaults: defaultsFor(),
         runs: rowsOf(1, 890),
         templateId: template.id,
       });
-      createdRunIds.push(...result.ids);
+      created.runIds.push(...result.ids);
       const before = await runRepository.findById(result.ids[0]!);
 
       await runTemplateService.deactivate(admin, template.id);
