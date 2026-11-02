@@ -1327,6 +1327,10 @@
     "tests/integration/services/run-consumable-audit.service.test.ts": [
       "REWRITE",
       "Seed COMPLETED Runs contract retained with restore; assertIsolatedTestDatabase; expectDomainError; testActor; suite-private OTHER_LEAD cleaned with deleteAndCount"
+    ],
+    "tests/integration/services/roster-selection-warning.integration.test.ts": [
+      "REWRITE",
+      "assertIsolatedTestDatabase; verified deleteAndCount cleanup (no swallowed deleteIfPresent); testActor; saveDraftSelection already used"
     ]
   },
   "tests": {

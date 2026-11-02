@@ -3,6 +3,8 @@ import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError, RosterWarningConfirmationRequiredError } from "@/lib/errors";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
+import { testActor } from "@tests/fixtures/actors";
+import { assertIsolatedTestDatabase } from "@tests/fixtures/db-fixtures";
 import { venomousCreateInput, seededProductSelection } from "@tests/fixtures/test-run-input";
 import { TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import type { CharacterRole, WowClass } from "@/models/enums";
@@ -53,16 +55,7 @@ function asUser(
   name: string,
   accountRole: AuthenticatedUser["accountRole"] = "USER",
 ): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@rwarn.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
+  return testActor(id, accountRole, { name, email: `${id}@rwarn.boostting.local` });
 }
 
 async function createTestUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"]) {
@@ -78,17 +71,15 @@ async function createTestUser(id: string, name: string, accountRole: Authenticat
   });
 }
 
-async function deleteIfPresent(table: string, id: string) {
-  try {
-    if (table === "User") await orm.User.where({ id }).delete();
-    else if (table === "Character") await orm.Character.where({ id }).delete();
-    else if (table === "RunSignupRole") await orm.RunSignupRole.where({ id }).delete();
-    else if (table === "RunSignup") await orm.RunSignup.where({ id }).delete();
-    else if (table === "RunAttendance") await orm.RunAttendance.where({ id }).delete();
-    else if (table === "Run") await orm.Run.where({ id }).delete();
-  } catch {
-    // Already gone.
-  }
+async function deleteOwnedRow(table: string, id: string) {
+  assertIsolatedTestDatabase();
+  if (table === "User") await orm.User.where({ id }).deleteAndCount();
+  else if (table === "Character") await orm.Character.where({ id }).deleteAndCount();
+  else if (table === "RunSignupRole") await orm.RunSignupRole.where({ id }).deleteAndCount();
+  else if (table === "RunSignup") await orm.RunSignup.where({ id }).deleteAndCount();
+  else if (table === "RunAttendance") await orm.RunAttendance.where({ id }).deleteAndCount();
+  else if (table === "Run") await orm.Run.where({ id }).deleteAndCount();
+  else throw new Error(`Unknown cleanup table ${table}`);
 }
 
 async function createCharacter(input: {
@@ -123,27 +114,27 @@ async function createCharacter(input: {
 async function cleanupRun(runId: string) {
   const attendance = await orm.RunAttendance.where({ runId }).select("id").all();
   for (const row of attendance) {
-    await deleteIfPresent("RunAttendance", (row as { id: string }).id);
+    await deleteOwnedRow("RunAttendance", (row as { id: string }).id);
   }
   const roster = await orm.RunRoster.where({ runId }).first();
   if (roster) {
     const rosterId = (roster as { id: string }).id;
     const entries = await orm.RunRosterEntry.where({ rosterId }).all();
     for (const entry of entries) {
-      await orm.RunRosterEntry.where({ id: (entry as { id: string }).id }).delete();
+      await orm.RunRosterEntry.where({ id: (entry as { id: string }).id }).deleteAndCount();
     }
-    await orm.RunRoster.where({ id: rosterId }).delete();
+    await orm.RunRoster.where({ id: rosterId }).deleteAndCount();
   }
   const signups = await orm.RunSignup.where({ runId }).select("id").all();
   for (const row of signups) {
     const signupId = (row as { id: string }).id;
     const roles = await orm.RunSignupRole.where({ signupId }).select("id").all();
     for (const role of roles) {
-      await deleteIfPresent("RunSignupRole", (role as { id: string }).id);
+      await deleteOwnedRow("RunSignupRole", (role as { id: string }).id);
     }
-    await deleteIfPresent("RunSignup", signupId);
+    await deleteOwnedRow("RunSignup", signupId);
   }
-  await deleteIfPresent("Run", runId);
+  await deleteOwnedRow("Run", runId);
 }
 
 /**
@@ -214,9 +205,7 @@ async function setLockout(
   const run = await runRepository.findById(runId);
   const resetIdentifier = lockoutService.getResetIdentifierForRun("EU", run!.scheduledStartAt);
   const difficulty = options.difficulty ?? "HEROIC";
-  await orm.CharacterRaidLockout.where({ characterId, raidId, difficulty, resetIdentifier })
-    .delete()
-    .catch(() => {});
+  await orm.CharacterRaidLockout.where({ characterId, raidId, difficulty, resetIdentifier }).deleteAndCount();
   let killedBossIds: string | null = null;
   if (options.killedBossNumbers) {
     const bosses = (await orm.RaidBoss.where({ raidId }).select("id", "sortOrder").all()) as Array<{
@@ -321,15 +310,15 @@ beforeAll(async () => {
       const signupId = (row as { id: string }).id;
       const roles = await orm.RunSignupRole.where({ signupId }).select("id").all();
       for (const role of roles) {
-        await deleteIfPresent("RunSignupRole", (role as { id: string }).id);
+        await deleteOwnedRow("RunSignupRole", (role as { id: string }).id);
       }
-      await deleteIfPresent("RunSignup", signupId);
+      await deleteOwnedRow("RunSignup", signupId);
     }
     const chars = await orm.Character.where({ userId }).select("id").all();
     for (const row of chars) {
-      await deleteIfPresent("Character", (row as { id: string }).id);
+      await deleteOwnedRow("Character", (row as { id: string }).id);
     }
-    await deleteIfPresent("User", userId);
+    await deleteOwnedRow("User", userId);
   }
 
   await createTestUser(ids.lead, "Warning Lead", "RAID_LEAD");
@@ -369,11 +358,11 @@ afterAll(async () => {
     await cleanupRun(runId);
   }
   for (const id of createdCharacterIds) {
-    await orm.CharacterRaidLockout.where({ characterId: id }).delete().catch(() => {});
-    await deleteIfPresent("Character", id);
+    await orm.CharacterRaidLockout.where({ characterId: id }).deleteAndCount();
+    await deleteOwnedRow("Character", id);
   }
   for (const id of createdUserIds) {
-    await deleteIfPresent("User", id);
+    await deleteOwnedRow("User", id);
   }
 }, 60_000);
 
