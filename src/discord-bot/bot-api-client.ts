@@ -50,9 +50,9 @@ export class BotApiClient {
 
     const contentType = response.headers.get("content-type") ?? "";
     if (!contentType.includes("application/json")) {
-      const bodyText = await response.text().catch(() => "<unreadable body>");
+      // The body is not logged: an error page can contain paths, stack traces or user data.
       console.error(
-        `[bot-api-client] non-JSON response from ${method} ${url}: status=${response.status} content-type=${contentType || "<none>"} body=${bodyText.slice(0, 500)}`,
+        `[bot-api-client] non-JSON response from ${method} ${url}: status=${response.status} content-type=${contentType || "<none>"}`,
       );
       throw new Error(`Bot API returned a non-JSON response (status ${response.status}).`);
     }

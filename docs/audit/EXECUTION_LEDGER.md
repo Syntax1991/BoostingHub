@@ -111,7 +111,7 @@ Static scan of all 3699 test blocks. These are candidates to read, not decisions
 
 Critical gaps:
 
-- `session-management.service.ts` has no direct test. Revoking a session is security-relevant.
+- `session-management.service.ts`: the existing test file exercises Better Auth directly, not this service, so its ownership checks had no test. Added in the security batch.
 - 14 of 25 controller files are not exercised by a test directly, including `signup.actions`, `strike.actions` and `user-management.actions`.
 - `src/discord-bot/interactions/note-handler.ts` has no direct test.
 - Only 2 bot routes have explicit credential tests, out of 24.
@@ -124,7 +124,7 @@ Order follows the assignment. Each line is one PR, stacked on the one before.
 | --- | --- | --- |
 | 1 | Documentation and restart plan | PR #323, awaiting review |
 | 2 | Remove dead code | PR open, awaiting review |
-| 3 | Security headers, bot log body, route-wide bot credential test | Planned |
+| 3 | Security headers, bot log body, route-wide bot credential test, session ownership tests | PR open, awaiting review |
 | 4 | MVCS boundaries A4 to A7 | Planned |
 | 5 | Guide code: drop legacy paths, share publisher code | Planned |
 | 6 | Test cleanup by module | Planned; 19 of 337 files read |
@@ -142,6 +142,13 @@ Order follows the assignment. Each line is one PR, stacked on the one before.
 ## Change log
 
 Updated with every batch.
+
+### Batch 3: security hardening
+
+- `next.config.ts`: adds HSTS (180 days, no subdomains), nosniff, frame denial, a referrer policy and a permissions policy, and removes `X-Powered-By: Next.js`. Apache still adds its own `X-Powered-By: PleskLin`, which is a server setting. No content security policy yet: it needs a study of inline scripts and images first.
+- `bot-api-client.ts`: a non-JSON response no longer logs its body.
+- New tests: `bot-route-credentials.test.ts` (every bot route found on disk refuses a missing or wrong token), `session-management-ownership.test.ts`, `next-config.test.ts`.
+- Mutation checks: removing the credential check from one route, and removing the owner filter from the session query, each made the new tests fail. Both mutations were restored from a copy.
 
 ### Batch 2: remove dead code
 

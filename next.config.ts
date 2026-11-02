@@ -17,8 +17,20 @@ function resolveDeploymentId(): string | undefined {
   }
 }
 
+const SECURITY_HEADERS = [
+  { key: "Strict-Transport-Security", value: "max-age=15552000" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+];
+
 const nextConfig: NextConfig = {
   deploymentId: resolveDeploymentId(),
+  poweredByHeader: false,
+  async headers() {
+    return [{ source: "/:path*", headers: SECURITY_HEADERS }];
+  },
   images: {
     remotePatterns: [
       {
