@@ -1,0 +1,345 @@
+file	postgres_queries	category	reason
+tests/unit/app/(app)/manage/runs/create-many/page.test.ts	0	unit	no database
+tests/unit/app/(app)/manage/runs/create/page.test.ts	0	unit	no database
+tests/unit/app/(app)/runs/[runId]/archive-transcript/route.test.ts	0	unit	no database
+tests/unit/app/api/bot/bot-route-credentials.test.ts	0	unit	no database
+tests/integration/app/api/bot/bot-routes.test.ts	1121	integration	database
+tests/integration/app/api/bot/runs/[runId]/archive/archive-route.test.ts	89	integration	database
+tests/integration/app/api/integrations/battlenet/callback/route.test.ts	26	integration	database
+tests/unit/app/dialog-centering.test.ts	0	unit	no database
+tests/unit/auth/auth-session-hardening.test.ts	0	unit	no database
+tests/unit/auth/authorization.consumable-audit.test.ts	0	unit	no database
+tests/unit/auth/authorization.user-management.test.ts	0	unit	no database
+tests/integration/auth/discord-oauth-url.test.ts	3	integration	database
+tests/unit/auth/platform-owner-authorization.test.ts	2	unit	auth introspection only
+tests/unit/components/auth/discord-sign-in-button.test.ts	0	unit	no database
+tests/unit/components/auth/login-view.test.ts	0	unit	no database
+tests/unit/components/characters/battle-net-panel.test.ts	0	unit	no database
+tests/unit/components/characters/character-details-view.wcl.test.ts	2	unit	auth introspection only
+tests/unit/components/characters/character-form-dialog.test.ts	2	unit	auth introspection only
+tests/unit/components/characters/character-offspec-display.test.ts	2	unit	auth introspection only
+tests/unit/components/characters/characters-view.desktop-grid.test.ts	2	unit	auth introspection only
+tests/unit/components/characters/characters-view.overflow-actions.test.ts	0	unit	no database
+tests/unit/components/characters/characters-view.wcl.test.ts	2	unit	auth introspection only
+tests/unit/components/characters/characters-view.weekly-availability.test.ts	2	unit	auth introspection only
+tests/unit/components/dashboard/dashboard-view.test.ts	0	unit	no database
+tests/unit/components/layout/app-shell.mobile-nav.test.ts	0	unit	no database
+tests/unit/components/layout/narrow-screen-layout.test.ts	0	unit	no database
+tests/unit/components/manage/add-booster-entry-dialog.test.ts	0	unit	no database
+tests/unit/components/manage/choose-spec-option.test.ts	0	unit	no database
+tests/unit/components/manage/manage-community-schedule-view.test.ts	2	unit	auth introspection only
+tests/unit/components/manage/manage-users-view.test.ts	2	unit	auth introspection only
+tests/unit/components/manage/raid-catalog/manage-raid-catalog-view.tabs.test.ts	0	unit	no database
+tests/unit/components/manage/roster-actions.test.ts	0	unit	no database
+tests/unit/components/manage/roster-boss-plan-editor.test.ts	0	unit	no database
+tests/unit/components/manage/roster-boss-plan-panel.test.ts	0	unit	no database
+tests/unit/components/manage/roster-builder-layout.test.ts	0	unit	no database
+tests/unit/components/manage/roster-run-commitments.test.ts	0	unit	no database
+tests/unit/components/manage/roster-signup-grouping.test.ts	0	unit	no database
+tests/unit/components/manage/roster-slot-warning.test.ts	0	unit	no database
+tests/unit/components/manage/roster-staged-selection.test.ts	0	unit	no database
+tests/unit/components/manage/user-access-dialog.test.ts	2	unit	auth introspection only
+tests/unit/components/runs/run-attendance-section.sort-filter.test.ts	0	unit	no database
+tests/unit/components/runs/run-creation-form.defaults.test.ts	0	unit	no database
+tests/unit/components/runs/run-creation-success-path.test.ts	0	unit	no database
+tests/unit/components/runs/run-preflight-panel.test.ts	0	unit	no database
+tests/unit/components/runs/run-roster-config-admin.test.ts	0	unit	no database
+tests/unit/components/runs/run-warcraft-logs-panel.test.ts	0	unit	no database
+tests/unit/components/runs/runs-view.create-cta.test.ts	0	unit	no database
+tests/unit/components/runs/runs-view.timezone.test.ts	0	unit	no database
+tests/unit/components/runs/signup-dialog.quick-signup.test.ts	0	unit	no database
+tests/unit/components/runs/signup-dialog.wcl.test.ts	2	unit	auth introspection only
+tests/unit/components/ui/wcl-best-link.test.ts	0	unit	no database
+tests/integration/controllers/run-consumable-audit.actions.test.ts	30	integration	database
+tests/unit/controllers/run-create-route.test.ts	2	unit	auth introspection only
+tests/unit/controllers/system-health.actions.test.ts	0	unit	no database
+tests/unit/controllers/warcraft-logs.actions.test.ts	0	unit	no database
+tests/unit/discord-bot/archive-transcript.test.ts	0	unit	no database
+tests/unit/discord-bot/bot-api-client.test.ts	0	unit	no database
+tests/unit/discord-bot/channel-reconciliation.test.ts	0	unit	no database
+tests/unit/discord-bot/class-emoji-lookup.test.ts	0	unit	no database
+tests/unit/discord-bot/client-rate-limit.test.ts	0	unit	no database
+tests/unit/discord-bot/client.quick-signup.test.ts	0	unit	no database
+tests/unit/discord-bot/commands/guide.test.ts	0	unit	no database
+tests/unit/discord-bot/commands/mysignups.test.ts	0	unit	no database
+tests/unit/discord-bot/custom-ids.test.ts	0	unit	no database
+tests/unit/discord-bot/discord-api-errors.test.ts	0	unit	no database
+tests/unit/discord-bot/embeds/raidboost-announce.test.ts	0	unit	no database
+tests/unit/discord-bot/embeds/roster-embed.test.ts	0	unit	no database
+tests/unit/discord-bot/embeds/run-lifecycle-announcement.test.ts	0	unit	no database
+tests/unit/discord-bot/embeds/signup-embed.test.ts	0	unit	no database
+tests/unit/discord-bot/embeds/signup-roster-split.test.ts	0	unit	no database
+tests/unit/discord-bot/env.test.ts	0	unit	no database
+tests/unit/discord-bot/format.test.ts	0	unit	no database
+tests/integration/discord-bot/global-announcements.test.ts	5	integration	database
+tests/unit/discord-bot/intents.test.ts	0	unit	no database
+tests/unit/discord-bot/interactions/archive-handler.test.ts	0	unit	no database
+tests/unit/discord-bot/interactions/cancel-handler.test.ts	0	unit	no database
+tests/unit/discord-bot/interactions/error-copy.test.ts	0	unit	no database
+tests/unit/discord-bot/interactions/signup-flow.test.ts	0	unit	no database
+tests/unit/discord-bot/interactions/signup-staging.test.ts	0	unit	no database
+tests/unit/discord-bot/message-content.test.ts	0	unit	no database
+tests/unit/discord-bot/messages/raid-invite-message.test.ts	0	unit	no database
+tests/unit/discord-bot/messages/run-start-message.test.ts	0	unit	no database
+tests/integration/discord-bot/sync-emoji-cache.test.ts	11	integration	database
+tests/integration/discord-bot/sync-loop.test.ts	187	integration	database
+tests/unit/discord-bot/sync-run-help-ping.test.ts	0	unit	no database
+tests/integration/discord-bot/sync-start-post.test.ts	35	integration	database
+tests/integration/discord-bot/sync-voice.test.ts	51	integration	database
+tests/unit/discord-bot/transcript-content.test.ts	0	unit	no database
+tests/unit/discord-bot/transcript-fetch.test.ts	0	unit	no database
+tests/unit/discord-bot/voice-channels.test.ts	0	unit	no database
+tests/unit/discord-bot/voice-presence-report.test.ts	0	unit	no database
+tests/unit/discord-bot/warcraft-logs-links.test.ts	0	unit	no database
+tests/unit/domain/character-schedule-conflict.test.ts	0	unit	no database
+tests/unit/domain/consumable-audit-extract.test.ts	0	unit	no database
+tests/unit/domain/consumable-audit-policy.test.ts	0	unit	no database
+tests/unit/domain/dashboard-attention.test.ts	0	unit	no database
+tests/unit/domain/gear-readiness-policy.test.ts	0	unit	no database
+tests/unit/domain/operational-analytics.test.ts	0	unit	no database
+tests/unit/domain/roster-builder-optimizer-fill.test.ts	0	unit	no database
+tests/unit/domain/roster-builder-optimizer.test.ts	0	unit	no database
+tests/unit/domain/roster-composition.test.ts	0	unit	no database
+tests/unit/domain/roster-publish-state.test.ts	0	unit	no database
+tests/integration/domain/roster-raid-buffs.integration.test.ts	275	integration	database
+tests/unit/domain/roster-raid-buffs.test.ts	0	unit	no database
+tests/unit/domain/roster-selection-risk.test.ts	0	unit	no database
+tests/unit/domain/roster-validation.test.ts	0	unit	no database
+tests/integration/domain/run-operational-handoff.integration.test.ts	1627	integration	database
+tests/unit/domain/run-operational-handoff.test.ts	0	unit	no database
+tests/unit/domain/run-state.test.ts	0	unit	no database
+tests/unit/domain/signup-state.test.ts	0	unit	no database
+tests/unit/domain/user-run-participation.test.ts	0	unit	no database
+tests/unit/domain/wcl-fight-assignment.test.ts	0	unit	no database
+tests/unit/domain/wcl-report-discovery.test.ts	0	unit	no database
+tests/unit/domain/wcl-report-overlap.test.ts	0	unit	no database
+tests/unit/domain/wipe-collapse.test.ts	0	unit	no database
+tests/unit/guides/booster-guide.test.ts	0	unit	no database
+tests/unit/guides/guide-content.test.ts	0	unit	no database
+tests/unit/guides/guide-publisher.test.ts	0	unit	no database
+tests/unit/guides/guide-replace.test.ts	0	unit	no database
+tests/unit/guides/raidlead-guide.test.ts	0	unit	no database
+tests/integration/integrations/blizzard/blizzard-api-client.test.ts	13	integration	database
+tests/unit/integrations/discord/discord-guild-member.client.test.ts	0	unit	no database
+tests/unit/integrations/raider-io/raider-io-api-client.test.ts	0	unit	no database
+tests/integration/integrations/warcraft-logs/warcraft-logs-api-client.test.ts	15	integration	database
+tests/integration/integrations/warcraft-logs/warcraft-logs-report-client.test.ts	9	integration	database
+tests/unit/integrations/warcraft-logs/warcraft-logs-zone-scope.test.ts	0	unit	no database
+tests/unit/lib/after-response.test.ts	0	unit	no database
+tests/unit/lib/app-url.test.ts	0	unit	no database
+tests/unit/lib/attendance-view.test.ts	0	unit	no database
+tests/unit/lib/blizzard/battle-net-flash.test.ts	0	unit	no database
+tests/unit/lib/blizzard/blizzard-integration-events.test.ts	0	unit	no database
+tests/unit/lib/blizzard/character-domain.test.ts	0	unit	no database
+tests/unit/lib/blizzard/import-selection.test.ts	0	unit	no database
+tests/unit/lib/blizzard/oauth-state.test.ts	0	unit	no database
+tests/unit/lib/blizzard/playable-class.test.ts	0	unit	no database
+tests/unit/lib/blizzard/raid-difficulty.test.ts	0	unit	no database
+tests/unit/lib/blizzard/raid-lockout-derivation.test.ts	0	unit	no database
+tests/unit/lib/blizzard/sync-backoff.test.ts	0	unit	no database
+tests/unit/lib/blizzard/sync-error.test.ts	0	unit	no database
+tests/unit/lib/blizzard/sync-health.test.ts	0	unit	no database
+tests/unit/lib/blizzard/sync-state.test.ts	0	unit	no database
+tests/unit/lib/character-availability.test.ts	0	unit	no database
+tests/unit/lib/character-capabilities.test.ts	0	unit	no database
+tests/unit/lib/character-identity.test.ts	0	unit	no database
+tests/unit/lib/character-item-level.test.ts	0	unit	no database
+tests/unit/lib/character-lockout-raids.test.ts	0	unit	no database
+tests/unit/lib/character-reservation-lock.test.ts	0	unit	no database
+tests/unit/lib/character-roster-metadata.test.ts	0	unit	no database
+tests/unit/lib/community-schedule-form.test.ts	0	unit	no database
+tests/unit/lib/community-schedule-share.test.ts	0	unit	no database
+tests/unit/lib/community-schedule-start.test.ts	0	unit	no database
+tests/unit/lib/community-schedule.test.ts	0	unit	no database
+tests/unit/lib/consumable-audit-display.test.ts	0	unit	no database
+tests/unit/lib/consumable-catalog.test.ts	0	unit	no database
+tests/unit/lib/create-run-form-defaults.test.ts	0	unit	no database
+tests/unit/lib/create-run-recurring.test.ts	0	unit	no database
+tests/unit/lib/datetime-timezone.test.ts	0	unit	no database
+tests/unit/lib/dev-db-schema-check.test.ts	0	unit	no database
+tests/unit/lib/discord-channel-name.test.ts	0	unit	no database
+tests/unit/lib/discord-display-name.test.ts	0	unit	no database
+tests/unit/lib/discord-embed-field-chunking.test.ts	0	unit	no database
+tests/unit/lib/discord-links.test.ts	0	unit	no database
+tests/unit/lib/discord-run-title-link.test.ts	0	unit	no database
+tests/unit/lib/discord-schedule.test.ts	0	unit	no database
+tests/unit/lib/discord/discord-integration-events.test.ts	0	unit	no database
+tests/unit/lib/domain.test.ts	0	unit	no database
+tests/unit/lib/external-booster-staging.test.ts	0	unit	no database
+tests/unit/lib/external-booster.test.ts	0	unit	no database
+tests/unit/lib/integration-provider-events.test.ts	0	unit	no database
+tests/unit/lib/integration-telemetry.test.ts	0	unit	no database
+tests/unit/lib/lockout-bosses.test.ts	0	unit	no database
+tests/unit/lib/lockout-display.test.ts	0	unit	no database
+tests/unit/lib/map-with-concurrency.test.ts	0	unit	no database
+tests/unit/lib/my-runs-groups.test.ts	0	unit	no database
+tests/unit/lib/personal-defensive-catalog.test.ts	0	unit	no database
+tests/unit/lib/product-key.test.ts	0	unit	no database
+tests/unit/lib/product-selection.test.ts	0	unit	no database
+tests/unit/lib/quiet-hours.test.ts	0	unit	no database
+tests/unit/lib/raid-catalog.test.ts	0	unit	no database
+tests/unit/lib/raid-id-filter.test.ts	0	unit	no database
+tests/unit/lib/raid-lockout-label.test.ts	0	unit	no database
+tests/unit/lib/raiderio-character-url.test.ts	0	unit	no database
+tests/unit/lib/roster-boss-plan-outputs.test.ts	0	unit	no database
+tests/unit/lib/roster-boss-plan.test.ts	0	unit	no database
+tests/unit/lib/roster-candidate-counts.test.ts	0	unit	no database
+tests/unit/lib/roster-diff.test.ts	0	unit	no database
+tests/unit/lib/roster-replacement.test.ts	0	unit	no database
+tests/unit/lib/roster-role-buckets.test.ts	0	unit	no database
+tests/unit/lib/run-action-feedback.test.ts	0	unit	no database
+tests/unit/lib/run-content-consumers.test.ts	0	unit	no database
+tests/unit/lib/run-content-lockouts.test.ts	0	unit	no database
+tests/unit/lib/run-domain-event.test.ts	0	unit	no database
+tests/unit/lib/run-routes.test.ts	0	unit	no database
+tests/unit/lib/run-row-duplicate.test.ts	0	unit	no database
+tests/unit/lib/run-scope-change.test.ts	0	unit	no database
+tests/unit/lib/run-selection-label.test.ts	0	unit	no database
+tests/unit/lib/run-staffing.test.ts	0	unit	no database
+tests/unit/lib/run-start-message.test.ts	0	unit	no database
+tests/unit/lib/run-title.test.ts	0	unit	no database
+tests/unit/lib/signup-assignable-roles.test.ts	0	unit	no database
+tests/unit/lib/signup-offered-specs.test.ts	0	unit	no database
+tests/unit/lib/signup-tile-invariants.test.ts	0	unit	no database
+tests/unit/lib/signup-tile-tone.test.ts	0	unit	no database
+tests/unit/lib/system-health.test.ts	0	unit	no database
+tests/unit/lib/test-database-guard.test.ts	0	unit	no database
+tests/unit/lib/user-character-roles.test.ts	0	unit	no database
+tests/unit/lib/warcraft-logs.test.ts	0	unit	no database
+tests/unit/lib/warcraft-logs/bulk-discovery-message.test.ts	0	unit	no database
+tests/unit/lib/wcl-performance-display.test.ts	0	unit	no database
+tests/unit/lib/wcl-spec-performance.test.ts	0	unit	no database
+tests/unit/lib/weekly-availability-display.test.ts	0	unit	no database
+tests/unit/lib/wow-class-icons.test.ts	0	unit	no database
+tests/unit/lib/wow-run-week.test.ts	0	unit	no database
+tests/unit/lib/wow-specializations.test.ts	0	unit	no database
+tests/unit/lib/wow-weekly-reset.test.ts	0	unit	no database
+tests/unit/next-config.test.ts	0	unit	no database
+tests/integration/prisma/boosting-roles-migration.test.ts	28	integration	database
+tests/integration/prisma/notification-visibility-backfill.test.ts	100	integration	database
+tests/integration/prisma/seed-guard.test.ts	0	integration	real subprocess
+tests/integration/prisma/seed-wipe.test.ts	88	integration	database
+tests/unit/proxy.test.ts	0	unit	no database
+tests/integration/repositories/auth-session.repository.test.ts	42	integration	database
+tests/integration/repositories/character-weekly-availability.repository.test.ts	127	integration	database
+tests/integration/repositories/character.repository.multi-delete.test.ts	134	integration	database
+tests/integration/repositories/community-stats.repository.test.ts	361	integration	database
+tests/integration/repositories/content-catalog.test.ts	65	integration	database
+tests/integration/repositories/integration-event.repository.test.ts	1561	integration	database
+tests/integration/repositories/lockout.repository.test.ts	88	integration	database
+tests/integration/repositories/roster.repository.clear-draft.test.ts	86	integration	database
+tests/integration/repositories/run-domain-event.repository.test.ts	39	integration	database
+tests/integration/repositories/run-list-bounds.test.ts	128	integration	database
+tests/integration/repositories/run-template.repository.test.ts	91	integration	database
+tests/integration/services/attendance.service.test.ts	11001	integration	database
+tests/integration/services/battle-net.service.test.ts	146	integration	database
+tests/unit/services/blizzard-raid-metadata.service.test.ts	0	unit	no database
+tests/integration/services/booster-access.service.test.ts	350	integration	database
+tests/integration/services/boosting-role.service.test.ts	567	integration	database
+tests/integration/services/character-blizzard-import.service.test.ts	3573	integration	database
+tests/integration/services/character-blizzard-sync.service.test.ts	2397	integration	database
+tests/integration/services/character-delete-actions.test.ts	136	integration	database
+tests/integration/services/character-delete.test.ts	751	integration	database
+tests/integration/services/character-operations.test.ts	23432	integration	database
+tests/unit/services/character-raider-io-ilvl.test.ts	0	unit	no database
+tests/integration/services/character-repair-notification.test.ts	619	integration	database
+tests/integration/services/character-run-commitments.test.ts	4335	integration	database
+tests/integration/services/character-schedule-commitments.service.test.ts	298	integration	database
+tests/integration/services/character-sync-matrix.test.ts	1090	integration	database
+tests/integration/services/character-sync-telemetry.test.ts	1421	integration	database
+tests/unit/services/character-warcraft-logs-batch.test.ts	0	unit	no database
+tests/unit/services/character-warcraft-logs-owner-bulk.test.ts	0	unit	no database
+tests/integration/services/character-warcraft-logs.service.test.ts	117	integration	database
+tests/unit/services/character-wcl-performance.ranking-scope.test.ts	0	unit	no database
+tests/integration/services/character-wcl-performance.resolve.test.ts	28	integration	database
+tests/unit/services/character-wcl-performance.service.test.ts	0	unit	no database
+tests/integration/services/character-weekly-availability.service.test.ts	315	integration	database
+tests/integration/services/character.service.test.ts	352	integration	database
+tests/integration/services/community-schedule-adoption.service.test.ts	2378	integration	database
+tests/integration/services/community-schedule-materialization.service.test.ts	3992	integration	database
+tests/integration/services/community-schedule.service.test.ts	1158	integration	database
+tests/unit/services/community-stats.service.test.ts	0	unit	no database
+tests/integration/services/create-run-recurring-schedule.test.ts	65	integration	database
+tests/integration/services/dashboard.service.test.ts	19	integration	database
+tests/integration/services/dev-account-bootstrap.service.test.ts	186	integration	database
+tests/integration/services/discord-member-name-sync.service.test.ts	192	integration	database
+tests/integration/services/discord-role-access-sync.service.test.ts	230	integration	database
+tests/unit/services/discord-run-channel-retirement.test.ts	0	unit	no database
+tests/integration/services/discord-schedule-sync.test.ts	2463	integration	database
+tests/integration/services/discord-sync-candidates.test.ts	1533	integration	database
+tests/integration/services/discord-sync.service.test.ts	15997	integration	database
+tests/integration/services/flexible-run-management.test.ts	6610	integration	database
+tests/integration/services/late-fill-help.integration.test.ts	3378	integration	database
+tests/integration/services/management-hub.overview.test.ts	33	integration	database
+tests/integration/services/multi-raid-foundation.test.ts	157	integration	database
+tests/integration/services/notification-archived-run.test.ts	398	integration	database
+tests/unit/services/notification-content-withdrawn.test.ts	0	unit	no database
+tests/unit/services/notification-dm-run-identity.test.ts	0	unit	no database
+tests/integration/services/notification-raid-invite.test.ts	779	integration	database
+tests/integration/services/notification-roster-events.test.ts	6496	integration	database
+tests/integration/services/notification.service.test.ts	41	integration	database
+tests/integration/services/platform-owner.test.ts	2313	integration	database
+tests/integration/services/product-driven-planning.test.ts	330	integration	database
+tests/integration/services/published-run-signups.test.ts	344	integration	database
+tests/integration/services/quiet-hours-delivery.test.ts	62	integration	database
+tests/integration/services/raid-catalog-blizzard-discovery.test.ts	67	integration	database
+tests/unit/services/raid-catalog-import-plan.test.ts	0	unit	no database
+tests/integration/services/raid-catalog-import.service.test.ts	468	integration	database
+tests/integration/services/raid-catalog-lifecycle.test.ts	292	integration	database
+tests/integration/services/raid-catalog.service.test.ts	937	integration	database
+tests/integration/services/raid-id-filter.integration.test.ts	158	integration	database
+tests/integration/services/raid-lockout-informational.test.ts	476	integration	database
+tests/integration/services/roster-boss-exceptions.integration.test.ts	5427	integration	database
+tests/integration/services/roster-builder.service.test.ts	786	integration	database
+tests/integration/services/roster-character-sync.service.test.ts	432	integration	database
+tests/integration/services/roster-legacy-dps.test.ts	444	integration	database
+tests/integration/services/roster-legacy-saved-draft.test.ts	1105	integration	database
+tests/integration/services/roster-pre-start-replacements.test.ts	4479	integration	database
+tests/integration/services/roster-reservation-concurrency.test.ts	1128	integration	database
+tests/integration/services/roster-saved-notice.test.ts	1219	integration	database
+tests/integration/services/roster-selection-warning.integration.test.ts	5048	integration	database
+tests/integration/services/roster.service.test.ts	1884	integration	database
+tests/integration/services/run-consumable-audit.service.test.ts	2234	integration	database
+tests/integration/services/run-content-products.test.ts	318	integration	database
+tests/integration/services/run-detail.service.test.ts	100	integration	database
+tests/integration/services/run-discord-announcement.test.ts	1310	integration	database
+tests/integration/services/run-lifecycle-announcement-atomicity.test.ts	309	integration	database
+tests/integration/services/run-lifecycle-concurrency.test.ts	1780	integration	database
+tests/integration/services/run-lifecycle-notifications.test.ts	2787	integration	database
+tests/integration/services/run-lootbuddy-target.test.ts	493	integration	database
+tests/integration/services/run-management.service.test.ts	2344	integration	database
+tests/integration/services/run-mass-create.service.test.ts	1066	integration	database
+tests/unit/services/run-preflight.service.test.ts	0	unit	no database
+tests/integration/services/run-raid-lead-bootstrap.test.ts	406	integration	database
+tests/integration/services/run-reactivate.test.ts	3114	integration	database
+tests/integration/services/run-selection-label.integration.test.ts	146	integration	database
+tests/integration/services/run-template.service.test.ts	271	integration	database
+tests/integration/services/run-warcraft-logs-auto.test.ts	1348	integration	database
+tests/integration/services/schedule-conflict-integrity.test.ts	404	integration	database
+tests/integration/services/scheduled-character-sync-backoff.test.ts	2324	integration	database
+tests/integration/services/scheduled-character-sync.service.test.ts	3666	integration	database
+tests/integration/services/session-management-ownership.test.ts	31	integration	database
+tests/integration/services/session-management.service.test.ts	109	integration	database
+tests/unit/services/settings-preferences-helpers.test.ts	0	unit	no database
+tests/integration/services/settings.service.test.ts	130	integration	database
+tests/integration/services/signup-cross-run-reservation.test.ts	1473	integration	database
+tests/integration/services/signup-draft-selection-visibility.test.ts	789	integration	database
+tests/unit/services/signup-eligibility.test.ts	0	unit	no database
+tests/integration/services/signup-embed-semantics.test.ts	354	integration	database
+tests/unit/services/signup-my-runs-terminal-filter.test.ts	0	unit	no database
+tests/integration/services/signup-note.test.ts	210	integration	database
+tests/integration/services/signup-offers.service.test.ts	1515	integration	database
+tests/integration/services/signup-quick-signup.service.test.ts	2364	integration	database
+tests/integration/services/signup.service.test.ts	346	integration	database
+tests/integration/services/strike.service.test.ts	164	integration	database
+tests/integration/services/user-management.admin-page.test.ts	90	integration	database
+tests/integration/services/user-management.service.test.ts	273	integration	database
+tests/integration/services/warcraft-logs-discovery.test.ts	936	integration	database
+tests/unit/services/warcraft-logs-raid-metadata.service.test.ts	0	unit	no database
+tests/unit/validators/raid-catalog.test.ts	0	unit	no database
+tests/unit/validators/run-consumable-audit.test.ts	0	unit	no database
+tests/unit/validators/system-health.test.ts	0	unit	no database
+tests/unit/validators/user-management.test.ts	0	unit	no database
+tests/integration/deploy/production/backup-db.test.sh	-	integration	real subprocess (bash script under test)
+tests/integration/deploy/production/env-status.test.sh	-	integration	real subprocess (bash script under test)
+tests/integration/deploy/update-server.test.sh	-	integration	real subprocess (bash script under test)

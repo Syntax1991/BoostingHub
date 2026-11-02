@@ -1,970 +1,970 @@
 {
   "files": {
-    "src/auth/auth-session-hardening.test.ts": [
+    "tests/unit/auth/auth-session-hardening.test.ts": [
       "KEEP",
       "Safe redirects, base URL and session view are security behavior"
     ],
-    "src/auth/authorization.consumable-audit.test.ts": [
+    "tests/unit/auth/authorization.consumable-audit.test.ts": [
       "KEEP",
       "Permission boundary with negative cases"
     ],
-    "src/auth/authorization.user-management.test.ts": [
+    "tests/unit/auth/authorization.user-management.test.ts": [
       "KEEP",
       "Canonical management navigation and user-management gates"
     ],
-    "src/auth/discord-oauth-url.test.ts": [
+    "tests/integration/auth/discord-oauth-url.test.ts": [
       "KEEP",
       "Exercises the real Better Auth sign-in route"
     ],
-    "src/auth/platform-owner-authorization.test.ts": [
+    "tests/unit/auth/platform-owner-authorization.test.ts": [
       "KEEP",
       "Owner hierarchy and protected role control"
     ],
-    "src/proxy.test.ts": [
+    "tests/unit/proxy.test.ts": [
       "KEEP",
       "Signed-out redirects and route coverage guard"
     ],
-    "src/app/(app)/manage/runs/create/page.test.ts": [
+    "tests/unit/app/(app)/manage/runs/create/page.test.ts": [
       "KEEP",
       "Legacy URL redirect still exists"
     ],
-    "src/app/(app)/manage/runs/create-many/page.test.ts": [
+    "tests/unit/app/(app)/manage/runs/create-many/page.test.ts": [
       "KEEP",
       "Legacy URL redirect still exists"
     ],
-    "src/app/api/bot/bot-routes.test.ts": [
+    "tests/integration/app/api/bot/bot-routes.test.ts": [
       "REWRITE",
       "Kept all 25 tests; fresh fixture rows and synthetic snowflakes, verified cleanup, request helpers, frozen raid-week clock, side-effect assertions; exact key lists kept as the bot wire contract"
     ],
-    "src/app/api/bot/runs/[runId]/archive/archive-route.test.ts": [
+    "tests/integration/app/api/bot/runs/[runId]/archive/archive-route.test.ts": [
       "REWRITE",
       "Order-independent (own Run per test), fresh fixture rows, verified cleanup, fixed the env restore writing \"undefined\""
     ],
-    "src/app/api/integrations/battlenet/callback/route.test.ts": [
+    "tests/integration/app/api/integrations/battlenet/callback/route.test.ts": [
       "KEEP",
       "Regression for the account-profile 403, including safe logging"
     ],
-    "src/controllers/run-consumable-audit.actions.test.ts": [
+    "tests/integration/controllers/run-consumable-audit.actions.test.ts": [
       "REWRITE",
       "Seed fixtures via SEED_IDS and testActor, one cleanup per test, public route builder for the revalidated path, stronger unauthenticated check"
     ],
-    "src/controllers/run-create-route.test.ts": [
+    "tests/unit/controllers/run-create-route.test.ts": [
       "KEEP",
       "Create form permission gate"
     ],
-    "src/controllers/system-health.actions.test.ts": [
+    "tests/unit/controllers/system-health.actions.test.ts": [
       "KEEP",
       "Telemetry severity classification, which drives health status"
     ],
-    "src/controllers/warcraft-logs.actions.test.ts": [
+    "tests/unit/controllers/warcraft-logs.actions.test.ts": [
       "KEEP",
       "Result mapping and user-facing messages"
     ],
-    "src/prisma/boosting-roles-migration.test.ts": [
+    "tests/integration/prisma/boosting-roles-migration.test.ts": [
       "KEEP",
       "Runs the shipped migration SQL against the old table shape"
     ],
-    "src/prisma/notification-visibility-backfill.test.ts": [
+    "tests/integration/prisma/notification-visibility-backfill.test.ts": [
       "KEEP",
       "Runs the shipped backfill SQL, including idempotency"
     ],
-    "src/prisma/seed-guard.test.ts": [
+    "tests/integration/prisma/seed-guard.test.ts": [
       "KEEP",
       "Destructive operation protection"
     ],
-    "src/prisma/seed-wipe.test.ts": [
+    "tests/integration/prisma/seed-wipe.test.ts": [
       "KEEP",
       "Runs the real seed; slow, but the only proof of a working reset"
     ],
-    "src/validators/raid-catalog.test.ts": [
+    "tests/unit/validators/raid-catalog.test.ts": [
       "KEEP",
       "Input rules with negative cases"
     ],
-    "src/validators/run-consumable-audit.test.ts": [
+    "tests/unit/validators/run-consumable-audit.test.ts": [
       "KEEP",
       "Rejects foreign hosts and malformed codes: security-relevant parsing"
     ],
-    "src/validators/system-health.test.ts": [
+    "tests/unit/validators/system-health.test.ts": [
       "KEEP",
       "Filter parsing with invalid values"
     ],
-    "src/validators/user-management.test.ts": [
+    "tests/unit/validators/user-management.test.ts": [
       "KEEP",
       "Filter parsing and the legacy alias"
     ],
-    "src/integrations/blizzard/blizzard-api-client.test.ts": [
+    "tests/integration/integrations/blizzard/blizzard-api-client.test.ts": [
       "KEEP",
       "HTTP to error code mapping at the public boundary"
     ],
-    "src/integrations/discord/discord-guild-member.client.test.ts": [
+    "tests/unit/integrations/discord/discord-guild-member.client.test.ts": [
       "KEEP",
       "Real client against mocked fetch, token never in errors"
     ],
-    "src/integrations/raider-io/raider-io-api-client.test.ts": [
+    "tests/unit/integrations/raider-io/raider-io-api-client.test.ts": [
       "KEEP",
       "Status mapping and item level source"
     ],
-    "src/integrations/warcraft-logs/warcraft-logs-api-client.test.ts": [
+    "tests/integration/integrations/warcraft-logs/warcraft-logs-api-client.test.ts": [
       "KEEP",
       "Token cache, single flight, status mapping. Two fixes: a title claimed a rejection it never tested; a weak count became exact"
     ],
-    "src/integrations/warcraft-logs/warcraft-logs-report-client.test.ts": [
+    "tests/integration/integrations/warcraft-logs/warcraft-logs-report-client.test.ts": [
       "KEEP",
       "Query batching and paging"
     ],
-    "src/integrations/warcraft-logs/warcraft-logs-zone-scope.test.ts": [
+    "tests/unit/integrations/warcraft-logs/warcraft-logs-zone-scope.test.ts": [
       "KEEP",
       "Zone average rules"
     ],
-    "src/guides/guide-content.test.ts": [
+    "tests/unit/guides/guide-content.test.ts": [
       "KEEP",
       "Reader-facing content rules; the repeated validator test moved to guide-publisher.test.ts"
     ],
-    "src/guides/guide-publisher.test.ts": [
+    "tests/unit/guides/guide-publisher.test.ts": [
       "KEEP",
       "New in batch 5: every shared test runs against both guides"
     ],
-    "src/guides/booster-guide.test.ts": [
+    "tests/unit/guides/booster-guide.test.ts": [
       "KEEP",
       "Rewritten in batch 5: only booster-specific tests remain"
     ],
-    "src/guides/raidlead-guide.test.ts": [
+    "tests/unit/guides/raidlead-guide.test.ts": [
       "KEEP",
       "Rewritten in batch 5: only raid-lead-specific tests remain"
     ],
-    "src/discord-bot/bot-api-client.test.ts": [
+    "tests/unit/discord-bot/bot-api-client.test.ts": [
       "KEEP",
       "Real client against mocked fetch. Merged the instance check into the error test"
     ],
-    "src/discord-bot/client-rate-limit.test.ts": [
+    "tests/unit/discord-bot/client-rate-limit.test.ts": [
       "KEEP",
       "New in batch 8"
     ],
-    "src/app/(app)/runs/[runId]/archive-transcript/route.test.ts": [
+    "tests/unit/app/(app)/runs/[runId]/archive-transcript/route.test.ts": [
       "KEEP",
       "New in batch 4; mutation-checked"
     ],
-    "src/app/api/bot/bot-route-credentials.test.ts": [
+    "tests/unit/app/api/bot/bot-route-credentials.test.ts": [
       "KEEP",
       "New in batch 3; mutation-checked"
     ],
-    "src/services/session-management-ownership.test.ts": [
+    "tests/integration/services/session-management-ownership.test.ts": [
       "KEEP",
       "Session ownership against real rows"
     ],
-    "src/next-config.test.ts": [
+    "tests/unit/next-config.test.ts": [
       "KEEP",
       "New in batch 3"
     ],
-    "src/repositories/auth-session.repository.test.ts": [
+    "tests/integration/repositories/auth-session.repository.test.ts": [
       "KEEP",
       "Real DB: expired and foreign sessions are never returned; protects session revocation ownership"
     ],
-    "src/repositories/character-weekly-availability.repository.test.ts": [
+    "tests/integration/repositories/character-weekly-availability.repository.test.ts": [
       "KEEP",
       "Real DB plus query-count guards against per-Character fan-out; the conflict test checks semantics survive batching"
     ],
-    "src/repositories/character.repository.multi-delete.test.ts": [
+    "tests/integration/repositories/character.repository.multi-delete.test.ts": [
       "KEEP",
       "Regression: Collection.delete() removed only the first row; re-saving specs or roles hit unique constraints"
     ],
-    "src/repositories/community-stats.repository.test.ts": [
+    "tests/integration/repositories/community-stats.repository.test.ts": [
       "KEEP",
       "Real DB eligibility filter (disabled, non-booster, retired) and service wiring"
     ],
-    "src/repositories/content-catalog.test.ts": [
+    "tests/integration/repositories/content-catalog.test.ts": [
       "KEEP",
       "DB catalog parity with the fixture and insert-only bootstrap; restores seeded values afterwards"
     ],
-    "src/repositories/integration-event.repository.test.ts": [
+    "tests/integration/repositories/integration-event.repository.test.ts": [
       "KEEP",
       "Sanitized metadata, purge and failure recording. Two fixes: the cap test passed with any row count below 100 and now inserts 101 rows; a duplicated assertion was dropped"
     ],
-    "src/repositories/lockout.repository.test.ts": [
+    "tests/integration/repositories/lockout.repository.test.ts": [
       "KEEP",
       "Per-raid replace keeps other raids; empty tracked set is never authoritative. The third test relies on the second test's rows"
     ],
-    "src/repositories/roster.repository.clear-draft.test.ts": [
+    "tests/integration/repositories/roster.repository.clear-draft.test.ts": [
       "KEEP",
       "Regression: clearing several draft selections left all but one behind"
     ],
-    "src/repositories/run-domain-event.repository.test.ts": [
+    "tests/integration/repositories/run-domain-event.repository.test.ts": [
       "KEEP",
       "Payload sanitizing, ordering and the USER actor guard"
     ],
-    "src/repositories/run-list-bounds.test.ts": [
+    "tests/integration/repositories/run-list-bounds.test.ts": [
       "KEEP",
       "Bounded list queries return the same subsets as the unbounded ones"
     ],
-    "src/repositories/run-template.repository.test.ts": [
+    "tests/integration/repositories/run-template.repository.test.ts": [
       "KEEP",
       "CRUD, joined reads and audit fields. One fix: updatedAt check used >= after a 5 ms wait and now requires a later value"
     ],
-    "src/components/runs/signup-dialog.quick-signup.test.ts": [
+    "tests/unit/components/runs/signup-dialog.quick-signup.test.ts": [
       "KEEP",
       "Source scan for a product decision (Quick Signup removed from the web dialog). The presence check is weak but the only guard for the offer controls"
     ],
-    "src/components/manage/roster-slot-warning.test.ts": [
+    "tests/unit/components/manage/roster-slot-warning.test.ts": [
       "KEEP",
       "Pure function, names each warning reason"
     ],
-    "src/components/auth/discord-sign-in-button.test.ts": [
+    "tests/unit/components/auth/discord-sign-in-button.test.ts": [
       "KEEP",
       "One click starts Discord sign-in with the callback; real component, auth client mocked"
     ],
-    "src/components/auth/login-view.test.ts": [
+    "tests/unit/components/auth/login-view.test.ts": [
       "KEEP",
       "No implementation details on the login page"
     ],
-    "src/components/runs/run-preflight-panel.test.ts": [
+    "tests/unit/components/runs/run-preflight-panel.test.ts": [
       "KEEP",
       "Warning to action mapping, including checks with no action"
     ],
-    "src/components/manage/user-access-dialog.test.ts": [
+    "tests/unit/components/manage/user-access-dialog.test.ts": [
       "KEEP",
       "Trigger renders with role context. One title claimed OWNER protection the test never checked; retitled"
     ],
-    "src/components/runs/runs-view.create-cta.test.ts": [
+    "tests/unit/components/runs/runs-view.create-cta.test.ts": [
       "KEEP",
       "Create Run shown only with canCreate"
     ],
-    "src/components/ui/wcl-best-link.test.ts": [
+    "tests/unit/components/ui/wcl-best-link.test.ts": [
       "KEEP",
       "Link only with a Warcraft Logs id"
     ],
-    "src/components/manage/add-booster-entry-dialog.test.ts": [
+    "tests/unit/components/manage/add-booster-entry-dialog.test.ts": [
       "KEEP",
       "Registered and External modes"
     ],
-    "src/components/runs/run-creation-success-path.test.ts": [
+    "tests/unit/components/runs/run-creation-success-path.test.ts": [
       "KEEP",
       "Redirect after create and the mass-created banner. Dropped an assertion that repeated the one before it"
     ],
-    "src/components/manage/roster-boss-plan-panel.test.ts": [
+    "tests/unit/components/manage/roster-boss-plan-panel.test.ts": [
       "KEEP",
       "Boss chips, exception and warning markers"
     ],
-    "src/components/runs/run-roster-config-admin.test.ts": [
+    "tests/unit/components/runs/run-roster-config-admin.test.ts": [
       "KEEP",
       "Managers see actions, viewers only notes"
     ],
-    "src/components/runs/run-warcraft-logs-panel.test.ts": [
+    "tests/unit/components/runs/run-warcraft-logs-panel.test.ts": [
       "KEEP",
       "Regression: only Link & analyze may submit the form"
     ],
-    "src/components/manage/roster-actions.test.ts": [
+    "tests/unit/components/manage/roster-actions.test.ts": [
       "KEEP",
       "Roster action matrix. One test repeated the published-and-clean case with the same input; removed"
     ],
-    "src/components/characters/battle-net-panel.test.ts": [
+    "tests/unit/components/characters/battle-net-panel.test.ts": [
       "KEEP",
       "Account profile denied callout never leaks codes; other errors unchanged"
     ],
-    "src/components/runs/run-creation-form.defaults.test.ts": [
+    "tests/unit/components/runs/run-creation-form.defaults.test.ts": [
       "KEEP",
       "Opt-in defaults unchecked; duplicate limit. One title claimed a recurring-mode check it never made; retitled"
     ],
-    "src/components/characters/characters-view.overflow-actions.test.ts": [
+    "tests/unit/components/characters/characters-view.overflow-actions.test.ts": [
       "KEEP",
       "Regression: dialogs nested in menu items unmounted on close. Two tests removed: one claimed to test onSelect but asserted it was not called; one only exercised React refs"
     ],
-    "src/components/manage/choose-spec-option.test.ts": [
+    "tests/unit/components/manage/choose-spec-option.test.ts": [
       "KEEP",
       "WCL link per spec, not nested in the select button. One test repeated the URL check of the first test and warcraft-logs.test.ts; removed"
     ],
-    "src/components/runs/run-attendance-section.sort-filter.test.ts": [
+    "tests/unit/components/runs/run-attendance-section.sort-filter.test.ts": [
       "KEEP",
       "Default order, filter options and unmarked count"
     ],
-    "src/components/runs/runs-view.timezone.test.ts": [
+    "tests/unit/components/runs/runs-view.timezone.test.ts": [
       "KEEP",
       "Viewer timezone and instant ordering"
     ],
-    "src/components/layout/app-shell.mobile-nav.test.ts": [
+    "tests/unit/components/layout/app-shell.mobile-nav.test.ts": [
       "KEEP",
       "Source scan for the mobile drawer wiring. Removed pure styling assertions (backdrop colour, widths, active styling classes) and the desktop sidebar class-string test"
     ],
-    "src/components/manage/roster-builder-layout.test.ts": [
+    "tests/unit/components/manage/roster-builder-layout.test.ts": [
       "KEEP",
       "Section order of the Roster tab"
     ],
-    "src/components/characters/character-details-view.wcl.test.ts": [
+    "tests/unit/components/characters/character-details-view.wcl.test.ts": [
       "KEEP",
       "WCL link safety attributes and repair hint"
     ],
-    "src/components/layout/narrow-screen-layout.test.ts": [
+    "tests/unit/components/layout/narrow-screen-layout.test.ts": [
       "KEEP",
       "Class decisions that fixed horizontal overflow on phones. The drawer test repeated app-shell.mobile-nav.test.ts; removed"
     ],
-    "src/components/manage/manage-users-view.test.ts": [
+    "tests/unit/components/manage/manage-users-view.test.ts": [
       "KEEP",
       "Directory columns. One title promised an em dash it never checked; the assertion is added"
     ],
-    "src/lib/wcl-performance-display.test.ts": [
+    "tests/unit/lib/wcl-performance-display.test.ts": [
       "KEEP",
       "Display formatting and filters; took the exact metric-label assertions from the services test"
     ],
-    "src/components/runs/signup-dialog.wcl.test.ts": [
+    "tests/unit/components/runs/signup-dialog.wcl.test.ts": [
       "KEEP",
       "WCL links for eligible and ineligible characters. Two tests had the same title and scenario; merged"
     ],
-    "src/components/manage/roster-signup-grouping.test.ts": [
+    "tests/unit/components/manage/roster-signup-grouping.test.ts": [
       "KEEP",
       "Group by None, Player, Role and the stored preference"
     ],
-    "src/components/manage/roster-staged-selection.test.ts": [
+    "tests/unit/components/manage/roster-staged-selection.test.ts": [
       "KEEP",
       "Role-copy toggle rules. One test repeated the reassign test without calling any toggle; removed"
     ],
-    "src/components/characters/characters-view.desktop-grid.test.ts": [
+    "tests/unit/components/characters/characters-view.desktop-grid.test.ts": [
       "KEEP",
       "Regression: arbitrary Tailwind grid tracks never compiled"
     ],
-    "src/components/characters/characters-view.weekly-availability.test.ts": [
+    "tests/unit/components/characters/characters-view.weekly-availability.test.ts": [
       "KEEP",
       "Availability labels and removed features stay absent. Dropped a border class assertion"
     ],
-    "src/components/dashboard/dashboard-view.test.ts": [
+    "tests/unit/components/dashboard/dashboard-view.test.ts": [
       "KEEP",
       "Personal, operations and empty states"
     ],
-    "src/components/characters/characters-view.wcl.test.ts": [
+    "tests/unit/components/characters/characters-view.wcl.test.ts": [
       "KEEP",
       "WCL link or Find WCL, bulk action only when needed"
     ],
-    "src/components/manage/roster-run-commitments.test.ts": [
+    "tests/unit/components/manage/roster-run-commitments.test.ts": [
       "KEEP",
       "Commitment chips and conflict alert. Two tests removed: one checked that a component without conflict input shows no conflict, one only placed two components side by side. Spec-letter prefixes dropped from titles"
     ],
-    "src/components/manage/raid-catalog/manage-raid-catalog-view.tabs.test.ts": [
+    "tests/unit/components/manage/raid-catalog/manage-raid-catalog-view.tabs.test.ts": [
       "KEEP",
       "Tab and scope resolution and URL building"
     ],
-    "src/components/characters/character-form-dialog.test.ts": [
+    "tests/unit/components/characters/character-form-dialog.test.ts": [
       "KEEP",
       "normalizeCreateRows rules and source wiring. Removed a test that re-implemented the readiness filter inside the test, a className pinning test and an implementation-detail test covered by the row tests"
     ],
-    "src/components/manage/roster-boss-plan-editor.test.ts": [
+    "tests/unit/components/manage/roster-boss-plan-editor.test.ts": [
       "KEEP",
       "Range picker, choices, payload and live warnings"
     ],
-    "src/components/manage/manage-community-schedule-view.test.ts": [
+    "tests/unit/components/manage/manage-community-schedule-view.test.ts": [
       "KEEP",
       "Admin and read-only views, empty state"
     ],
-    "src/components/characters/character-offspec-display.test.ts": [
+    "tests/unit/components/characters/character-offspec-display.test.ts": [
       "KEEP",
       "Offspec display across user, detail and admin views. One test compared a pure function with itself around a render; removed. Numbering dropped from titles; a real-looking player name replaced by a synthetic one"
     ],
-    "src/discord-bot/client.quick-signup.test.ts": [
+    "tests/unit/discord-bot/client.quick-signup.test.ts": [
       "KEEP",
       "Source scan that the quick-signup button reaches its handler; weak but the only routing guard"
     ],
-    "src/discord-bot/intents.test.ts": [
+    "tests/unit/discord-bot/intents.test.ts": [
       "KEEP",
       "Gateway intents stay minimal and come from one list"
     ],
-    "src/discord-bot/format.test.ts": [
+    "tests/unit/discord-bot/format.test.ts": [
       "KEEP",
       "Pure formatting helpers"
     ],
-    "src/discord-bot/interactions/error-copy.test.ts": [
+    "tests/unit/discord-bot/interactions/error-copy.test.ts": [
       "KEEP",
       "Domain code to Discord copy, server message fallback"
     ],
-    "src/discord-bot/embeds/raidboost-announce.test.ts": [
+    "tests/unit/discord-bot/embeds/raidboost-announce.test.ts": [
       "KEEP",
       "Exact announce text and allowedMentions"
     ],
-    "src/discord-bot/transcript-fetch.test.ts": [
+    "tests/unit/discord-bot/transcript-fetch.test.ts": [
       "KEEP",
       "Paging, cap, attachment metadata only"
     ],
-    "src/discord-bot/custom-ids.test.ts": [
+    "tests/unit/discord-bot/custom-ids.test.ts": [
       "KEEP",
       "Round trips and rejection of foreign ids"
     ],
-    "src/discord-bot/interactions/cancel-handler.test.ts": [
+    "tests/unit/discord-bot/interactions/cancel-handler.test.ts": [
       "KEEP",
       "Cancel, reason modal, withdraw with reason"
     ],
-    "src/discord-bot/discord-api-errors.test.ts": [
+    "tests/unit/discord-bot/discord-api-errors.test.ts": [
       "KEEP",
       "Permanent vs retryable Discord errors"
     ],
-    "src/discord-bot/interactions/archive-handler.test.ts": [
+    "tests/unit/discord-bot/interactions/archive-handler.test.ts": [
       "KEEP",
       "Confirm step, server refusal, keep"
     ],
-    "src/discord-bot/commands/guide.test.ts": [
+    "tests/unit/discord-bot/commands/guide.test.ts": [
       "KEEP",
       "Guide channels, never the old threads"
     ],
-    "src/discord-bot/commands/mysignups.test.ts": [
+    "tests/unit/discord-bot/commands/mysignups.test.ts": [
       "KEEP",
       "Grouping per Run and selection states"
     ],
-    "src/discord-bot/embeds/run-lifecycle-announcement.test.ts": [
+    "tests/unit/discord-bot/embeds/run-lifecycle-announcement.test.ts": [
       "KEEP",
       "Embeds link the Run, no URL without a base URL; gained the no @everyone/@here check from the service suite"
     ],
-    "src/discord-bot/sync-emoji-cache.test.ts": [
+    "tests/integration/discord-bot/sync-emoji-cache.test.ts": [
       "KEEP",
       "One emoji fetch per pass and TTL reuse through syncOnce"
     ],
-    "src/discord-bot/messages/run-start-message.test.ts": [
+    "tests/unit/discord-bot/messages/run-start-message.test.ts": [
       "KEEP",
       "Mapping into the shared Final Setup renderer"
     ],
-    "src/discord-bot/voice-presence-report.test.ts": [
+    "tests/unit/discord-bot/voice-presence-report.test.ts": [
       "KEEP",
       "Snapshot limits, trusted cache, report interval"
     ],
-    "src/discord-bot/interactions/signup-staging.test.ts": [
+    "tests/unit/discord-bot/interactions/signup-staging.test.ts": [
       "KEEP",
       "Session isolation and TTL"
     ],
-    "src/discord-bot/message-content.test.ts": [
+    "tests/unit/discord-bot/message-content.test.ts": [
       "KEEP",
       "Message Content classification. Spec numbers dropped from titles"
     ],
-    "src/discord-bot/sync-run-help-ping.test.ts": [
+    "tests/unit/discord-bot/sync-run-help-ping.test.ts": [
       "KEEP",
       "Ping roles delivery, authority, never pings twice"
     ],
-    "src/discord-bot/env.test.ts": [
+    "tests/unit/discord-bot/env.test.ts": [
       "KEEP",
       "Bot env parsing. The first test named every missing variable but checked one; it now checks the full message"
     ],
-    "src/discord-bot/messages/raid-invite-message.test.ts": [
+    "tests/unit/discord-bot/messages/raid-invite-message.test.ts": [
       "KEEP",
       "Exact invite text with Channel and Voice lines. One assertion repeated the one before it"
     ],
-    "src/discord-bot/archive-transcript.test.ts": [
+    "tests/unit/discord-bot/archive-transcript.test.ts": [
       "KEEP",
       "Ticket Tool layout and a byte-exact regression snapshot"
     ],
-    "src/discord-bot/transcript-content.test.ts": [
+    "tests/unit/discord-bot/transcript-content.test.ts": [
       "KEEP",
       "Withheld content marked unavailable, HTML escaping"
     ],
-    "src/discord-bot/embeds/signup-roster-split.test.ts": [
+    "tests/unit/discord-bot/embeds/signup-roster-split.test.ts": [
       "KEEP",
       "Signup vs Roster embed content. The title-only test repeated the first test"
     ],
-    "src/discord-bot/global-announcements.test.ts": [
+    "tests/integration/discord-bot/global-announcements.test.ts": [
       "KEEP",
       "One-time announcement and its failure isolation. The env test repeated env.test.ts"
     ],
-    "src/discord-bot/embeds/roster-embed.test.ts": [
+    "tests/unit/discord-bot/embeds/roster-embed.test.ts": [
       "KEEP",
       "Roster embed fields, footer and links"
     ],
-    "src/discord-bot/class-emoji-lookup.test.ts": [
+    "tests/unit/discord-bot/class-emoji-lookup.test.ts": [
       "KEEP",
       "Emoji cache TTL, single flight, eviction and failure paths"
     ],
-    "src/discord-bot/sync-voice.test.ts": [
+    "tests/integration/discord-bot/sync-voice.test.ts": [
       "KEEP",
       "Voice lane through syncOnce. Assertions are Discord calls, which are the output of this code. Spec numbers dropped from titles"
     ],
-    "src/discord-bot/voice-channels.test.ts": [
+    "tests/unit/discord-bot/voice-channels.test.ts": [
       "KEEP",
       "Voice channel state machine and pool. Three duplicates merged into the tests they repeated"
     ],
-    "src/discord-bot/embeds/signup-embed.test.ts": [
+    "tests/unit/discord-bot/embeds/signup-embed.test.ts": [
       "KEEP",
       "Signup embed layout and Discord limits. The chunking test moved to discord-embed-field-chunking.test.ts; one limit test repeated the limits loop"
     ],
-    "src/discord-bot/warcraft-logs-links.test.ts": [
+    "tests/unit/discord-bot/warcraft-logs-links.test.ts": [
       "KEEP",
       "Cursor-based log scanning, retry and horizon rules. One test repeated a case of the first test"
     ],
-    "src/discord-bot/sync-start-post.test.ts": [
+    "tests/integration/discord-bot/sync-start-post.test.ts": [
       "KEEP",
       "Final Setup post, allowedMentions and voice line. Removed two assertions on names that never occur in the data and a test whose builders cannot produce the line it checked for"
     ],
-    "src/discord-bot/interactions/signup-flow.test.ts": [
+    "tests/unit/discord-bot/interactions/signup-flow.test.ts": [
       "KEEP",
       "Staging flow and Quick Signup. One regex accepted any wording; it now checks the exact copy"
     ],
-    "src/discord-bot/channel-reconciliation.test.ts": [
+    "tests/unit/discord-bot/channel-reconciliation.test.ts": [
       "KEEP",
       "Channel moves, renames, week section ordering. Two tests repeated others with the same input"
     ],
-    "src/discord-bot/sync-loop.test.ts": [
+    "tests/integration/discord-bot/sync-loop.test.ts": [
       "KEEP",
       "End-to-end sync pass against a Discord fake. One conditional test could assert nothing and now asserts both outcomes; three duplicates merged; dead code removed; letter prefixes dropped"
     ],
-    "src/lib/discord-embed-field-chunking.test.ts": [
+    "tests/unit/lib/discord-embed-field-chunking.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/after-response.test.ts": [
+    "tests/unit/lib/after-response.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/app-url.test.ts": [
+    "tests/unit/lib/app-url.test.ts": [
       "KEEP",
       "Absolute Run URLs; also checks runDetailPath"
     ],
-    "src/lib/attendance-view.test.ts": [
+    "tests/unit/lib/attendance-view.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/blizzard/battle-net-flash.test.ts": [
+    "tests/unit/lib/blizzard/battle-net-flash.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/blizzard/blizzard-integration-events.test.ts": [
+    "tests/unit/lib/blizzard/blizzard-integration-events.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/blizzard/character-domain.test.ts": [
+    "tests/unit/lib/blizzard/character-domain.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/blizzard/import-selection.test.ts": [
+    "tests/unit/lib/blizzard/import-selection.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/blizzard/oauth-state.test.ts": [
+    "tests/unit/lib/blizzard/oauth-state.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/blizzard/playable-class.test.ts": [
+    "tests/unit/lib/blizzard/playable-class.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/blizzard/raid-difficulty.test.ts": [
+    "tests/unit/lib/blizzard/raid-difficulty.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/blizzard/raid-lockout-derivation.test.ts": [
+    "tests/unit/lib/blizzard/raid-lockout-derivation.test.ts": [
       "KEEP",
       "Current-reset lockout derivation. Four tests repeated raid-difficulty, raid-catalog or neighbouring tests"
     ],
-    "src/lib/blizzard/sync-backoff.test.ts": [
+    "tests/unit/lib/blizzard/sync-backoff.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/blizzard/sync-error.test.ts": [
+    "tests/unit/lib/blizzard/sync-error.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/blizzard/sync-health.test.ts": [
+    "tests/unit/lib/blizzard/sync-health.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/blizzard/sync-state.test.ts": [
+    "tests/unit/lib/blizzard/sync-state.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/character-availability.test.ts": [
+    "tests/unit/lib/character-availability.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/character-capabilities.test.ts": [
+    "tests/unit/lib/character-capabilities.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/character-identity.test.ts": [
+    "tests/unit/lib/character-identity.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/character-item-level.test.ts": [
+    "tests/unit/lib/character-item-level.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/character-lockout-raids.test.ts": [
+    "tests/unit/lib/character-lockout-raids.test.ts": [
       "KEEP",
       "Lockout slot projection and the no-hardcoded-names source check. Three tests only checked catalog data through a test-local helper or repeated test 1"
     ],
-    "src/lib/character-reservation-lock.test.ts": [
+    "tests/unit/lib/character-reservation-lock.test.ts": [
       "KEEP",
       "Lock order and dedupe; the namespace constant is checked because changing it would collide with other advisory locks"
     ],
-    "src/lib/character-roster-metadata.test.ts": [
+    "tests/unit/lib/character-roster-metadata.test.ts": [
       "KEEP",
       "Offspec labels. Five tests claimed a label cannot change role resolution, which pure functions cannot do; the role cases are in signup-assignable-roles.test.ts"
     ],
-    "src/lib/community-schedule-form.test.ts": [
+    "tests/unit/lib/community-schedule-form.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/community-schedule-share.test.ts": [
+    "tests/unit/lib/community-schedule-share.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/community-schedule-start.test.ts": [
+    "tests/unit/lib/community-schedule-start.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/community-schedule.test.ts": [
+    "tests/unit/lib/community-schedule.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/consumable-audit-display.test.ts": [
+    "tests/unit/lib/consumable-audit-display.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/consumable-catalog.test.ts": [
+    "tests/unit/lib/consumable-catalog.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/create-run-form-defaults.test.ts": [
+    "tests/unit/lib/create-run-form-defaults.test.ts": [
       "KEEP",
       "Opt-in defaults. One test repeated the recurring payload test"
     ],
-    "src/lib/create-run-recurring.test.ts": [
+    "tests/unit/lib/create-run-recurring.test.ts": [
       "KEEP",
       "Schedule payload from Create Run. One test checked a value the test itself passed in; one built an object it never passed to the code. The setup-name test now checks exact output"
     ],
-    "src/lib/datetime-timezone.test.ts": [
+    "tests/unit/lib/datetime-timezone.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/dev-db-schema-check.test.ts": [
+    "tests/unit/lib/dev-db-schema-check.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/discord-channel-name.test.ts": [
+    "tests/unit/lib/discord-channel-name.test.ts": [
       "KEEP",
       "Channel names. Four tests repeated others or could not fail"
     ],
-    "src/lib/discord-display-name.test.ts": [
+    "tests/unit/lib/discord-display-name.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/discord-links.test.ts": [
+    "tests/unit/lib/discord-links.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/discord-run-title-link.test.ts": [
+    "tests/unit/lib/discord-run-title-link.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/discord-schedule.test.ts": [
+    "tests/unit/lib/discord-schedule.test.ts": [
       "KEEP",
       "Schedule buckets and signature. Removed a hash of a hand-built payload and a pure-function-with-itself check; dropped a constant echo"
     ],
-    "src/lib/discord/discord-integration-events.test.ts": [
+    "tests/unit/lib/discord/discord-integration-events.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/domain.test.ts": [
+    "tests/unit/lib/domain.test.ts": [
       "KEEP",
       "Grab-bag of auth, run state, datetime and lockout checks; kept, but misnamed (see naming table)"
     ],
-    "src/lib/external-booster-staging.test.ts": [
+    "tests/unit/lib/external-booster-staging.test.ts": [
       "KEEP",
       "Staging helpers and dialog markup. Removed a self-comparison, a duplicate, two copies of external-booster.test.ts and a duplicate key-order test; one misleading title fixed"
     ],
-    "src/lib/external-booster.test.ts": [
+    "tests/unit/lib/external-booster.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/integration-provider-events.test.ts": [
+    "tests/unit/lib/integration-provider-events.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/integration-telemetry.test.ts": [
+    "tests/unit/lib/integration-telemetry.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/lockout-bosses.test.ts": [
+    "tests/unit/lib/lockout-bosses.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/lockout-display.test.ts": [
+    "tests/unit/lib/lockout-display.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/map-with-concurrency.test.ts": [
+    "tests/unit/lib/map-with-concurrency.test.ts": [
       "KEEP",
       "Ordering and concurrency ceiling. A constant-echo test and a redundant bound were removed"
     ],
-    "src/lib/my-runs-groups.test.ts": [
+    "tests/unit/lib/my-runs-groups.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/personal-defensive-catalog.test.ts": [
+    "tests/unit/lib/personal-defensive-catalog.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/product-key.test.ts": [
+    "tests/unit/lib/product-key.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/product-selection.test.ts": [
+    "tests/unit/lib/product-selection.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/quiet-hours.test.ts": [
+    "tests/unit/lib/quiet-hours.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/raid-catalog.test.ts": [
+    "tests/unit/lib/raid-catalog.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/raid-id-filter.test.ts": [
+    "tests/unit/lib/raid-id-filter.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/raid-lockout-label.test.ts": [
+    "tests/unit/lib/raid-lockout-label.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/raiderio-character-url.test.ts": [
+    "tests/unit/lib/raiderio-character-url.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/roster-boss-plan-outputs.test.ts": [
+    "tests/unit/lib/roster-boss-plan-outputs.test.ts": [
       "KEEP",
       "Boss plan renderers. The selected-DM test now checks the plan line its title promises"
     ],
-    "src/lib/roster-boss-plan.test.ts": [
+    "tests/unit/lib/roster-boss-plan.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/roster-candidate-counts.test.ts": [
+    "tests/unit/lib/roster-candidate-counts.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/roster-diff.test.ts": [
+    "tests/unit/lib/roster-diff.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/roster-replacement.test.ts": [
+    "tests/unit/lib/roster-replacement.test.ts": [
       "KEEP",
       "Replacement ranking. A single-candidate test proved nothing beyond the first test"
     ],
-    "src/lib/roster-role-buckets.test.ts": [
+    "tests/unit/lib/roster-role-buckets.test.ts": [
       "KEEP",
       "Bucket mapping. One test repeated the first with the same calls; a literal-array check and two redundant negatives were removed"
     ],
-    "src/lib/run-action-feedback.test.ts": [
+    "tests/unit/lib/run-action-feedback.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/run-content-consumers.test.ts": [
+    "tests/unit/lib/run-content-consumers.test.ts": [
       "KEEP",
       "Bundle lockout and labels across consumers. One test repeated lockout-display CASE 3; a mojibake separator fixed"
     ],
-    "src/lib/run-content-lockouts.test.ts": [
+    "tests/unit/lib/run-content-lockouts.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/run-domain-event.test.ts": [
+    "tests/unit/lib/run-domain-event.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/run-routes.test.ts": [
+    "tests/unit/lib/run-routes.test.ts": [
       "KEEP",
       "Route helpers and tab sync; took the canonical route test from run-detail.service.test.ts"
     ],
-    "src/lib/run-row-duplicate.test.ts": [
+    "tests/unit/lib/run-row-duplicate.test.ts": [
       "KEEP",
       "Real-hour duplication across DST. The last test repeated create-run-form-defaults constants; retitled to what it checks"
     ],
-    "src/lib/run-scope-change.test.ts": [
+    "tests/unit/lib/run-scope-change.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/run-selection-label.test.ts": [
+    "tests/unit/lib/run-selection-label.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/run-staffing.test.ts": [
+    "tests/unit/lib/run-staffing.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/run-start-message.test.ts": [
+    "tests/unit/lib/run-start-message.test.ts": [
       "KEEP",
       "Final Setup text, escaping and length. Two tests checked the fixed footer for names that never occur"
     ],
-    "src/lib/run-title.test.ts": [
+    "tests/unit/lib/run-title.test.ts": [
       "KEEP",
       "Run titles. A pure function compared with itself was removed"
     ],
-    "src/lib/signup-assignable-roles.test.ts": [
+    "tests/unit/lib/signup-assignable-roles.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/signup-offered-specs.test.ts": [
+    "tests/unit/lib/signup-offered-specs.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/signup-tile-invariants.test.ts": [
+    "tests/unit/lib/signup-tile-invariants.test.ts": [
       "KEEP",
       "Role filter and tile specs. Four tests repeated signup-offered-specs, wcl-spec-performance and warcraft-logs tests"
     ],
-    "src/lib/signup-tile-tone.test.ts": [
+    "tests/unit/lib/signup-tile-tone.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/system-health.test.ts": [
+    "tests/unit/lib/system-health.test.ts": [
       "KEEP",
       "Provider health roll-up. One assertion only read back the test input"
     ],
-    "src/lib/user-character-roles.test.ts": [
+    "tests/unit/lib/user-character-roles.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/warcraft-logs.test.ts": [
+    "tests/unit/lib/warcraft-logs.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/warcraft-logs/bulk-discovery-message.test.ts": [
+    "tests/unit/lib/warcraft-logs/bulk-discovery-message.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/wcl-spec-performance.test.ts": [
+    "tests/unit/lib/wcl-spec-performance.test.ts": [
       "KEEP",
       "Best Perf. Avg rules. One test repeated the first"
     ],
-    "src/lib/weekly-availability-display.test.ts": [
+    "tests/unit/lib/weekly-availability-display.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/wow-class-icons.test.ts": [
+    "tests/unit/lib/wow-class-icons.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/wow-run-week.test.ts": [
+    "tests/unit/lib/wow-run-week.test.ts": [
       "KEEP",
       "Week buckets and DST. Three duplicates removed, and two tests that did arithmetic on their own constants instead of calling the code"
     ],
-    "src/lib/wow-specializations.test.ts": [
+    "tests/unit/lib/wow-specializations.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/lib/wow-weekly-reset.test.ts": [
+    "tests/unit/lib/wow-weekly-reset.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
     ],
-    "src/domain/character-schedule-conflict.test.ts": [
+    "tests/unit/domain/character-schedule-conflict.test.ts": [
       "KEEP",
       "Conflict projection; also checks the 2 h reservation boundary that lives in signup.repository (misplaced, kept)"
     ],
-    "src/domain/consumable-audit-extract.test.ts": [
+    "tests/unit/domain/consumable-audit-extract.test.ts": [
       "KEEP",
       "Read in full; pure rules checked against exact expected values"
     ],
-    "src/domain/consumable-audit-policy.test.ts": [
+    "tests/unit/domain/consumable-audit-policy.test.ts": [
       "KEEP",
       "Read in full; pure rules checked against exact expected values"
     ],
-    "src/domain/dashboard-attention.test.ts": [
+    "tests/unit/domain/dashboard-attention.test.ts": [
       "KEEP",
       "Personal and operations projections. One test repeated the first"
     ],
-    "src/domain/gear-readiness-policy.test.ts": [
+    "tests/unit/domain/gear-readiness-policy.test.ts": [
       "KEEP",
       "Enchant, gem and weapon enhancement rules. One Runeforge test repeated test 1"
     ],
-    "src/domain/operational-analytics.test.ts": [
+    "tests/unit/domain/operational-analytics.test.ts": [
       "KEEP",
       "Read in full; pure rules checked against exact expected values"
     ],
-    "src/domain/roster-builder-optimizer.test.ts": [
+    "tests/unit/domain/roster-builder-optimizer.test.ts": [
       "KEEP",
       "Read in full; pure rules checked against exact expected values"
     ],
-    "src/domain/roster-composition.test.ts": [
+    "tests/unit/domain/roster-composition.test.ts": [
       "KEEP",
       "Read in full; pure rules checked against exact expected values"
     ],
-    "src/domain/roster-publish-state.test.ts": [
+    "tests/unit/domain/roster-publish-state.test.ts": [
       "KEEP",
       "Read in full; pure rules checked against exact expected values"
     ],
-    "src/domain/roster-raid-buffs.integration.test.ts": [
+    "tests/integration/domain/roster-raid-buffs.integration.test.ts": [
       "REWRITE",
       "Own Run per test, fresh fixture rows, frozen clock, no pre-delete; buff ids asserted explicitly; WITHDRAWN exclusion on the real view"
     ],
-    "src/domain/roster-raid-buffs.test.ts": [
+    "tests/unit/domain/roster-raid-buffs.test.ts": [
       "KEEP",
       "Buff coverage matrix. Two tests repeated others (empty roster, PLAYING Mage)"
     ],
-    "src/domain/roster-selection-risk.test.ts": [
+    "tests/unit/domain/roster-selection-risk.test.ts": [
       "KEEP",
       "CLEAN / WARNING / BLOCKED classifier and fingerprints. A pure-function-with-itself test was removed"
     ],
-    "src/domain/roster-validation.test.ts": [
+    "tests/unit/domain/roster-validation.test.ts": [
       "KEEP",
       "Publish blockers and warnings. Two tests repeated the passing case without any lockout or characterless input"
     ],
-    "src/domain/run-operational-handoff.integration.test.ts": [
+    "tests/integration/domain/run-operational-handoff.integration.test.ts": [
       "KEEP",
       "Real DB handoff projection. A conditional assertion is now unconditional; dropped vacuous id checks and a settlement-absence test for a feature removed in #228"
     ],
-    "src/domain/run-operational-handoff.test.ts": [
+    "tests/unit/domain/run-operational-handoff.test.ts": [
       "KEEP",
       "Read in full; pure rules checked against exact expected values"
     ],
-    "src/domain/run-state.test.ts": [
+    "tests/unit/domain/run-state.test.ts": [
       "KEEP",
       "Read in full; pure rules checked against exact expected values; gained a lifecycle transition test (canTransitionRun had none)"
     ],
-    "src/domain/signup-state.test.ts": [
+    "tests/unit/domain/signup-state.test.ts": [
       "KEEP",
       "Offer reconciliation and withdraw rules. A constant-echo test was removed; gained the self-withdrawal rules from signup-eligibility.test.ts"
     ],
-    "src/domain/user-run-participation.test.ts": [
+    "tests/unit/domain/user-run-participation.test.ts": [
       "KEEP",
       "Selection state rules. Two tests repeated others with the same branch"
     ],
-    "src/domain/wcl-fight-assignment.test.ts": [
+    "tests/unit/domain/wcl-fight-assignment.test.ts": [
       "KEEP",
       "Fight assignment across Runs. One test repeated the 8-fight assignment check"
     ],
-    "src/domain/wcl-report-discovery.test.ts": [
+    "tests/unit/domain/wcl-report-discovery.test.ts": [
       "KEEP",
       "Read in full; pure rules checked against exact expected values"
     ],
-    "src/domain/wcl-report-overlap.test.ts": [
+    "tests/unit/domain/wcl-report-overlap.test.ts": [
       "KEEP",
       "Duplicate report pull matching; timings modeled on a real raid, no personal data"
     ],
-    "src/domain/wipe-collapse.test.ts": [
+    "tests/unit/domain/wipe-collapse.test.ts": [
       "KEEP",
       "Read in full; pure rules checked against exact expected values"
     ],
-    "src/services/dashboard.service.test.ts": [
+    "tests/integration/services/dashboard.service.test.ts": [
       "KEEP",
       "Dashboard projection through the service"
     ],
-    "src/services/discord-run-channel-retirement.test.ts": [
+    "tests/unit/services/discord-run-channel-retirement.test.ts": [
       "KEEP",
       "Destructive channel retirement guard. Two single-status cases repeated the status loop"
     ],
-    "src/services/raid-catalog-import-plan.test.ts": [
+    "tests/unit/services/raid-catalog-import-plan.test.ts": [
       "KEEP",
       "Import plan rules"
     ],
-    "src/services/notification-content-withdrawn.test.ts": [
+    "tests/unit/services/notification-content-withdrawn.test.ts": [
       "KEEP",
       "Tests a domain notification builder; misplaced under services (rename candidate)"
     ],
-    "src/services/raid-id-filter.integration.test.ts": [
+    "tests/integration/services/raid-id-filter.integration.test.ts": [
       "KEEP",
       "Raid id filter against the real DB"
     ],
-    "src/services/signup-embed-semantics.test.ts": [
+    "tests/integration/services/signup-embed-semantics.test.ts": [
       "KEEP",
       "Signup embed grouping semantics"
     ],
-    "src/services/settings-preferences-helpers.test.ts": [
+    "tests/unit/services/settings-preferences-helpers.test.ts": [
       "KEEP",
       "Grab-bag of lib helpers (misplaced). Three timezone tests passed constants that the functions never read"
     ],
-    "src/services/blizzard-raid-metadata.service.test.ts": [
+    "tests/unit/services/blizzard-raid-metadata.service.test.ts": [
       "KEEP",
       "Journal discovery mapping and outage handling"
     ],
-    "src/services/character-raider-io-ilvl.test.ts": [
+    "tests/unit/services/character-raider-io-ilvl.test.ts": [
       "KEEP",
       "Raider.IO enrichment preference and telemetry"
     ],
@@ -972,325 +972,325 @@
       "KEEP",
       "Community Stats role gate"
     ],
-    "src/services/raid-catalog-blizzard-discovery.test.ts": [
+    "tests/integration/services/raid-catalog-blizzard-discovery.test.ts": [
       "KEEP",
       "Journal id fill, manual-id survival, retry replacement, outage"
     ],
-    "src/services/character-warcraft-logs-owner-bulk.test.ts": [
+    "tests/unit/services/character-warcraft-logs-owner-bulk.test.ts": [
       "KEEP",
       "Owner bulk link filter and statuses. One summary pass-through test repeated test 1"
     ],
-    "src/services/run-selection-label.integration.test.ts": [
+    "tests/integration/services/run-selection-label.integration.test.ts": [
       "KEEP",
       "Live select labels; one source-text guard that option builders use the shared helper"
     ],
-    "src/app/dialog-centering.test.ts": [
+    "tests/unit/app/dialog-centering.test.ts": [
       "KEEP",
       "Source guard for the single global dialog centering rule"
     ],
-    "src/services/notification.service.test.ts": [
+    "tests/integration/services/notification.service.test.ts": [
       "REWRITE",
       "Fresh users instead of fixed invalid UUIDs and a swallowed pre-clean; notification factory replaces three copies; markAllRead proven not to touch another user's notifications"
     ],
-    "src/services/character-wcl-performance.service.test.ts": [
+    "tests/unit/services/character-wcl-performance.service.test.ts": [
       "KEEP",
       "Role and spec relevance rules. Constant echo removed; the format test merged into lib/wcl-performance-display.test.ts"
     ],
-    "src/services/run-detail.service.test.ts": [
+    "tests/integration/services/run-detail.service.test.ts": [
       "KEEP",
       "Run detail visibility on seed data, now named via SEED_IDS and testActor; the route helper test moved to lib/run-routes.test.ts"
     ],
-    "src/services/create-run-recurring-schedule.test.ts": [
+    "tests/integration/services/create-run-recurring-schedule.test.ts": [
       "KEEP",
       "Create Run recurring path through the schedule service"
     ],
-    "src/services/session-management.service.test.ts": [
+    "tests/integration/services/session-management.service.test.ts": [
       "KEEP",
       "Better Auth session lifecycle and public views (tests the auth library, not sessionManagementService; rename candidate). Session count now exact"
     ],
-    "src/services/warcraft-logs-raid-metadata.service.test.ts": [
+    "tests/unit/services/warcraft-logs-raid-metadata.service.test.ts": [
       "KEEP",
       "WCL zone resolution, ambiguity, soft vs forced discovery"
     ],
-    "src/services/character-warcraft-logs-batch.test.ts": [
+    "tests/unit/services/character-warcraft-logs-batch.test.ts": [
       "KEEP",
       "Batch dedupe, circuit breaker and concurrency cap"
     ],
-    "src/services/signup-note.test.ts": [
+    "tests/integration/services/signup-note.test.ts": [
       "KEEP",
       "Signup notes and raid short names through the embed"
     ],
-    "src/services/character-delete-actions.test.ts": [
+    "tests/integration/services/character-delete-actions.test.ts": [
       "REWRITE",
       "Shared fixtures, verified cleanup (the pre-existing Platform Owner keeps all but the Characters created here), expectDomainError"
     ],
-    "src/services/notification-archived-run.test.ts": [
+    "tests/integration/services/notification-archived-run.test.ts": [
       "REWRITE",
       "Fresh users and Runs per test (no shared mutable Run), frozen raid week, synthetic snowflake, verified cleanup"
     ],
-    "src/services/character-wcl-performance.ranking-scope.test.ts": [
+    "tests/unit/services/character-wcl-performance.ranking-scope.test.ts": [
       "REWRITE",
       "One file-level mock restore (a describe leaked spies), named clock, structured value assertion instead of JSON substring checks"
     ],
-    "src/services/management-hub.overview.test.ts": [
+    "tests/integration/services/management-hub.overview.test.ts": [
       "REWRITE",
       "Users created once with fresh ids instead of delete-and-recreate before every test; absorbed the unique checks of management-hub.community-stats.test.ts"
     ],
-    "src/services/character-warcraft-logs.service.test.ts": [
+    "tests/integration/services/character-warcraft-logs.service.test.ts": [
       "REWRITE",
       "User creation errors were swallowed and the users never deleted; fresh users, verified cleanup, one WCL reset helper"
     ],
-    "src/services/signup.service.test.ts": [
+    "tests/integration/services/signup.service.test.ts": [
       "REWRITE",
       "Rebuilt on own users, Characters and Runs instead of seeded Runs and order-dependent state; keeps the withdraw rules and Lootbuddy metadata; the six tests of the removed createBoosterSignup are covered by signup-offers.service.test.ts or tested backup and DUPLICATE_SIGNUP behaviour production no longer has"
     ],
-    "src/services/run-preflight.service.test.ts": [
+    "tests/unit/services/run-preflight.service.test.ts": [
       "KEEP",
       "Pure preflight rules with explicit check ids"
     ],
-    "src/services/community-stats.service.test.ts": [
+    "tests/unit/services/community-stats.service.test.ts": [
       "KEEP",
       "Pure aggregation; WOW_CLASSES is the domain definition, not the code under test"
     ],
-    "src/services/signup-my-runs-terminal-filter.test.ts": [
+    "tests/unit/services/signup-my-runs-terminal-filter.test.ts": [
       "REWRITE",
       "The repository mock re-implemented the status filter, so the exclusion tests passed without the service's own filter; now rows pass through unfiltered (mutation-checked) and the requested statuses are asserted literally"
     ],
-    "src/services/run-raid-lead-bootstrap.test.ts": [
+    "tests/integration/services/run-raid-lead-bootstrap.test.ts": [
       "REWRITE",
       "Fresh ids, schedule links and slots tracked and removed first (Run deletion is restricted), no broad raidLeadId sweep, no swallowed errors"
     ],
-    "src/services/settings.service.test.ts": [
+    "tests/integration/services/settings.service.test.ts": [
       "REWRITE",
       "The defaults tests checked values the suite wrote itself; bare fixture users now prove the real column defaults; fresh owner per test"
     ],
-    "src/services/roster-character-sync.service.test.ts": [
+    "tests/integration/services/roster-character-sync.service.test.ts": [
       "REWRITE",
       "Fresh owner, Characters and Run per test via the service (no fixed raid row), verified cleanup, exact result objects"
     ],
-    "src/services/schedule-conflict-integrity.test.ts": [
+    "tests/integration/services/schedule-conflict-integrity.test.ts": [
       "REWRITE",
       "Fixed November 2026 dates would have failed once past; frozen raid week; swallowed setup removed; leaked users deleted; the 2h boundary is now an explicit product value; two unrelated truthy assertions dropped"
     ],
-    "src/services/notification-dm-run-identity.test.ts": [
+    "tests/unit/services/notification-dm-run-identity.test.ts": [
       "KEEP",
       "DM hierarchy for every builder; the dmLink example no longer uses the production domain (tests domain builders, misplaced)"
     ],
-    "src/services/user-management.admin-page.test.ts": [
+    "tests/integration/services/user-management.admin-page.test.ts": [
       "REWRITE",
       "Fresh users per test instead of fixed ids deleted and recreated; the DISABLED filter is checked on the suite's own users, not the whole database"
     ],
-    "src/services/quiet-hours-delivery.test.ts": [
+    "tests/integration/services/quiet-hours-delivery.test.ts": [
       "REWRITE",
       "Fresh user and notification ids, synthetic snowflake; a five-test loop that never used its variable is one test"
     ],
-    "src/services/warcraft-logs-discovery.test.ts": [
+    "tests/integration/services/warcraft-logs-discovery.test.ts": [
       "REWRITE",
       "Seed run and user via SEED_IDS, synthetic snowflakes for channel and authors, the seeded completedAt restored instead of forced to null"
     ],
-    "src/services/run-lifecycle-announcement-atomicity.test.ts": [
+    "tests/integration/services/run-lifecycle-announcement-atomicity.test.ts": [
       "REWRITE",
       "Fresh lead, frozen raid week, verified cleanup; an unused admin dropped"
     ],
-    "src/services/character-schedule-commitments.service.test.ts": [
+    "tests/integration/services/character-schedule-commitments.service.test.ts": [
       "REWRITE",
       "Swallowed user creation and role grants removed, users deleted, frozen raid week, explicit 3h spacing, styling-class pins dropped (component test misplaced)"
     ],
-    "src/services/character-sync-matrix.test.ts": [
+    "tests/integration/services/character-sync-matrix.test.ts": [
       "REWRITE",
       "Shared fixtures and verified cleanup; the global bulk-cooldown marker clear is documented as the one justified outside-row delete; bulk marker: own admin only, foreign marker inside the cooldown fails (was a global delete)"
     ],
-    "src/services/discord-member-name-sync.service.test.ts": [
+    "tests/integration/services/discord-member-name-sync.service.test.ts": [
       "REWRITE",
       "Real-looking guild and role ids replaced by synthetic ones; fresh ids; later tests set up the names they start from instead of inheriting them"
     ],
-    "src/services/multi-raid-foundation.test.ts": [
+    "tests/integration/services/multi-raid-foundation.test.ts": [
       "REWRITE",
       "Fresh lead and verified cleanup; mass-create counts asserted literally instead of compared with the same rows; a data-dependent migration check removed"
     ],
-    "src/domain/roster-builder-optimizer-fill.test.ts": [
+    "tests/unit/domain/roster-builder-optimizer-fill.test.ts": [
       "KEEP",
       "Moved from src/services (tests a pure domain module); fill-maximisation cases plus a seeded brute-force comparison"
     ],
-    "src/services/user-management.service.test.ts": [
+    "tests/integration/services/user-management.service.test.ts": [
       "REWRITE",
       "Fresh target and Raid Lead per test instead of resetting fixed users; Runs through the service; the last-admin test documents its temporary demotion of other admins"
     ],
-    "src/services/character-repair-notification.test.ts": [
+    "tests/integration/services/character-repair-notification.test.ts": [
       "REWRITE",
       "Refresh failures were swallowed, now asserted; Character names that looked like real players replaced; shared fixtures and verified cleanup"
     ],
-    "src/services/boosting-role.service.test.ts": [
+    "tests/integration/services/boosting-role.service.test.ts": [
       "REWRITE",
       "Own acting admin instead of the seeded one (the no-audit-event count is now exact); seeded Runs via SEED_IDS; fresh users"
     ],
-    "src/services/product-driven-planning.test.ts": [
+    "tests/integration/services/product-driven-planning.test.ts": [
       "REWRITE",
       "Fresh users, verified cleanup in dependency order, no swallowed deletes, redundant vi import removed"
     ],
-    "src/services/booster-access.service.test.ts": [
+    "tests/integration/services/booster-access.service.test.ts": [
       "REWRITE",
       "Fresh owner per test instead of per-test cleanup of fixed users; own admin; seeded Runs via SEED_IDS"
     ],
-    "src/services/battle-net.service.test.ts": [
+    "tests/integration/services/battle-net.service.test.ts": [
       "REWRITE",
       "Fresh users per test replace the after-each deletes; two local error helpers replaced (sync case uses toThrow with the code matcher)"
     ],
-    "src/services/published-run-signups.test.ts": [
+    "tests/integration/services/published-run-signups.test.ts": [
       "REWRITE",
       "Scenario kept as one test; fresh fixtures, frozen raid week, quick signup count exact (one Character)"
     ],
-    "src/services/dev-account-bootstrap.service.test.ts": [
+    "tests/integration/services/dev-account-bootstrap.service.test.ts": [
       "REWRITE",
       "Fresh user and synthetic Discord id per scenario instead of 17 fixed ids with a pre-clean; every restoring scenario now checks it wrote no activity, replacing an order-dependent aggregate test"
     ],
-    "src/services/discord-role-access-sync.service.test.ts": [
+    "tests/integration/services/discord-role-access-sync.service.test.ts": [
       "REWRITE",
       "Real-looking guild and role ids (incl. Raid Staff, Raidleader, M+) replaced by synthetic ones; fresh user per scenario instead of shared mutable users"
     ],
-    "src/services/character-wcl-performance.resolve.test.ts": [
+    "tests/integration/services/character-wcl-performance.resolve.test.ts": [
       "KEEP",
       "Cache, deferral and role-relevance rules with mocked WCL; the repeated clock is one named constant"
     ],
-    "src/services/run-content-products.test.ts": [
+    "tests/integration/services/run-content-products.test.ts": [
       "REWRITE",
       "Run payload factory replaces nine copies; fresh lead, verified cleanup, duplicate vitest import removed"
     ],
-    "src/services/roster-legacy-dps.test.ts": [
+    "tests/integration/services/roster-legacy-dps.test.ts": [
       "REWRITE",
       "Own Raid Lead and Boosters instead of seeded users; frozen raid week; verified cleanup replaces a 40-line manual delete"
     ],
-    "src/services/raid-lockout-informational.test.ts": [
+    "tests/integration/services/raid-lockout-informational.test.ts": [
       "REWRITE",
       "Fresh saved Character per test; the lockout helper reuses an existing row instead of deleting it with errors swallowed; exact offer counts"
     ],
-    "src/services/strike.service.test.ts": [
+    "tests/integration/services/strike.service.test.ts": [
       "REWRITE",
       "Fresh users; strikes (which restrict deleting their subject and creator) removed first, then verified cleanup; no swallowed deletes"
     ],
-    "src/services/character-weekly-availability.service.test.ts": [
+    "tests/integration/services/character-weekly-availability.service.test.ts": [
       "REWRITE",
       "Own owner, Characters and Raid Lead instead of seeded users, seeded Characters and the seeded admin; one Run helper replaces three 12-line blocks; the Booster grant through the seeded admin is unnecessary with a Booster owner"
     ],
-    "src/services/raid-catalog-lifecycle.test.ts": [
+    "tests/integration/services/raid-catalog-lifecycle.test.ts": [
       "REWRITE",
       "Fresh users and verified cleanup in dependency order; the fixed f00dface ids stay because they are the mocked catalog entry under test"
     ],
-    "src/services/platform-owner.test.ts": [
+    "tests/integration/services/platform-owner.test.ts": [
       "REWRITE",
       "Fresh users instead of fixed ids with a pre-clean; lock waits proven with waitForLockWaiter instead of 200 ms sleeps; the queued-demotion race now holds only the other admin row, which exposed the single-row update() lock (fixed in user.repository); bootstrap event counts scoped to suite users; the single-owner index asserted by SQLSTATE 23505 and constraint name; USER added to the below-Admin refusal its title claimed; held transactions released in finally so a failed lock wait cannot hang cleanup"
     ],
-    "src/services/run-lootbuddy-target.test.ts": [
+    "tests/integration/services/run-lootbuddy-target.test.ts": [
       "REWRITE",
       "Fresh users instead of invalid fixed ids with a pre-delete; templates (which restrict their creator) removed first, then verified cleanup with no swallowed errors; anyContentRunInput where the raid is not under test; three casts removed"
     ],
-    "src/services/discord-schedule-sync.test.ts": [
+    "tests/integration/services/discord-schedule-sync.test.ts": [
       "REWRITE",
       "Frozen DISCORD_SCHEDULE_TEST_CLOCK instead of now+90 days (which drifted onto the Jan/Feb 2027 schedule fixtures); schedule post rows snapshotted and restored instead of deleted; fresh lead with a synthetic snowflake instead of a fixed id and a swallowed upsert; recordRunChannel instead of a fake raid-invite row; exact order, exact empty schedules and exact line shapes instead of not-contains and a lead-name substring"
     ],
-    "src/services/scheduled-character-sync-backoff.test.ts": [
+    "tests/integration/services/scheduled-character-sync-backoff.test.ts": [
       "REWRITE",
       "Shared user fixtures and verified cleanup; Force refresh all removes only its own admin marker and fails on a foreign marker inside the cooldown instead of deleting every marker; the repository-level fairness pass runs through withOnlySyncCandidates, so skippedBackoff is exact (was >= early.length)"
     ],
-    "src/services/character-delete.test.ts": [
+    "tests/integration/services/character-delete.test.ts": [
       "REWRITE",
       "Shared user fixtures and verified cleanup instead of a hand-written delete chain; Characters tracked because the Platform Owner may be a pre-existing user; exact delete event message, NOT_AUTHORIZED for RAID_LEAD and USER instead of any domain error, attendance rows asserted instead of a substring of stringified JSON; production saveDraftSelection instead of the test-only setDraftSelection"
     ],
-    "src/services/notification-raid-invite.test.ts": [
+    "tests/integration/services/notification-raid-invite.test.ts": [
       "REWRITE",
       "Fresh users with synthetic snowflakes instead of invalid fixed ids, a pre-clean and real-looking Discord ids; production saveDraftSelection, which refuses the Raid Lead holding two selected offers the old test-only setDraftSelection allowed, so DPS is a separate booster; the always-empty raidInvites assertion dropped (lane is dead code, A19); one started-Run helper instead of two copies; preference restore in finally"
     ],
-    "src/services/signup-draft-selection-visibility.test.ts": [
+    "tests/integration/services/signup-draft-selection-visibility.test.ts": [
       "REWRITE",
       "Frozen RAID_WEEK_TEST_CLOCK instead of fixed December 2026 starts, which Run creation would refuse from 1 Dec 2026; fresh users instead of fixed ids, swallowed creates and a leftover delete; offers through setCharacterOffers; exact ROSTERING status instead of OPEN-or-ROSTERING; spy restored in finally and the batched lookup asserted to contain the offers"
     ],
-    "src/services/run-discord-announcement.test.ts": [
+    "tests/integration/services/run-discord-announcement.test.ts": [
       "REWRITE",
       "Fresh users with a synthetic snowflake instead of fixed ids, a pre-clean and swallowed deletes; reads the Run's own announcements instead of a global listPending(limit) that other pending rows could push past the limit; preference changes restored in finally; the two pure embed tests merged into discord-bot/embeds/run-lifecycle-announcement.test.ts"
     ],
-    "src/services/roster-builder.service.test.ts": [
+    "tests/integration/services/roster-builder.service.test.ts": [
       "REWRITE",
       "Fresh ids per test instead of invalid fixed ids with a pre-clean and swallowed deletes; verified cleanup after each test; proposals asserted as exact signup-role pairs instead of \"some row is MELEE_DPS\""
     ],
-    "src/services/character.service.test.ts": [
+    "tests/integration/services/character.service.test.ts": [
       "REWRITE",
       "Own users, Run and Lead instead of fixed ids, the seeded admin and a seeded Run; lockout raids compared with the loaded catalog instead of three hardcoded names; valid random ids for the missing-Character and empty-user cases; all four same-name identities asserted, not one"
     ],
-    "src/services/roster-legacy-saved-draft.test.ts": [
+    "tests/integration/services/roster-legacy-saved-draft.test.ts": [
       "REWRITE",
       "Own Raid Lead instead of the seeded Thorne; synthetic Character names instead of what look like real production player names in a public repository; shared fixtures with verified cleanup instead of a 35-line manual chain; the unresolved-DPS blocker asserted by code and signup instead of message text"
     ],
-    "src/services/run-lifecycle-concurrency.test.ts": [
+    "tests/integration/services/run-lifecycle-concurrency.test.ts": [
       "REWRITE",
       "Fresh users instead of fixed ids with a pre-delete and swallowed deletes; waitForLockWaiter instead of 150 ms sleeps (mutation: Start without the roster lock now fails); held transactions released in finally; race losers asserted by their exact codes (30 rounds stable); mocks restored in afterEach; dropped a title field that the Run input does not have (Zod discarded it; tsc error)"
     ],
-    "src/services/character-sync-telemetry.test.ts": [
+    "tests/integration/services/character-sync-telemetry.test.ts": [
       "REWRITE",
       "Shared user fixtures and verified cleanup; refreshes the arranged mocks make fail are asserted to reject instead of .catch(() => {}), so an unexpected success fails the test"
     ],
-    "src/services/roster-reservation-concurrency.test.ts": [
+    "tests/integration/services/roster-reservation-concurrency.test.ts": [
       "REWRITE",
       "Production saveDraftSelection instead of the test-only setDraftSelection; fresh users instead of fixed ids with a pre-clean of their Runs; sequential refusals pinned to CHARACTER_SCHEDULE_CONFLICT, race losers to the pre-check or the locked check; the Auto Build race now really calls applyRosterProposal instead of computing unused proposals; the misleading ~10s-gap sleep removed. Mutation: with the locked reservation check disabled both race tests fail every run"
     ],
-    "src/services/signup-eligibility.test.ts": [
+    "tests/unit/services/signup-eligibility.test.ts": [
       "KEEP",
       "Pure eligibility and lockout-save rules with explicit inputs; a duplicated assertion and a test of deprecated availability blocks that never passed a block removed; withdrawal rules moved to domain/signup-state.test.ts, the run/signup coupling check replaced by a real lifecycle test in domain/run-state.test.ts"
     ],
-    "src/services/signup-cross-run-reservation.test.ts": [
+    "tests/integration/services/signup-cross-run-reservation.test.ts": [
       "REWRITE",
       "Every test gets its own hybrid Character and users instead of one shared fixture with fixed ids; production saveDraftSelection instead of the test-only setDraftSelection; scheduledStartsCollideForReservation cases KEEP"
     ],
-    "src/services/roster-saved-notice.test.ts": [
+    "tests/integration/services/roster-saved-notice.test.ts": [
       "REWRITE",
       "Two time bombs removed (hard-coded 12 and 26 December resets): frozen RAID_WEEK clock, Runs at CURRENT_WEEK_RUN_START and the reset derived from the run start; one selected Booster offer per user (the impossible two-offers state is gone); fresh users per test; reminders read through one helper"
     ],
-    "src/services/run-template.service.test.ts": [
+    "tests/integration/services/run-template.service.test.ts": [
       "REWRITE",
       "Fresh users instead of seeded ones; dead writes to the shared Raid row removed; \"no template created\" cases now assert the template count instead of only the error"
     ],
-    "src/services/raid-catalog-import.service.test.ts": [
+    "tests/integration/services/raid-catalog-import.service.test.ts": [
       "REWRITE",
       "Own admin instead of the seeded one; cleanup by the ids the test created instead of deleting every Run, Run Setup and Product whose name matches \"QA Import %\"; raid content rows go with their parents by cascade (verified)"
     ],
-    "src/services/scheduled-character-sync.service.test.ts": [
+    "tests/integration/services/scheduled-character-sync.service.test.ts": [
       "REWRITE",
       "Pass totals depended on how long ago the DB was reset (every stale seeded Character counted): asserted passes now run through withOnlySyncCandidates and pin exact counts instead of >= 1; shared user fixtures; cleanup errors no longer swallowed; console spies restored by vi.restoreAllMocks"
     ],
-    "src/services/discord-sync-candidates.test.ts": [
+    "tests/integration/services/discord-sync-candidates.test.ts": [
       "REWRITE",
       "Fresh lead instead of a fixed id; id-based cleanup through deleteCreatedRows; arrayContaining negation replaced by not.toContain; roster lane asserted as exactly one REFRESH item; console.info of load counts removed"
     ],
-    "src/guides/guide-replace.test.ts": [
+    "tests/unit/guides/guide-replace.test.ts": [
       "KEEP",
       "Pure file-system and fake-Discord tests with temp directories cleaned per test; two write-once lets made const"
     ],
-    "src/lib/test-database-guard.test.ts": [
+    "tests/unit/lib/test-database-guard.test.ts": [
       "KEEP",
       "New in this audit: first tests of the test-database guard (valid URL; missing, development and non-test names refused; TEST_DATABASE_EXPECTED_NAME pin)"
     ]
   },
   "tests": {
-    "src/auth/auth-session-hardening.test.ts::Better Auth session policy constants > uses a 30-day expiresIn and 1-day updateAge": [
+    "tests/unit/auth/auth-session-hardening.test.ts::Better Auth session policy constants > uses a 30-day expiresIn and 1-day updateAge": [
       "REMOVE",
       "Only repeats two constants. Replacement: discord-oauth-url.test.ts checks the same values on the real auth options"
     ],
-    "src/auth/platform-owner-authorization.test.ts::account role hierarchy — OWNER > ADMIN > RAID_LEAD > USER > existing USER / RAID_LEAD / ADMIN behavior is unchanged": [
+    "tests/unit/auth/platform-owner-authorization.test.ts::account role hierarchy — OWNER > ADMIN > RAID_LEAD > USER > existing USER / RAID_LEAD / ADMIN behavior is unchanged": [
       "REWRITE",
       "Half repeats authorization.user-management.test.ts. Keep the canManageRun and isEligibleRaidLead assertions, which are unique"
     ],
-    "src/auth/platform-owner-authorization.test.ts::account role hierarchy — OWNER > ADMIN > RAID_LEAD > USER > OWNER inherits every Admin capability": [
+    "tests/unit/auth/platform-owner-authorization.test.ts::account role hierarchy — OWNER > ADMIN > RAID_LEAD > USER > OWNER inherits every Admin capability": [
       "REWRITE",
       "Drop the module list repeated from the ADMIN test; equality with ADMIN already covers it"
     ],
-    "src/auth/platform-owner-authorization.test.ts::OWNER presentation and the generic role picker > OWNER is excluded from the generic assignable role options": [
+    "tests/unit/auth/platform-owner-authorization.test.ts::OWNER presentation and the generic role picker > OWNER is excluded from the generic assignable role options": [
       "REWRITE",
       "The second assertion is implied by the first"
     ],
-    "src/app/(app)/manage/runs/create/page.test.ts::run create path helpers > exposes the canonical /runs/create path": [
+    "tests/unit/app/(app)/manage/runs/create/page.test.ts::run create path helpers > exposes the canonical /runs/create path": [
       "REMOVE",
       "Only repeats a constant. Replacement: both redirect tests assert the same path"
     ],
-    "src/app/api/bot/bot-routes.test.ts::POST /api/bot/runs/:runId/signup/quick > calls signupService.quickSignupBoosters for the URL runId and returns the result DTO": [
+    "tests/integration/app/api/bot/bot-routes.test.ts::POST /api/bot/runs/:runId/signup/quick > calls signupService.quickSignupBoosters for the URL runId and returns the result DTO": [
       "REWRITE",
       "Good behavior, misleading name: it asserts results and idempotency, not the service call"
     ],
@@ -1298,509 +1298,509 @@
       "REMOVE",
       "Done in batch 2. Only compared an alias with itself; the alias is gone. Real coverage: discord-role-access-sync.service.test.ts"
     ],
-    "src/repositories/integration-event.repository.test.ts::integrationEventRepository / service > caps listRecent limit at 100": [
+    "tests/integration/repositories/integration-event.repository.test.ts::integrationEventRepository / service > caps listRecent limit at 100": [
       "REWRITE",
       "Passed with any table under 100 rows; now inserts 101 rows and expects exactly 100"
     ],
-    "src/repositories/integration-event.repository.test.ts::integrationEventRepository / service > purgeExpired deletes events older than 30 days": [
+    "tests/integration/repositories/integration-event.repository.test.ts::integrationEventRepository / service > purgeExpired deletes events older than 30 days": [
       "REWRITE",
       "Same deletion asserted twice; one copy removed"
     ],
-    "src/repositories/run-template.repository.test.ts::runTemplateRepository — CRUD and joined reads > update mutates planning fields and bumps updatedById/updatedAt": [
+    "tests/integration/repositories/run-template.repository.test.ts::runTemplateRepository — CRUD and joined reads > update mutates planning fields and bumps updatedById/updatedAt": [
       "REWRITE",
       "updatedAt check accepted an unchanged value"
     ],
-    "src/components/manage/user-access-dialog.test.ts::UserAccessDialog > renders the Access trigger for an OWNER": [
+    "tests/unit/components/manage/user-access-dialog.test.ts::UserAccessDialog > renders the Access trigger for an OWNER": [
       "REWRITE",
       "Retitled: the old title claimed protection the test never checked"
     ],
-    "src/components/runs/run-creation-form.defaults.test.ts::RunCreationForm opt-in defaults > one-time rows carry compact copy / +1h / +2h controls for that row": [
+    "tests/unit/components/runs/run-creation-form.defaults.test.ts::RunCreationForm opt-in defaults > one-time rows carry compact copy / +1h / +2h controls for that row": [
       "REWRITE",
       "Retitled; the recurring-mode claim was never tested"
     ],
-    "src/components/manage/manage-users-view.test.ts::ManageUsersView directory UX > shows the pending count and an em dash for a user without boosting access": [
+    "tests/unit/components/manage/manage-users-view.test.ts::ManageUsersView directory UX > shows the pending count and an em dash for a user without boosting access": [
       "REWRITE",
       "Adds the em dash assertion its title promised"
     ],
-    "src/components/layout/app-shell.mobile-nav.test.ts::AppShell mobile navigation drawer > marks active routes with aria-current": [
+    "tests/unit/components/layout/app-shell.mobile-nav.test.ts::AppShell mobile navigation drawer > marks active routes with aria-current": [
       "REWRITE",
       "Styling class assertions removed"
     ],
-    "src/components/layout/app-shell.mobile-nav.test.ts::AppShell mobile navigation drawer > opens an off-canvas left drawer with backdrop, labeled dialog, and scrollable nav": [
+    "tests/unit/components/layout/app-shell.mobile-nav.test.ts::AppShell mobile navigation drawer > opens an off-canvas left drawer with backdrop, labeled dialog, and scrollable nav": [
       "REWRITE",
       "Backdrop colour and width assertions removed"
     ],
-    "src/components/runs/signup-dialog.wcl.test.ts::BoosterCharacterChecklist Warcraft Logs links > still shows WCL for a reservation-blocked Booster Character with an id": [
+    "tests/unit/components/runs/signup-dialog.wcl.test.ts::BoosterCharacterChecklist Warcraft Logs links > still shows WCL for a reservation-blocked Booster Character with an id": [
       "REWRITE",
       "Absorbs the conflicting-run assertion of its duplicate"
     ],
-    "src/components/characters/characters-view.weekly-availability.test.ts::CharactersView weekly availability > renders Availability as interactive button labels with difficulty summaries": [
+    "tests/unit/components/characters/characters-view.weekly-availability.test.ts::CharactersView weekly availability > renders Availability as interactive button labels with difficulty summaries": [
       "REWRITE",
       "Border class assertion removed"
     ],
-    "src/components/runs/run-creation-success-path.test.ts::runCreateSuccessPath > redirects multiple created Runs to Manage Runs with massCreated count": [
+    "tests/unit/components/runs/run-creation-success-path.test.ts::runCreateSuccessPath > redirects multiple created Runs to Manage Runs with massCreated count": [
       "REWRITE",
       "Redundant negative assertion removed"
     ],
-    "src/discord-bot/env.test.ts::loadBotEnv — required variables > throws listing every missing required variable": [
+    "tests/unit/discord-bot/env.test.ts::loadBotEnv — required variables > throws listing every missing required variable": [
       "REWRITE",
       "Checked one name; now checks the full list"
     ],
-    "src/discord-bot/interactions/signup-flow.test.ts::Quick Signup button > renders Booster-access and signup-closed domain errors through describeBotApiError": [
+    "tests/unit/discord-bot/interactions/signup-flow.test.ts::Quick Signup button > renders Booster-access and signup-closed domain errors through describeBotApiError": [
       "REWRITE",
       "Regex accepted any wording; now exact copy"
     ],
-    "src/discord-bot/sync-loop.test.ts::syncOnce — same-pass first-channel positioning > ARCHIVE target does not provision or position into CURRENT/NEXT": [
+    "tests/integration/discord-bot/sync-loop.test.ts::syncOnce — same-pass first-channel positioning > ARCHIVE target does not provision or position into CURRENT/NEXT": [
       "REWRITE",
       "Assertion was inside an if and could run zero times; now asserts the channel is created and not positioned"
     ],
-    "src/discord-bot/sync-loop.test.ts::syncOnce — same-pass first-channel positioning > retries same-pass when fresh Discord order stays wrong after first setPositions": [
+    "tests/integration/discord-bot/sync-loop.test.ts::syncOnce — same-pass first-channel positioning > retries same-pass when fresh Discord order stays wrong after first setPositions": [
       "REWRITE",
       "Absorbs the exact call count of its duplicate"
     ],
-    "src/discord-bot/voice-channels.test.ts::reconcileRunVoiceChannels — terminal / app-archived (RETIRE_IF_EMPTY) > Unknown Channel clears the id and never creates a channel for a terminal Run": [
+    "tests/unit/discord-bot/voice-channels.test.ts::reconcileRunVoiceChannels — terminal / app-archived (RETIRE_IF_EMPTY) > Unknown Channel clears the id and never creates a channel for a terminal Run": [
       "REWRITE",
       "Merged with the no-create test of the same input"
     ],
-    "src/discord-bot/sync-start-post.test.ts::syncOnce — Final Setup explicit allowedMentions > send: only unique, non-null selected roster Discord ids may be mentioned; no @everyone/@here/role parsing": [
+    "tests/integration/discord-bot/sync-start-post.test.ts::syncOnce — Final Setup explicit allowedMentions > send: only unique, non-null selected roster Discord ids may be mentioned; no @everyone/@here/role parsing": [
       "REWRITE",
       "Removed checks for names that are not in the data"
     ],
-    "src/lib/external-booster-staging.test.ts::external booster staging helpers > K. sequential edits each change only their own row": [
+    "tests/unit/lib/external-booster-staging.test.ts::external booster staging helpers > K. sequential edits each change only their own row": [
       "REWRITE",
       "Retitled: the old title claimed dialog enforcement the test never checks"
     ],
-    "src/lib/run-row-duplicate.test.ts::duplicateRunRow > a copy carries only its own row fields, never form-wide opt-ins": [
+    "tests/unit/lib/run-row-duplicate.test.ts::duplicateRunRow > a copy carries only its own row fields, never form-wide opt-ins": [
       "REWRITE",
       "Dropped repeated constant checks; retitled"
     ],
-    "src/lib/system-health.test.ts::deriveProviderHealth — SYSTEM domain neutrality > production case: newest cooldown ERROR + older SUCCESS => HEALTHY": [
+    "tests/unit/lib/system-health.test.ts::deriveProviderHealth — SYSTEM domain neutrality > production case: newest cooldown ERROR + older SUCCESS => HEALTHY": [
       "REWRITE",
       "Dropped an assertion that read back the input"
     ],
-    "src/lib/create-run-recurring.test.ts::defaultRecurringSetupName > builds a short Run Setup label from product + difficulty + loot": [
+    "tests/unit/lib/create-run-recurring.test.ts::defaultRecurringSetupName > builds a short Run Setup label from product + difficulty + loot": [
       "REWRITE",
       "toContain became exact output, plus the blank-name fallback"
     ],
-    "src/lib/roster-boss-plan-outputs.test.ts::roster DMs > a newly selected player with a plan sees it in the selected DM": [
+    "tests/unit/lib/roster-boss-plan-outputs.test.ts::roster DMs > a newly selected player with a plan sees it in the selected DM": [
       "REWRITE",
       "Now checks the plan line"
     ],
-    "src/domain/run-operational-handoff.integration.test.ts::raid lead lifecycle handoffs (managed runs) > projects independent handoffs across batched runs": [
+    "tests/integration/domain/run-operational-handoff.integration.test.ts::raid lead lifecycle handoffs (managed runs) > projects independent handoffs across batched runs": [
       "REWRITE",
       "Assertion inside an if could be skipped; now required"
     ],
-    "src/domain/run-operational-handoff.integration.test.ts::raid lead lifecycle handoffs (managed runs) > management hub attention metrics use the same projection": [
+    "tests/integration/domain/run-operational-handoff.integration.test.ts::raid lead lifecycle handoffs (managed runs) > management hub attention metrics use the same projection": [
       "REWRITE",
       "Dropped vacuous id checks"
     ],
-    "src/services/notification.service.test.ts::notificationService web read/unread/ownership > tracks unread count, markRead, markAllRead, and rejects foreign ids": [
+    "tests/integration/services/notification.service.test.ts::notificationService web read/unread/ownership > tracks unread count, markRead, markAllRead, and rejects foreign ids": [
       "REWRITE",
       "Exact counts after each step; other user's unread count unchanged by markAllRead"
     ],
-    "src/services/run-detail.service.test.ts::runDetailService > gives a USER own signups and published roster without manager payload": [
+    "tests/integration/services/run-detail.service.test.ts::runDetailService > gives a USER own signups and published roster without manager payload": [
       "REWRITE",
       "Dropped a length >= 0 assertion that cannot fail"
     ],
-    "src/services/session-management.service.test.ts::Better Auth session lifecycle (1.7.3 APIs) > lists, identifies, and revokes sessions without exposing tokens in public views": [
+    "tests/integration/services/session-management.service.test.ts::Better Auth session lifecycle (1.7.3 APIs) > lists, identifies, and revokes sessions without exposing tokens in public views": [
       "REWRITE",
       "Session count >= 2 for a fresh user is now exactly 2"
     ],
-    "src/domain/roster-raid-buffs.integration.test.ts::rosterService Class Buff Checker integration > updates coverage when a Shaman Booster is draft-selected and deselected": [
+    "tests/integration/domain/roster-raid-buffs.integration.test.ts::rosterService Class Buff Checker integration > updates coverage when a Shaman Booster is draft-selected and deselected": [
       "REWRITE",
       "Added the WITHDRAWN exclusion against the real roster view"
     ],
-    "src/app/api/bot/bot-routes.test.ts::GET /api/bot/discord/sync — channel reconciliation contract > exposes a channels array alongside signups/roster/start, with exactly the fields the bot needs": [
+    "tests/integration/app/api/bot/bot-routes.test.ts::GET /api/bot/discord/sync — channel reconciliation contract > exposes a channels array alongside signups/roster/start, with exactly the fields the bot needs": [
       "REWRITE",
       "Bucket asserted as exactly CURRENT under the frozen clock; start instant checked"
     ],
-    "src/app/api/bot/bot-routes.test.ts::bot API acting-user resolution > ignores any userId supplied in the request body and always acts as the resolved Discord user": [
+    "tests/integration/app/api/bot/bot-routes.test.ts::bot API acting-user resolution > ignores any userId supplied in the request body and always acts as the resolved Discord user": [
       "REWRITE",
       "Also proves no row for the spoofed user"
     ],
-    "src/app/api/bot/bot-routes.test.ts::POST /api/bot/runs/:runId/signup/quick > signs up the URL run and returns the result DTO": [
+    "tests/integration/app/api/bot/bot-routes.test.ts::POST /api/bot/runs/:runId/signup/quick > signs up the URL run and returns the result DTO": [
       "REWRITE",
       "Skip counters exact (one eligible Character) instead of typeof number"
     ],
-    "src/app/api/bot/runs/[runId]/archive/archive-route.test.ts::POST /api/bot/runs/:runId/archive (Discord Archive Run button) > the Run's Raid Lead archives a completed Run (once)": [
+    "tests/integration/app/api/bot/runs/[runId]/archive/archive-route.test.ts::POST /api/bot/runs/:runId/archive (Discord Archive Run button) > the Run's Raid Lead archives a completed Run (once)": [
       "REWRITE",
       "No longer relies on the previous test completing the Run; repeated archive keeps the first timestamp"
     ],
-    "src/lib/wcl-performance-display.test.ts::roster WCL performance display copy > renders Bundle multi-role lines without collapsing raids": [
+    "tests/unit/lib/wcl-performance-display.test.ts::roster WCL performance display copy > renders Bundle multi-role lines without collapsing raids": [
       "REWRITE",
       "Absorbed the exact metric-label assertions"
     ],
-    "src/services/signup-my-runs-terminal-filter.test.ts::signupService.getMyRuns — terminal Run filter > loads only signups on upcoming Runs from the repository": [
+    "tests/unit/services/signup-my-runs-terminal-filter.test.ts::signupService.getMyRuns — terminal Run filter > loads only signups on upcoming Runs from the repository": [
       "REWRITE",
       "Replaces a constant echo with the literal statuses the service requests"
     ],
-    "src/services/quiet-hours-delivery.test.ts::resolveDiscordDelivery with an event DM switched off > is SKIPPED even inside Quiet Hours with the master switch on": [
+    "tests/integration/services/quiet-hours-delivery.test.ts::resolveDiscordDelivery with an event DM switched off > is SKIPPED even inside Quiet Hours with the master switch on": [
       "REWRITE",
       "One test for the five identical loop cases"
     ],
-    "src/services/schedule-conflict-integrity.test.ts::schedule conflict integrity > surfaces reservation conflicts after a cross-run time edit and clears at exactly 2h": [
+    "tests/integration/services/schedule-conflict-integrity.test.ts::schedule conflict integrity > surfaces reservation conflicts after a cross-run time edit and clears at exactly 2h": [
       "REWRITE",
       "Boundary from an explicit product value, not the implementation constant"
     ],
-    "src/services/published-run-signups.test.ts::published-run signups > I–V: late offers stay PENDING; Start freezes; Discord buttons follow the window": [
+    "tests/integration/services/published-run-signups.test.ts::published-run signups > I–V: late offers stay PENDING; Start freezes; Discord buttons follow the window": [
       "REWRITE",
       "Quick signup now asserts exactly one added"
     ],
-    "src/services/multi-raid-foundation.test.ts::RunRaidContent — contents authority > createManyDraftsAtomic writes one content per Run (contents-only Run row)": [
+    "tests/integration/services/multi-raid-foundation.test.ts::RunRaidContent — contents authority > createManyDraftsAtomic writes one content per Run (contents-only Run row)": [
       "REWRITE",
       "Planned counts 4 and 5 asserted literally; before it compared two reads of the same rows"
     ],
-    "src/services/raid-lockout-informational.test.ts::raid lockouts are informational — full signup/roster/publish chain > a fully-saved Character (HC 8/8) is eligible, offerable, and confirms successfully — no LOCKOUT_CONFLICT": [
+    "tests/integration/services/raid-lockout-informational.test.ts::raid lockouts are informational — full signup/roster/publish chain > a fully-saved Character (HC 8/8) is eligible, offerable, and confirms successfully — no LOCKOUT_CONFLICT": [
       "REWRITE",
       "Offer result exact (one created) instead of greater than zero"
     ]
   },
   "removed": {
-    "src/components/characters/characters-view.overflow-actions.test.ts::OverflowMenu onSelect path > invokes onSelect and does not require node for labeled actions": [
+    "tests/unit/components/characters/characters-view.overflow-actions.test.ts::OverflowMenu onSelect path > invokes onSelect and does not require node for labeled actions": [
       "REMOVE",
       "Title claims onSelect runs; the test asserts it was not called"
     ],
-    "src/components/characters/characters-view.overflow-actions.test.ts::overflow host ref typing smoke > accepts a button ref object shape used by CharacterOverflow": [
+    "tests/unit/components/characters/characters-view.overflow-actions.test.ts::overflow host ref typing smoke > accepts a button ref object shape used by CharacterOverflow": [
       "REMOVE",
       "Tests React refs, no project code"
     ],
-    "src/components/characters/character-offspec-display.test.ts::character offspec display > 9. rendering offspecs does not change signup assignment": [
+    "tests/unit/components/characters/character-offspec-display.test.ts::character offspec display > 9. rendering offspecs does not change signup assignment": [
       "REMOVE",
       "Compares a pure function with itself; the render part repeats the Offspecs test"
     ],
-    "src/components/manage/roster-run-commitments.test.ts::RosterScheduleConflictAlert > J/K: commitments without conflicts do not invent Schedule conflict copy": [
+    "tests/unit/components/manage/roster-run-commitments.test.ts::RosterScheduleConflictAlert > J/K: commitments without conflicts do not invent Schedule conflict copy": [
       "REMOVE",
       "The component has no conflict input, so the assertion cannot fail"
     ],
-    "src/components/manage/roster-run-commitments.test.ts::RosterScheduleConflictAlert > N: commitment + conflict both render when composed": [
+    "tests/unit/components/manage/roster-run-commitments.test.ts::RosterScheduleConflictAlert > N: commitment + conflict both render when composed": [
       "REMOVE",
       "Only places two components in one div; each is tested on its own"
     ],
-    "src/components/manage/choose-spec-option.test.ts::ChooseSpecOption — multi-spec modal WCL links > Elemental and Restoration links use the same authoritative character destination": [
+    "tests/unit/components/manage/choose-spec-option.test.ts::ChooseSpecOption — multi-spec modal WCL links > Elemental and Restoration links use the same authoritative character destination": [
       "MERGE",
       "Covered by the first test and warcraft-logs.test.ts"
     ],
-    "src/components/characters/character-form-dialog.test.ts::CharacterFormDialog — Raider.IO bulk Add Character > puts Raider.IO input and Remove on the same controls row under the label": [
+    "tests/unit/components/characters/character-form-dialog.test.ts::CharacterFormDialog — Raider.IO bulk Add Character > puts Raider.IO input and Remove on the same controls row under the label": [
       "REMOVE",
       "Pins exact className strings, no behaviour"
     ],
-    "src/components/characters/character-form-dialog.test.ts::CharacterFormDialog — Raider.IO bulk Add Character > uses stable row ids and row-local invalidation": [
+    "tests/unit/components/characters/character-form-dialog.test.ts::CharacterFormDialog — Raider.IO bulk Add Character > uses stable row ids and row-local invalidation": [
       "REMOVE",
       "Implementation strings; stable ids are tested through normalizeCreateRows"
     ],
-    "src/components/characters/character-form-dialog.test.ts::trailing empty ignored by create readiness math > 3 resolved ready rows + trailing empty still count as 3 for Add N": [
+    "tests/unit/components/characters/character-form-dialog.test.ts::trailing empty ignored by create readiness math > 3 resolved ready rows + trailing empty still count as 3 for Add N": [
       "REMOVE",
       "Re-implements the filter in the test and checks its own result"
     ],
-    "src/components/layout/narrow-screen-layout.test.ts::mobile navigation drawer > replaces the bottom bar with a fixed left drawer that does not stay in the page flow": [
+    "tests/unit/components/layout/narrow-screen-layout.test.ts::mobile navigation drawer > replaces the bottom bar with a fixed left drawer that does not stay in the page flow": [
       "MERGE",
       "Same checks as app-shell.mobile-nav.test.ts"
     ],
-    "src/components/layout/app-shell.mobile-nav.test.ts::AppShell mobile navigation drawer > keeps desktop SideNav architecture (md+ aside) unchanged": [
+    "tests/unit/components/layout/app-shell.mobile-nav.test.ts::AppShell mobile navigation drawer > keeps desktop SideNav architecture (md+ aside) unchanged": [
       "REMOVE",
       "Only a className string"
     ],
-    "src/components/manage/roster-staged-selection.test.ts::role-copy toggle semantics > syncs dropdown reassignment with checked copies": [
+    "tests/unit/components/manage/roster-staged-selection.test.ts::role-copy toggle semantics > syncs dropdown reassignment with checked copies": [
       "MERGE",
       "Sets the map by hand and repeats the reassign test's checks"
     ],
-    "src/components/manage/roster-actions.test.ts::resolveRosterActions > after Update (clean again) → Publish Roster available again": [
+    "tests/unit/components/manage/roster-actions.test.ts::resolveRosterActions > after Update (clean again) → Publish Roster available again": [
       "MERGE",
       "Same input as the published-and-clean test"
     ],
-    "src/components/runs/signup-dialog.wcl.test.ts::BoosterCharacterChecklist Warcraft Logs links > still shows WCL for a reservation-blocked Booster Character with an id (second copy)": [
+    "tests/unit/components/runs/signup-dialog.wcl.test.ts::BoosterCharacterChecklist Warcraft Logs links > still shows WCL for a reservation-blocked Booster Character with an id (second copy)": [
       "MERGE",
       "Duplicate title and scenario; its conflicting-run assertion moved into the first copy"
     ],
-    "src/discord-bot/sync-loop.test.ts::syncOnce — same-pass first-channel positioning > J: cache view alone cannot hide a wrong fresh server order": [
+    "tests/integration/discord-bot/sync-loop.test.ts::syncOnce — same-pass first-channel positioning > J: cache view alone cannot hide a wrong fresh server order": [
       "MERGE",
       "Same setup and checks as the retry test"
     ],
-    "src/discord-bot/sync-loop.test.ts::syncOnce — UserNotification DMs > marks FAILED_PERMANENT when Discord rejects the notification DM": [
+    "tests/integration/discord-bot/sync-loop.test.ts::syncOnce — UserNotification DMs > marks FAILED_PERMANENT when Discord rejects the notification DM": [
       "MERGE",
       "Same as the 50007 case of the failure classification table"
     ],
-    "src/discord-bot/sync-start-post.test.ts::Signup / Roster embeds unchanged by Final Setup LFG > does not put the Final Setup LFG line into signup or roster embeds": [
+    "tests/integration/discord-bot/sync-start-post.test.ts::Signup / Roster embeds unchanged by Final Setup LFG > does not put the Final Setup LFG line into signup or roster embeds": [
       "REMOVE",
       "The embed builders never use the LFG line, so the check cannot fail"
     ],
-    "src/discord-bot/global-announcements.test.ts::loadBotEnv — announcement channel optional > startup succeeds when DISCORD_ANNOUNCEMENT_CHANNEL_ID is unset": [
+    "tests/integration/discord-bot/global-announcements.test.ts::loadBotEnv — announcement channel optional > startup succeeds when DISCORD_ANNOUNCEMENT_CHANNEL_ID is unset": [
       "MERGE",
       "Covered by env.test.ts"
     ],
-    "src/discord-bot/channel-reconciliation.test.ts::reconcileExistingRunChannel — name drift > name already correct: setName is not called": [
+    "tests/unit/discord-bot/channel-reconciliation.test.ts::reconcileExistingRunChannel — name drift > name already correct: setName is not called": [
       "MERGE",
       "Subset of the fully-correct test with the same input"
     ],
-    "src/discord-bot/channel-reconciliation.test.ts::reconcileWeekSectionPositions — drift correction > category drift: a channel outside the category (per reconcileExistingRunChannel) is a separate concern — position reconciliation only orders channels already listed as children": [
+    "tests/unit/discord-bot/channel-reconciliation.test.ts::reconcileWeekSectionPositions — drift correction > category drift: a channel outside the category (per reconcileExistingRunChannel) is a separate concern — position reconciliation only orders channels already listed as children": [
       "MERGE",
       "Same input and result as the CURRENT drift test"
     ],
-    "src/discord-bot/warcraft-logs-links.test.ts::Warcraft Logs links and Discord Message Content access > an untrusted author's visible link stays ignored": [
+    "tests/unit/discord-bot/warcraft-logs-links.test.ts::Warcraft Logs links and Discord Message Content access > an untrusted author's visible link stays ignored": [
       "MERGE",
       "Same case as message 2 of the first findTrustedReportLinks test"
     ],
-    "src/discord-bot/voice-channels.test.ts::reconcileRunVoiceChannels — create → persist atomicity > E: normal success → persisted, then resolved; no compensation": [
+    "tests/unit/discord-bot/voice-channels.test.ts::reconcileRunVoiceChannels — create → persist atomicity > E: normal success → persisted, then resolved; no compensation": [
       "MERGE",
       "Its one extra assertion moved into the first PROVISION test"
     ],
-    "src/discord-bot/voice-channels.test.ts::reconcileRunVoiceChannels — terminal / app-archived (RETIRE_IF_EMPTY) > Example B: occupied 5 → 2 → 0 connected — deleted only on the poll after the last user leaves": [
+    "tests/unit/discord-bot/voice-channels.test.ts::reconcileRunVoiceChannels — terminal / app-archived (RETIRE_IF_EMPTY) > Example B: occupied 5 → 2 → 0 connected — deleted only on the poll after the last user leaves": [
       "MERGE",
       "Repeats the occupied and empty cases above it"
     ],
-    "src/discord-bot/voice-channels.test.ts::reconcileRunVoiceChannels — terminal / app-archived (RETIRE_IF_EMPTY) > never creates a channel for a terminal Run": [
+    "tests/unit/discord-bot/voice-channels.test.ts::reconcileRunVoiceChannels — terminal / app-archived (RETIRE_IF_EMPTY) > never creates a channel for a terminal Run": [
       "MERGE",
       "Merged into the Unknown Channel test with the same input"
     ],
-    "src/discord-bot/embeds/signup-embed.test.ts::buildSignupEmbed — section spacing > spacing never pushes a 25-signup roster with notes past Discord limits": [
+    "tests/unit/discord-bot/embeds/signup-embed.test.ts::buildSignupEmbed — section spacing > spacing never pushes a 25-signup roster with notes past Discord limits": [
       "MERGE",
       "The limits loop already checks 25 boosters with notes"
     ],
-    "src/discord-bot/embeds/signup-embed.test.ts::participant lines > chunkEmbedFieldLines never splits a line, never drops lines, and keeps order": [
+    "tests/unit/discord-bot/embeds/signup-embed.test.ts::participant lines > chunkEmbedFieldLines never splits a line, never drops lines, and keeps order": [
       "MERGE",
       "Moved to src/lib/discord-embed-field-chunking.test.ts"
     ],
-    "src/discord-bot/embeds/signup-roster-split.test.ts::Discord Signup vs Roster embeds > E: Signup and Roster are independently titled messages": [
+    "tests/unit/discord-bot/embeds/signup-roster-split.test.ts::Discord Signup vs Roster embeds > E: Signup and Roster are independently titled messages": [
       "MERGE",
       "Same title checks as the first test"
     ],
-    "src/lib/map-with-concurrency.test.ts::mapWithConcurrency > Raider.IO lookup concurrency constant is 3": [
+    "tests/unit/lib/map-with-concurrency.test.ts::mapWithConcurrency > Raider.IO lookup concurrency constant is 3": [
       "REMOVE",
       "Repeats a constant"
     ],
-    "src/lib/wow-run-week.test.ts::classifyRunWeek — exact NEXT start and rollover to CURRENT > before rollover: a Run at next Wednesday 06:00 is NEXT": [
+    "tests/unit/lib/wow-run-week.test.ts::classifyRunWeek — exact NEXT start and rollover to CURRENT > before rollover: a Run at next Wednesday 06:00 is NEXT": [
       "MERGE",
       "Same input as the exact NEXT boundary test"
     ],
-    "src/lib/wow-run-week.test.ts::classifyRunWeek — following start is FUTURE until its own rollover > a Run at the following Wednesday 06:00 is FUTURE relative to the original now": [
+    "tests/unit/lib/wow-run-week.test.ts::classifyRunWeek — following start is FUTURE until its own rollover > a Run at the following Wednesday 06:00 is FUTURE relative to the original now": [
       "MERGE",
       "Same input as the exact FUTURE boundary test"
     ],
-    "src/lib/wow-run-week.test.ts::classifyRunWeek — winter (CET, UTC+1) > reset local time remains 06:00 in CET": [
+    "tests/unit/lib/wow-run-week.test.ts::classifyRunWeek — winter (CET, UTC+1) > reset local time remains 06:00 in CET": [
       "MERGE",
       "Covered by the boundary instants test"
     ],
-    "src/lib/wow-run-week.test.ts::classifyRunWeek — spring DST transition (2026-03-29, CET -> CEST) > is NOT exactly 168 UTC hours from currentStart to nextStart across the spring transition (would be a naive +7-day bug)": [
+    "tests/unit/lib/wow-run-week.test.ts::classifyRunWeek — spring DST transition (2026-03-29, CET -> CEST) > is NOT exactly 168 UTC hours from currentStart to nextStart across the spring transition (would be a naive +7-day bug)": [
       "REMOVE",
       "Arithmetic on test constants; the code is checked by the neighbouring boundary test"
     ],
-    "src/lib/wow-run-week.test.ts::classifyRunWeek — autumn DST transition (2026-10-25, CEST -> CET) > is NOT exactly 168 UTC hours from currentStart to nextStart across the autumn transition (would be a naive +7-day bug)": [
+    "tests/unit/lib/wow-run-week.test.ts::classifyRunWeek — autumn DST transition (2026-10-25, CEST -> CET) > is NOT exactly 168 UTC hours from currentStart to nextStart across the autumn transition (would be a naive +7-day bug)": [
       "REMOVE",
       "Arithmetic on test constants; the code is checked by the neighbouring boundary test"
     ],
-    "src/lib/discord-schedule.test.ts::discord-schedule — embed / signature (U–Z) > V: unchanged signature is stable": [
+    "tests/unit/lib/discord-schedule.test.ts::discord-schedule — embed / signature (U–Z) > V: unchanged signature is stable": [
       "REMOVE",
       "Pure function compared with itself"
     ],
-    "src/lib/discord-schedule.test.ts::discord-schedule — embed / signature (U–Z) > Z: format-version bump changes the signature once": [
+    "tests/unit/lib/discord-schedule.test.ts::discord-schedule — embed / signature (U–Z) > Z: format-version bump changes the signature once": [
       "REMOVE",
       "Hashes a hand-built payload; never calls the code with another version"
     ],
-    "src/lib/discord-channel-name.test.ts::buildDiscordRunChannelName > never concatenates difficulty and lootType into one segment": [
+    "tests/unit/lib/discord-channel-name.test.ts::buildDiscordRunChannelName > never concatenates difficulty and lootType into one segment": [
       "MERGE",
       "Exact-format tests cover the separator"
     ],
-    "src/lib/discord-channel-name.test.ts::buildDiscordRunChannelName > is deterministic for the same input": [
+    "tests/unit/lib/discord-channel-name.test.ts::buildDiscordRunChannelName > is deterministic for the same input": [
       "REMOVE",
       "Pure function compared with itself"
     ],
-    "src/lib/discord-channel-name.test.ts::buildDiscordRunChannelName > encodes Season 2 Bundle coverage as Nof9 without s2b prefix": [
+    "tests/unit/lib/discord-channel-name.test.ts::buildDiscordRunChannelName > encodes Season 2 Bundle coverage as Nof9 without s2b prefix": [
       "MERGE",
       "Same as the verbatim coverage test"
     ],
-    "src/lib/discord-channel-name.test.ts::buildDiscordRunChannelName > the Raid Lead segment is the Raid Lead's (Discord-resolved) User.name, slugged": [
+    "tests/unit/lib/discord-channel-name.test.ts::buildDiscordRunChannelName > the Raid Lead segment is the Raid Lead's (Discord-resolved) User.name, slugged": [
       "MERGE",
       "Covered by the name normalisation test"
     ],
-    "src/lib/external-booster-staging.test.ts::external booster staging helpers > initial Mage default is unambiguous Ranged DPS (matches dialog useState)": [
+    "tests/unit/lib/external-booster-staging.test.ts::external booster staging helpers > initial Mage default is unambiguous Ranged DPS (matches dialog useState)": [
       "MERGE",
       "Same as the pure DPS classes test"
     ],
-    "src/lib/external-booster-staging.test.ts::external booster staging helpers > H. Cancel is a no-op on staged data (draft discarded by the dialog)": [
+    "tests/unit/lib/external-booster-staging.test.ts::external booster staging helpers > H. Cancel is a no-op on staged data (draft discarded by the dialog)": [
       "REMOVE",
       "Compares a helper result with itself"
     ],
-    "src/lib/external-booster-staging.test.ts::external booster staging helpers > I/J. editing preserves order and key": [
+    "tests/unit/lib/external-booster-staging.test.ts::external booster staging helpers > I/J. editing preserves order and key": [
       "MERGE",
       "Same checks as test B"
     ],
-    "src/lib/external-booster-staging.test.ts::external booster staging helpers > Q. server-side validation still rejects invalid class/role pair": [
+    "tests/unit/lib/external-booster-staging.test.ts::external booster staging helpers > Q. server-side validation still rejects invalid class/role pair": [
       "MERGE",
       "Copy of external-booster.test.ts"
     ],
-    "src/lib/external-booster-staging.test.ts::external booster staging helpers > R. server-side validation rejects legacy generic DPS even if a stale client submits it": [
+    "tests/unit/lib/external-booster-staging.test.ts::external booster staging helpers > R. server-side validation rejects legacy generic DPS even if a stale client submits it": [
       "MERGE",
       "Copy of external-booster.test.ts"
     ],
-    "src/lib/run-title.test.ts::buildRunTitle > is deterministic for the same input": [
+    "tests/unit/lib/run-title.test.ts::buildRunTitle > is deterministic for the same input": [
       "REMOVE",
       "Pure function compared with itself"
     ],
-    "src/lib/roster-replacement.test.ts::rankReplacementCandidates > WCL orders but never excludes; missing WCL is listed": [
+    "tests/unit/lib/roster-replacement.test.ts::rankReplacementCandidates > WCL orders but never excludes; missing WCL is listed": [
       "MERGE",
       "The first ranking test already lists a candidate without WCL"
     ],
-    "src/lib/create-run-recurring.test.ts::buildCreateSchedulePlanFromCreateRun > defaults autoCreateRun off so Schedule create does not duplicate concrete Runs": [
+    "tests/unit/lib/create-run-recurring.test.ts::buildCreateSchedulePlanFromCreateRun > defaults autoCreateRun off so Schedule create does not duplicate concrete Runs": [
       "REMOVE",
       "Checks a value the test passed in, not a default"
     ],
-    "src/lib/create-run-recurring.test.ts::one-time vs recurring state isolation > recurring payload ignores fields that only exist on one-time mass-create rows": [
+    "tests/unit/lib/create-run-recurring.test.ts::one-time vs recurring state isolation > recurring payload ignores fields that only exist on one-time mass-create rows": [
       "REMOVE",
       "Builds an object it never passes to the code"
     ],
-    "src/lib/blizzard/raid-lockout-derivation.test.ts::current raid catalog selection > requires an explicit raid id for catalog boss totals": [
+    "tests/unit/lib/blizzard/raid-lockout-derivation.test.ts::current raid catalog selection > requires an explicit raid id for catalog boss totals": [
       "MERGE",
       "Covered by raid-catalog.test.ts"
     ],
-    "src/lib/blizzard/raid-lockout-derivation.test.ts::deriveCurrentResetLockouts > ignores unsupported modes at the difficulty mapper boundary": [
+    "tests/unit/lib/blizzard/raid-lockout-derivation.test.ts::deriveCurrentResetLockouts > ignores unsupported modes at the difficulty mapper boundary": [
       "MERGE",
       "Copy of raid-difficulty.test.ts"
     ],
-    "src/lib/blizzard/raid-lockout-derivation.test.ts::deriveCurrentResetLockouts > zero-fills both current raids when only a historical raid is present": [
+    "tests/unit/lib/blizzard/raid-lockout-derivation.test.ts::deriveCurrentResetLockouts > zero-fills both current raids when only a historical raid is present": [
       "MERGE",
       "Same scenario as the Manaforge test"
     ],
-    "src/lib/blizzard/raid-lockout-derivation.test.ts::deriveCurrentResetLockouts > zero-fills HC/Mythic when only Normal mode is present": [
+    "tests/unit/lib/blizzard/raid-lockout-derivation.test.ts::deriveCurrentResetLockouts > zero-fills HC/Mythic when only Normal mode is present": [
       "MERGE",
       "Same as the independent-difficulties test"
     ],
-    "src/lib/run-content-consumers.test.ts::multi-raid character lockout compact display > groups per raid and never merges boss totals": [
+    "tests/unit/lib/run-content-consumers.test.ts::multi-raid character lockout compact display > groups per raid and never merges boss totals": [
       "MERGE",
       "Same as lockout-display CASE 3"
     ],
-    "src/lib/run-start-message.test.ts::formatFinalSetupLfgLine — Manawyrm community footer > does not include a Raid Lead name or HM": [
+    "tests/unit/lib/run-start-message.test.ts::formatFinalSetupLfgLine — Manawyrm community footer > does not include a Raid Lead name or HM": [
       "REMOVE",
       "The footer is a constant; the names never occur"
     ],
-    "src/lib/run-start-message.test.ts::renderFinalSetupText — plain Discord Final Setup > never includes a Raid Lead display name in the Manawyrm footer": [
+    "tests/unit/lib/run-start-message.test.ts::renderFinalSetupText — plain Discord Final Setup > never includes a Raid Lead display name in the Manawyrm footer": [
       "REMOVE",
       "The footer is a constant; the names never occur"
     ],
-    "src/lib/character-roster-metadata.test.ts::character roster metadata (offspec display) > 6. displaying Enhancement does not add MELEE_DPS to modern offered roles": [
+    "tests/unit/lib/character-roster-metadata.test.ts::character roster metadata (offspec display) > 6. displaying Enhancement does not add MELEE_DPS to modern offered roles": [
       "REMOVE",
       "A pure label function cannot change role resolution; covered by signup-assignable-roles.test.ts"
     ],
-    "src/lib/character-roster-metadata.test.ts::character roster metadata (offspec display) > 7. rendering Enhancement does not change an existing RANGED_DPS selection": [
+    "tests/unit/lib/character-roster-metadata.test.ts::character roster metadata (offspec display) > 7. rendering Enhancement does not change an existing RANGED_DPS selection": [
       "REMOVE",
       "Same as above"
     ],
-    "src/lib/character-roster-metadata.test.ts::character roster metadata (offspec display) > 8. historic DPS resolution, bucket, and composition stay independent of the label": [
+    "tests/unit/lib/character-roster-metadata.test.ts::character roster metadata (offspec display) > 8. historic DPS resolution, bucket, and composition stay independent of the label": [
       "REMOVE",
       "Same as above"
     ],
-    "src/lib/character-roster-metadata.test.ts::character roster metadata (offspec display) > 9. the same character metadata is used for every projected section": [
+    "tests/unit/lib/character-roster-metadata.test.ts::character roster metadata (offspec display) > 9. the same character metadata is used for every projected section": [
       "REMOVE",
       "Maps a constant over an array and compares"
     ],
-    "src/lib/character-roster-metadata.test.ts::character roster metadata (offspec display) > character page spec text does not change offered roles or a stored selection": [
+    "tests/unit/lib/character-roster-metadata.test.ts::character roster metadata (offspec display) > character page spec text does not change offered roles or a stored selection": [
       "REMOVE",
       "Same as above"
     ],
-    "src/lib/signup-tile-invariants.test.ts::signup tile — one Character = one tile > multi-spec Character → one tile with two spec choices": [
+    "tests/unit/lib/signup-tile-invariants.test.ts::signup tile — one Character = one tile > multi-spec Character → one tile with two spec choices": [
       "MERGE",
       "Covered by signup-offered-specs.test.ts"
     ],
-    "src/lib/signup-tile-invariants.test.ts::signup tile — one Character = one tile > Elemental → RANGED_DPS and Restoration → HEALER": [
+    "tests/unit/lib/signup-tile-invariants.test.ts::signup tile — one Character = one tile > Elemental → RANGED_DPS and Restoration → HEALER": [
       "MERGE",
       "Covered by signup-offered-specs.test.ts"
     ],
-    "src/lib/signup-tile-invariants.test.ts::signup tile — per-spec WCL > per-spec Best is correct and never mixed": [
+    "tests/unit/lib/signup-tile-invariants.test.ts::signup tile — per-spec WCL > per-spec Best is correct and never mixed": [
       "MERGE",
       "Same as the first wcl-spec-performance test"
     ],
-    "src/lib/signup-tile-invariants.test.ts::signup tile — per-spec WCL > WCL link uses existing character-id destination": [
+    "tests/unit/lib/signup-tile-invariants.test.ts::signup tile — per-spec WCL > WCL link uses existing character-id destination": [
       "MERGE",
       "Copy of warcraft-logs.test.ts"
     ],
-    "src/lib/wcl-spec-performance.test.ts::wclBestForSpec > does not return Elemental while choosing Restoration": [
+    "tests/unit/lib/wcl-spec-performance.test.ts::wclBestForSpec > does not return Elemental while choosing Restoration": [
       "MERGE",
       "Same assertion as the first test"
     ],
-    "src/lib/character-lockout-raids.test.ts::Characters multi-raid lockout projection > 3. 8-boss raid exposes 8 boss names for dots": [
+    "tests/unit/lib/character-lockout-raids.test.ts::Characters multi-raid lockout projection > 3. 8-boss raid exposes 8 boss names for dots": [
       "REMOVE",
       "Checks catalog data through a test-local helper"
     ],
-    "src/lib/character-lockout-raids.test.ts::Characters multi-raid lockout projection > 4. 1-boss raids expose a single boss name for dots": [
+    "tests/unit/lib/character-lockout-raids.test.ts::Characters multi-raid lockout projection > 4. 1-boss raids expose a single boss name for dots": [
       "REMOVE",
       "Checks catalog data through a test-local helper"
     ],
-    "src/lib/character-lockout-raids.test.ts::Characters multi-raid lockout projection > 6. raid order follows catalog sortOrder": [
+    "tests/unit/lib/character-lockout-raids.test.ts::Characters multi-raid lockout projection > 6. raid order follows catalog sortOrder": [
       "MERGE",
       "Same assertion as test 1"
     ],
-    "src/lib/roster-role-buckets.test.ts::roster role buckets (concrete Melee/Ranged) > 6–7. HEALER + RANGED_DPS assignment picks the chosen concrete bucket": [
+    "tests/unit/lib/roster-role-buckets.test.ts::roster role buckets (concrete Melee/Ranged) > 6–7. HEALER + RANGED_DPS assignment picks the chosen concrete bucket": [
       "MERGE",
       "Same calls as test 1–4"
     ],
-    "src/lib/create-run-form-defaults.test.ts::Create Run opt-in defaults > recurring Schedule payload requires explicit discordRolePing opt-in (false stays false)": [
+    "tests/unit/lib/create-run-form-defaults.test.ts::Create Run opt-in defaults > recurring Schedule payload requires explicit discordRolePing opt-in (false stays false)": [
       "MERGE",
       "Same as the create-run-recurring payload test"
     ],
-    "src/domain/run-operational-handoff.integration.test.ts::raid lead lifecycle handoffs (managed runs) > completing a Run creates no settlement work and keeps the Run COMPLETED": [
+    "tests/integration/domain/run-operational-handoff.integration.test.ts::raid lead lifecycle handoffs (managed runs) > completing a Run creates no settlement work and keeps the Run COMPLETED": [
       "REMOVE",
       "Guards absence of payouts, removed in #228; completeRun is covered elsewhere"
     ],
-    "src/domain/dashboard-attention.test.ts::projectPersonalDashboardAttention > SELECTED without conflict still shows next run": [
+    "tests/unit/domain/dashboard-attention.test.ts::projectPersonalDashboardAttention > SELECTED without conflict still shows next run": [
       "MERGE",
       "Same input as the first test"
     ],
-    "src/domain/gear-readiness-policy.test.ts::weapon enhancement — Death Knight Runeforge (product rule: an oil is never required) > 5. a valid Runeforge never produces an oil failure": [
+    "tests/unit/domain/gear-readiness-policy.test.ts::weapon enhancement — Death Knight Runeforge (product rule: an oil is never required) > 5. a valid Runeforge never produces an oil failure": [
       "MERGE",
       "Same as test 1"
     ],
-    "src/domain/roster-raid-buffs.test.ts::evaluateRaidBuffCoverage > C: caller responsibility — unselected Mage is simply omitted from the input": [
+    "tests/unit/domain/roster-raid-buffs.test.ts::evaluateRaidBuffCoverage > C: caller responsibility — unselected Mage is simply omitted from the input": [
       "MERGE",
       "Evaluates an empty roster like test A"
     ],
-    "src/domain/roster-raid-buffs.test.ts::evaluateRaidBuffCoverage > F: legacy Character-backed PLAYING Mage Lootbuddy covers via resolved class": [
+    "tests/unit/domain/roster-raid-buffs.test.ts::evaluateRaidBuffCoverage > F: legacy Character-backed PLAYING Mage Lootbuddy covers via resolved class": [
       "MERGE",
       "Same input shape as test E"
     ],
-    "src/domain/wcl-fight-assignment.test.ts::absolute WCL time > never compares relative milliseconds against Run timestamps": [
+    "tests/unit/domain/wcl-fight-assignment.test.ts::absolute WCL time > never compares relative milliseconds against Run timestamps": [
       "MERGE",
       "The same-report test asserts the same 8 assignments"
     ],
-    "src/domain/signup-state.test.ts::picked-player withdrawal rules > allows it only until the Run starts": [
+    "tests/unit/domain/signup-state.test.ts::picked-player withdrawal rules > allows it only until the Run starts": [
       "REMOVE",
       "Repeats a constant"
     ],
-    "src/domain/roster-selection-risk.test.ts::warning fingerprint and acknowledgement > is stable for the same lockout state": [
+    "tests/unit/domain/roster-selection-risk.test.ts::warning fingerprint and acknowledgement > is stable for the same lockout state": [
       "REMOVE",
       "Pure function compared with itself"
     ],
-    "src/domain/roster-validation.test.ts::validateRosterDraft > characterless lootbuddy with characterActive true is not blocked as inactive": [
+    "tests/unit/domain/roster-validation.test.ts::validateRosterDraft > characterless lootbuddy with characterActive true is not blocked as inactive": [
       "MERGE",
       "Same passing path as the lootbuddy test"
     ],
-    "src/domain/roster-validation.test.ts::validateRosterDraft > raid lockouts are informational only — a locked/saved character never blocks publish": [
+    "tests/unit/domain/roster-validation.test.ts::validateRosterDraft > raid lockouts are informational only — a locked/saved character never blocks publish": [
       "REMOVE",
       "The input has no lockout data; it repeats the passing case"
     ],
-    "src/domain/user-run-participation.test.ts::resolveUserRunParticipation > draft deselected → falls back to OFFERED": [
+    "tests/unit/domain/user-run-participation.test.ts::resolveUserRunParticipation > draft deselected → falls back to OFFERED": [
       "MERGE",
       "Same input as the first test"
     ],
-    "src/domain/user-run-participation.test.ts::resolveUserRunParticipation > offspec draft role is authoritative displayRole": [
+    "tests/unit/domain/user-run-participation.test.ts::resolveUserRunParticipation > offspec draft role is authoritative displayRole": [
       "MERGE",
       "Same branch as the draft-selected test"
     ],
-    "src/services/discord-run-channel-retirement.test.ts::shouldRetireDiscordChannel (destructive TEXT-channel authority) > A: COMPLETED + archivedAt=null → false": [
+    "tests/unit/services/discord-run-channel-retirement.test.ts::shouldRetireDiscordChannel (destructive TEXT-channel authority) > A: COMPLETED + archivedAt=null → false": [
       "MERGE",
       "Covered by the status-alone loop"
     ],
-    "src/services/discord-run-channel-retirement.test.ts::shouldRetireDiscordChannel (destructive TEXT-channel authority) > B: CANCELLED + archivedAt=null → false": [
+    "tests/unit/services/discord-run-channel-retirement.test.ts::shouldRetireDiscordChannel (destructive TEXT-channel authority) > B: CANCELLED + archivedAt=null → false": [
       "MERGE",
       "Covered by the status-alone loop"
     ],
-    "src/services/settings-preferences-helpers.test.ts::community timezone authority regression > Run.title stays community-derived regardless of viewer timezone": [
+    "tests/unit/services/settings-preferences-helpers.test.ts::community timezone authority regression > Run.title stays community-derived regardless of viewer timezone": [
       "REMOVE",
       "The viewer timezone was never passed to the function"
     ],
-    "src/services/settings-preferences-helpers.test.ts::community timezone authority regression > Discord channel name stays community-derived": [
+    "tests/unit/services/settings-preferences-helpers.test.ts::community timezone authority regression > Discord channel name stays community-derived": [
       "REMOVE",
       "The viewer timezone was never passed to the function"
     ],
-    "src/services/settings-preferences-helpers.test.ts::community timezone authority regression > raid-ID week classification ignores viewer timezone": [
+    "tests/unit/services/settings-preferences-helpers.test.ts::community timezone authority regression > raid-ID week classification ignores viewer timezone": [
       "REMOVE",
       "The viewer timezone was never passed to the function"
     ],
@@ -1816,19 +1816,19 @@
       "MERGE",
       "composeRoster counts are covered in roster-composition.test.ts"
     ],
-    "src/services/character-warcraft-logs-owner-bulk.test.ts::characterWarcraftLogsService.linkMissingForOwner > preserves mixed batch summary counts on COMPLETED": [
+    "tests/unit/services/character-warcraft-logs-owner-bulk.test.ts::characterWarcraftLogsService.linkMissingForOwner > preserves mixed batch summary counts on COMPLETED": [
       "MERGE",
       "Pass-through of a mocked summary, as in test 1"
     ],
-    "src/services/character-wcl-performance.service.test.ts::specNameForOfferedRole / metric keys > maps run difficulty to WCL filters": [
+    "tests/unit/services/character-wcl-performance.service.test.ts::specNameForOfferedRole / metric keys > maps run difficulty to WCL filters": [
       "REMOVE",
       "Repeats constants"
     ],
-    "src/services/character-wcl-performance.service.test.ts::formatWclPerformanceRaidLine > formats with metric labels and optional spec": [
+    "tests/unit/services/character-wcl-performance.service.test.ts::formatWclPerformanceRaidLine > formats with metric labels and optional spec": [
       "MERGE",
       "Moved the exact assertions into lib/wcl-performance-display.test.ts"
     ],
-    "src/services/run-detail.service.test.ts::canonical run routes > builds /runs/[runId] as the entity URL and maps manage actions to tabs": [
+    "tests/integration/services/run-detail.service.test.ts::canonical run routes > builds /runs/[runId] as the entity URL and maps manage actions to tabs": [
       "MERGE",
       "Moved to src/lib/run-routes.test.ts; the seed-id variants repeated the run-1 cases"
     ],
@@ -1844,31 +1844,31 @@
       "MERGE",
       "Moved into the overview OWNER test"
     ],
-    "src/services/quiet-hours-delivery.test.ts::resolveDiscordDelivery covers all event toggles conceptually > dmRosterSelectedEnabled OFF → SKIPPED": [
+    "tests/integration/services/quiet-hours-delivery.test.ts::resolveDiscordDelivery covers all event toggles conceptually > dmRosterSelectedEnabled OFF → SKIPPED": [
       "MERGE",
       "Loop variable never reached the function; one test remains"
     ],
-    "src/services/quiet-hours-delivery.test.ts::resolveDiscordDelivery covers all event toggles conceptually > dmRaidInviteEnabled OFF → SKIPPED": [
+    "tests/integration/services/quiet-hours-delivery.test.ts::resolveDiscordDelivery covers all event toggles conceptually > dmRaidInviteEnabled OFF → SKIPPED": [
       "MERGE",
       "Identical input"
     ],
-    "src/services/quiet-hours-delivery.test.ts::resolveDiscordDelivery covers all event toggles conceptually > dmRunCancelledEnabled OFF → SKIPPED": [
+    "tests/integration/services/quiet-hours-delivery.test.ts::resolveDiscordDelivery covers all event toggles conceptually > dmRunCancelledEnabled OFF → SKIPPED": [
       "MERGE",
       "Identical input"
     ],
-    "src/services/quiet-hours-delivery.test.ts::resolveDiscordDelivery covers all event toggles conceptually > dmRunRescheduledEnabled OFF → SKIPPED": [
+    "tests/integration/services/quiet-hours-delivery.test.ts::resolveDiscordDelivery covers all event toggles conceptually > dmRunRescheduledEnabled OFF → SKIPPED": [
       "MERGE",
       "Identical input"
     ],
-    "src/services/quiet-hours-delivery.test.ts::resolveDiscordDelivery covers all event toggles conceptually > dmRosterRemovedEnabled OFF → SKIPPED": [
+    "tests/integration/services/quiet-hours-delivery.test.ts::resolveDiscordDelivery covers all event toggles conceptually > dmRosterRemovedEnabled OFF → SKIPPED": [
       "MERGE",
       "Identical input"
     ],
-    "src/services/signup-my-runs-terminal-filter.test.ts::signupService.getMyRuns — terminal Run filter > reuses UPCOMING_RUN_STATUSES for the active set": [
+    "tests/unit/services/signup-my-runs-terminal-filter.test.ts::signupService.getMyRuns — terminal Run filter > reuses UPCOMING_RUN_STATUSES for the active set": [
       "REWRITE",
       "Constant echo; replaced by the repository-call contract test"
     ],
-    "src/services/multi-raid-foundation.test.ts::RunRaidContent — contents authority > migration backfill left existing Runs with matching sole content": [
+    "tests/integration/services/multi-raid-foundation.test.ts::RunRaidContent — contents authority > migration backfill left existing Runs with matching sole content": [
       "REMOVE",
       "Sampled an arbitrary row from the shared DB and returned early when empty; it checked old data, not code"
     ],
@@ -1908,79 +1908,79 @@
       "MERGE",
       "Moved unchanged to src/domain/roster-builder-optimizer-fill.test.ts"
     ],
-    "src/services/dev-account-bootstrap.service.test.ts::bootstrapDevelopmentAccount — restoring the target account > never creates an ActivityEvent across any mutation scenario above": [
+    "tests/integration/services/dev-account-bootstrap.service.test.ts::bootstrapDevelopmentAccount — restoring the target account > never creates an ActivityEvent across any mutation scenario above": [
       "MERGE",
       "Depended on earlier tests' users; each restoring scenario now asserts zero activity itself"
     ],
-    "src/services/discord-schedule-sync.test.ts::discord schedule lane — listSyncWork > signature matches pure builder for the rendered runs": [
+    "tests/integration/services/discord-schedule-sync.test.ts::discord schedule lane — listSyncWork > signature matches pure builder for the rendered runs": [
       "REMOVE",
       "Never called the builder its title names; stability is already proven by the U/V/W and Z convergence tests"
     ],
-    "src/services/signup.service.test.ts::signupService create/withdraw > creates a booster signup and a backup signup for different characters": [
+    "tests/integration/services/signup.service.test.ts::signupService create/withdraw > creates a booster signup and a backup signup for different characters": [
       "REMOVE",
       "Tested createBoosterSignup and backup offers, which production cannot create; offer creation is covered by signup-offers \"creates one offer\" and \"expands to multiple offers\""
     ],
-    "src/services/signup.service.test.ts::signupService create/withdraw > rejects an exact duplicate booster combination": [
+    "tests/integration/services/signup.service.test.ts::signupService create/withdraw > rejects an exact duplicate booster combination": [
       "REMOVE",
       "DUPLICATE_SIGNUP existed only in the removed createBoosterSignup; resubmission is a no-op in setCharacterOffers (covered)"
     ],
-    "src/services/signup.service.test.ts::signupService create/withdraw > allows identical class+mode lootbuddy entries as distinct signup ids": [
+    "tests/integration/services/signup.service.test.ts::signupService create/withdraw > allows identical class+mode lootbuddy entries as distinct signup ids": [
       "REMOVE",
       "Covered by signup-offers \"supports N lootbuddies including duplicates\""
     ],
-    "src/services/signup.service.test.ts::signupService create/withdraw > rejects booster signup when the user has no characters / character not owned": [
+    "tests/integration/services/signup.service.test.ts::signupService create/withdraw > rejects booster signup when the user has no characters / character not owned": [
       "REMOVE",
       "Covered by signup-offers \"rejects a character owned by another user\""
     ],
-    "src/services/signup.service.test.ts::signupService create/withdraw > rejects a closed/non-signable run": [
+    "tests/integration/services/signup.service.test.ts::signupService create/withdraw > rejects a closed/non-signable run": [
       "REMOVE",
       "Covered by signup-offers \"rejects creating a new offer once the signup window is closed\""
     ],
-    "src/services/signup.service.test.ts::signupService create/withdraw > can offer two different Brann characters on the same open run": [
+    "tests/integration/services/signup.service.test.ts::signupService create/withdraw > can offer two different Brann characters on the same open run": [
       "REMOVE",
       "Covered by signup-offers \"expands to multiple offers\" and \"reactivates the withdrawn A row\""
     ],
-    "src/services/signup-eligibility.test.ts::signup creation rules > treats a non-withdrawn matching combination as an active duplicate": [
+    "tests/unit/services/signup-eligibility.test.ts::signup creation rules > treats a non-withdrawn matching combination as an active duplicate": [
       "REMOVE",
       "isBlockingDuplicate was only used by the removed createBoosterSignup path and is deleted with it"
     ],
-    "src/services/run-discord-announcement.test.ts::channel embed copy > reschedule embed includes native Discord old/new timestamps": [
+    "tests/integration/services/run-discord-announcement.test.ts::channel embed copy > reschedule embed includes native Discord old/new timestamps": [
       "MERGE",
       "Timestamps already asserted in the embed suite; its no-mass-ping check moved there"
     ],
-    "src/services/run-discord-announcement.test.ts::channel embed copy > cancel embed includes product and schedule timestamp": [
+    "tests/integration/services/run-discord-announcement.test.ts::channel embed copy > cancel embed includes product and schedule timestamp": [
       "MERGE",
       "Identical assertions already in the embed suite"
     ],
-    "src/services/signup-eligibility.test.ts::raid lockouts are informational, never a Booster eligibility blocker > does not block Characters for deprecated manual availability blocks": [
+    "tests/unit/services/signup-eligibility.test.ts::raid lockouts are informational, never a Booster eligibility blocker > does not block Characters for deprecated manual availability blocks": [
       "REMOVE",
       "Passed no availability block (the input has no such field); identical to \"D: no lockout row\""
     ],
-    "src/services/signup-eligibility.test.ts::run and signup state machines stay independent > does not couple run OPEN to signup SELECTED": [
+    "tests/unit/services/signup-eligibility.test.ts::run and signup state machines stay independent > does not couple run OPEN to signup SELECTED": [
       "REWRITE",
       "Replaced by run-state.test.ts \"run lifecycle transitions\", which checks every transition against an independent table"
     ],
-    "src/services/signup-eligibility.test.ts::withdrawal > allows withdrawing an own pending signup": [
+    "tests/unit/services/signup-eligibility.test.ts::withdrawal > allows withdrawing an own pending signup": [
       "MERGE",
       "Moved to domain/signup-state.test.ts (self-withdrawal)"
     ],
-    "src/services/signup-eligibility.test.ts::withdrawal > rejects withdrawing a selected signup after roster publication": [
+    "tests/unit/services/signup-eligibility.test.ts::withdrawal > rejects withdrawing a selected signup after roster publication": [
       "MERGE",
       "Moved to domain/signup-state.test.ts (self-withdrawal)"
     ],
-    "src/services/signup-eligibility.test.ts::withdrawal > allows withdrawing selected only before publication": [
+    "tests/unit/services/signup-eligibility.test.ts::withdrawal > allows withdrawing selected only before publication": [
       "MERGE",
       "Moved to domain/signup-state.test.ts (self-withdrawal)"
     ],
-    "src/services/signup-eligibility.test.ts::withdrawal > keeps withdrawn as a terminal persisted state": [
+    "tests/unit/services/signup-eligibility.test.ts::withdrawal > keeps withdrawn as a terminal persisted state": [
       "MERGE",
       "Moved to domain/signup-state.test.ts (self-withdrawal)"
     ],
-    "src/services/signup-cross-run-reservation.test.ts::cross-Run Character reservation — write-boundary enforcement > setDraftSelection rejects selecting a Character already reserved on a colliding Run, leaving the original selection intact": [
+    "tests/integration/services/signup-cross-run-reservation.test.ts::cross-Run Character reservation — write-boundary enforcement > setDraftSelection rejects selecting a Character already reserved on a colliding Run, leaving the original selection intact": [
       "MERGE",
       "setDraftSelection was test-only; the batch test now also asserts that both rosters stay as they were"
     ],
-    "src/services/signup-cross-run-reservation.test.ts::cross-Run Character reservation — write-boundary enforcement > saveDraftSelection rejects a whole batch when any booster Character is reserved on a colliding Run": [
+    "tests/integration/services/signup-cross-run-reservation.test.ts::cross-Run Character reservation — write-boundary enforcement > saveDraftSelection rejects a whole batch when any booster Character is reserved on a colliding Run": [
       "REWRITE",
       "Renamed: \"... leaving both rosters as they were\", also checks the colliding Run's roster"
     ]

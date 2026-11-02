@@ -57,11 +57,11 @@ The build's Next.js `deploymentId` is the deployed commit (`next.config.ts`; `NE
 | Path | Purpose |
 | --- | --- |
 | `deploy/update-server.sh` | **The** release helper for normal updates (see below) |
-| `deploy/update-server.test.sh` | Offline tests for the release helper (systemd / git / npm stubbed): timer pause/restore, failure paths, lock, self-update |
+| `tests/integration/deploy/update-server.test.sh` | Offline tests for the release helper (systemd / git / npm stubbed): timer pause/restore, failure paths, lock, self-update |
 | `deploy/production/systemd/*.service`, `*.timer` | Reference copies of the live units (6 services, 4 timers) |
 | `deploy/production/backup-db.sh` | Backup script; production runs a root-owned installed copy |
 | `deploy/production/env-status.py` | Read-only `.env` check that never prints secret values. Database URLs show only scheme/user/host/port/database; the password and every query-parameter value are hidden. |
-| `deploy/production/*.test.sh` | Offline tests for the two scripts above (no DB, no credentials) |
+| `tests/integration/deploy/production/*.test.sh` | Offline tests for the two scripts above (no DB, no credentials) |
 | `scripts/record-backup-telemetry.mts` | Called by the backup script as the app user; records the outcome as an `IntegrationEvent` for `/manage/system`. Best effort, never carries paths or secrets |
 
 **Units and root-owned executables are never installed by a normal deploy.**
@@ -146,7 +146,7 @@ migrate with a complete runtime they are restarted.
 
 **Self-update.** The script's body is one `main()` function and the last line is
 `main "$@"; exit $?`, so the `git pull` that rewrites this file during a deploy
-cannot corrupt the running deploy. Offline tests: `bash deploy/update-server.test.sh`.
+cannot corrupt the running deploy. Offline tests: `bash tests/integration/deploy/update-server.test.sh`.
 
 After a deploy, run the [production smoke checklist](#production-smoke-checklist).
 

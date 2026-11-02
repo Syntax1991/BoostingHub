@@ -310,11 +310,50 @@ A scan of every test file found about 45 cleanups of the form `orm.X.where(<non-
 - Batch 11: `signup-cross-run-reservation`, `roster-saved-notice` (both fixed-date time bombs removed: 12 and 26 December), `run-template.service`, `raid-catalog-import.service` (deleted rows by name pattern before), `scheduled-character-sync.service` and `-backoff` (pass totals depended on how long ago the DB was reset; new `src/test/sync-candidates.ts`), `discord-sync-candidates`, `guide-replace` (KEEP). `run-lifecycle-concurrency` passed a `title` the Run input does not have; `tsc` reported it, and it is dropped.
 - Full suite on the audited state before batch 11, on `boostting_bot_test_audit` after `test:db:reset`: 341 files, 3826 tests passed, exit 0 (438 s). The earlier 3,832-test baseline is not used as evidence.
 
+### Tests moved to `tests/` (owner decision 2026-11-02, variant B)
+
+Scope: every test file leaves `src/`, which now holds production code only. 344 test files (341 Vitest files and 3 deploy shell tests) plus 11 support files moved with `git mv` in one structural commit. Behaviour is unchanged; no assertion, title or fixture changed.
+
+| Target | Files | Content |
+| --- | --- | --- |
+| `tests/unit/` | 222 | No database: pure rules, components, clients, bot logic |
+| `tests/integration/` | 122 | 118 query the database, `prisma/seed-guard` runs the real seed command, 3 deploy shell tests run the real scripts |
+| `tests/fixtures/` | 4 | `actors`, `db-fixtures`, `time`, `test-run-input` (was `src/lib/test-run-input.ts`, imported only by tests) |
+| `tests/helpers/` | 6 | `bot-api`, `bulk-force-refresh`, `domain-error`, `signup-offers`, `sync-candidates`, new `repo-paths` |
+| `tests/setup/` | 2 | `global-setup` (was `vitest.global-setup.ts`), `external-api-guard` |
+
+There are no end-to-end tests, so there is no `tests/e2e/` folder. Below `unit/` and `integration/` the path mirrors the module under test.
+
+Classification by measured behaviour, not by file name:
+
+- One full-suite run with a probe setup file counted every PostgreSQL query per test file. The probe was outside the repository and was not committed. Result per file: `docs/audit/test-classification.tsv`.
+- 13 files ran exactly 2 or 3 queries. The query log shows 2 of them are Better Auth's schema check (`current_schemas`, column metadata), which runs whenever the auth module is imported. 12 of these files do nothing else, so they are unit. `auth/discord-oauth-url` also writes a `verification` row, so it is integration.
+- Low but real counts stay integration. For example, `blizzard-api-client` and `global-announcements` write `integration_event` telemetry.
+- Subprocesses were checked by a scan for `child_process`, servers and pools. `seed-guard` spawns `npm run db:seed` and moved to integration. `guide-replace` only uses temp folders and a fake Discord, and stays unit.
+- Seven unit files have `integrations` in their path (external provider clients). They are not integration tests.
+
+Changes needed by the move:
+
+- Vitest `include` is `tests/**/*.test.ts`, and the global and per-file setup paths moved. The new alias `@tests` exists in both Vitest and `tsconfig.json`. ESLint has no test-specific patterns. There is no coverage configuration and no CI.
+- 89 files: `@/test/*` and `@/lib/test-run-input` imports became `@tests/fixtures/*` and `@tests/helpers/*`.
+- 16 files read source files relative to their own folder, through `__dirname`, `new URL(..., import.meta.url)` or relative imports. They now use `srcPath()` or `@/` imports. Two Next.js page tests import their page via `@/app/...`, and `next.config` is imported relatively.
+- The deploy shell tests resolve their script in `deploy/` instead of their own folder. `.gitattributes` keeps them LF.
+- `docs/DEVELOPER.md` (structure, test setup, filing rule, guard pin) and `docs/DEPLOYMENT.md` are updated. `test-decisions.json` keys and `test-ledger.tsv` use the new paths, and the decision counts are unchanged (2373 KEEP, 626 REWRITE, 826 open).
+- Checked with no change needed: dynamic imports (`pg`, `vitest`, `discord.js`, `@/` modules), `vi.mock` targets (all aliases), the one inline snapshot (no snapshot files), cwd-relative reads (`docs/`, `migrations/`, `src/...` from the repository root), and `guide-content` (already skips test files when it scans `src/`).
+
+Verification:
+
+- Inventory from `vitest list --json`, mapped through the move: 341 files and 3825 tests before and after; 0 missing, 0 extra, 0 discovered outside `tests/`. `git ls-files src` shows no test file.
+- The deploy shell tests pass from their new place with a real `python3`: update-server 41/41, backup-db 39/39, env-status 18/18.
+- Full suite after `test:db:reset` on `boostting_bot_test_audit`: 341 files, 3825 tests passed, exit 0 (448 s). `npm run lint`, `npm run typecheck` and `npm run build` all exit 0.
+
+Found while moving, not changed (feature freeze): four production modules are imported only by tests. They are `components/manage/roster-run-commitments.tsx`, `lib/character-availability.ts`, `lib/roster-candidate-counts.ts` and `repositories/character-availability.repository.ts`. They are dead-code candidates for phase 3, once dynamic imports and framework conventions have been checked.
+
 ## Continuation point
 
 The test audit is not complete. Order for the rest, smallest risk first:
 
-1. Done on branch `test/audit-batch-a`: `src/repositories` (11 files), `src/components` (39), `src/discord-bot` (37), `src/lib` (88), `src/domain` (22), `src/guides`, `src/services` batches 1–11.
+1. Done on branch `test/audit-batch-a`: `src/repositories` (11 files), `src/components` (39), `src/discord-bot` (37), `src/lib` (88), `src/domain` (22), `src/guides`, `src/services` batches 1–11. All tests now live under `tests/` (see above); paths below that still name `src/...test.ts` are as they were at the time.
 2. Next: the 25 remaining `src/services` files, smallest first; `test-decisions.json` lists what is decided. `run-warcraft-logs-auto` writes on seeded Runs and needs its own fixtures; `roster.service` passes only on a freshly reset DB. A test file without an entry in `test-decisions.json` is unreviewed. Each file now also gets the fixture rules above; files already audited get a fixture sweep afterwards (local `asUser`, `expectDomainCode`, fixed-id pre-cleans, swallowed `.catch(() => {})` cleanups).
 3. Done: `signupService.createBoosterSignup` is removed with `persistSignup`, `signupRepository.create` / `findDuplicate`, `isBlockingDuplicate` and `boosterSignupSchema`. All 13 suites offer through `offerCharacters` / `offerCharacter` in `src/test/signup-offers.ts`, which calls the production `setCharacterOffers`. `signup.service.test.ts` is rewritten.
 
@@ -331,6 +370,8 @@ Services batch 2 notes worth keeping:
 
 Not started: renames from the naming table, other than the move to `src/domain`.
 
-Owner decision (2026-11-02), after the audit: every test moves to a root-level `tests/` directory (`unit/`, `integration/`, `e2e/`, `fixtures/`, `helpers/`, `setup/`), and `src/` keeps production code only. Tests are classified by what they do: a test that needs the database or several real components is `integration`, whatever its file name. The move is its own structural commit with no behaviour change; the discovered file inventory is compared exactly before and after, and the database guards stay in force.
+Owner decision (2026-11-02), done in the move above: every test moves to a root-level `tests/` directory (`unit/`, `integration/`, `e2e/`, `fixtures/`, `helpers/`, `setup/`), and `src/` keeps production code only. Tests are classified by what they do: a test that needs the database or several real components is `integration`, whatever its file name. The move is its own structural commit with no behaviour change; the discovered file inventory is compared exactly before and after, and the database guards stay in force.
 
 Open tracked items: A18 and A19 (one commit each), the multi-row `.delete()` cleanups in tests, removing `rosterService.setDraftSelection` once its last caller has moved to `saveDraftSelection`.
+
+Order from here (owner master plan, 2026-11-02): phase 2 finishes the test audit (25 suites; `setDraftSelection`; the multi-row `.delete()` cleanups, each checked for intended cardinality and ownership before any change); phase 3 does A18, A19, the four dead-code candidates and a naming review in rename-only commits (no public fields, columns, persisted keys or Discord payloads); then performance, security and reliability with measured before/after; then UX and documentation; then the final validation matrix.

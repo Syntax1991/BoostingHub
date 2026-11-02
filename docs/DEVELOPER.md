@@ -246,6 +246,12 @@ src/
   lib/             Cross-cutting utilities
   prisma/          Prisma 8 contract, client, seed
   discord-bot/     Separate long-lived process (discord.js) — calls /api/bot/* only, never Prisma/Repositories
+tests/             Every test; src/ holds production code only (see Test setup)
+  unit/            No database: pure rules, components, clients, bot logic. Mirrors src/
+  integration/     Real database or real subprocesses: services, repositories, routes, deploy scripts. Mirrors src/ and deploy/
+  fixtures/        Typed test data factories: actors, database rows, clocks, Run inputs
+  helpers/         Shared test helpers: bot requests, signup offers, domain-error assertions, source paths
+  setup/           Vitest global setup (test-database guard) and per-file setup (external API guard)
 ```
 
 Main app routes (all in `src/app/(app)/` except the public login):
@@ -301,7 +307,7 @@ Other tools outside `scripts/`:
 | `src/discord-bot/register-commands.ts` | Registers the Discord slash commands | `bot:register-commands`, by hand |
 | `deploy/update-server.sh` | The only release path | By hand on the server |
 | `deploy/production/backup-db.sh`, `env-status.py` | Backup and read-only `.env` check | Timer, by hand |
-| `deploy/update-server.test.sh`, `deploy/production/*.test.sh` | Stub tests of the deployment scripts; they need bash and `python3` | By hand, no npm script and no CI |
+| `tests/integration/deploy/update-server.test.sh`, `tests/integration/deploy/production/*.test.sh` | Stub tests of the deployment scripts; they need bash and `python3` | By hand, no npm script and no CI |
 
 ## Local development
 
@@ -338,7 +344,7 @@ It is safe to re-run. It is not random. Seed is a fixture, not required producti
 
 Default password: `dev-login-only` (override with `DEV_AUTH_PASSWORD`).
 
-`src/services/signup.service.test.ts`, `src/services/roster.service.test.ts`, `src/services/run-detail.service.test.ts`, and `src/services/character.service.test.ts` use the seeded database. Character tests create isolated users (`cm0000000001` / `cm0000000002`) and delete them afterwards. Run Management tests create isolated users (`rm0000000001`–`4`) and dedicated runs; they do not mutate Roster Lab. Re-seed after roster tests if you need the original demo rows. Roster tests mutate **Roster Lab Heroic**.
+Tests under `tests/integration/` run against `TEST_DATABASE_URL`, which `npm run test:db:reset` migrates and seeds. Audited suites create their own users, Characters and Runs with fresh ids and delete exactly those rows; they may read seeded rows through `SEED_IDS` (`src/prisma/seed-ids.ts`). Suites still open in the test audit (`docs/audit/EXECUTION_LEDGER.md`) can mutate seeded rows: `tests/integration/services/roster.service.test.ts` mutates **Roster Lab Heroic**, so re-seed after it if you need the original demo rows.
 
 ### Temporary Prisma Postgres
 
@@ -721,16 +727,17 @@ npm run build
 
 ### Test setup
 
-- Runner: Vitest, `src/**/*.test.ts`, one file at a time (`fileParallelism: false`). Scripts under `deploy/` have offline shell tests (`bash deploy/update-server.test.sh`, `bash deploy/production/backup-db.test.sh`, `bash deploy/production/env-status.test.sh`; the last two need a real `python3` on the PATH, and most checks fail without one).
-- Database: `TEST_DATABASE_URL` is required and must differ from `DATABASE_URL`. `src/lib/pg-pool.ts` refuses to start under Vitest otherwise. `npm run test:db:reset` resets and reseeds that database destructively; `npm run test:full` resets, then runs everything.
-- External APIs: `src/test/external-api-guard.ts` fails a test that lets a real Warcraft Logs, Blizzard or Raider.IO request escape.
+- Runner: Vitest, `tests/**/*.test.ts`, one file at a time (`fileParallelism: false`). `src/` contains no tests. A test is filed by what it does, not by its name: `tests/integration/` when it queries the database (beyond Better Auth's schema check at import) or runs a real subprocess, otherwise `tests/unit/`. Below either folder the path mirrors the module under test (`src/services/x.ts` → `tests/integration/services/x.test.ts`). Imports use `@/` for production code and `@tests/` for fixtures and helpers; a test that reads source files resolves them with `srcPath()` (`tests/helpers/repo-paths.ts`). There are no end-to-end browser tests.
+- Deploy scripts have offline shell tests (`bash tests/integration/deploy/update-server.test.sh`, `bash tests/integration/deploy/production/backup-db.test.sh`, `bash tests/integration/deploy/production/env-status.test.sh`; the last two need a real `python3` on the PATH, and most checks fail without one).
+- Database: `TEST_DATABASE_URL` is required and must differ from `DATABASE_URL`. `src/lib/pg-pool.ts` refuses to start under Vitest otherwise. `npm run test:db:reset` resets and reseeds that database destructively; `npm run test:full` resets, then runs everything. Set `TEST_DATABASE_EXPECTED_NAME` to pin the one database a checkout may use: the pool, Vitest's global setup and `test:db:reset` then refuse any other name before connecting.
+- External APIs: `tests/setup/external-api-guard.ts` fails a test that lets a real Warcraft Logs, Blizzard or Raider.IO request escape.
 - Some tests use the seeded database and mutate Roster Lab fixtures; re-seed after them if you need the original demo rows. Parallel checkouts need one test database each, because a reset would break a concurrent run.
 - Discord: pure bot logic is unit-tested. The discord.js wiring (`client.ts`, the real calls in `sync-loop.ts`, `register-commands.ts`) cannot run without a live token and is verified by typecheck, build and smoke tests only.
 
 ### Discord bot test coverage
 
 - Pure, fully unit-tested: `custom-ids.ts`, `format.ts`, `discord-channel-name.ts`'s `buildDiscordRunChannelName`, `wow-run-week.ts`'s `classifyRunWeek` (basic classification, half-open boundary equality, winter/summer, and both DST transitions — with an explicit test proving the CURRENT→NEXT gap is *not* a fixed 168 UTC hours across a transition), `discord-schedule.ts` (Schedule eligibility, CURRENT/NEXT filtering, ordering, signature convergence, empty state, format-version bump), `embeds/signup-embed.ts`, `embeds/roster-embed.ts`, `bot-api-client.ts` (mocked `fetch`, including `listSyncWork`'s `channels[]`), `env.ts`'s `loadBotEnv` (the one active category, independent marker-channel resolution, and the ARCHIVE category), `interactions/error-copy.ts`, `interactions/signup-flow.ts`'s `buildSelectOptions`/`parseSelectedOffers`, `commands/mysignups.ts`'s `formatMySignups`, `channel-reconciliation.ts`'s `reconcileExistingRunChannel`/`reconcileChannels` (CURRENT/NEXT sharing one category, ARCHIVE move, rename, missing-category, missing-channel, failure-isolation), and `reconcileWeekSectionPositions` (chronological CURRENT/NEXT ordering, manual drift correction, marker identity/name/parent never touched even though their position may appear in the payload, unmanaged channels keep their relative position, missing/invalid marker config, ARCHIVE items ignored — all against fake position lists, no discord.js or live token needed). Schedule edit-in-place / deleted-message recovery / failure isolation vs archive+signup: `sync-loop.test.ts`. Service lane: `discord-schedule-sync.test.ts`.
-- Bot API routes: tested by calling the exported Route Handler functions directly with constructed `NextRequest`s (`src/app/api/bot/bot-routes.test.ts`), including a contract test asserting `GET /api/bot/discord/sync` exposes `channels` alongside `signups`/`roster`, each carrying `targetBucket` and `scheduledStartAt` — no live Discord credentials required.
+- Bot API routes: tested by calling the exported Route Handler functions directly with constructed `NextRequest`s (`tests/integration/app/api/bot/bot-routes.test.ts`), including a contract test asserting `GET /api/bot/discord/sync` exposes `channels` alongside `signups`/`roster`, each carrying `targetBucket` and `scheduledStartAt` — no live Discord credentials required.
 - `discord-sync.service.ts`: tested against the real dev database like every other Service, including channel provisioning/idempotency/rename, the independent `channels` lane, and weekly target resolution with an injectable `now` — CURRENT/NEXT eligible for first provisioning, PAST/FUTURE blocked, app archival overriding week classification, and a same-Run rollover test (NEXT → CURRENT across two `listSyncWork` calls with no Run mutation in between) (`src/services/discord-sync.service.test.ts`).
 - The discord.js Client wiring itself (`client.ts`, `sync-loop.ts`'s actual channel fetch/create/message send/edit/`setPositions` calls, `register-commands.ts`) cannot be unit-tested without a live bot token — it was verified structurally (typecheck, production build, and a boot smoke test against Discord's own token validation) rather than end-to-end. `sync-loop.ts` is kept as thin as possible specifically so the real reconciliation *logic* lives in the unit-tested `channel-reconciliation.ts` instead.
 
@@ -1089,7 +1096,7 @@ Never shown: `Booster · Normal / Heroic / Mythic` — the Booster role has no d
 2. sets `isBooster = true` for every User with **any** `APPROVED` qualification row, whatever its difficulty (Normal, Heroic, Mythic, several, or approved + revoked). Users with only `REVOKED` rows, or none, stay `false` — no approved booster loses access;
 3. drops `booster_qualification`.
 
-`isLootbuddy` stays `false` for everyone. `booster_access` is not touched. The migration is covered by `src/prisma/boosting-roles-migration.test.ts`.
+`isLootbuddy` stays `false` for everyone. `booster_access` is not touched. The migration is covered by `tests/integration/prisma/boosting-roles-migration.test.ts`.
 
 #### Out of scope here
 
