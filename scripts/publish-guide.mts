@@ -1,33 +1,36 @@
 /**
- * Publish / update the Manawyrm Hub Booster Guide in Discord.
+ * Publish / update a Manawyrm Hub guide in Discord.
  *
  * Default is dry-run (preview). Never prints tokens.
  *
  *   npm run guide:booster:preview
- *   npm run guide:booster:publish
- *   npm run guide:booster:publish -- --retire-legacy
+ *   npm run guide:raidlead:publish
  *
  * Options:
- *   --channel=<id>     target channel (default: GUIDE_CHANNEL_IDS.booster)
- *   --publish          apply creates/edits (and optional legacy retirement)
- *   --retire-legacy    after upsert + re-read verification, delete the complete
- *                      known five-message legacy Booster Guide set
+ *   --guide=<kind>     booster or raidlead (required)
+ *   --channel=<id>     target channel (default: GUIDE_CHANNEL_IDS.<kind>)
+ *   --publish          apply creates/edits
  *   --replace          replace the guide with new messages instead of editing it:
  *                      alone: read-only plan · with --publish: create and verify new
  *                      messages, delete nothing · with --retire-old: delete the old
  *                      ids saved by the publish run
  *   --snapshot-dir=…   override local rollback snapshot directory
- *                      (default: tmp-booster-guide-snapshots/)
+ *                      (default: tmp-<kind>-guide-snapshots/)
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { GUIDE_CHANNEL_IDS } from "@/discord-bot/guide-channels";
+import { boosterGuidePublisher } from "@/guides/booster-guide";
+import { buildGuideComponents, type GuideKind } from "@/guides/guide-card";
 import {
-  BOOSTER_GUIDE_CARDS,
-  buildBoosterGuideComponents,
-  buildBoosterGuideEmbed,
-  parseBoosterGuideCardKey,
-} from "@/guides/booster-guide";
+  DISCORD_API,
+  defaultScreenshotsDir,
+  loadGuideScreenshot,
+  resolveGuideAssetRevisions,
+  type DiscordMessageLike,
+  type GuideDiscordClient,
+  type GuidePublisher,
+} from "@/guides/guide-publisher";
 import {
   discordHttpErrorFrom,
   fetchDiscordAsset,
@@ -35,19 +38,12 @@ import {
   runGuideReplaceCli,
   type GuideReplaceMessage,
 } from "@/guides/guide-replace";
-import {
-  DISCORD_API,
-  defaultGuideSnapshotDir,
-  defaultScreenshotsDir,
-  executeBoosterGuidePublish,
-  guideMessageNeedsUpdate,
-  loadGuideScreenshot,
-  planBoosterGuidePublish,
-  resolveGuideAssetRevisions,
-  validateBoosterGuideCards,
-  type DiscordMessageLike,
-  type GuideDiscordClient,
-} from "@/guides/booster-guide-publisher";
+import { raidleadGuidePublisher } from "@/guides/raidlead-guide";
+
+const PUBLISHERS: Record<GuideKind, GuidePublisher> = {
+  booster: boosterGuidePublisher,
+  raidlead: raidleadGuidePublisher,
+};
 
 function arg(name: string): string | undefined {
   const prefix = `--${name}=`;
@@ -157,14 +153,15 @@ function createRestClient(token: string): GuideDiscordClient {
   };
 }
 
-export async function writeGuideRollbackSnapshot(
+async function writeGuideRollbackSnapshot(
+  kind: GuideKind,
   dir: string,
   channelId: string,
   messages: DiscordMessageLike[],
 ): Promise<string> {
   await mkdir(dir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const path = resolve(dir, `booster-guide-snapshot-${stamp}.json`);
+  const path = resolve(dir, `${kind}-guide-snapshot-${stamp}.json`);
   const payload = {
     channelId,
     savedAt: new Date().toISOString(),
@@ -184,32 +181,37 @@ export async function writeGuideRollbackSnapshot(
 }
 
 async function main() {
-  const channelId = arg("channel") ?? GUIDE_CHANNEL_IDS.booster;
+  const kind = arg("guide") as GuideKind | undefined;
+  if (kind !== "booster" && kind !== "raidlead") {
+    throw new Error("--guide=booster or --guide=raidlead is required.");
+  }
+  const publisher = PUBLISHERS[kind];
+  const { cards, format } = publisher;
+  const channelId = arg("channel") ?? GUIDE_CHANNEL_IDS[kind];
   const publish = process.argv.includes("--publish");
-  const retireLegacy = process.argv.includes("--retire-legacy");
   const replace = process.argv.includes("--replace");
-  const snapshotDir = arg("snapshot-dir") ?? defaultGuideSnapshotDir();
+  const snapshotDir = arg("snapshot-dir") ?? resolve(process.cwd(), `tmp-${kind}-guide-snapshots`);
   const screenshotsDir = defaultScreenshotsDir();
 
-  const cardErrors = validateBoosterGuideCards(BOOSTER_GUIDE_CARDS);
+  const cardErrors = publisher.validateCards();
   if (cardErrors.length) {
     throw new Error(`Guide card validation failed:\n${cardErrors.join("\n")}`);
   }
 
-  const assetRevisions = await resolveGuideAssetRevisions(screenshotsDir);
-  console.log(`Booster guide cards: ${BOOSTER_GUIDE_CARDS.length}`);
-  for (const [i, card] of BOOSTER_GUIDE_CARDS.entries()) {
+  const assetRevisions = await resolveGuideAssetRevisions(screenshotsDir, cards);
+  console.log(`${kind} guide cards: ${cards.length}`);
+  for (const [i, card] of cards.entries()) {
     const revision = assetRevisions[card.key] ?? null;
-    const embed = buildBoosterGuideEmbed(card, { assetRevision: revision });
+    const embed = format.buildEmbed(card, { assetRevision: revision });
     console.log(
-      `  ${i + 1}. ${card.key} — "${card.title}" image=${card.imageFile ?? "-"} asset=${revision ?? "-"} footer=${embed.footer.text}`,
+      `  ${i + 1}. ${card.key} — "${card.title}" image=${card.imageFile ?? "-"} asset=${revision ?? "-"} footer="${embed.footer.text}"`,
     );
   }
 
   if (replace) {
     const retireOld = process.argv.includes("--retire-old");
-    if (retireLegacy || (retireOld && publish)) {
-      throw new Error("--replace takes either --publish or --retire-old, and never --retire-legacy.");
+    if (retireOld && publish) {
+      throw new Error("--replace takes either --publish or --retire-old.");
     }
     const token = requireEnv("DISCORD_BOT_TOKEN");
     const rest = createRestClient(token);
@@ -220,15 +222,15 @@ async function main() {
         botUserId: me.id,
         snapshotDir,
         adapter: {
-          kind: "booster",
-          cards: BOOSTER_GUIDE_CARDS,
+          kind,
+          cards,
           assetRevisions,
           cardErrors,
-          cardKeyFromFooter: parseBoosterGuideCardKey,
-          needsUpdate: (message, card, revision) => guideMessageNeedsUpdate(message, card, revision),
+          cardKeyFromFooter: format.parseCardKey,
+          needsUpdate: (message, card, revision) => publisher.needsUpdate(message, card, revision),
           render: (card, revision) => [
-            buildBoosterGuideEmbed(card, { assetRevision: revision }),
-            buildBoosterGuideComponents(card),
+            format.buildEmbed(card, { assetRevision: revision }),
+            buildGuideComponents(card),
           ],
         },
         client: {
@@ -241,8 +243,8 @@ async function main() {
               : [];
             return rest.createMessage({
               channelId: id,
-              embed: buildBoosterGuideEmbed(card, { assetRevision }),
-              components: buildBoosterGuideComponents(card),
+              embed: format.buildEmbed(card, { assetRevision }),
+              components: buildGuideComponents(card),
               files,
               nonce,
             });
@@ -258,7 +260,6 @@ async function main() {
   if (!publish) {
     console.log("\nDry-run / preview only (no Discord reads or writes).");
     console.log("Re-run with --publish to upsert the live guide.");
-    if (retireLegacy) console.log("Note: --retire-legacy is ignored without --publish.");
     return;
   }
 
@@ -271,16 +272,10 @@ async function main() {
   const me = await discordJson<{ id: string }>(token, "GET", "/users/@me");
   const messages = await client.listMessages(channelId);
 
-  const snapshotPath = await writeGuideRollbackSnapshot(snapshotDir, channelId, messages);
+  const snapshotPath = await writeGuideRollbackSnapshot(kind, snapshotDir, channelId, messages);
   console.log(`Rollback snapshot written: ${snapshotPath}`);
 
-  const plan = planBoosterGuidePublish({
-    channelId,
-    botUserId: me.id,
-    messages,
-    assetRevisions,
-    retireLegacy,
-  });
+  const plan = publisher.plan({ channelId, botUserId: me.id, messages, assetRevisions });
 
   if (plan.errors.length) {
     console.error("Refusing to publish:");
@@ -288,37 +283,14 @@ async function main() {
     process.exit(1);
   }
 
-  if (plan.legacyMessageIds.length && !retireLegacy) {
-    console.log(
-      `Warning: legacy guide fingerprints matched ${plan.legacyMessageIds.length}/5. After verifying the new guide, re-run with --retire-legacy.`,
-    );
-  }
-
   console.log("Plan:");
   for (const action of plan.actions) {
     console.log(`  - ${JSON.stringify(action)}`);
   }
-  if (retireLegacy) {
-    console.log(`  - retire-legacy candidates=${JSON.stringify(plan.legacyMessageIds)} complete=${plan.legacyComplete}`);
-  }
 
-  const result = await executeBoosterGuidePublish({
-    client,
-    channelId,
-    plan,
-    screenshotsDir,
-    botUserId: me.id,
-    retireLegacy,
-    dryRun: false,
-  });
+  const result = await publisher.execute({ client, channelId, plan, screenshotsDir, dryRun: false });
 
-  console.log(
-    `Done. unchanged=${result.unchanged} updated=${result.updated} created=${result.created} retiredLegacy=${result.retiredLegacy}`,
-  );
-  if (result.retirementSkippedReason) {
-    console.error(`Legacy retirement skipped: ${result.retirementSkippedReason}`);
-    process.exit(1);
-  }
+  console.log(`Done. unchanged=${result.unchanged} updated=${result.updated} created=${result.created}`);
 }
 
 main().catch((err) => {

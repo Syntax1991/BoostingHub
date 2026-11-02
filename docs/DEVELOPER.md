@@ -286,7 +286,7 @@ Scripts:
 | `check-dev-db-schema.ts` | Read-only schema check before `next dev` | `predev` |
 | `test-db-reset.ts` | Destructively resets `TEST_DATABASE_URL` only | `test:db:reset` |
 | `capture-guide-screenshots.mts`, `capture-raidlead-guide-screenshots.mts` | Playwright guide screenshots | `guide:screenshots`, `guide:raidlead:screenshots` |
-| `publish-booster-guide.mts`, `publish-raidlead-guide.mts` | Discord guide publishers | `guide:*:preview`, `guide:*:publish` |
+| `publish-guide.mts` | Discord guide publishers | `guide:*:preview`, `guide:*:publish` |
 | `record-backup-telemetry.mts` | Backup outcome as `IntegrationEvent` | none (called by the backup script) |
 | `generate-wow-item-sockets.mjs` | Regenerates the socket table after a content patch | none |
 | `build-spec-icon-map.mts` | Regenerates the specialization icon map | none |

@@ -1,68 +1,18 @@
 /**
  * Canonical Manawyrm Hub Raid Lead Guide (Discord v2).
  *
- * Live Discord posts identify themselves via embed footer:
- *   `Manawyrm Hub · guide:raidlead:v2:<cardKey>[ · asset:<12hex>]`
- *
- * The optional `asset:` segment is a SHA-256 prefix of the attached screenshot
- * bytes so screenshot-only refreshes still trigger Discord edits.
+ * Card format: guide-card.ts. Publishing: guide-publisher.ts.
  */
-import { APP_BRAND_NAME } from "@/lib/branding";
-import { hashGuideAssetBytes } from "@/guides/booster-guide";
+import { APP_URL, createGuideFormat, type GuideCard } from "@/guides/guide-card";
+import { createGuidePublisher } from "@/guides/guide-publisher";
 
-export { hashGuideAssetBytes };
-
-export const RAIDLEAD_GUIDE_KIND = "raidlead" as const;
-export const RAIDLEAD_GUIDE_VERSION = "v2" as const;
-export const RAIDLEAD_GUIDE_MARKER_PREFIX = `guide:${RAIDLEAD_GUIDE_KIND}:${RAIDLEAD_GUIDE_VERSION}:`;
-export const RAIDLEAD_GUIDE_ASSET_PREFIX = "asset:";
-
-/** Same gold accent as Booster Guide / signup embeds. */
-export const RAIDLEAD_GUIDE_EMBED_COLOR = 0xd4af37;
-
-export const APP_URL = "https://manawyrm-boosting.com";
-
-export type GuideEmbedField = {
-  name: string;
-  value: string;
-  inline?: boolean;
-};
-
-export type RaidleadGuideCard = {
-  key: string;
-  title: string;
-  description: string;
-  fields?: GuideEmbedField[];
-  imageFile: string | null;
-  linkButton?: { label: string; url: string };
-};
-
-export function raidleadGuideFooter(cardKey: string, assetRevision?: string | null): string {
-  const base = `${APP_BRAND_NAME} · ${RAIDLEAD_GUIDE_MARKER_PREFIX}${cardKey}`;
-  if (!assetRevision) return base;
-  return `${base} · ${RAIDLEAD_GUIDE_ASSET_PREFIX}${assetRevision}`;
-}
-
-export function parseRaidleadGuideCardKey(footerText: string | null | undefined): string | null {
-  if (!footerText) return null;
-  const idx = footerText.indexOf(RAIDLEAD_GUIDE_MARKER_PREFIX);
-  if (idx < 0) return null;
-  const rest = footerText.slice(idx + RAIDLEAD_GUIDE_MARKER_PREFIX.length).trim();
-  const match = /^([a-z0-9-]+)/i.exec(rest);
-  return match?.[1] ?? null;
-}
-
-export function parseRaidleadGuideAssetRevision(footerText: string | null | undefined): string | null {
-  if (!footerText) return null;
-  const match = new RegExp(`·\\s*${RAIDLEAD_GUIDE_ASSET_PREFIX}([a-f0-9]{12})\\b`, "i").exec(footerText);
-  return match?.[1]?.toLowerCase() ?? null;
-}
+export const RAIDLEAD_GUIDE_FORMAT = createGuideFormat("raidlead");
 
 /**
  * Six canonical Discord guide cards, written for a new Raid Lead. Each card answers
  * one question in a few steps and names the next step. Button names match the UI.
  */
-export const RAIDLEAD_GUIDE_CARDS: readonly RaidleadGuideCard[] = [
+export const RAIDLEAD_GUIDE_CARDS: readonly GuideCard[] = [
   {
     key: "raid-lead-basics",
     title: "📗 Raid Lead Guide: How do I get started?",
@@ -155,84 +105,23 @@ export const RAIDLEAD_GUIDE_CARDS: readonly RaidleadGuideCard[] = [
   },
 ] as const;
 
-export function buildRaidleadGuideEmbed(
-  card: RaidleadGuideCard,
-  options?: { assetRevision?: string | null },
-): {
-  title: string;
-  description: string;
-  color: number;
-  fields?: GuideEmbedField[];
-  footer: { text: string };
-  image?: { url: string };
-} {
-  const embed: {
-    title: string;
-    description: string;
-    color: number;
-    fields?: GuideEmbedField[];
-    footer: { text: string };
-    image?: { url: string };
-  } = {
-    title: card.title,
-    description: card.description,
-    color: RAIDLEAD_GUIDE_EMBED_COLOR,
-    footer: { text: raidleadGuideFooter(card.key, options?.assetRevision ?? null) },
-  };
-  if (card.fields?.length) {
-    embed.fields = card.fields.map((field) => ({
-      name: field.name,
-      value: field.value,
-      inline: field.inline ?? false,
-    }));
-  }
-  if (card.imageFile) {
-    embed.image = { url: `attachment://${card.imageFile}` };
-  }
-  return embed;
-}
-
-export function buildRaidleadGuideComponents(card: RaidleadGuideCard): unknown[] | undefined {
-  if (!card.linkButton) return undefined;
-  return [
-    {
-      type: 1,
-      components: [
-        {
-          type: 2,
-          style: 5,
-          label: card.linkButton.label,
-          url: card.linkButton.url,
-        },
-      ],
-    },
-  ];
-}
-
-export function measureRaidleadGuideEmbed(
-  card: RaidleadGuideCard,
-  assetRevision: string | null = "a".repeat(12),
-): {
-  titleChars: number;
-  descriptionChars: number;
-  fieldCount: number;
-  maxFieldChars: number;
-  footerChars: number;
-  totalChars: number;
-} {
-  const footer = raidleadGuideFooter(card.key, card.imageFile ? assetRevision : null);
-  const fields = card.fields ?? [];
-  const fieldNameChars = fields.reduce((n, f) => n + f.name.length, 0);
-  const fieldValueChars = fields.reduce((n, f) => n + f.value.length, 0);
-  const maxFieldChars = fields.reduce((n, f) => Math.max(n, f.value.length), 0);
-  const totalChars =
-    card.title.length + card.description.length + fieldNameChars + fieldValueChars + footer.length;
-  return {
-    titleChars: card.title.length,
-    descriptionChars: card.description.length,
-    fieldCount: fields.length,
-    maxFieldChars,
-    footerChars: footer.length,
-    totalChars,
-  };
-}
+export const raidleadGuidePublisher = createGuidePublisher({
+  format: RAIDLEAD_GUIDE_FORMAT,
+  cards: RAIDLEAD_GUIDE_CARDS,
+  contentErrors(cards) {
+    const errors: string[] = [];
+    const createCard = cards.find((c) => c.key === "create-run");
+    if (createCard && !/Community/i.test(JSON.stringify(createCard))) {
+      errors.push("create-run card must document Community run type");
+    }
+    const rosterCard = cards.find((c) => c.key === "build-roster");
+    if (rosterCard && !/\*\*Publish\*\*/.test(JSON.stringify(rosterCard))) {
+      errors.push("build-roster card must mention the Publish button");
+    }
+    // BoostingHub has no financial workflow: no card may describe payouts or settlements.
+    if (cards.some((c) => /payout|settlement|mark paid/i.test(JSON.stringify(c)))) {
+      errors.push("guide cards must not describe payouts or settlements");
+    }
+    return errors;
+  },
+});

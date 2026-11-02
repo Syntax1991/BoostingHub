@@ -2,9 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { BOOSTER_GUIDE_CARDS } from "@/guides/booster-guide";
-import { validateBoosterGuideCards } from "@/guides/booster-guide-publisher";
 import { RAIDLEAD_GUIDE_CARDS } from "@/guides/raidlead-guide";
-import { validateRaidleadGuideCards } from "@/guides/raidlead-guide-publisher";
 
 const ALL_CARDS = [...BOOSTER_GUIDE_CARDS, ...RAIDLEAD_GUIDE_CARDS];
 /** Long enough for three steps and one tip, short enough to read on a phone. */
@@ -94,11 +92,6 @@ describe("guide cards for new users", () => {
       }
     }
     expect([...missing]).toEqual([]);
-  });
-
-  it("passes both publisher validators", () => {
-    expect(validateBoosterGuideCards()).toEqual([]);
-    expect(validateRaidleadGuideCards()).toEqual([]);
   });
 
   it("does not use the retired roster button names", () => {

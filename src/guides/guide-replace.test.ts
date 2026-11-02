@@ -2,26 +2,10 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  BOOSTER_GUIDE_CARDS,
-  buildBoosterGuideComponents,
-  buildBoosterGuideEmbed,
-  hashGuideAssetBytes,
-  parseBoosterGuideCardKey,
-  type BoosterGuideCard,
-} from "@/guides/booster-guide";
-import { guideMessageNeedsUpdate, planBoosterGuidePublish } from "@/guides/booster-guide-publisher";
-import {
-  RAIDLEAD_GUIDE_CARDS,
-  buildRaidleadGuideComponents,
-  buildRaidleadGuideEmbed,
-  parseRaidleadGuideCardKey,
-  type RaidleadGuideCard,
-} from "@/guides/raidlead-guide";
-import {
-  guideMessageNeedsUpdate as raidleadNeedsUpdate,
-  resolveRaidleadGuideCardKey,
-} from "@/guides/raidlead-guide-publisher";
+import { BOOSTER_GUIDE_CARDS, boosterGuidePublisher } from "@/guides/booster-guide";
+import { buildGuideComponents, hashGuideAssetBytes, type GuideCard } from "@/guides/guide-card";
+import type { GuidePublisher } from "@/guides/guide-publisher";
+import { RAIDLEAD_GUIDE_CARDS, raidleadGuidePublisher } from "@/guides/raidlead-guide";
 import {
   DiscordHttpError,
   discordHttpErrorFrom,
@@ -55,48 +39,27 @@ function revisions(cards: readonly GuideReplaceCard[]): Record<string, string | 
   );
 }
 
-function boosterFixture(): GuideFixture<BoosterGuideCard> {
-  const assetRevisions = revisions(BOOSTER_GUIDE_CARDS);
+function guideFixture(publisher: GuidePublisher): GuideFixture<GuideCard> {
+  const { cards, format } = publisher;
+  const assetRevisions = revisions(cards);
+  const embedOf = (card: GuideCard) => format.buildEmbed(card, { assetRevision: assetRevisions[card.key] ?? null });
   return {
     adapter: {
-      kind: "booster",
-      cards: BOOSTER_GUIDE_CARDS,
+      kind: format.kind,
+      cards,
       assetRevisions,
       cardErrors: [],
-      cardKeyFromFooter: parseBoosterGuideCardKey,
-      needsUpdate: (message, card, revision) => guideMessageNeedsUpdate(message, card, revision),
-      render: (card, revision) => buildBoosterGuideEmbed(card, { assetRevision: revision }),
+      cardKeyFromFooter: format.parseCardKey,
+      needsUpdate: (message, card, revision) => publisher.needsUpdate(message, card, revision),
+      render: (card, revision) => format.buildEmbed(card, { assetRevision: revision }),
     },
-    footer: (card) => buildBoosterGuideEmbed(card, { assetRevision: assetRevisions[card.key] ?? null }).footer.text,
-    build: (card) => ({
-      embed: buildBoosterGuideEmbed(card, { assetRevision: assetRevisions[card.key] ?? null }),
-      components: buildBoosterGuideComponents(card),
-    }),
+    footer: (card) => embedOf(card).footer.text,
+    build: (card) => ({ embed: embedOf(card), components: buildGuideComponents(card) }),
   };
 }
 
-function raidleadFixture(): GuideFixture<RaidleadGuideCard> {
-  const assetRevisions = revisions(RAIDLEAD_GUIDE_CARDS);
-  return {
-    adapter: {
-      kind: "raidlead",
-      cards: RAIDLEAD_GUIDE_CARDS,
-      assetRevisions,
-      cardErrors: [],
-      cardKeyFromFooter: (footer) => {
-        const raw = parseRaidleadGuideCardKey(footer);
-        return raw ? resolveRaidleadGuideCardKey(raw) : null;
-      },
-      needsUpdate: (message, card, revision) => raidleadNeedsUpdate(message, card, revision),
-      render: (card, revision) => buildRaidleadGuideEmbed(card, { assetRevision: revision }),
-    },
-    footer: (card) => buildRaidleadGuideEmbed(card, { assetRevision: assetRevisions[card.key] ?? null }).footer.text,
-    build: (card) => ({
-      embed: buildRaidleadGuideEmbed(card, { assetRevision: assetRevisions[card.key] ?? null }),
-      components: buildRaidleadGuideComponents(card),
-    }),
-  };
-}
+const boosterFixture = () => guideFixture(boosterGuidePublisher);
+const raidleadFixture = () => guideFixture(raidleadGuidePublisher);
 
 /** In-memory channel. Fails on demand, and returns the first message for a repeated nonce like Discord. */
 class FakeDiscord<Card extends GuideReplaceCard> {
@@ -257,7 +220,7 @@ describe("guide replace", () => {
     await publishGuideReplacement(context(fixture, discord));
     await expect(hasActiveGuideReplacement(snapshotDir, CHANNEL)).resolves.toBe(true);
 
-    const during = planBoosterGuidePublish({
+    const during = boosterGuidePublisher.plan({
       channelId: CHANNEL,
       botUserId: BOT,
       messages: discord.messages,
@@ -266,7 +229,7 @@ describe("guide replace", () => {
     expect(during.errors.join(" ")).toMatch(/Ambiguous state/);
 
     await retireOldGuideMessages(context(fixture, discord));
-    const after = planBoosterGuidePublish({
+    const after = boosterGuidePublisher.plan({
       channelId: CHANNEL,
       botUserId: BOT,
       messages: discord.messages,
