@@ -10,3 +10,4 @@ Branch: `test/audit-batch-a`. Authoritative status: [../EXECUTION_LEDGER.md](../
 | 4 | [PHASE-4.md](PHASE-4.md) | Performance, security, reliability |
 | 5 | [PHASE-5.md](PHASE-5.md) | UX and documentation |
 | 6 | [PHASE-6.md](PHASE-6.md) | Final validation matrix |
+| — | [FINAL-ACCEPTANCE-REVIEW.md](FINAL-ACCEPTANCE-REVIEW.md) | Independent acceptance review of Phases 1–6 |

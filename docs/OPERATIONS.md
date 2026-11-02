@@ -480,6 +480,11 @@ Backups are stored on the production host only. An off-site copy is not document
 - Ops scripts never print secret values. Use `env-status.py` rather than `cat .env`.
 - Development switches (`DEV_AUTH_ENABLED`, `DEV_ACCOUNT_BOOTSTRAP_ENABLED`) stay `false`.
 - **`npm run db:seed` deletes existing data** and replaces it with test fixtures. Never run it on the server. It refuses `NODE_ENV=production`, the production database, non-local hosts, extra connection parameters and any database not named in `SEED_CONFIRM_DATABASE`. To recover data, use the restore procedure, never the seed.
+- Next.js already suppresses `X-Powered-By: Next.js` (`poweredByHeader: false`). The Apache/Plesk reverse proxy may still emit `X-Powered-By: PleskLin`. Unset that header in the hosting panel (or `Header unset X-Powered-By`) — it is server config, not an application deploy.
+- There is still no Content-Security-Policy. Do not enable an enforcing CSP from the panel without an inventory of inline scripts and image hosts first (see audit acceptance report).
+- After a Discord-bot deploy, confirm rate-limit waits with
+  `journalctl -u boostinghub-discord-bot --since "1 hour ago" | grep 'rate limited'`.
+  The bot logs each Discord REST rate-limit wait; absence of lines does not prove the sync is fast, only that no wait was observed in that window.
 
 ## Operational non-goals
 

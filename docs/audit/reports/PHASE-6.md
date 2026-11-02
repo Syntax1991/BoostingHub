@@ -51,7 +51,12 @@ Master audit Phases 1–6 are complete on the authorized feature-freeze branch. 
 | REMOVE (tombstones) | 4+ (incl. Phase 3 deleted suites) |
 | Live `*.test.ts` files | **338** (341 at Phase 2 gate − 3 deleted unit suites in Phase 3) |
 
-Runtime test count **3801** (was 3824 at Phase 2 gate; −23 from deleted unit suites for dead modules).
+Runtime test count **3801** (was 3824 at Phase 2 gate; −23 total):
+
+| Source | Files | Tests | Commit |
+| --- | --- | --- | --- |
+| Dead modules deleted with their unit suites | −3 | −21 | `e2a0979` |
+| A19 empty `raidInvites` sync-loop describe removed (file kept) | 0 | −2 | `cc14bdf` |
 
 ## OPEN ITEMS (not blockers for audit DONE)
 

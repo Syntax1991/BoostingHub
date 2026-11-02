@@ -330,6 +330,10 @@ systemctl restart boostinghub-web.service boostinghub-discord-bot.service
       `journalctl -u boostinghub-web --since "10 min ago"` and
       `journalctl -u boostinghub-discord-bot --since "10 min ago"` show no startup errors,
       schema errors, reconnect loops or repeating Unknown Channel lines
+- [ ] Web + Discord bot co-deployed (A19 removed the empty `raidInvites` sync field; mismatched versions disagree on the sync payload)
+- [ ] Optional diagnostics: `journalctl -u boostinghub-discord-bot --since "1 hour ago" | grep 'rate limited'`
+      (records Discord REST waits; used to confirm or dismiss the 15–25 s sync-stall hypothesis)
+- [ ] Optional host hardening: Apache/Plesk no longer sends `X-Powered-By: PleskLin`
 
 ## Failed deployments
 
