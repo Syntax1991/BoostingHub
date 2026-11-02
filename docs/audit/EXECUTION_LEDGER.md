@@ -225,12 +225,43 @@ Requested as an addendum: inspect every source, config, script, test and doc for
 
 Second addendum, same pass: replace unexplained magic strings and numbers in business logic with named constants close to their owning domain (retry limits, delays, intervals, pagination limits, Discord error codes, thresholds, repeated API paths). Keep obvious literals, messages and JSX text inline; no global constants file; no new configuration layer; behaviour and public contracts unchanged.
 
+## Test code quality and fixtures (addenda, 2026-11-02)
+
+Four addenda extend the test audit: hold test code to production standards (no unexplained magic values, typed factories, scoped fixtures, isolation, strong assertions), refactor the Bot API integration suite as the worked example, remove fragile hardcoding without making tests tautological, and the general quality bar (root causes, no workarounds, self-review per batch).
+
+Rules applied to every test file from here on:
+
+- Expected values of public contracts (error codes, HTTP statuses, buff ids, wire keys) stay explicit literals in the test, so a changed implementation constant cannot pass unnoticed.
+- DB suites create their own users, characters and runs with fresh ids, delete exactly those rows, and fail when a row survives. No pre-clean by predictable ids, no swallowed cleanup errors.
+- The seeded fixtures (`src/prisma/seed.ts`) are named through `SEED_IDS`, not raw UUIDs. A suite may read a seeded row; it removes only rows it wrote.
+- Raid-week-dependent suites freeze `Date` (only) at `RAID_WEEK_TEST_CLOCK` with `advance: true`, so CURRENT/NEXT is deterministic and Prisma keeps real timers.
+- Exact key-list assertions stay only where a separately deployed consumer reads the shape (the Discord bot via `src/discord-bot/bot-api-client.ts`).
+
+Shared fixtures, each small and scoped, in `src/test/`:
+
+| Module | Contents |
+| --- | --- |
+| `actors.ts` | `testActor(id, role, overrides)`: the typed signed-in caller (replaces 71 local `asUser` copies as files are audited) |
+| `domain-error.ts` | `expectDomainError(promise, code)`: reports what actually happened (replaces 41 local copies) |
+| `db-fixtures.ts` | `assertIsolatedTestDatabase()` (test runtime and pool on `TEST_DATABASE_URL`), `createTestUser`, `createTestCharacter`, `syntheticDiscordId`, `deleteCreatedRows` (verifies nothing survives) |
+| `bot-api.ts` | `botRequest(path, {token, actingDiscordUserId, body})`, `runRouteParams`, `installBotApiToken` |
+| `time.ts` | added `RAID_WEEK_TEST_CLOCK`, `CURRENT_WEEK_RUN_START` |
+
+Also: `src/prisma/seed-ids.ts` now owns the seed's ids (`seed.ts` imports them), and `anyContentRunInput` in `src/lib/test-run-input.ts` marks tests that do not depend on the raid content.
+
+Refactored so far:
+
+- `src/app/api/bot/bot-routes.test.ts` (25 tests, all kept). Coverage preserved for token auth, acting-user resolution, character ownership, Booster role, signup window, quick-signup idempotency, sync channel and schedule contracts, channel-gone, voice channel, start voice, and WCL configuration. Fixed ids, a fixed real-looking snowflake set and the pre-clean of fixed user ids replaced by fresh rows. Request, header, param, signup-body and discord-state helpers replace 20 inline request blocks. The bucket is now asserted as exactly CURRENT under a frozen clock. Added side-effect checks: the spoofed body userId, foreign character, closed signup window and unauthenticated quick signup write no signup row.
+- `src/app/api/bot/runs/[runId]/archive/archive-route.test.ts`: the tests no longer depend on order (each makes its own Run). The token restore no longer writes the string "undefined" into the environment, and a repeated archive keeps the first timestamp.
+- `src/domain/roster-raid-buffs.integration.test.ts`: invalid fixed UUIDs, pre-delete, wall-clock scheduling, repeated roster settings and the shared mutable Run all removed. Each test gets its own Run. SKYFURY, ARCANE_INTELLECT and POWER_WORD_FORTITUDE are still asserted explicitly.
+- `src/controllers/run-consumable-audit.actions.test.ts`: seed users and the seeded completed Run are now named via `SEED_IDS`. The duplicated per-test delete is dropped (afterEach alone cleans), the revalidated path is checked via the public `runDetailPath`, and an unauthenticated call is checked to revalidate nothing.
+
 ## Continuation point
 
 The test audit is not complete. Order for the rest, smallest risk first:
 
-1. Done on branch `test/audit-batch-a`: `src/repositories` (11 files), `src/components` (39), `src/discord-bot` (37), `src/lib` (88), `src/domain` (22).
-2. Next: `src/services` (107), `src/app` (1), `src/guides/guide-replace.test.ts` (1).
+1. Done on branch `test/audit-batch-a`: `src/repositories` (11 files), `src/components` (39), `src/discord-bot` (37), `src/lib` (88), `src/domain` (22), `src/services` batch 1 (24 files).
+2. Next: the rest of `src/services` (smallest first, `node todo.cjs src` lists them), `src/guides/guide-replace.test.ts`. Each file now also gets the fixture rules above; files already audited get a fixture sweep afterwards (local `asUser`, `expectDomainCode`, fixed-id pre-cleans, swallowed `.catch(() => {})` cleanups).
 3. For each file: read every test, record a decision in `docs/audit/test-decisions.json`, change what the decision says, then rebuild `docs/audit/test-ledger.tsv` from `vitest list --json`.
 4. After that, remove methods only tests call, such as `signupService.createBoosterSignup` (74 uses) and `rosterService.setDraftSelection` (78 uses). Move their tests to the production entry points first.
 5. Then shared helpers for `createTestUser` (36 copies), `createCharacter` (29) and `createUser` (26), and `restoreMocks` for the 52 files that never reset mocks.

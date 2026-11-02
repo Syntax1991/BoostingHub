@@ -1,133 +1,53 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
-import { orm } from "@/lib/prisma";
+import type { NotificationType } from "@/models/enums";
 import { userNotificationRepository } from "@/repositories/user-notification.repository";
 import { notificationService } from "@/services/notification.service";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { expectDomainError } from "@/test/domain-error";
 
-const ids = {
-  owner: "n1111111-1111-4111-8111-111111111101",
-  other: "n1111111-1111-4111-8111-111111111102",
-};
+const created = { userIds: [] as string[] };
+let owner: AuthenticatedUser;
+let other: AuthenticatedUser;
 
-function asUser(id: string, name: string): AuthenticatedUser {
-  return {
+/** A web-only notification (no Discord delivery) for `userId`; returns its id. */
+async function notify(userId: string, type: NotificationType, title: string) {
+  const id = crypto.randomUUID();
+  await userNotificationRepository.createIgnoreDuplicate({
     id,
-    name,
-    email: `${id}@notify.boostting.local`,
-    image: null,
+    userId,
+    type,
+    runId: null,
+    signupId: null,
+    sourceKey: `test-web:${id}`,
+    title,
+    message: title,
+    href: "/runs",
+    discordDeliveryStatus: "SKIPPED",
     discordUserId: null,
-    discordUsername: null,
-    accountRole: "USER",
-    accountStatus: "ACTIVE",
-  };
-}
-
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    expect(isDomainError(error) && error.code).toBe(code);
-  }
-}
-
-async function createTestUser(id: string, name: string) {
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@notify.boostting.local`,
-    emailVerified: true,
-    accountRole: "USER",
-    accountStatus: "ACTIVE",
-    discordDmEnabled: true,
-    dmRosterSelectedEnabled: true,
-    dmRaidInviteEnabled: true,
-    dmRunCancelledEnabled: true,
-    dmRunRescheduledEnabled: true,
-    dmRosterRemovedEnabled: true,
-    timeZone: "Europe/Berlin",
     createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
   });
+  return id;
 }
-
-async function cleanup() {
-  for (const userId of Object.values(ids)) {
-    const rows = await orm.UserNotification.where({ userId }).select("id").all();
-    for (const row of rows) {
-      await orm.UserNotification.where({ id: (row as { id: string }).id }).delete();
-    }
-    try {
-      await orm.User.where({ id: userId }).delete();
-    } catch {
-      // already gone
-    }
-  }
-}
-
-const owner = asUser(ids.owner, "Notify Owner");
-const other = asUser(ids.other, "Notify Other");
 
 beforeAll(async () => {
-  await cleanup();
-  await createTestUser(ids.owner, "Notify Owner");
-  await createTestUser(ids.other, "Notify Other");
+  assertIsolatedTestDatabase();
+  const ownerId = await createTestUser({ name: "Notify Owner" });
+  const otherId = await createTestUser({ name: "Notify Other" });
+  created.userIds.push(ownerId, otherId);
+  owner = testActor(ownerId);
+  other = testActor(otherId);
 });
 
-afterAll(async () => {
-  await cleanup();
-});
+// Notifications cascade with their User.
+afterAll(() => deleteCreatedRows(created));
 
 describe("notificationService web read/unread/ownership", () => {
   it("tracks unread count, markRead, markAllRead, and rejects foreign ids", async () => {
-    const now = new Date().toISOString();
-    const ownedA = crypto.randomUUID();
-    const ownedB = crypto.randomUUID();
-    const foreign = crypto.randomUUID();
-
-    await userNotificationRepository.createIgnoreDuplicate({
-      id: ownedA,
-      userId: ids.owner,
-      type: "ROSTER_SELECTED",
-      runId: null,
-      signupId: null,
-      sourceKey: `test-web:${ownedA}`,
-      title: "A",
-      message: "first",
-      href: "/runs",
-      discordDeliveryStatus: "SKIPPED",
-      discordUserId: null,
-      createdAt: now,
-    });
-    await userNotificationRepository.createIgnoreDuplicate({
-      id: ownedB,
-      userId: ids.owner,
-      type: "RAID_INVITE",
-      runId: null,
-      signupId: null,
-      sourceKey: `test-web:${ownedB}`,
-      title: "B",
-      message: "second",
-      href: "/runs",
-      discordDeliveryStatus: "SKIPPED",
-      discordUserId: null,
-      createdAt: now,
-    });
-    await userNotificationRepository.createIgnoreDuplicate({
-      id: foreign,
-      userId: ids.other,
-      type: "ROSTER_SELECTED",
-      runId: null,
-      signupId: null,
-      sourceKey: `test-web:${foreign}`,
-      title: "Foreign",
-      message: "other",
-      href: "/runs",
-      discordDeliveryStatus: "SKIPPED",
-      discordUserId: null,
-      createdAt: now,
-    });
+    const ownedA = await notify(owner.id, "ROSTER_SELECTED", "A");
+    await notify(owner.id, "RAID_INVITE", "B");
+    const foreign = await notify(other.id, "ROSTER_SELECTED", "Foreign");
 
     const bell = await notificationService.getBellData(owner);
     expect(bell.unreadCount).toBe(2);
@@ -135,13 +55,15 @@ describe("notificationService web read/unread/ownership", () => {
 
     await notificationService.markRead(owner, ownedA);
     const afterOne = await notificationService.getBellData(owner);
+    expect(afterOne.unreadCount).toBe(1);
     expect(afterOne.latest.find((row) => row.id === ownedA)?.readAt).toBeTruthy();
 
     await notificationService.markAllRead(owner);
-    const afterAll = await notificationService.getBellData(owner);
-    expect(afterAll.unreadCount).toBe(0);
+    expect((await notificationService.getBellData(owner)).unreadCount).toBe(0);
+    // Marking all read touches only the caller's own notifications.
+    expect((await notificationService.getBellData(other)).unreadCount).toBe(1);
 
-    await expectDomainCode(notificationService.markRead(owner, foreign), "NOT_FOUND");
-    await expectDomainCode(notificationService.markRead(other, ownedA), "NOT_FOUND");
+    await expectDomainError(notificationService.markRead(owner, foreign), "NOT_FOUND");
+    await expectDomainError(notificationService.markRead(other, ownedA), "NOT_FOUND");
   });
 });

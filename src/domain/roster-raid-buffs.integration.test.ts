@@ -1,202 +1,114 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { normalizeCharacterIdentity } from "@/lib/character-identity";
+import { anyContentRunInput } from "@/lib/test-run-input";
 import { orm } from "@/lib/prisma";
+import type { SignupStatus } from "@/models/enums";
 import { raidRepository } from "@/repositories/raid.repository";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
-import { venomousCreateInput } from "@/lib/test-run-input";
 import { signupService } from "@/services/signup.service";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestCharacter, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { CURRENT_WEEK_RUN_START, RAID_WEEK_TEST_CLOCK, freezeSystemTime, restoreSystemTime } from "@/test/time";
 
 /**
  * Isolated integration coverage for Class Buff Checker wiring through
  * getRosterManagementView / draft selection. Pure mapping rules live in
  * roster-raid-buffs.test.ts — this file only proves selected draft rows
- * drive the DTO (including the PR #27 multi-participation case).
+ * drive the DTO (including the PR #27 multi-participation case). Each test
+ * gets its own OPEN Run; the users and the Shaman are shared and never change.
  */
 
-const ids = {
-  lead: "aaaaaaaa-aaaa-4aaa-8aaa-rbc000000001",
-  player: "aaaaaaaa-aaaa-4aaa-8aaa-rbc000000002",
-};
-
-const createdUserIds = Object.values(ids);
-const createdCharacterIds: string[] = [];
-let runId = "";
+const created = { runIds: [] as string[], characterIds: [] as string[], userIds: [] as string[] };
+let lead: AuthenticatedUser;
+let player: AuthenticatedUser;
 let shamanId = "";
+let runId = "";
 
-function rosterBoosters<T extends { id: string }>(view: { boosters: T[] }): T[] {
-  return view.boosters;
+type RosterView = Awaited<ReturnType<typeof rosterService.getRosterManagementView>>;
+
+const loadView = () => rosterService.getRosterManagementView(lead, runId);
+
+function isCovered(view: RosterView, buffId: string) {
+  return view.raidBuffCoverage.buffs.find((buff) => buff.id === buffId)?.covered;
 }
 
-function asUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"] = "USER"): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@rbctest.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
+async function setDraftSelected(view: RosterView, signupId: string, selected: boolean) {
+  await rosterService.setDraftSelection(lead, { runId, signupId, selected, version: view.roster.version });
+  return loadView();
 }
 
-async function deleteIfPresent(table: string, id: string) {
-  try {
-    if (table === "User") await orm.User.where({ id }).delete();
-    else if (table === "Character") await orm.Character.where({ id }).delete();
-    else if (table === "RunSignup") await orm.RunSignup.where({ id }).delete();
-    else if (table === "Run") await orm.Run.where({ id }).delete();
-  } catch {
-    // Already gone.
-  }
+async function offerShamanAsHealer() {
+  await signupService.setCharacterOffers(player, { runId, offers: [{ characterId: shamanId, offeredRoles: ["HEALER"] }] });
 }
-
-async function cleanupRun(id: string) {
-  const roster = await orm.RunRoster.where({ runId: id }).first();
-  if (roster) {
-    const rosterId = (roster as { id: string }).id;
-    const entries = await orm.RunRosterEntry.where({ rosterId }).all();
-    for (const entry of entries) {
-      await orm.RunRosterEntry.where({ id: (entry as { id: string }).id }).delete();
-    }
-    await orm.RunRoster.where({ id: rosterId }).delete();
-  }
-  const signups = await orm.RunSignup.where({ runId: id }).select("id").all();
-  for (const row of signups) {
-    const signupId = (row as { id: string }).id;
-    const offered = await orm.RunSignupRole.where({ signupId }).select("id").all();
-    for (const offer of offered) {
-      await deleteIfPresent("RunSignupRole", (offer as { id: string }).id);
-    }
-    await deleteIfPresent("RunSignup", signupId);
-  }
-  await deleteIfPresent("Run", id);
-}
-
-const lead = asUser(ids.lead, "Rbc Lead", "RAID_LEAD");
-const player = asUser(ids.player, "Rbc Player");
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
+  freezeSystemTime(RAID_WEEK_TEST_CLOCK, { advance: true });
   await raidRepository.ensureReferenceRaids();
-  for (const userId of createdUserIds) {
-    const runs = await orm.Run.where({ raidLeadId: userId }).select("id").all();
-    for (const row of runs) {
-      await cleanupRun((row as { id: string }).id);
-    }
-    const playerRuns = await orm.RunSignup.where({ userId }).select("runId").all();
-    for (const row of playerRuns) {
-      await cleanupRun((row as { runId: string }).runId);
-    }
-    const chars = await orm.Character.where({ userId }).select("id").all();
-    for (const row of chars) {
-      await deleteIfPresent("Character", (row as { id: string }).id);
-    }
-    await deleteIfPresent("User", userId);
-  }
-
-  await orm.User.create({
-    id: ids.lead,
-    name: "Rbc Lead",
-    email: `${ids.lead}@rbctest.boostting.local`,
-    emailVerified: true,
-    accountRole: "RAID_LEAD",
-    accountStatus: "ACTIVE",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
-  await orm.User.create({
-    id: ids.player,
-    name: "Rbc Player",
-    email: `${ids.player}@rbctest.boostting.local`,
-    emailVerified: true,
-    accountRole: "USER",
-    accountStatus: "ACTIVE",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
-  const shamanRow = await orm.Character.create({
-    id: crypto.randomUUID(),
-    userId: ids.player,
+  const leadId = await createTestUser({ name: "Rbc Lead", accountRole: "RAID_LEAD" });
+  const playerId = await createTestUser({ name: "Rbc Player", isBooster: true });
+  created.userIds.push(leadId, playerId);
+  lead = testActor(leadId, "RAID_LEAD");
+  player = testActor(playerId);
+  shamanId = await createTestCharacter({
+    userId: playerId,
     name: "Rbcshaman",
     realm: "Antonidas",
-    normalizedName: normalizeCharacterIdentity("Rbcshaman"),
-    normalizedRealm: normalizeCharacterIdentity("Antonidas"),
-    region: "EU",
     wowClass: "SHAMAN",
     specialization: "Restoration",
     primaryRole: "HEALER",
-    itemLevel: 700,
-    isActive: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
   });
-  shamanId = (shamanRow as { id: string }).id;
-  createdCharacterIds.push(shamanId);
-
-  await orm.User.where({ id: ids.player }).update({ isBooster: true });
-
-  const run = await runService.createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString(), desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14 }));
-  runId = run.id;
-  await runService.openRun(lead, runId);
+  created.characterIds.push(shamanId);
 }, 60_000);
 
+beforeEach(async () => {
+  const run = await runService.createRun(lead, anyContentRunInput({ scheduledStartAt: CURRENT_WEEK_RUN_START }));
+  created.runIds.push(run.id);
+  runId = run.id;
+  await runService.openRun(lead, runId);
+});
+
 afterAll(async () => {
-  if (runId) await cleanupRun(runId);
-  for (const id of createdCharacterIds) await deleteIfPresent("Character", id);
-  for (const id of createdUserIds) await deleteIfPresent("User", id);
+  try {
+    await deleteCreatedRows(created);
+  } finally {
+    restoreSystemTime();
+  }
 }, 60_000);
 
 describe("rosterService Class Buff Checker integration", () => {
   it("updates coverage when a Shaman Booster is draft-selected and deselected", async () => {
-    await signupService.setCharacterOffers(player, {
-      runId,
-      offers: [{ characterId: shamanId, offeredRoles: ["HEALER"] }],
-    });
+    await offerShamanAsHealer();
 
-    let view = await rosterService.getRosterManagementView(lead, runId);
-    const booster = rosterBoosters(view).find((item) => item.character?.id === shamanId);
+    let view = await loadView();
+    const booster = view.boosters.find((item) => item.character?.id === shamanId)!;
     expect(booster).toBeTruthy();
-    expect(view.raidBuffCoverage.buffs.find((item) => item.id === "SKYFURY")?.covered).toBe(false);
+    expect(isCovered(view, "SKYFURY")).toBe(false);
 
-    await rosterService.setDraftSelection(lead, {
-      runId,
-      signupId: booster!.id,
-      selected: true,
-      version: view.roster.version,
-    });
-    view = await rosterService.getRosterManagementView(lead, runId);
-    expect(view.raidBuffCoverage.buffs.find((item) => item.id === "SKYFURY")?.covered).toBe(true);
+    view = await setDraftSelected(view, booster.id, true);
+    expect(isCovered(view, "SKYFURY")).toBe(true);
     expect(
       view.raidBuffCoverage.buffs
         .find((item) => item.id === "SKYFURY")
-        ?.providers.some((provider) => provider.signupId === booster!.id),
+        ?.providers.some((provider) => provider.signupId === booster.id),
     ).toBe(true);
 
     // A draft-selected row that is later WITHDRAWN no longer counts toward coverage.
-    const { status } = (await orm.RunSignup.where({ id: booster!.id }).select("status").first()) as { status: string };
-    await orm.RunSignup.where({ id: booster!.id }).update({ status: "WITHDRAWN" });
-    view = await rosterService.getRosterManagementView(lead, runId);
-    expect(view.raidBuffCoverage.buffs.find((item) => item.id === "SKYFURY")?.covered).toBe(false);
-    await orm.RunSignup.where({ id: booster!.id }).update({ status });
-    view = await rosterService.getRosterManagementView(lead, runId);
+    const { status } = (await orm.RunSignup.where({ id: booster.id }).select("status").first()) as { status: SignupStatus };
+    await orm.RunSignup.where({ id: booster.id }).update({ status: "WITHDRAWN" });
+    view = await loadView();
+    expect(isCovered(view, "SKYFURY")).toBe(false);
+    await orm.RunSignup.where({ id: booster.id }).update({ status });
+    view = await loadView();
+    expect(isCovered(view, "SKYFURY")).toBe(true);
 
-    await rosterService.setDraftSelection(lead, {
-      runId,
-      signupId: booster!.id,
-      selected: false,
-      version: view.roster.version,
-    });
-    view = await rosterService.getRosterManagementView(lead, runId);
-    expect(view.raidBuffCoverage.buffs.find((item) => item.id === "SKYFURY")?.covered).toBe(false);
+    view = await setDraftSelected(view, booster.id, false);
+    expect(isCovered(view, "SKYFURY")).toBe(false);
   });
 
   it("PR #27: same User Booster + Mage PLAYING + Priest LOOT_ONLY", async () => {
-    await signupService.setCharacterOffers(player, {
-      runId,
-      offers: [{ characterId: shamanId, offeredRoles: ["HEALER"] }],
-    });
+    await offerShamanAsHealer();
     await signupService.setLootbuddies(player, {
       runId,
       lootbuddies: [
@@ -205,46 +117,18 @@ describe("rosterService Class Buff Checker integration", () => {
       ],
     });
 
-    let view = await rosterService.getRosterManagementView(lead, runId);
-    const booster = rosterBoosters(view).find((item) => item.character?.id === shamanId)!;
-    const mage = view.groups.lootbuddies.find(
-      (item) => item.lootbuddyClass === "MAGE" && item.lootbuddyMode === "PLAYING",
-    )!;
+    let view = await loadView();
+    const booster = view.boosters.find((item) => item.character?.id === shamanId)!;
+    const mage = view.groups.lootbuddies.find((item) => item.lootbuddyClass === "MAGE" && item.lootbuddyMode === "PLAYING")!;
     const priest = view.groups.lootbuddies.find(
       (item) => item.lootbuddyClass === "PRIEST" && item.lootbuddyMode === "LOOT_ONLY",
     )!;
 
-    for (const signupId of [booster.id, mage.id, priest.id]) {
-      await rosterService.setDraftSelection(lead, {
-        runId,
-        signupId,
-        selected: true,
-        version: view.roster.version,
-      });
-      view = await rosterService.getRosterManagementView(lead, runId);
-    }
+    for (const signupId of [booster.id, mage.id, priest.id]) view = await setDraftSelected(view, signupId, true);
 
-    const byId = Object.fromEntries(view.raidBuffCoverage.buffs.map((item) => [item.id, item]));
-    expect(byId.SKYFURY?.covered).toBe(true);
-    expect(byId.ARCANE_INTELLECT?.covered).toBe(true);
+    expect(isCovered(view, "SKYFURY")).toBe(true);
+    expect(isCovered(view, "ARCANE_INTELLECT")).toBe(true);
     // A LOOT_ONLY Lootbuddy is in the raid too and brings its class buff.
-    expect(byId.POWER_WORD_FORTITUDE?.covered).toBe(true);
-
-    // Deselect protected rows before withdrawing offers.
-    for (const signupId of [booster.id, mage.id, priest.id]) {
-      if (
-        [...rosterBoosters(view), ...view.groups.lootbuddies].find((item) => item.id === signupId)?.draftSelected
-      ) {
-        await rosterService.setDraftSelection(lead, {
-          runId,
-          signupId,
-          selected: false,
-          version: view.roster.version,
-        });
-        view = await rosterService.getRosterManagementView(lead, runId);
-      }
-    }
-    await signupService.setLootbuddies(player, { runId, lootbuddies: [] });
-    await signupService.setCharacterOffers(player, { runId, offers: [] });
+    expect(isCovered(view, "POWER_WORD_FORTITUDE")).toBe(true);
   });
 });

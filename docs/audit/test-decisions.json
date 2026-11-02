@@ -33,20 +33,20 @@
       "Legacy URL redirect still exists"
     ],
     "src/app/api/bot/bot-routes.test.ts": [
-      "KEEP",
-      "Real routes and database: credentials, acting user, ownership, signup rules"
+      "REWRITE",
+      "Kept all 25 tests; fresh fixture rows and synthetic snowflakes, verified cleanup, request helpers, frozen raid-week clock, side-effect assertions; exact key lists kept as the bot wire contract"
     ],
     "src/app/api/bot/runs/[runId]/archive/archive-route.test.ts": [
-      "KEEP",
-      "Real route: permission, state and idempotency"
+      "REWRITE",
+      "Order-independent (own Run per test), fresh fixture rows, verified cleanup, fixed the env restore writing \"undefined\""
     ],
     "src/app/api/integrations/battlenet/callback/route.test.ts": [
       "KEEP",
       "Regression for the account-profile 403, including safe logging"
     ],
     "src/controllers/run-consumable-audit.actions.test.ts": [
-      "KEEP",
-      "Authorization and validation before any external call"
+      "REWRITE",
+      "Seed fixtures via SEED_IDS and testActor, one cleanup per test, public route builder for the revalidated path, stronger unauthenticated check"
     ],
     "src/controllers/run-create-route.test.ts": [
       "KEEP",
@@ -762,7 +762,7 @@
     ],
     "src/lib/run-routes.test.ts": [
       "KEEP",
-      "Read in full; pure logic checked against exact expected values"
+      "Route helpers and tab sync; took the canonical route test from run-detail.service.test.ts"
     ],
     "src/lib/run-row-duplicate.test.ts": [
       "KEEP",
@@ -881,8 +881,8 @@
       "Read in full; pure rules checked against exact expected values"
     ],
     "src/domain/roster-raid-buffs.integration.test.ts": [
-      "KEEP",
-      "Real DB buff coverage through draft selection; now also proves a WITHDRAWN draft-selected row stops counting"
+      "REWRITE",
+      "Own Run per test, fresh fixture rows, frozen clock, no pre-delete; buff ids asserted explicitly; WITHDRAWN exclusion on the real view"
     ],
     "src/domain/roster-raid-buffs.test.ts": [
       "KEEP",
@@ -989,8 +989,8 @@
       "Source guard for the single global dialog centering rule"
     ],
     "src/services/notification.service.test.ts": [
-      "KEEP",
-      "Bell read/unread/ownership. Unread count is now exact"
+      "REWRITE",
+      "Fresh users instead of fixed invalid UUIDs and a swallowed pre-clean; notification factory replaces three copies; markAllRead proven not to touch another user's notifications"
     ],
     "src/services/character-wcl-performance.service.test.ts": [
       "KEEP",
@@ -998,7 +998,7 @@
     ],
     "src/services/run-detail.service.test.ts": [
       "KEEP",
-      "Run detail visibility per role on seed data; also covers run-routes helpers (misplaced). Vacuous length >= 0 dropped"
+      "Run detail visibility on seed data, now named via SEED_IDS and testActor; the route helper test moved to lib/run-routes.test.ts"
     ],
     "src/services/create-run-recurring-schedule.test.ts": [
       "KEEP",
@@ -1148,7 +1148,7 @@
     ],
     "src/services/notification.service.test.ts::notificationService web read/unread/ownership > tracks unread count, markRead, markAllRead, and rejects foreign ids": [
       "REWRITE",
-      "Unread count >= 2 for a fresh user is now exactly 2"
+      "Exact counts after each step; other user's unread count unchanged by markAllRead"
     ],
     "src/services/run-detail.service.test.ts::runDetailService > gives a USER own signups and published roster without manager payload": [
       "REWRITE",
@@ -1165,6 +1165,22 @@
     "src/lib/wcl-performance-display.test.ts::formatWclPerformanceRaidLine > renders Bundle multi-role lines without collapsing raids": [
       "REWRITE",
       "Absorbed the exact metric-label assertions"
+    ],
+    "src/app/api/bot/bot-routes.test.ts::GET /api/bot/discord/sync — channel reconciliation contract > exposes a channels array alongside signups/roster/start, with exactly the fields the bot needs": [
+      "REWRITE",
+      "Bucket asserted as exactly CURRENT under the frozen clock; start instant checked"
+    ],
+    "src/app/api/bot/bot-routes.test.ts::bot API acting-user resolution > ignores any userId supplied in the request body and always acts as the resolved Discord user": [
+      "REWRITE",
+      "Also proves no row for the spoofed user"
+    ],
+    "src/app/api/bot/bot-routes.test.ts::POST /api/bot/runs/:runId/signup/quick > signs up the URL run and returns the result DTO": [
+      "REWRITE",
+      "Skip counters exact (one eligible Character) instead of typeof number"
+    ],
+    "src/app/api/bot/runs/[runId]/archive/archive-route.test.ts::POST /api/bot/runs/:runId/archive (Discord Archive Run button) > the Run's Raid Lead archives a completed Run (once)": [
+      "REWRITE",
+      "No longer relies on the previous test completing the Run; repeated archive keeps the first timestamp"
     ]
   },
   "removed": {
@@ -1539,6 +1555,10 @@
     "src/services/character-wcl-performance.service.test.ts::formatWclPerformanceRaidLine > formats with metric labels and optional spec": [
       "MERGE",
       "Moved the exact assertions into lib/wcl-performance-display.test.ts"
+    ],
+    "src/services/run-detail.service.test.ts::canonical run routes > builds /runs/[runId] as the entity URL and maps manage actions to tabs": [
+      "MERGE",
+      "Moved to src/lib/run-routes.test.ts; the seed-id variants repeated the run-1 cases"
     ]
   }
 }

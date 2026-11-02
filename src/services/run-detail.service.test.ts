@@ -1,76 +1,33 @@
 import { describe, expect, it } from "vitest";
-import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
-import { parseRunDetailTab, runDetailPath } from "@/lib/run-routes";
+import { SEED_IDS } from "@/prisma/seed-ids";
 import { rosterRepository } from "@/repositories/roster.repository";
 import { rosterService } from "@/services/roster.service";
 import { runDetailService } from "@/services/run-detail.service";
+import { testActor } from "@/test/actors";
+import { expectDomainError } from "@/test/domain-error";
 
 const ids = {
-  kael: "11111111-1111-4111-8111-111111111111",
-  thorne: "33333333-3333-4333-8333-333333333333",
-  aelira: "44444444-4444-4444-8444-444444444444",
-  heroicOpen: "r1111111-1111-4111-8111-111111111111",
-  weekend: "r7777777-7777-4777-8777-777777777777",
-  normal: "r4444444-4444-4444-8444-444444444444",
-  published: "r5555555-5555-4555-8555-555555555555",
-  publishedKael: "s5555555-5555-4555-8555-555555555551",
+  kael: SEED_IDS.users.kael,
+  thorne: SEED_IDS.users.thorne,
+  heroicOpen: SEED_IDS.runs.heroicOpen,
+  weekend: SEED_IDS.runs.heroicWeekend,
+  normal: SEED_IDS.runs.normalOpen,
+  published: SEED_IDS.runs.heroicPublished,
+  mythicDraft: SEED_IDS.runs.mythicDraft,
+  publishedKael: SEED_IDS.signups.publishedKael,
 };
 
-function asUser(
-  id: string,
-  name: string,
-  accountRole: AuthenticatedUser["accountRole"] = "USER",
-): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@dev.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
-
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    expect(isDomainError(error) && error.code).toBe(code);
-  }
-}
-
-const kael = asUser(ids.kael, "Kael Stormhowl");
-const thorne = asUser(ids.thorne, "Thorne Ironvein", "RAID_LEAD");
-const aelira = asUser(ids.aelira, "Aelira Nightwatch", "ADMIN");
-
-describe("canonical run routes", () => {
-  it("builds /runs/[runId] as the entity URL and maps manage actions to tabs", () => {
-    expect(runDetailPath(ids.weekend)).toBe(`/runs/${ids.weekend}`);
-    expect(runDetailPath(ids.weekend, "roster")).toBe(`/runs/${ids.weekend}`);
-    expect(runDetailPath(ids.weekend, "attendance")).toBe(`/runs/${ids.weekend}?tab=attendance`);
-    expect(parseRunDetailTab(["roster"])).toBe("roster");
-    expect(parseRunDetailTab("attendance")).toBe("attendance");
-    // Unknown / removed tabs fall back to the operational Roster workspace.
-    expect(parseRunDetailTab("payout")).toBe("roster");
-    expect(parseRunDetailTab("unknown")).toBe("roster");
-    expect(runDetailPath("run-1")).toBe("/runs/run-1");
-    expect(runDetailPath("run-1", "attendance")).toBe("/runs/run-1?tab=attendance");
-    expect(runDetailPath("run-1", "overview")).toBe("/runs/run-1?tab=operations");
-    expect(runDetailPath("run-1", "operations")).toBe("/runs/run-1?tab=operations");
-    expect(runDetailPath("run-1", "history")).toBe("/runs/run-1?tab=history");
-  });
-});
+/** Seeded callers: a Booster, the Raid Lead of the weekend and draft Runs, and an admin. */
+const kael = testActor(ids.kael, "USER");
+const thorne = testActor(ids.thorne, "RAID_LEAD");
+const aelira = testActor(SEED_IDS.users.aelira, "ADMIN");
 
 describe("runDetailService", () => {
   it("loads a run and rejects a missing run", async () => {
     const view = await runDetailService.getRunDetail(kael, ids.weekend);
     expect(view.run.id).toBe(ids.weekend);
     expect(view.run.title).toBeTruthy();
-    await expectDomainCode(runDetailService.getRunDetail(kael, "r0000000-0000-4000-8000-000000000000"), "NOT_FOUND");
+    await expectDomainError(runDetailService.getRunDetail(kael, crypto.randomUUID()), "NOT_FOUND");
   });
 
   it("gives a USER own signups and published roster without manager payload", async () => {
@@ -123,14 +80,14 @@ describe("runDetailService", () => {
   });
 
   it("hides a private DRAFT from a USER", async () => {
-    await expectDomainCode(
-      runDetailService.getRunDetail(kael, "r6666666-6666-4666-8666-666666666666"),
+    await expectDomainError(
+      runDetailService.getRunDetail(kael, ids.mythicDraft),
       "NOT_FOUND",
     );
   });
 
   it("lets the assigned raid lead open a DRAFT", async () => {
-    const view = await runDetailService.getRunDetail(thorne, "r6666666-6666-4666-8666-666666666666");
+    const view = await runDetailService.getRunDetail(thorne, ids.mythicDraft);
     expect(view.permissions.canManageRun).toBe(true);
     expect(view.capabilities.canOpen).toBe(true);
     expect(view.capabilities.canEdit).toBe(true);
@@ -138,7 +95,7 @@ describe("runDetailService", () => {
   });
 
   it("keeps USER roster mutations rejected", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       rosterService.setDraftSelection(kael, {
         runId: ids.weekend,
         signupId: ids.publishedKael,

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { runDetailPath, syncRunDetailTab, type RunDetailTabState } from "@/lib/run-routes";
+import { parseRunDetailTab, runDetailPath, syncRunDetailTab, type RunDetailTabState } from "@/lib/run-routes";
 import { preflightCheckAction } from "@/components/runs/run-preflight-panel";
 
 describe("syncRunDetailTab — Run Detail tab follows client-side navigation", () => {
@@ -53,5 +53,21 @@ describe("syncRunDetailTab — Run Detail tab follows client-side navigation", (
     const source = readFileSync(new URL("../components/runs/run-detail-tabs.tsx", import.meta.url), "utf8");
     expect(source).toContain("syncRunDetailTab(tabState, initialTab");
     expect(source).toMatch(/if \(synced !== tabState\) setTabState\(synced\)/);
+  });
+});
+
+describe("canonical run routes", () => {
+  it("builds /runs/[runId] as the entity URL and maps manage actions to tabs", () => {
+    expect(runDetailPath("run-1")).toBe("/runs/run-1");
+    expect(runDetailPath("run-1", "roster")).toBe("/runs/run-1");
+    expect(runDetailPath("run-1", "attendance")).toBe("/runs/run-1?tab=attendance");
+    expect(runDetailPath("run-1", "overview")).toBe("/runs/run-1?tab=operations");
+    expect(runDetailPath("run-1", "operations")).toBe("/runs/run-1?tab=operations");
+    expect(runDetailPath("run-1", "history")).toBe("/runs/run-1?tab=history");
+    expect(parseRunDetailTab(["roster"])).toBe("roster");
+    expect(parseRunDetailTab("attendance")).toBe("attendance");
+    // Unknown / removed tabs fall back to the operational Roster workspace.
+    expect(parseRunDetailTab("payout")).toBe("roster");
+    expect(parseRunDetailTab("unknown")).toBe("roster");
   });
 });

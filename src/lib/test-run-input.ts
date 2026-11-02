@@ -55,6 +55,15 @@ export function venomousCreateInput(
   } as CreateRunInput;
 }
 
+/**
+ * A valid Run for tests whose assertions do not depend on the raid content.
+ * Today that is the seeded Venomous product; pick `venomousCreateInput`
+ * instead when the content itself is under test.
+ */
+export function anyContentRunInput(overrides: Partial<CreateRunInput> = {}): CreateRunInput {
+  return venomousCreateInput(overrides);
+}
+
 /** Update payload re-selecting the seeded Venomous product (keeps or changes its boss count). */
 export function venomousUpdateInput(
   runId: string,

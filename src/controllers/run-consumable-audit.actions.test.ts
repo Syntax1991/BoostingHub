@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 
 const requireUser = vi.fn();
 const revalidatePath = vi.fn();
@@ -21,30 +21,32 @@ import {
 import { warcraftLogsApiClient } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
 import { DomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
+import { runDetailPath } from "@/lib/run-routes";
+import { SEED_IDS } from "@/prisma/seed-ids";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase } from "@/test/db-fixtures";
 
-const RUN_ID = "r9999996-9996-4996-8996-999999999996";
+/**
+ * The seeded completed Run (Raid Lead Thorne). The seed attaches no reports or
+ * audits to it, so the cleanup below removes only rows these tests wrote.
+ */
+const RUN_ID = SEED_IDS.runs.largeCompleted;
 const REPORT = "AbCdEfGhIjKlMnOp";
-
-const user = (id: string, accountRole: "USER" | "RAID_LEAD" | "ADMIN") => ({
-  id,
-  name: accountRole,
-  email: null,
-  image: null,
-  discordUserId: null,
-  discordUsername: null,
-  accountRole,
-  accountStatus: "ACTIVE" as const,
-});
+const booster = testActor(SEED_IDS.users.kael, "USER");
+const runRaidLead = testActor(SEED_IDS.users.thorne, "RAID_LEAD");
+const admin = testActor(SEED_IDS.users.aelira, "ADMIN");
 
 describe("Warcraft Logs / Consumables Audit server actions", () => {
   let metadataSpy: MockInstance<typeof warcraftLogsApiClient.fetchReportMetadata>;
   let eventsSpy: MockInstance<typeof warcraftLogsApiClient.fetchReportConsumableEvents>;
 
-  beforeEach(async () => {
+  beforeAll(() => {
+    assertIsolatedTestDatabase();
+  });
+
+  beforeEach(() => {
     requireUser.mockReset();
     revalidatePath.mockReset();
-    await orm.RunConsumableAudit.where({ runId: RUN_ID }).deleteAndCount();
-    await orm.RunWarcraftLogsReport.where({ runId: RUN_ID }).deleteAndCount();
     vi.spyOn(warcraftLogsApiClient, "isConfigured").mockReturnValue(true);
     metadataSpy = vi.spyOn(warcraftLogsApiClient, "fetchReportMetadata").mockResolvedValue({ status: "NOT_FOUND" });
     eventsSpy = vi.spyOn(warcraftLogsApiClient, "fetchReportConsumableEvents");
@@ -58,14 +60,14 @@ describe("Warcraft Logs / Consumables Audit server actions", () => {
   });
 
   it("returns the normal authorization response to a USER for every action and never reaches Warcraft Logs", async () => {
-    requireUser.mockResolvedValue(user("11111111-1111-4111-8111-111111111111", "USER"));
+    requireUser.mockResolvedValue(booster);
     const results = [
       await attachRunWarcraftLogsReportAction({ runId: RUN_ID, report: `https://www.warcraftlogs.com/reports/${REPORT}` }),
       await rescanRunWarcraftLogsAction({ runId: RUN_ID }),
       await detachRunWarcraftLogsReportAction({ runId: RUN_ID, reportCode: REPORT }),
       await decideRunWarcraftLogsFightAction({
         runId: RUN_ID,
-        fightId: "ca000003-0000-4000-8000-00000000c0a3",
+        fightId: crypto.randomUUID(),
         assign: true,
       }),
       await analyzeRunConsumablesAction({ runId: RUN_ID }),
@@ -84,10 +86,11 @@ describe("Warcraft Logs / Consumables Audit server actions", () => {
       code: "NOT_AUTHENTICATED",
     });
     expect(metadataSpy).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it("validates the report link", async () => {
-    requireUser.mockResolvedValue(user("44444444-4444-4444-8444-444444444444", "ADMIN"));
+    requireUser.mockResolvedValue(admin);
     await expect(attachRunWarcraftLogsReportAction({ runId: RUN_ID, report: "not a report" })).resolves.toMatchObject({
       ok: false,
       code: "VALIDATION_FAILED",
@@ -96,7 +99,7 @@ describe("Warcraft Logs / Consumables Audit server actions", () => {
   });
 
   it("maps a missing report to a safe message for the run's Raid Lead", async () => {
-    requireUser.mockResolvedValue(user("33333333-3333-4333-8333-333333333333", "RAID_LEAD"));
+    requireUser.mockResolvedValue(runRaidLead);
     const result = await attachRunWarcraftLogsReportAction({ runId: RUN_ID, report: REPORT });
     expect(result).toEqual({
       ok: false,
@@ -104,11 +107,11 @@ describe("Warcraft Logs / Consumables Audit server actions", () => {
       message: "That Warcraft Logs report was not found or is private.",
     });
     expect(metadataSpy).toHaveBeenCalledWith(REPORT);
-    expect(revalidatePath).toHaveBeenCalledWith(`/runs/${RUN_ID}`);
+    expect(revalidatePath).toHaveBeenCalledWith(runDetailPath(RUN_ID));
   });
 
   it("asks for a report before re-analysis", async () => {
-    requireUser.mockResolvedValue(user("44444444-4444-4444-8444-444444444444", "ADMIN"));
+    requireUser.mockResolvedValue(admin);
     await expect(analyzeRunConsumablesAction({ runId: RUN_ID })).resolves.toMatchObject({
       ok: false,
       code: "CONSUMABLE_AUDIT_REPORT_REQUIRED",

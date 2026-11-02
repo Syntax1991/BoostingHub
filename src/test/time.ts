@@ -36,6 +36,15 @@ export const SCHEDULE_TEST_CLOCK = "2027-01-01T12:00:00.000Z";
  */
 export const FEED_TEST_CLOCK = "2027-06-01T12:00:00.000Z";
 
+/**
+ * A Thursday, the day after the Wednesday 06:00 Europe/Berlin raid-ID reset,
+ * for DB suites that need their Runs in a known raid week. Freeze it with
+ * `advance: true`; before FEED_TEST_CLOCK as that clock requires.
+ */
+export const RAID_WEEK_TEST_CLOCK = "2027-03-04T12:00:00.000Z";
+/** Saturday evening of RAID_WEEK_TEST_CLOCK's week: a Run start that classifies CURRENT. */
+export const CURRENT_WEEK_RUN_START = "2027-03-06T19:00:00.000Z";
+
 export function restoreSystemTime(): void {
   vi.useRealTimers();
 }
