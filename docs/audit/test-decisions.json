@@ -906,11 +906,11 @@
     ],
     "src/domain/run-state.test.ts": [
       "KEEP",
-      "Read in full; pure rules checked against exact expected values"
+      "Read in full; pure rules checked against exact expected values; gained a lifecycle transition test (canTransitionRun had none)"
     ],
     "src/domain/signup-state.test.ts": [
       "KEEP",
-      "Offer reconciliation and withdraw rules. A constant-echo test was removed"
+      "Offer reconciliation and withdraw rules. A constant-echo test was removed; gained the self-withdrawal rules from signup-eligibility.test.ts"
     ],
     "src/domain/user-run-participation.test.ts": [
       "KEEP",
@@ -1227,6 +1227,14 @@
     "src/services/character-sync-telemetry.test.ts": [
       "REWRITE",
       "Shared user fixtures and verified cleanup; refreshes the arranged mocks make fail are asserted to reject instead of .catch(() => {}), so an unexpected success fails the test"
+    ],
+    "src/services/roster-reservation-concurrency.test.ts": [
+      "REWRITE",
+      "Production saveDraftSelection instead of the test-only setDraftSelection; fresh users instead of fixed ids with a pre-clean of their Runs; sequential refusals pinned to CHARACTER_SCHEDULE_CONFLICT, race losers to the pre-check or the locked check; the Auto Build race now really calls applyRosterProposal instead of computing unused proposals; the misleading ~10s-gap sleep removed. Mutation: with the locked reservation check disabled both race tests fail every run"
+    ],
+    "src/services/signup-eligibility.test.ts": [
+      "KEEP",
+      "Pure eligibility and lockout-save rules with explicit inputs; a duplicated assertion and a test of deprecated availability blocks that never passed a block removed; withdrawal rules moved to domain/signup-state.test.ts, the run/signup coupling check replaced by a real lifecycle test in domain/run-state.test.ts"
     ]
   },
   "tests": {
@@ -1911,6 +1919,30 @@
     "src/services/run-discord-announcement.test.ts::channel embed copy > cancel embed includes product and schedule timestamp": [
       "MERGE",
       "Identical assertions already in the embed suite"
+    ],
+    "src/services/signup-eligibility.test.ts::raid lockouts are informational, never a Booster eligibility blocker > does not block Characters for deprecated manual availability blocks": [
+      "REMOVE",
+      "Passed no availability block (the input has no such field); identical to \"D: no lockout row\""
+    ],
+    "src/services/signup-eligibility.test.ts::run and signup state machines stay independent > does not couple run OPEN to signup SELECTED": [
+      "REWRITE",
+      "Replaced by run-state.test.ts \"run lifecycle transitions\", which checks every transition against an independent table"
+    ],
+    "src/services/signup-eligibility.test.ts::withdrawal > allows withdrawing an own pending signup": [
+      "MERGE",
+      "Moved to domain/signup-state.test.ts (self-withdrawal)"
+    ],
+    "src/services/signup-eligibility.test.ts::withdrawal > rejects withdrawing a selected signup after roster publication": [
+      "MERGE",
+      "Moved to domain/signup-state.test.ts (self-withdrawal)"
+    ],
+    "src/services/signup-eligibility.test.ts::withdrawal > allows withdrawing selected only before publication": [
+      "MERGE",
+      "Moved to domain/signup-state.test.ts (self-withdrawal)"
+    ],
+    "src/services/signup-eligibility.test.ts::withdrawal > keeps withdrawn as a terminal persisted state": [
+      "MERGE",
+      "Moved to domain/signup-state.test.ts (self-withdrawal)"
     ]
   }
 }

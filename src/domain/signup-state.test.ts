@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  canSelfWithdrawSignup,
+  canTransitionSignup,
   isActiveSignupOffer,
   isAvailableSignup,
   isSignedUpSignup,
@@ -217,5 +219,26 @@ describe("picked-player withdrawal rules", () => {
     expect(() => normalizeWithdrawReason("x".repeat(WITHDRAW_REASON_MAX_LENGTH + 1))).toThrow(
       expect.objectContaining({ code: "VALIDATION_FAILED" }),
     );
+  });
+});
+
+describe("self-withdrawal", () => {
+  it("allows withdrawing an own pending signup", () => {
+    expect(canSelfWithdrawSignup("PENDING", "OPEN")).toBe(true);
+  });
+
+  it("rejects withdrawing a selected signup after roster publication", () => {
+    expect(canSelfWithdrawSignup("SELECTED", "PUBLISHED")).toBe(false);
+    expect(canSelfWithdrawSignup("SELECTED", "IN_PROGRESS")).toBe(false);
+  });
+
+  it("allows withdrawing selected only before publication", () => {
+    expect(canSelfWithdrawSignup("SELECTED", "ROSTERING")).toBe(true);
+  });
+
+  it("keeps withdrawn as a terminal persisted state", () => {
+    expect(canTransitionSignup("PENDING", "WITHDRAWN")).toBe(true);
+    expect(canTransitionSignup("WITHDRAWN", "PENDING")).toBe(false);
+    expect(canSelfWithdrawSignup("WITHDRAWN", "OPEN")).toBe(false);
   });
 });

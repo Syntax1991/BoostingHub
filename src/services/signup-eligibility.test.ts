@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { EligibilityCharacter, EligibilityRun } from "@/services/signup-eligibility";
 import { evaluateBoosterOptions } from "@/services/signup-eligibility";
 import { assertSignupWindowOpen } from "@/services/signup-eligibility";
-import { canSelfWithdrawSignup, canTransitionSignup } from "@/domain/signup-state";
-import { canTransitionRun } from "@/domain/run-state";
 import { setLootbuddiesSchema, signupOptionsSchema } from "@/validators/signup";
 
 const reset = "2026-W37";
@@ -366,10 +364,6 @@ describe("raid lockouts are informational, never a Booster eligibility blocker",
       "NO_BOOSTER_ACCESS",
     );
     expect(
-      evaluateBoosterOptions([saved({ ownerIsBooster: false })], heroicRun).ineligible[0]
-        ?.reason,
-    ).toBe("NO_BOOSTER_ACCESS");
-    expect(
       evaluateBoosterOptions(
         [
           saved({
@@ -414,12 +408,6 @@ describe("raid lockouts are informational, never a Booster eligibility blocker",
     );
     expect(inactive.ineligible[0]?.reason).toBe("INACTIVE");
     expect(inactive.ineligible[0]?.warcraftLogsId).toBe("55556666");
-  });
-
-  it("does not block Characters for deprecated manual availability blocks", () => {
-    const result = evaluateBoosterOptions([shaman({ warcraftLogsId: "77778888" })], heroicRun);
-    expect(result.eligible).toHaveLength(1);
-    expect(result.ineligible).toHaveLength(0);
   });
 
   it("uses stable precedence: inactive > reservation > access", () => {
@@ -491,34 +479,5 @@ describe("signup creation rules", () => {
     expect(
       signupOptionsSchema.parse({ runId: "r7777777-7777-4777-8777-777777777777" }).runId,
     ).toBe("r7777777-7777-4777-8777-777777777777");
-  });
-});
-
-describe("withdrawal", () => {
-  it("allows withdrawing an own pending signup", () => {
-    expect(canSelfWithdrawSignup("PENDING", "OPEN")).toBe(true);
-  });
-
-  it("rejects withdrawing a selected signup after roster publication", () => {
-    expect(canSelfWithdrawSignup("SELECTED", "PUBLISHED")).toBe(false);
-    expect(canSelfWithdrawSignup("SELECTED", "IN_PROGRESS")).toBe(false);
-  });
-
-  it("allows withdrawing selected only before publication", () => {
-    expect(canSelfWithdrawSignup("SELECTED", "ROSTERING")).toBe(true);
-  });
-
-  it("keeps withdrawn as a terminal persisted state", () => {
-    expect(canTransitionSignup("PENDING", "WITHDRAWN")).toBe(true);
-    expect(canTransitionSignup("WITHDRAWN", "PENDING")).toBe(false);
-    expect(canSelfWithdrawSignup("WITHDRAWN", "OPEN")).toBe(false);
-  });
-});
-
-describe("run and signup state machines stay independent", () => {
-  it("does not couple run OPEN to signup SELECTED", () => {
-    expect(canTransitionRun("OPEN", "ROSTERING")).toBe(true);
-    expect(canTransitionSignup("PENDING", "SELECTED")).toBe(true);
-    expect(canTransitionRun("OPEN", "SELECTED" as never)).toBe(false);
   });
 });

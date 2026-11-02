@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { isDomainError } from "@/lib/errors";
-import { RAID_DIFFICULTIES, RUN_LOOT_TYPES, type RaidDifficulty, type RunLootType } from "@/models/enums";
+import { RAID_DIFFICULTIES, RUN_LOOT_TYPES, RUN_STATUSES, type RaidDifficulty, type RunLootType, type RunStatus } from "@/models/enums";
 import {
+  assertRunTransition,
   assertValidPlannedBossCount,
   assertValidRunLootType,
+  canTransitionRun,
   isLootTypeAllowedForDifficulty,
 } from "@/domain/run-state";
 
@@ -64,5 +66,39 @@ describe("assertValidPlannedBossCount", () => {
         expect(isDomainError(error) && error.code).toBe("RUN_BOSS_COUNT_INVALID");
       }
     }
+  });
+});
+
+describe("run lifecycle transitions", () => {
+  // Written out independently of RUN_TRANSITIONS, so a changed table fails here.
+  const ALLOWED: ReadonlyArray<readonly [RunStatus, RunStatus]> = [
+    ["DRAFT", "OPEN"],
+    ["OPEN", "ROSTERING"],
+    ["ROSTERING", "PUBLISHED"],
+    ["ROSTERING", "OPEN"],
+    ["PUBLISHED", "IN_PROGRESS"],
+    ["IN_PROGRESS", "COMPLETED"],
+    ...(["DRAFT", "OPEN", "ROSTERING", "PUBLISHED", "IN_PROGRESS"] as const).map((from) => [from, "CANCELLED"] as const),
+  ];
+
+  it("allows exactly the lifecycle moves and nothing else", () => {
+    for (const from of RUN_STATUSES) {
+      for (const to of RUN_STATUSES) {
+        const expected = ALLOWED.some(([allowedFrom, allowedTo]) => allowedFrom === from && allowedTo === to);
+        expect(canTransitionRun(from, to), `${from} -> ${to}`).toBe(expected);
+      }
+    }
+  });
+
+  it("COMPLETED and CANCELLED are terminal; Reactivate is its own operation", () => {
+    for (const to of RUN_STATUSES) {
+      expect(canTransitionRun("COMPLETED", to)).toBe(false);
+      expect(canTransitionRun("CANCELLED", to)).toBe(false);
+    }
+  });
+
+  it("assertRunTransition refuses a skipped step with INVALID_STATE_TRANSITION", () => {
+    expect(() => assertRunTransition("OPEN", "PUBLISHED")).toThrow(expect.objectContaining({ code: "INVALID_STATE_TRANSITION" }));
+    expect(() => assertRunTransition("OPEN", "ROSTERING")).not.toThrow();
   });
 });
