@@ -1323,6 +1323,10 @@
     "tests/integration/services/roster-boss-exceptions.integration.test.ts": [
       "REWRITE",
       "assertIsolatedTestDatabase; verified deleteAndCount without swallowed errors; testActor; saveDraftSelection already used; suite-private fixed ids retained"
+    ],
+    "tests/integration/services/run-consumable-audit.service.test.ts": [
+      "REWRITE",
+      "Seed COMPLETED Runs contract retained with restore; assertIsolatedTestDatabase; expectDomainError; testActor; suite-private OTHER_LEAD cleaned with deleteAndCount"
     ]
   },
   "tests": {

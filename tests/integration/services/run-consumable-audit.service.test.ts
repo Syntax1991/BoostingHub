@@ -1,7 +1,9 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
+import { testActor } from "@tests/fixtures/actors";
+import { assertIsolatedTestDatabase } from "@tests/fixtures/db-fixtures";
+import { expectDomainError } from "@tests/helpers/domain-error";
 import {
   warcraftLogsApiClient,
   type WarcraftLogsConsumableEvents,
@@ -48,32 +50,19 @@ const REPORT_START = at("14:05");
 const PLEXUS = 3129;
 const LOOMITHAR = 3131;
 
-function asUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"]): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@dev.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
-
-const kael = asUser("11111111-1111-4111-8111-111111111111", "Kael Stormhowl", "USER");
-const thorne = asUser("33333333-3333-4333-8333-333333333333", "Thorne Ironvein", "RAID_LEAD");
-const aelira = asUser("44444444-4444-4444-8444-444444444444", "Aelira Nightwatch", "ADMIN");
-const otherLead = asUser(OTHER_LEAD_ID, "Other Lead", "RAID_LEAD");
-
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    expect(isDomainError(error) ? error.code : error).toBe(code);
-  }
-}
+const kael = testActor("11111111-1111-4111-8111-111111111111", "USER", {
+  name: "Kael Stormhowl",
+  email: "11111111-1111-4111-8111-111111111111@dev.boostting.local",
+});
+const thorne = testActor("33333333-3333-4333-8333-333333333333", "RAID_LEAD", {
+  name: "Thorne Ironvein",
+  email: "33333333-3333-4333-8333-333333333333@dev.boostting.local",
+});
+const aelira = testActor("44444444-4444-4444-8444-444444444444", "ADMIN", {
+  name: "Aelira Nightwatch",
+  email: "44444444-4444-4444-8444-444444444444@dev.boostting.local",
+});
+let otherLead = testActor(OTHER_LEAD_ID, "RAID_LEAD", { name: "Other Lead" });
 
 type Attended = Extract<ConsumableAuditParticipant, { source: "ATTENDANCE" }>;
 let rosterA: Attended[] = [];
@@ -207,6 +196,7 @@ async function fightStatuses(runId: string) {
 const createdSnapshots: string[] = [];
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   const pick = (rows: ConsumableAuditParticipant[]) =>
     rows.filter((row): row is Attended => row.source === "ATTENDANCE");
   rosterA = pick(await runConsumableAuditRepository.listParticipants(RUN_A));
@@ -257,6 +247,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  assertIsolatedTestDatabase();
   await clearAssociations();
   await orm.RunExternalBooster.where({ id: EXTERNAL_ID }).deleteAndCount();
   for (const id of createdSnapshots) await orm.RunStartSnapshot.where({ id }).deleteAndCount();
@@ -415,14 +406,14 @@ describe("authorization", () => {
       () => runConsumableAuditService.analyze(otherLead, { runId: RUN_A }, later),
       () => runConsumableAuditService.getAuditView(otherLead, RUN_A),
     ]) {
-      await expectDomainCode(call(), "NOT_AUTHORIZED");
+      await expectDomainError(call(), "NOT_AUTHORIZED");
     }
 
     // Run B handed to another lead: Thorne may not move B's fight into A.
     await runWarcraftLogsService.decideFight(aelira, { runId: RUN_B, fightId: rowB.id, assign: true }, later());
     await orm.Run.where({ id: RUN_B }).update({ raidLeadId: OTHER_LEAD_ID });
     try {
-      await expectDomainCode(
+      await expectDomainError(
         runWarcraftLogsService.decideFight(thorne, { runId: RUN_A, fightId: rowA.id, assign: true }, later()),
         "NOT_AUTHORIZED",
       );
@@ -448,7 +439,7 @@ describe("authorization", () => {
       () => runConsumableAuditService.analyze(kael, { runId: RUN_A }, later),
       () => runConsumableAuditService.getAuditView(kael, RUN_A),
     ]) {
-      await expectDomainCode(call(), "NOT_AUTHORIZED");
+      await expectDomainError(call(), "NOT_AUTHORIZED");
     }
     expect(metadataSpy).not.toHaveBeenCalled();
     expect(eventsSpy).not.toHaveBeenCalled();
@@ -475,7 +466,7 @@ describe("authorization", () => {
   });
 
   it("linking and analysis are only for COMPLETED runs", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       runWarcraftLogsService.attachReport(aelira, { runId: IN_PROGRESS_RUN, reportCode: REPORT }, later()),
       "CONSUMABLE_AUDIT_RUN_NOT_COMPLETED",
     );
@@ -540,7 +531,7 @@ describe("idempotency and failure safety", () => {
   it("rate-limits WCL-triggering actions per run", async () => {
     const now = later();
     await runWarcraftLogsService.attachReport(aelira, { runId: RUN_A, reportCode: REPORT }, now);
-    await expectDomainCode(
+    await expectDomainError(
       runWarcraftLogsService.rescan(aelira, { runId: RUN_A }, new Date(now.getTime() + 5_000)),
       "CONSUMABLE_AUDIT_REFRESH_COOLDOWN",
     );
