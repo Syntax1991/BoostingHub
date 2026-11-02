@@ -354,7 +354,7 @@
     ],
     "src/components/characters/character-offspec-display.test.ts": [
       "KEEP",
-      "Offspec display across user, detail and admin views. One test compared a pure function with itself around a render; removed. Numbering dropped from titles"
+      "Offspec display across user, detail and admin views. One test compared a pure function with itself around a render; removed. Numbering dropped from titles; a real-looking player name replaced by a synthetic one"
     ],
     "src/discord-bot/client.quick-signup.test.ts": [
       "KEEP",
@@ -1178,7 +1178,7 @@
     ],
     "src/services/platform-owner.test.ts": [
       "REWRITE",
-      "Fresh users instead of fixed ids with a pre-clean; lock waits proven with waitForLockWaiter instead of 200 ms sleeps; the queued-demotion race now holds only the other admin row, which exposed the single-row update() lock (fixed in user.repository); bootstrap event counts scoped to suite users; the single-owner index asserted by SQLSTATE 23505 and constraint name; USER added to the below-Admin refusal its title claimed"
+      "Fresh users instead of fixed ids with a pre-clean; lock waits proven with waitForLockWaiter instead of 200 ms sleeps; the queued-demotion race now holds only the other admin row, which exposed the single-row update() lock (fixed in user.repository); bootstrap event counts scoped to suite users; the single-owner index asserted by SQLSTATE 23505 and constraint name; USER added to the below-Admin refusal its title claimed; held transactions released in finally so a failed lock wait cannot hang cleanup"
     ],
     "src/services/run-lootbuddy-target.test.ts": [
       "REWRITE",
@@ -1215,6 +1215,18 @@
     "src/services/character.service.test.ts": [
       "REWRITE",
       "Own users, Run and Lead instead of fixed ids, the seeded admin and a seeded Run; lockout raids compared with the loaded catalog instead of three hardcoded names; valid random ids for the missing-Character and empty-user cases; all four same-name identities asserted, not one"
+    ],
+    "src/services/roster-legacy-saved-draft.test.ts": [
+      "REWRITE",
+      "Own Raid Lead instead of the seeded Thorne; synthetic Character names instead of what look like real production player names in a public repository; shared fixtures with verified cleanup instead of a 35-line manual chain; the unresolved-DPS blocker asserted by code and signup instead of message text"
+    ],
+    "src/services/run-lifecycle-concurrency.test.ts": [
+      "REWRITE",
+      "Fresh users instead of fixed ids with a pre-delete and swallowed deletes; waitForLockWaiter instead of 150 ms sleeps (mutation: Start without the roster lock now fails); held transactions released in finally; race losers asserted by their exact codes (30 rounds stable); mocks restored in afterEach"
+    ],
+    "src/services/character-sync-telemetry.test.ts": [
+      "REWRITE",
+      "Shared user fixtures and verified cleanup; refreshes the arranged mocks make fail are asserted to reject instead of .catch(() => {}), so an unexpected success fails the test"
     ]
   },
   "tests": {

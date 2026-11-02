@@ -249,8 +249,11 @@ describe("last Admin-level account", () => {
     });
     await lockHeld;
     const second = userManagementService.changeAccountRole(adminB(), { targetUserId: ids.adminA, nextRole: "USER" });
-    await waitForLockWaiter();
-    release();
+    try {
+      await waitForLockWaiter();
+    } finally {
+      release();
+    }
     await first;
     await expectDomainError(second, "LAST_ADMIN_REQUIRED");
     expect(await roleOf(ids.adminA)).toBe("ADMIN");
@@ -323,8 +326,11 @@ describe("owner bootstrap", () => {
     });
     await ownerWritten;
     const second = ownerBootstrapService.bootstrap({ userId: ids.adminB });
-    await waitForLockWaiter();
-    release();
+    try {
+      await waitForLockWaiter();
+    } finally {
+      release();
+    }
     await first;
     await expectDomainError(second, "OWNER_ALREADY_EXISTS");
     expect(await ownerIds()).toEqual([ids.adminA]);

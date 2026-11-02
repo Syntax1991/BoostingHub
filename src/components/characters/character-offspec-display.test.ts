@@ -267,7 +267,7 @@ describe("character offspec display", () => {
   it("user list hides the offspec label when none are configured", () => {
     const html = renderUserList(
       userCharacter({
-        name: "Glesien",
+        name: "Offspecless",
         wowClass: "HUNTER",
         specialization: "Marksmanship",
         primaryRole: "RANGED_DPS",

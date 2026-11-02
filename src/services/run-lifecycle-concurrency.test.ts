@@ -1,9 +1,8 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
-import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { db, orm } from "@/lib/prisma";
-import { futureTestIso, venomousCreateInput } from "@/lib/test-run-input";
+import { anyContentRunInput, futureTestIso } from "@/lib/test-run-input";
 import { asString } from "@/lib/persistence";
 import { raidRepository } from "@/repositories/raid.repository";
 import {
@@ -17,188 +16,76 @@ import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.re
 import { attendanceRepository } from "@/repositories/attendance.repository";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
+import { testActor } from "@/test/actors";
+import {
+  assertIsolatedTestDatabase,
+  createTestCharacter,
+  createTestUser,
+  deleteCreatedRows,
+  waitForLockWaiter,
+} from "@/test/db-fixtures";
+import { expectDomainError } from "@/test/domain-error";
 
-const ids = {
-  lead: "cccccccc-cccc-4ccc-8ccc-lc0000000001",
-  player: "cccccccc-cccc-4ccc-8ccc-lc0000000002",
-};
-
-const createdRunIds: string[] = [];
-const createdCharacterIds: string[] = [];
-const createdSignupIds: string[] = [];
-
-function asUser(
-  id: string,
-  name: string,
-  accountRole: AuthenticatedUser["accountRole"] = "USER",
-): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@lc.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
-
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    if (error instanceof Error && error.message === `Expected domain error ${code}`) throw error;
-    expect(isDomainError(error) && error.code).toBe(code);
-  }
-}
-
-async function createTestUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"]) {
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@lc.boostting.local`,
-    emailVerified: true,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-    isBooster: accountRole === "USER",
-    discordDmEnabled: true,
-    dmRosterSelectedEnabled: true,
-    dmRaidInviteEnabled: true,
-    dmRunCancelledEnabled: true,
-    dmRunRescheduledEnabled: true,
-    dmRosterRemovedEnabled: true,
-    timeZone: "Europe/Berlin",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
-}
-
-async function cleanupRun(runId: string) {
-  const attendance = await orm.RunAttendance.where({ runId }).select("id").all();
-  for (const row of attendance) {
-    await orm.RunAttendance.where({ id: asString((row as Record<string, unknown>).id) }).delete();
-  }
-  try {
-    await orm.RunStartSnapshot.where({ runId }).delete();
-  } catch {
-    // none
-  }
-  const notes = await orm.UserNotification.where({ runId }).select("id").all();
-  for (const row of notes) {
-    await orm.UserNotification.where({ id: asString((row as Record<string, unknown>).id) }).delete();
-  }
-  const announcements = await orm.RunDiscordAnnouncement.where({ runId }).select("id").all();
-  for (const row of announcements) {
-    await orm.RunDiscordAnnouncement.where({ id: asString((row as Record<string, unknown>).id) }).delete();
-  }
-  const roster = (await orm.RunRoster.where({ runId }).first()) as Record<string, unknown> | null;
-  if (roster) {
-    const rosterId = asString(roster.id);
-    const entries = await orm.RunRosterEntry.where({ rosterId }).select("id").all();
-    for (const entry of entries) {
-      await orm.RunRosterEntry.where({ id: asString((entry as Record<string, unknown>).id) }).delete();
-    }
-    const externals = await orm.RunExternalBooster.where({ rosterId }).select("id").all();
-    for (const external of externals) {
-      await orm.RunExternalBooster.where({ id: asString((external as Record<string, unknown>).id) }).delete();
-    }
-    await orm.RunRoster.where({ id: rosterId }).delete();
-  }
-  const signups = await orm.RunSignup.where({ runId }).select("id").all();
-  for (const row of signups) {
-    const signupId = asString((row as Record<string, unknown>).id);
-    const roles = await orm.RunSignupRole.where({ signupId }).select("id").all();
-    for (const role of roles) {
-      await orm.RunSignupRole.where({ id: asString((role as Record<string, unknown>).id) }).delete();
-    }
-    await orm.RunSignup.where({ id: signupId }).delete();
-  }
-  try {
-    await orm.Run.where({ id: runId }).delete();
-  } catch {
-    // gone
-  }
-}
-
-const lead = asUser(ids.lead, "LC Lead", "RAID_LEAD");
+const created = { runIds: [] as string[], characterIds: [] as string[], userIds: [] as string[] };
+let lead: AuthenticatedUser;
+let playerId = "";
 let playerChar = "";
 
+/** The losing side of a Start/Cancel race, whichever way it goes. */
+function rejectionCode(result: PromiseSettledResult<unknown>): unknown {
+  if (result.status !== "rejected") return "fulfilled";
+  return isDomainError(result.reason) ? result.reason.code : result.reason;
+}
+
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   await raidRepository.ensureReferenceRaids();
-  for (const id of Object.values(ids)) {
-    try {
-      await orm.User.where({ id }).delete();
-    } catch {
-      // gone
-    }
-  }
-  await createTestUser(ids.lead, "LC Lead", "RAID_LEAD");
-  await createTestUser(ids.player, "LC Player", "USER");
-  playerChar = crypto.randomUUID();
-  createdCharacterIds.push(playerChar);
-  await orm.Character.create({
-    id: playerChar,
-    userId: ids.player,
+  const leadId = await createTestUser({ name: "LC Lead", accountRole: "RAID_LEAD" });
+  playerId = await createTestUser({ name: "LC Player", isBooster: true });
+  created.userIds.push(leadId, playerId);
+  lead = testActor(leadId, "RAID_LEAD");
+  playerChar = await createTestCharacter({
+    userId: playerId,
     name: "LcTank",
     realm: "Concurrency Lab",
-    normalizedName: normalizeCharacterIdentity("LcTank"),
-    normalizedRealm: normalizeCharacterIdentity("Concurrency Lab"),
-    region: "EU",
     wowClass: "WARRIOR",
     specialization: "Protection",
     primaryRole: "TANK",
-    itemLevel: 700,
-    isActive: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
   });
+  created.characterIds.push(playerChar);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 afterAll(async () => {
-  for (const runId of createdRunIds.splice(0)) {
-    await cleanupRun(runId);
-  }
-  for (const id of createdCharacterIds.splice(0)) {
-    try {
-      await orm.Character.where({ id }).delete();
-    } catch {
-      // gone
-    }
-  }
-  for (const id of Object.values(ids)) {
-    try {
-      await orm.User.where({ id }).delete();
-    } catch {
-      // gone
-    }
-  }
+  assertIsolatedTestDatabase();
+  // Attendance references roster entries with RESTRICT, so it goes before its Run.
+  for (const runId of created.runIds) await orm.RunAttendance.where({ runId }).deleteAndCount();
+  await deleteCreatedRows(created);
 });
 
 async function createPublishedRunnableRun() {
-  const created = await runService.createRun(
+  const run = await runService.createRun(
     lead,
-    venomousCreateInput({
-      scheduledStartAt: futureTestIso(12 + createdRunIds.length),
+    anyContentRunInput({
+      scheduledStartAt: futureTestIso(12 + created.runIds.length),
       desiredTankCount: 1,
       desiredHealerCount: 0,
       desiredDpsCount: 0,
-      title: `LC race ${createdRunIds.length}`,
+      title: `LC race ${created.runIds.length}`,
     }),
   );
-  createdRunIds.push(created.id);
-  await runService.openRun(lead, created.id);
+  created.runIds.push(run.id);
+  await runService.openRun(lead, run.id);
 
   const signupId = crypto.randomUUID();
-  createdSignupIds.push(signupId);
   const now = new Date().toISOString();
   await orm.RunSignup.create({
     id: signupId,
-    runId: created.id,
-    userId: ids.player,
+    runId: run.id,
+    userId: playerId,
     characterId: playerChar,
     participationType: "BOOSTER",
     isBackup: false,
@@ -216,22 +103,21 @@ async function createPublishedRunnableRun() {
     createdAt: now,
   });
 
-  const view = await rosterService.getRosterManagementView(lead, created.id);
+  const view = await rosterService.getRosterManagementView(lead, run.id);
   await rosterService.saveDraftSelection(lead, {
-    runId: created.id,
+    runId: run.id,
     version: view.roster.version,
     selections: [{ signupId, selectedRole: "TANK" }],
   });
-  const ready = await rosterService.getRosterManagementView(lead, created.id);
+  const ready = await rosterService.getRosterManagementView(lead, run.id);
   await rosterService.publishRoster(lead, {
-    runId: created.id,
+    runId: run.id,
     version: ready.roster.version,
     acknowledgeWarnings: true,
   });
 
-  const run = await runRepository.findById(created.id);
-  expect(run?.status).toBe("PUBLISHED");
-  return created.id;
+  expect((await runRepository.findById(run.id))?.status).toBe("PUBLISHED");
+  return run.id;
 }
 
 describe("lifecycle concurrency — Start vs Cancel", () => {
@@ -252,16 +138,14 @@ describe("lifecycle concurrency — Start vs Cancel", () => {
 
       if (run?.status === "IN_PROGRESS") {
         expect(started.status).toBe("fulfilled");
-        expect(cancelled.status).toBe("rejected");
-        expect(isDomainError((cancelled as PromiseRejectedResult).reason)).toBe(true);
+        expect(rejectionCode(cancelled)).toBe("RUN_CANNOT_CANCEL");
         expect(snapshot).not.toBeNull();
         expect(attendanceCount).toBeGreaterThan(0);
         expect(run.signupsOpen).toBe(false);
       } else {
         expect(run?.status).toBe("CANCELLED");
         expect(cancelled.status).toBe("fulfilled");
-        expect(started.status).toBe("rejected");
-        expect(isDomainError((started as PromiseRejectedResult).reason)).toBe(true);
+        expect(rejectionCode(started)).toBe("RUN_NOT_PUBLISHED");
         expect(snapshot).toBeNull();
         expect(attendanceCount).toBe(0);
       }
@@ -311,15 +195,17 @@ describe("lifecycle concurrency — Start vs Cancel", () => {
 
     const startPromise = runService.startRun(lead, { runId });
     await startQueued;
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    releaseCancel();
+    try {
+      await waitForLockWaiter();
+    } finally {
+      releaseCancel();
+    }
     await cancelTx;
 
-    await expectDomainCode(startPromise, "RUN_NOT_PUBLISHED");
+    await expectDomainError(startPromise, "RUN_NOT_PUBLISHED");
     expect(await runRepository.findById(runId)).toMatchObject({ status: "CANCELLED", cancelRevision: 1 });
     expect(await runStartSnapshotRepository.findByRunId(runId)).toBeNull();
     expect(await attendanceRepository.countByRunId(runId)).toBe(0);
-    vi.restoreAllMocks();
   });
 
   it("deterministic: Start commits under RunRoster lock first → Cancel fails RUN_CANNOT_CANCEL", async () => {
@@ -337,7 +223,7 @@ describe("lifecycle concurrency — Start vs Cancel", () => {
     });
 
     const startHold = db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: typeof orm }).public ?? (tx.orm as unknown as typeof orm)) as typeof orm;
+      const txOrm = tx.orm.public;
       await lockRosterInTx(txOrm, roster!.id);
       signalLocked();
       await startMayCommit;
@@ -376,7 +262,7 @@ describe("lifecycle concurrency — Start vs Cancel", () => {
         id: crypto.randomUUID(),
         runId,
         startedAt: now,
-        startedById: ids.lead,
+        startedById: lead.id,
         createdAt: now,
         updatedAt: now,
       });
@@ -400,15 +286,17 @@ describe("lifecycle concurrency — Start vs Cancel", () => {
 
     const cancelPromise = runService.cancelRun(lead, runId);
     await cancelQueued;
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    releaseStart();
+    try {
+      await waitForLockWaiter();
+    } finally {
+      releaseStart();
+    }
     await startHold;
 
-    await expectDomainCode(cancelPromise, "RUN_CANNOT_CANCEL");
+    await expectDomainError(cancelPromise, "RUN_CANNOT_CANCEL");
     expect(await runRepository.findById(runId)).toMatchObject({ status: "IN_PROGRESS", cancelRevision: 0 });
     expect(await runStartSnapshotRepository.findByRunId(runId)).not.toBeNull();
     expect(await attendanceRepository.countByRunId(runId)).toBeGreaterThan(0);
-    vi.restoreAllMocks();
   });
 });
 
@@ -423,8 +311,7 @@ describe("lifecycle concurrency — double Cancel", () => {
       const fulfilled = results.filter((result) => result.status === "fulfilled");
       const rejected = results.filter((result) => result.status === "rejected");
       expect(fulfilled).toHaveLength(1);
-      expect(rejected).toHaveLength(1);
-      expect(isDomainError((rejected[0] as PromiseRejectedResult).reason)).toBe(true);
+      expect(rejected.map(rejectionCode)).toEqual(["RUN_CANNOT_CANCEL"]);
 
       expect(await runRepository.findById(runId)).toMatchObject({
         status: "CANCELLED",

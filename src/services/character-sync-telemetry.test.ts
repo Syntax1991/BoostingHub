@@ -38,33 +38,18 @@ import { characterRepository } from "@/repositories/character.repository";
 import { raidRepository } from "@/repositories/raid.repository";
 import { characterBlizzardSyncService } from "@/services/character-blizzard-sync.service";
 import { scheduledCharacterSyncService } from "@/services/scheduled-character-sync.service";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
 
 /**
  * Character sync telemetry (lastSyncAttemptAt / lastSyncErrorAt /
  * lastSyncErrorCode / syncFailureCount), attempt-based manual cooldown, the
  * per-Character advisory lock and the lockout/data invariants around failures.
  */
-const createdUserIds: string[] = [];
-const createdCharacterIds: string[] = [];
+const OWNER_NAME = "Telemetry Owner";
+const created = { characterIds: [] as string[], userIds: [] as string[] };
 let ownerId = "";
 let owner: AuthenticatedUser;
-
-async function createUser(name: string): Promise<string> {
-  const id = crypto.randomUUID();
-  const now = new Date().toISOString();
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@tel.boostting.local`,
-    emailVerified: true,
-    accountRole: "USER",
-    accountStatus: "ACTIVE",
-    createdAt: now,
-    updatedAt: now,
-  });
-  createdUserIds.push(id);
-  return id;
-}
 
 async function createLinkedCharacter(name: string, input: { region?: WowRegion; lastSyncedAt?: string | null } = {}) {
   const realm = "Twisting Nether";
@@ -88,7 +73,7 @@ async function createLinkedCharacter(name: string, input: { region?: WowRegion; 
   });
   // Skip the best-effort WCL network lookup.
   await orm.Character.where({ id }).update({ warcraftLogsId: "wcl-known", updatedAt: new Date().toISOString() });
-  createdCharacterIds.push(record.id);
+  created.characterIds.push(record.id);
   return record;
 }
 
@@ -142,29 +127,27 @@ async function expireCooldown(id: string) {
   await orm.Character.where({ id }).update({ lastSyncAttemptAt: new Date(Date.now() - 120_000).toISOString() });
 }
 
+/** A refresh the arranged mocks make fail; it must not quietly succeed. */
+async function refreshExpectingFailure(id: string) {
+  await expect(characterBlizzardSyncService.refreshCharacter(owner, id)).rejects.toThrow();
+}
+
 async function failOnce(id: string, error: unknown) {
   mockStatusFailure(error);
-  await characterBlizzardSyncService.refreshCharacter(owner, id).catch(() => {});
+  await refreshExpectingFailure(id);
   await expireCooldown(id);
 }
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   vi.stubEnv("BLIZZARD_CLIENT_ID", "test-client-id");
   vi.stubEnv("BLIZZARD_CLIENT_SECRET", "test-client-secret");
   vi.stubEnv("BLIZZARD_REDIRECT_URI", "http://localhost:3000/api/integrations/battlenet/callback");
   vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "");
   await raidRepository.ensureReferenceRaids();
-  ownerId = await createUser("Telemetry Owner");
-  owner = {
-    id: ownerId,
-    name: "Telemetry Owner",
-    email: null,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole: "USER",
-    accountStatus: "ACTIVE",
-  };
+  ownerId = await createTestUser({ name: OWNER_NAME });
+  created.userIds.push(ownerId);
+  owner = testActor(ownerId, "USER", { name: OWNER_NAME });
   await battleNetConnectionRepository.upsert({
     userId: ownerId,
     region: "EU",
@@ -185,15 +168,9 @@ afterEach(() => {
 });
 
 afterAll(async () => {
-  for (const id of createdCharacterIds) {
-    await orm.CharacterRaidLockout.where({ characterId: id }).deleteAll();
-    await orm.Character.where({ id }).deleteAll();
-  }
-  for (const id of createdUserIds) {
-    await orm.BattleNetConnection.where({ userId: id }).deleteAll();
-    await orm.ActivityEvent.where({ userId: id }).deleteAll();
-    await orm.User.where({ id }).deleteAll();
-  }
+  assertIsolatedTestDatabase();
+  await orm.BattleNetConnection.where({ userId: ownerId }).deleteAndCount();
+  await deleteCreatedRows(created);
   vi.unstubAllEnvs();
 });
 
@@ -277,7 +254,7 @@ describe("safe error categories, end to end", () => {
   it.each(cases.map(([label, arrange, expected]) => [label, expected, arrange] as const))("%s → %s", async (_label, expected, arrange) => {
     const character = await createLinkedCharacter(`Telcat${Math.random().toString(36).slice(2, 8)}`);
     arrange();
-    await characterBlizzardSyncService.refreshCharacter(owner, character.id).catch(() => {});
+    await refreshExpectingFailure(character.id);
     const after = await row(character.id);
     expect(after.lastSyncErrorCode).toBe(expected);
     expect(CHARACTER_SYNC_ERROR_CODES as readonly string[]).toContain(after.lastSyncErrorCode);
@@ -302,7 +279,7 @@ describe("safe error categories, end to end", () => {
   it("stores only the fixed category — never the raw message", async () => {
     const character = await createLinkedCharacter("Telraw");
     mockStatusFailure(new Error("upstream said: token=secret-123 Authorization: Bearer xyz"));
-    await characterBlizzardSyncService.refreshCharacter(owner, character.id).catch(() => {});
+    await refreshExpectingFailure(character.id);
     const raw = (await orm.Character.where({ id: character.id }).first()) as Record<string, unknown>;
     expect(raw.lastSyncErrorCode).toBe("INTERNAL");
     expect(JSON.stringify(raw)).not.toContain("secret-123");
@@ -313,7 +290,7 @@ describe("safe error categories, end to end", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const character = await createLinkedCharacter("Tellogname");
     mockStatusFailure(new DomainError("BATTLENET_RATE_LIMITED", "Battle.net rate limit reached. Try again shortly.", 429));
-    await characterBlizzardSyncService.refreshCharacter(owner, character.id).catch(() => {});
+    await refreshExpectingFailure(character.id);
     const lines = warn.mock.calls.map((call) => String(call[0]));
     expect(lines).toHaveLength(1);
     expect(JSON.parse(lines[0]!)).toEqual({
@@ -324,7 +301,7 @@ describe("safe error categories, end to end", () => {
       rateLimited: true,
       retryable: true,
     });
-    for (const forbidden of ["Tellogname", "tellogname", character.id, ownerId, "Telemetry Owner", "rate limit reached"]) {
+    for (const forbidden of ["Tellogname", "tellogname", character.id, ownerId, OWNER_NAME, "rate limit reached"]) {
       expect(lines[0]).not.toContain(forbidden);
     }
   });
@@ -343,7 +320,7 @@ describe("manual cooldown is attempt-based", () => {
   it("a FAILED attempt also starts the cooldown (no hammering a failing Character), and it ends after 60s", async () => {
     const character = await createLinkedCharacter("Telcoolfail");
     mockStatusFailure(new DomainError("BATTLENET_API_UNAVAILABLE", "Battle.net API unavailable (character-status).", 503));
-    await characterBlizzardSyncService.refreshCharacter(owner, character.id).catch(() => {});
+    await refreshExpectingFailure(character.id);
     expect((await row(character.id)).lastSyncedAt).toBeNull();
     await expect(characterBlizzardSyncService.refreshCharacter(owner, character.id)).rejects.toMatchObject({
       code: "BLIZZARD_REFRESH_COOLDOWN",
@@ -413,7 +390,7 @@ describe("per-Character advisory lock", () => {
 
     const character = await createLinkedCharacter("Tellockrel");
     mockStatusFailure(new DomainError("BATTLENET_API_UNAVAILABLE", "x", 503));
-    await characterBlizzardSyncService.refreshCharacter(owner, character.id).catch(() => {});
+    await refreshExpectingFailure(character.id);
     const afterFailure = await tryAcquireCharacterSyncLock(character.id);
     expect(afterFailure).not.toBeNull();
     await releaseCharacterSyncLock(afterFailure!);
@@ -482,7 +459,7 @@ describe("lockouts stay multi-content and UNKNOWN-safe around failures", () => {
 
     await expireCooldown(character.id);
     mockStatusFailure(new DomainError("BATTLENET_API_UNAVAILABLE", "x", 503));
-    await characterBlizzardSyncService.refreshCharacter(owner, character.id).catch(() => {});
+    await refreshExpectingFailure(character.id);
     const afterFailure = await orm.CharacterRaidLockout.where({ characterId: character.id, resetIdentifier: reset }).all();
     expect(afterFailure).toHaveLength(rows.length);
   });
@@ -490,7 +467,7 @@ describe("lockouts stay multi-content and UNKNOWN-safe around failures", () => {
   it("a never-synced Character that fails keeps its lockouts UNKNOWN (no rows invented)", async () => {
     const character = await createLinkedCharacter("Telunknown");
     mockStatusFailure(new DomainError("BLIZZARD_CHARACTER_NOT_FOUND", "x", 404));
-    await characterBlizzardSyncService.refreshCharacter(owner, character.id).catch(() => {});
+    await refreshExpectingFailure(character.id);
     expect(await orm.CharacterRaidLockout.where({ characterId: character.id }).all()).toHaveLength(0);
     expect(deriveCharacterSyncHealth(await row(character.id), { now: now(), staleMinutes: 120 })).toBe("ERROR");
   });
