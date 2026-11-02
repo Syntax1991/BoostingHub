@@ -1,11 +1,16 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
+import { anyContentRunInput } from "@/lib/test-run-input";
 import { characterRepository } from "@/repositories/character.repository";
+import { raidRepository } from "@/repositories/raid.repository";
 import { signupRepository } from "@/repositories/signup.repository";
 import { characterService } from "@/services/character.service";
+import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { expectDomainError } from "@/test/domain-error";
 import { offerCharacter } from "@/test/signup-offers";
 
 // Warcraft Logs auto-link enrichment runs after Character writes/syncs; keep it
@@ -18,134 +23,55 @@ vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOr
   },
 }));
 
-const ids = {
-  owner: "aaaaaaaa-aaaa-4aaa-8aaa-cm0000000001",
-  other: "aaaaaaaa-aaaa-4aaa-8aaa-cm0000000002",
-  admin: "44444444-4444-4444-8444-444444444444",
-  heroicOpen: "r1111111-1111-4111-8111-111111111111",
-};
+/** Characters go with their owners: Character.userId cascades. */
+const created = { runIds: [] as string[], userIds: [] as string[] };
+let owner: AuthenticatedUser;
+let other: AuthenticatedUser;
+/** An Admin caller; ownership checks never look the caller's row up. */
+const admin = testActor(crypto.randomUUID(), "ADMIN");
+let heroicOpenRunId: string;
 
-const createdCharacterIds: string[] = [];
-const createdSignupIds: string[] = [];
-
-function asUser(
-  id: string,
-  name: string,
-  accountRole: AuthenticatedUser["accountRole"] = "USER",
-): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@cmtest.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
+async function createUser(name: string, accountRole: AuthenticatedUser["accountRole"] = "USER") {
+  const id = await createTestUser({ name, accountRole });
+  created.userIds.push(id);
+  return testActor(id, accountRole, { name });
 }
 
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    expect(isDomainError(error) && error.code).toBe(code);
-  }
-}
-
-async function createTestUser(id: string, name: string) {
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@cmtest.boostting.local`,
-    emailVerified: true,
-    accountRole: "USER",
-    accountStatus: "ACTIVE",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
-}
-
-async function deleteIfPresent(
-  table: "User" | "Character" | "RunSignup" | "BoosterAccess",
-  id: string,
-) {
-  try {
-    if (table === "User") {
-      await orm.User.where({ id }).delete();
-      return;
-    }
-    if (table === "Character") {
-      await orm.Character.where({ id }).delete();
-      return;
-    }
-    if (table === "RunSignup") {
-      await orm.RunSignup.where({ id }).delete();
-      return;
-    }
-    await orm.BoosterAccess.where({ id }).delete();
-  } catch {
-    // Already gone from a previous isolated run.
-  }
-}
-
-async function cleanupGeneratedRows() {
-  for (const id of createdSignupIds) {
-    await deleteIfPresent("RunSignup", id);
-  }
-  const ownerSignups = await orm.RunSignup.where({ userId: ids.owner }).all();
-  for (const row of ownerSignups) {
-    await deleteIfPresent("RunSignup", String(row.id));
-  }
-  await orm.User.where({ id: ids.owner }).update({ isBooster: false });
-  const ownerAccess = await orm.BoosterAccess.where({ userId: ids.owner }).all();
-  for (const row of ownerAccess) {
-    await deleteIfPresent("BoosterAccess", String(row.id));
-  }
-  for (const id of createdCharacterIds) {
-    await deleteIfPresent("Character", id);
-  }
-  const leftover = await orm.Character.where({ userId: ids.owner }).all();
-  for (const row of leftover) {
-    await deleteIfPresent("Character", String(row.id));
-  }
-  const leftoverOther = await orm.Character.where({ userId: ids.other }).all();
-  for (const row of leftoverOther) {
-    await deleteIfPresent("Character", String(row.id));
-  }
-  await deleteIfPresent("User", ids.owner);
-  await deleteIfPresent("User", ids.other);
+async function lockoutRaidIds() {
+  return (await raidRepository.loadCatalog()).lockoutRaids.map((raid) => raid.id).sort();
 }
 
 beforeAll(async () => {
-  await cleanupGeneratedRows();
-  await createTestUser(ids.owner, "Character Owner");
-  await createTestUser(ids.other, "Character Other");
+  assertIsolatedTestDatabase();
+  await raidRepository.ensureReferenceRaids();
+  owner = await createUser("Character Owner");
+  other = await createUser("Character Other");
+  const lead = await createUser("Character Lead", "RAID_LEAD");
+  const run = await runService.createRun(lead, anyContentRunInput());
+  created.runIds.push(run.id);
+  await runService.openRun(lead, run.id);
+  heroicOpenRunId = run.id;
 });
 
 afterAll(async () => {
-  await cleanupGeneratedRows();
+  await deleteCreatedRows(created);
 });
 
 describe("characterService empty user", () => {
   it("returns zero counts for a user with no characters", async () => {
-    const page = await characterService.getCharacterPage(asUser("bbbbbbbb-bbbb-4bbb-8bbb-cmempty00001", "Empty"));
+    const page = await characterService.getCharacterPage(testActor(crypto.randomUUID()));
     expect(page.totalCharacters).toBe(0);
     expect(page.activeCharacters).toBe(0);
     expect(page.characters).toEqual([]);
   });
 
-  it("exposes plural currentLockoutRaids only — no singular currentLockoutRaid", async () => {
-    const page = await characterService.getCharacterPage(asUser(ids.owner, "Character Owner"));
-    expect(page.currentLockoutRaids.map((raid) => raid.name).sort()).toEqual(
-      ["Tide", "The Unbinding of Kith'ix", "The Venomous Abyss"].sort(),
-    );
+  it("exposes every catalog lockout raid as plural currentLockoutRaids — no singular currentLockoutRaid", async () => {
+    const page = await characterService.getCharacterPage(owner);
+    expect(page.currentLockoutRaids.map((raid) => raid.id).sort()).toEqual(await lockoutRaidIds());
     expect(page).not.toHaveProperty("currentLockoutRaid");
   });
 
   it("exposes warcraftLogsId on the character page when linked, otherwise null", async () => {
-    const owner = asUser(ids.owner, "Character Owner");
     const linked = await characterService.createCharacter(owner, {
       name: "Wclpage",
       realm: "Twisting Nether",
@@ -162,7 +88,6 @@ describe("characterService empty user", () => {
       specialization: "Affliction",
       itemLevel: 601,
     });
-    createdCharacterIds.push(linked.id, unlinked.id);
     await orm.Character.where({ id: linked.id }).update({ warcraftLogsId: "42424242" });
 
     const page = await characterService.getCharacterPage(owner);
@@ -176,9 +101,6 @@ describe("characterService empty user", () => {
 });
 
 describe("characterService create", () => {
-  const owner = asUser(ids.owner, "Character Owner");
-  const other = asUser(ids.other, "Character Other");
-
   it("creates EU and US characters for the session user, not a client-supplied owner", async () => {
     const eu = await characterService.createCharacter(owner, {
       name: "Cmtestone",
@@ -188,8 +110,7 @@ describe("characterService create", () => {
       specialization: "Restoration",
       itemLevel: 640,
     });
-    createdCharacterIds.push(eu.id);
-    expect(eu.userId).toBe(ids.owner);
+    expect(eu.userId).toBe(owner.id);
     expect(eu.isActive).toBe(true);
     expect(eu.primaryRole).toBe("HEALER");
     expect(eu.region).toBe("EU");
@@ -202,9 +123,8 @@ describe("characterService create", () => {
       specialization: "Beast Mastery",
       itemLevel: 620,
     });
-    createdCharacterIds.push(us.id);
     expect(us.region).toBe("US");
-    expect(us.userId).toBe(ids.owner);
+    expect(us.userId).toBe(owner.id);
   });
 
   it("accepts an accented character name", async () => {
@@ -216,12 +136,11 @@ describe("characterService create", () => {
       specialization: "Holy",
       itemLevel: 600,
     });
-    createdCharacterIds.push(created.id);
     expect(created.name).toBe("Éowyn");
   });
 
   it("rejects a duplicate identity including case-only differences", async () => {
-    const first = await characterService.createCharacter(owner, {
+    await characterService.createCharacter(owner, {
       name: "Testblast",
       realm: "Tarren Mill",
       region: "EU",
@@ -229,9 +148,8 @@ describe("characterService create", () => {
       specialization: "Arms",
       itemLevel: 500,
     });
-    createdCharacterIds.push(first.id);
 
-    await expectDomainCode(
+    await expectDomainError(
       characterService.createCharacter(owner, {
         name: "testblast",
         realm: "tarren mill",
@@ -253,7 +171,6 @@ describe("characterService create", () => {
       specialization: "Frost",
       itemLevel: 580,
     });
-    createdCharacterIds.push(original.id);
 
     const otherRealm = await characterService.createCharacter(owner, {
       name: "Twinname",
@@ -263,7 +180,6 @@ describe("characterService create", () => {
       specialization: "Fire",
       itemLevel: 581,
     });
-    createdCharacterIds.push(otherRealm.id);
 
     const otherRegion = await characterService.createCharacter(owner, {
       name: "Twinname",
@@ -273,7 +189,6 @@ describe("characterService create", () => {
       specialization: "Arcane",
       itemLevel: 582,
     });
-    createdCharacterIds.push(otherRegion.id);
 
     const otherUser = await characterService.createCharacter(other, {
       name: "Twinname",
@@ -283,12 +198,16 @@ describe("characterService create", () => {
       specialization: "Frost",
       itemLevel: 583,
     });
-    createdCharacterIds.push(otherUser.id);
-    expect(otherUser.userId).toBe(ids.other);
+    expect([original, otherRealm, otherRegion, otherUser].map((row) => [row.userId, row.realm, row.region])).toEqual([
+      [owner.id, "Draenor", "EU"],
+      [owner.id, "Kazzak", "EU"],
+      [owner.id, "Draenor", "US"],
+      [other.id, "Draenor", "EU"],
+    ]);
   });
 
   it("rejects invalid class/spec combinations", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       characterService.createCharacter(owner, {
         name: "Badspecial",
         realm: "Draenor",
@@ -303,10 +222,6 @@ describe("characterService create", () => {
 });
 
 describe("characterService ownership and update", () => {
-  const owner = asUser(ids.owner, "Character Owner");
-  const other = asUser(ids.other, "Character Other");
-  const admin = asUser(ids.admin, "Aelira Nightwatch", "ADMIN");
-
   it("lets the owner update fields, keeps class immutable, and rejects rename collisions", async () => {
     const first = await characterService.createCharacter(owner, {
       name: "Editone",
@@ -316,7 +231,7 @@ describe("characterService ownership and update", () => {
       specialization: "Holy",
       itemLevel: 650,
     });
-    const second = await characterService.createCharacter(owner, {
+    await characterService.createCharacter(owner, {
       name: "Edittwo",
       realm: "Ravencrest",
       region: "EU",
@@ -324,12 +239,9 @@ describe("characterService ownership and update", () => {
       specialization: "Protection",
       itemLevel: 651,
     });
-    createdCharacterIds.push(first.id, second.id);
 
     const details = await characterService.getCharacterDetails(owner, first.id);
-    expect(details.currentLockoutRaids.map((raid) => raid.name).sort()).toEqual(
-      ["Tide", "The Unbinding of Kith'ix", "The Venomous Abyss"].sort(),
-    );
+    expect(details.currentLockoutRaids.map((raid) => raid.id).sort()).toEqual(await lockoutRaidIds());
     expect(details).not.toHaveProperty("currentLockoutRaid");
     expect(details.warcraftLogsId).toBeNull();
     expect(details.warcraftLogsLinked).toBe(false);
@@ -351,7 +263,7 @@ describe("characterService ownership and update", () => {
     // Item level is Blizzard-authoritative and untouched by edits.
     expect(updated.itemLevel).toBe(650);
 
-    await expectDomainCode(
+    await expectDomainError(
       characterService.updateCharacter(owner, first.id, {
         name: "Edittwo",
         realm: "Ravencrest",
@@ -361,8 +273,8 @@ describe("characterService ownership and update", () => {
       "CHARACTER_ALREADY_EXISTS",
     );
 
-    await expectDomainCode(
-      characterService.updateCharacter(owner, "cccccccc-cccc-4ccc-8ccc-missing00001", {
+    await expectDomainError(
+      characterService.updateCharacter(owner, crypto.randomUUID(), {
         name: "Missing",
         realm: "Draenor",
         region: "EU",
@@ -381,11 +293,10 @@ describe("characterService ownership and update", () => {
       specialization: "Assassination",
       itemLevel: 610,
     });
-    createdCharacterIds.push(character.id);
 
-    await expectDomainCode(characterService.getCharacterDetails(other, character.id), "CHARACTER_NOT_OWNED");
-    await expectDomainCode(characterService.getCharacterDetails(admin, character.id), "CHARACTER_NOT_OWNED");
-    await expectDomainCode(
+    await expectDomainError(characterService.getCharacterDetails(other, character.id), "CHARACTER_NOT_OWNED");
+    await expectDomainError(characterService.getCharacterDetails(admin, character.id), "CHARACTER_NOT_OWNED");
+    await expectDomainError(
       characterService.updateCharacter(other, character.id, {
         name: "Ownedonly",
         realm: "Kazzak",
@@ -394,14 +305,12 @@ describe("characterService ownership and update", () => {
       }),
       "CHARACTER_NOT_OWNED",
     );
-    await expectDomainCode(characterService.deactivateCharacter(other, character.id), "CHARACTER_NOT_OWNED");
-    await expectDomainCode(characterService.reactivateCharacter(admin, character.id), "CHARACTER_NOT_OWNED");
+    await expectDomainError(characterService.deactivateCharacter(other, character.id), "CHARACTER_NOT_OWNED");
+    await expectDomainError(characterService.reactivateCharacter(admin, character.id), "CHARACTER_NOT_OWNED");
   });
 });
 
 describe("characterService lifecycle and signup eligibility", () => {
-  const owner = asUser(ids.owner, "Character Owner");
-
   it("deactivates without rewriting history or booster access, and blocks new signups until reactivation", async () => {
     const character = await characterService.createCharacter(owner, {
       name: "Lifecycle",
@@ -411,24 +320,22 @@ describe("characterService lifecycle and signup eligibility", () => {
       specialization: "Restoration",
       itemLevel: 630,
     });
-    createdCharacterIds.push(character.id);
 
-    const beforeAccess = await signupService.getSignupOptions(owner, ids.heroicOpen);
+    const beforeAccess = await signupService.getSignupOptions(owner, heroicOpenRunId);
     expect(beforeAccess.booster.eligible.some((item) => item.characterId === character.id)).toBe(false);
-    await expectDomainCode(
-      offerCharacter(owner, ids.heroicOpen, character.id, "HEALER"),
+    await expectDomainError(
+      offerCharacter(owner, heroicOpenRunId, character.id, "HEALER"),
       "BOOSTER_ACCESS_REQUIRED",
     );
 
-    await orm.User.where({ id: ids.owner }).update({ isBooster: true });
+    await orm.User.where({ id: owner.id }).update({ isBooster: true });
 
-    const withAccess = await signupService.getSignupOptions(owner, ids.heroicOpen);
+    const withAccess = await signupService.getSignupOptions(owner, heroicOpenRunId);
     expect(
       withAccess.booster.eligible.some((item) => item.characterId === character.id && item.defaultRole === "HEALER"),
     ).toBe(true);
 
-    const signupId = await offerCharacter(owner, ids.heroicOpen, character.id, "HEALER");
-    createdSignupIds.push(signupId);
+    const signupId = await offerCharacter(owner, heroicOpenRunId, character.id, "HEALER");
 
     await characterService.deactivateCharacter(owner, character.id);
     const stored = await characterRepository.findById(character.id);
@@ -438,13 +345,13 @@ describe("characterService lifecycle and signup eligibility", () => {
     expect(historical?.status).toBe("PENDING");
 
     // Deactivating a Character never touches the owner's account-level Booster role.
-    const owned = await orm.User.where({ id: ids.owner }).select("isBooster").first();
+    const owned = await orm.User.where({ id: owner.id }).select("isBooster").first();
     expect(owned?.isBooster).toBe(true);
 
-    const inactiveOptions = await signupService.getSignupOptions(owner, ids.heroicOpen);
+    const inactiveOptions = await signupService.getSignupOptions(owner, heroicOpenRunId);
     expect(inactiveOptions.booster.eligible.some((item) => item.characterId === character.id)).toBe(false);
-    await expectDomainCode(
-      offerCharacter(owner, ids.heroicOpen, character.id, "HEALER"),
+    await expectDomainError(
+      offerCharacter(owner, heroicOpenRunId, character.id, "HEALER"),
       "CHARACTER_INACTIVE",
     );
 
@@ -452,7 +359,7 @@ describe("characterService lifecycle and signup eligibility", () => {
     const reactivated = await characterRepository.findById(character.id);
     expect(reactivated?.isActive).toBe(true);
 
-    const activeOptions = await signupService.getSignupOptions(owner, ids.heroicOpen);
+    const activeOptions = await signupService.getSignupOptions(owner, heroicOpenRunId);
     expect(
       activeOptions.booster.eligible.some((item) => item.characterId === character.id && item.defaultRole === "HEALER"),
     ).toBe(true);

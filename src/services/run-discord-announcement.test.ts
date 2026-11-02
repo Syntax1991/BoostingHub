@@ -1,10 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { normalizeCharacterIdentity } from "@/lib/character-identity";
-import { discordTimestamp } from "@/lib/discord-timestamp";
 import { orm } from "@/lib/prisma";
-import { venomousCreateInput, venomousUpdateInput } from "@/lib/test-run-input";
-import type { CharacterRole } from "@/models/enums";
+import { anyContentRunInput, venomousUpdateInput } from "@/lib/test-run-input";
 import { raidRepository } from "@/repositories/raid.repository";
 import {
   runCancelledChannelSourceKey,
@@ -15,239 +12,127 @@ import { runRepository } from "@/repositories/run.repository";
 import { userNotificationRepository } from "@/repositories/user-notification.repository";
 import { discordSyncService } from "@/services/discord-sync.service";
 import { runService } from "@/services/run.service";
+import { testActor } from "@/test/actors";
 import {
-  buildRunCancelledChannelEmbed,
-  buildRunRescheduledChannelEmbed,
-} from "@/discord-bot/embeds/run-lifecycle-announcement";
+  assertIsolatedTestDatabase,
+  createTestCharacter,
+  createTestUser,
+  deleteCreatedRows,
+  syntheticDiscordId,
+} from "@/test/db-fixtures";
 import { offerCharacter } from "@/test/signup-offers";
+import { DAY_MS, HOUR_MS } from "@/test/time";
 
-const ids = {
-  lead: "a4444444-4444-4444-8444-444444444401",
-  admin: "a4444444-4444-4444-8444-444444444402",
-  player: "a4444444-4444-4444-8444-444444444403",
-};
-
-const createdRunIds: string[] = [];
-const createdCharacterIds: string[] = [];
+const created = { runIds: [] as string[], characterIds: [] as string[], userIds: [] as string[] };
+let lead: AuthenticatedUser;
+let player: AuthenticatedUser;
+let charPlayer = "";
 
 let scheduleSlot = 0;
 function futureIso(days = 14) {
   const slot = scheduleSlot++;
-  return new Date(Date.now() + days * 24 * 60 * 60 * 1000 + slot * 3 * 60 * 60 * 1000).toISOString();
+  return new Date(Date.now() + days * DAY_MS + slot * 3 * HOUR_MS).toISOString();
 }
-
-function asUser(
-  id: string,
-  name: string,
-  accountRole: AuthenticatedUser["accountRole"] = "USER",
-  discordUserId: string | null = null,
-): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@announce.boostting.local`,
-    image: null,
-    discordUserId,
-    discordUsername: discordUserId ? `u${discordUserId}` : null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
-
-async function createTestUser(
-  id: string,
-  name: string,
-  accountRole: AuthenticatedUser["accountRole"],
-  opts: { discordUserId?: string | null; discordDmEnabled?: boolean; dmRunCancelledEnabled?: boolean; dmRunRescheduledEnabled?: boolean } = {},
-) {
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@announce.boostting.local`,
-    emailVerified: true,
-    discordUserId: opts.discordUserId ?? null,
-    discordUsername: opts.discordUserId ? `u${opts.discordUserId}` : null,
-    accountRole,
-    accountStatus: "ACTIVE",
-    discordDmEnabled: opts.discordDmEnabled ?? true,
-    dmRosterSelectedEnabled: true,
-    dmRaidInviteEnabled: true,
-    dmRunCancelledEnabled: opts.dmRunCancelledEnabled ?? true,
-    dmRunRescheduledEnabled: opts.dmRunRescheduledEnabled ?? true,
-    dmRosterRemovedEnabled: true,
-    timeZone: "Europe/Berlin",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
-}
-
-async function createCharacter(input: {
-  userId: string;
-  name: string;
-  wowClass: "SHAMAN" | "PALADIN" | "HUNTER" | "PRIEST" | "MONK";
-  specialization: string;
-  primaryRole: CharacterRole;
-}) {
-  const id = crypto.randomUUID();
-  createdCharacterIds.push(id);
-  await orm.Character.create({
-    id,
-    userId: input.userId,
-    name: input.name,
-    realm: "Announce Realm",
-    normalizedName: normalizeCharacterIdentity(input.name),
-    normalizedRealm: normalizeCharacterIdentity("Announce Realm"),
-    region: "EU",
-    wowClass: input.wowClass,
-    specialization: input.specialization,
-    primaryRole: input.primaryRole,
-    itemLevel: 700,
-    isActive: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
-  return id;
-}
-
-async function approveAccess(userId: string) {
-  await orm.User.where({ id: userId }).update({ isBooster: true });
-}
-
-async function cleanupAll() {
-  for (const runId of createdRunIds.splice(0)) {
-    const announcements = await orm.RunDiscordAnnouncement.where({ runId }).select("id").all();
-    for (const row of announcements) {
-      await orm.RunDiscordAnnouncement.where({ id: (row as { id: string }).id }).delete();
-    }
-    const notes = await orm.UserNotification.where({ runId }).select("id").all();
-    for (const row of notes) {
-      await orm.UserNotification.where({ id: (row as { id: string }).id }).delete();
-    }
-    try {
-      await orm.Run.where({ id: runId }).delete();
-    } catch {
-      // gone
-    }
-  }
-  for (const characterId of createdCharacterIds.splice(0)) {
-    try {
-      await orm.Character.where({ id: characterId }).delete();
-    } catch {
-      // gone
-    }
-  }
-  for (const userId of Object.values(ids)) {
-    const notes = await orm.UserNotification.where({ userId }).select("id").all();
-    for (const row of notes) {
-      await orm.UserNotification.where({ id: (row as { id: string }).id }).delete();
-    }
-    try {
-      await orm.User.where({ id: userId }).delete();
-    } catch {
-      // gone
-    }
-  }
-}
-
-const lead = asUser(ids.lead, "Announce Lead", "RAID_LEAD");
-const player = asUser(ids.player, "Announce Player", "USER", "930000000000000001");
-
-let charPlayer = "";
-let charLead = "";
 
 async function openSignedRun(scheduledStartAt: string) {
-  const created = await runService.createRun(
+  const run = await runService.createRun(
     lead,
-    venomousCreateInput({
-      scheduledStartAt,
-      desiredTankCount: 1,
-      desiredHealerCount: 1,
-      desiredDpsCount: 1,
-    }),
+    anyContentRunInput({ scheduledStartAt, desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1 }),
   );
-  createdRunIds.push(created.id);
-  await runService.openRun(lead, created.id);
-  await offerCharacter(player, created.id, charPlayer, "HEALER");
-  return created.id;
+  created.runIds.push(run.id);
+  await runService.openRun(lead, run.id);
+  await offerCharacter(player, run.id, charPlayer, "HEALER");
+  return run.id;
 }
 
-async function updateSchedule(runId: string, scheduledStartAt: string, extra: Record<string, unknown> = {}) {
+async function updateSchedule(runId: string, scheduledStartAt: string) {
   const run = await runRepository.findById(runId);
   if (!run) throw new Error("run missing");
-  await runService.updateRun(lead, venomousUpdateInput(runId, run, { scheduledStartAt, ...extra }));
+  await runService.updateRun(lead, venomousUpdateInput(runId, run, { scheduledStartAt }));
+}
+
+/** This Run's channel announcements, oldest first (the order the bot posts them). */
+async function announcementsFor(runId: string) {
+  const rows = (await orm.RunDiscordAnnouncement.where({ runId }).select("id").all()) as Array<{ id: string }>;
+  const records = await Promise.all(rows.map((row) => runDiscordAnnouncementRepository.findById(row.id)));
+  return records
+    .filter((record) => record !== null)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+/** Sets one of the player's DM preferences for the duration of `body`. */
+async function withPlayerPreference(
+  preference: { discordDmEnabled: false } | { dmRunRescheduledEnabled: false },
+  body: () => Promise<void>,
+) {
+  await orm.User.where({ id: player.id }).update({ ...preference, updatedAt: new Date().toISOString() });
+  try {
+    await body();
+  } finally {
+    await orm.User.where({ id: player.id }).update({
+      discordDmEnabled: true,
+      dmRunRescheduledEnabled: true,
+      updatedAt: new Date().toISOString(),
+    });
+  }
 }
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   await raidRepository.ensureReferenceRaids();
-  await cleanupAll();
-  await createTestUser(ids.lead, "Announce Lead", "RAID_LEAD");
-  await createTestUser(ids.admin, "Announce Admin", "ADMIN");
-  await createTestUser(ids.player, "Announce Player", "USER", { discordUserId: "930000000000000001" });
-  await approveAccess(ids.lead);
-  await approveAccess(ids.player);
-  charPlayer = await createCharacter({
-    userId: ids.player,
+  const leadId = await createTestUser({ name: "Announce Lead", accountRole: "RAID_LEAD" });
+  const playerId = await createTestUser({ name: "Announce Player", discordUserId: syntheticDiscordId(), isBooster: true });
+  created.userIds.push(leadId, playerId);
+  lead = testActor(leadId, "RAID_LEAD");
+  player = testActor(playerId, "USER");
+  charPlayer = await createTestCharacter({
+    userId: playerId,
     name: "AnnA",
+    realm: "Announce Realm",
     wowClass: "SHAMAN",
     specialization: "Restoration",
     primaryRole: "HEALER",
   });
-  charLead = await createCharacter({
-    userId: ids.lead,
-    name: "AnnLead",
-    wowClass: "PALADIN",
-    specialization: "Protection",
-    primaryRole: "TANK",
-  });
-  void charLead;
+  created.characterIds.push(charPlayer);
 });
 
 afterAll(async () => {
-  await cleanupAll();
+  await deleteCreatedRows(created);
 });
 
 describe("RunDiscordAnnouncement enqueue", () => {
   it("schedule change creates one PENDING RUN_RESCHEDULED announcement", async () => {
     const runId = await openSignedRun(futureIso());
-    const before = await runRepository.findById(runId);
-    const oldStart = before!.scheduledStartAt;
+    const oldStart = (await runRepository.findById(runId))!.scheduledStartAt;
     const nextStart = futureIso(15);
 
     await updateSchedule(runId, nextStart);
 
-    const pending = await runDiscordAnnouncementRepository.listPending(100);
-    const forRun = pending.filter((row) => row.runId === runId);
-    expect(forRun).toHaveLength(1);
-    expect(forRun[0].type).toBe("RUN_RESCHEDULED");
-    expect(forRun[0].status).toBe("PENDING");
-    expect(forRun[0].sourceKey).toBe(runRescheduledChannelSourceKey(runId, 1));
-    expect(forRun[0].previousScheduledStartAt).toBe(oldStart);
-    expect(Date.parse(forRun[0].scheduledStartAt)).toBe(Date.parse(nextStart));
+    const rows = await announcementsFor(runId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      type: "RUN_RESCHEDULED",
+      status: "PENDING",
+      sourceKey: runRescheduledChannelSourceKey(runId, 1),
+      previousScheduledStartAt: oldStart,
+    });
+    expect(Date.parse(rows[0]!.scheduledStartAt)).toBe(Date.parse(nextStart));
   });
 
   it("unrelated Run edit does not create an announcement", async () => {
     const runId = await openSignedRun(futureIso());
-    const beforeCount = (await runDiscordAnnouncementRepository.listPending(200)).filter(
-      (row) => row.runId === runId,
-    ).length;
 
     const run = await runRepository.findById(runId);
-    await runService.updateRun(
-      lead,
-      venomousUpdateInput(runId, run!, { notes: "notes only", desiredHealerCount: 2 }),
-    );
+    await runService.updateRun(lead, venomousUpdateInput(runId, run!, { notes: "notes only", desiredHealerCount: 2 }));
 
-    const after = (await runDiscordAnnouncementRepository.listPending(200)).filter((row) => row.runId === runId);
-    expect(after).toHaveLength(beforeCount);
+    expect(await announcementsFor(runId)).toEqual([]);
   });
 
   it("retry same revision does not duplicate channel announcement", async () => {
     const runId = await openSignedRun(futureIso());
     const nextStart = futureIso(16);
     await updateSchedule(runId, nextStart);
-    const first = await runDiscordAnnouncementRepository.listPending(200);
-    const keys = first.filter((row) => row.runId === runId).map((row) => row.sourceKey);
-    expect(keys).toEqual([runRescheduledChannelSourceKey(runId, 1)]);
+    expect((await announcementsFor(runId)).map((row) => row.sourceKey)).toEqual([runRescheduledChannelSourceKey(runId, 1)]);
 
     const dup = await runDiscordAnnouncementRepository.createIgnoreDuplicate({
       runId,
@@ -260,43 +145,38 @@ describe("RunDiscordAnnouncement enqueue", () => {
       lootType: "VIP",
     });
     expect(dup).toBeNull();
-    expect(
-      (await runDiscordAnnouncementRepository.listPending(200)).filter((row) => row.runId === runId),
-    ).toHaveLength(1);
+    expect(await announcementsFor(runId)).toHaveLength(1);
   });
 
   it("second real schedule change creates a second distinct announcement", async () => {
     const runId = await openSignedRun(futureIso());
-    const start1 = futureIso(17);
-    const start2 = futureIso(18);
-    await updateSchedule(runId, start1);
-    await updateSchedule(runId, start2);
-    const rows = (await runDiscordAnnouncementRepository.listPending(200)).filter((row) => row.runId === runId);
-    expect(rows).toHaveLength(2);
-    expect(rows.map((row) => row.sourceKey).sort()).toEqual(
-      [runRescheduledChannelSourceKey(runId, 1), runRescheduledChannelSourceKey(runId, 2)].sort(),
-    );
+    await updateSchedule(runId, futureIso(17));
+    await updateSchedule(runId, futureIso(18));
+    expect((await announcementsFor(runId)).map((row) => row.sourceKey)).toEqual([
+      runRescheduledChannelSourceKey(runId, 1),
+      runRescheduledChannelSourceKey(runId, 2),
+    ]);
   });
 
   it("cancel creates one PENDING RUN_CANCELLED announcement; retry does not duplicate", async () => {
     const runId = await openSignedRun(futureIso());
     await runService.cancelRun(lead, runId);
-    const rows = (await runDiscordAnnouncementRepository.listPending(200)).filter((row) => row.runId === runId);
+    const rows = await announcementsFor(runId);
     expect(rows).toHaveLength(1);
-    expect(rows[0].type).toBe("RUN_CANCELLED");
-    expect(rows[0].sourceKey).toBe(runCancelledChannelSourceKey(runId, 1));
+    expect(rows[0]).toMatchObject({ type: "RUN_CANCELLED", status: "PENDING", sourceKey: runCancelledChannelSourceKey(runId, 1) });
 
     const again = await runDiscordAnnouncementRepository.createIgnoreDuplicate({
       runId,
       type: "RUN_CANCELLED",
       sourceKey: runCancelledChannelSourceKey(runId, 1),
       previousScheduledStartAt: null,
-      scheduledStartAt: rows[0].scheduledStartAt,
+      scheduledStartAt: rows[0]!.scheduledStartAt,
       productLabel: "x",
       difficulty: "HEROIC",
       lootType: "VIP",
     });
     expect(again).toBeNull();
+    expect(await announcementsFor(runId)).toHaveLength(1);
   });
 });
 
@@ -308,13 +188,10 @@ describe("RunDiscordAnnouncement sync work + retirement barrier", () => {
 
     const work = await discordSyncService.listSyncWork();
     const announcement = work.runAnnouncements.find((row) => row.runId === runId);
-    expect(announcement).toBeTruthy();
-    expect(announcement!.type).toBe("RUN_CANCELLED");
-    expect(announcement!.runChannelId).toBe("announce-chan-1");
+    expect(announcement).toMatchObject({ type: "RUN_CANCELLED", runChannelId: "announce-chan-1" });
 
     const channel = work.channels.find((row) => row.runId === runId);
-    expect(channel?.pendingLifecycleAnnouncements).toBe(true);
-    expect(channel?.retireChannel).toBe(false);
+    expect(channel).toMatchObject({ pendingLifecycleAnnouncements: true, retireChannel: false });
   });
 
   it("no Run channel → announcement still PENDING in work with null runChannelId; no channel created", async () => {
@@ -322,7 +199,7 @@ describe("RunDiscordAnnouncement sync work + retirement barrier", () => {
     await runService.cancelRun(lead, runId);
     const work = await discordSyncService.listSyncWork();
     const announcement = work.runAnnouncements.find((row) => row.runId === runId);
-    expect(announcement?.runChannelId ?? null).toBeNull();
+    expect(announcement).toMatchObject({ type: "RUN_CANCELLED", runChannelId: null });
     expect(work.channels.some((row) => row.runId === runId)).toBe(false);
   });
 
@@ -330,17 +207,13 @@ describe("RunDiscordAnnouncement sync work + retirement barrier", () => {
     const runId = await openSignedRun(futureIso());
     await discordSyncService.recordRunChannel({ runId, channelId: "announce-chan-2" });
     await runService.cancelRun(lead, runId);
-    const pending = (await runDiscordAnnouncementRepository.listPending(50)).find((row) => row.runId === runId);
-    expect(pending).toBeTruthy();
-    await discordSyncService.recordRunAnnouncementDelivery({
-      announcementId: pending!.id,
-      result: "SENT",
-    });
+    const [pending] = await announcementsFor(runId);
+    await discordSyncService.recordRunAnnouncementDelivery({ announcementId: pending!.id, result: "SENT" });
+
     let work = await discordSyncService.listSyncWork();
     expect(work.runAnnouncements.some((row) => row.runId === runId)).toBe(false);
     let channel = work.channels.find((row) => row.runId === runId);
-    expect(channel?.pendingLifecycleAnnouncements).toBe(false);
-    expect(channel?.retireChannel).toBe(false);
+    expect(channel).toMatchObject({ pendingLifecycleAnnouncements: false, retireChannel: false });
     expect(channel?.desiredChannelName.startsWith("closed-")).toBe(true);
 
     await runService.archiveRun(lead, runId);
@@ -352,106 +225,45 @@ describe("RunDiscordAnnouncement sync work + retirement barrier", () => {
   it("ordering: reschedule then cancel appear createdAt ASC in runAnnouncements", async () => {
     const runId = await openSignedRun(futureIso());
     await discordSyncService.recordRunChannel({ runId, channelId: "announce-chan-3" });
-    const start1 = futureIso(20);
-    const start2 = futureIso(21);
-    await updateSchedule(runId, start1);
-    await updateSchedule(runId, start2);
+    await updateSchedule(runId, futureIso(20));
+    await updateSchedule(runId, futureIso(21));
     await runService.cancelRun(lead, runId);
 
-    const work = await discordSyncService.listSyncWork();
-    const forRun = work.runAnnouncements.filter((row) => row.runId === runId);
-    expect(forRun.map((row) => row.type)).toEqual(["RUN_RESCHEDULED", "RUN_RESCHEDULED", "RUN_CANCELLED"]);
-    const pending = (await runDiscordAnnouncementRepository.listPending(200)).filter((row) => row.runId === runId);
-    expect(pending.map((row) => row.sourceKey)).toEqual([
+    const stored = await announcementsFor(runId);
+    expect(stored.map((row) => row.sourceKey)).toEqual([
       runRescheduledChannelSourceKey(runId, 1),
       runRescheduledChannelSourceKey(runId, 2),
       runCancelledChannelSourceKey(runId, 1),
     ]);
+    const work = await discordSyncService.listSyncWork();
+    expect(work.runAnnouncements.filter((row) => row.runId === runId).map((row) => row.announcementId)).toEqual(
+      stored.map((row) => row.id),
+    );
   });
 });
 
 describe("User delivery regression vs channel announcements", () => {
   it("master DM OFF: web notification still created; DM SKIPPED; channel announcement still PENDING", async () => {
-    await orm.User.where({ id: ids.player }).update({
-      discordDmEnabled: false,
-      updatedAt: new Date().toISOString(),
-    });
-    const runId = await openSignedRun(futureIso());
-    await runService.cancelRun(lead, runId);
+    await withPlayerPreference({ discordDmEnabled: false }, async () => {
+      const runId = await openSignedRun(futureIso());
+      await runService.cancelRun(lead, runId);
 
-    const notes = await userNotificationRepository.listForUser(ids.player, 20);
-    const cancelNote = notes.find((row) => row.runId === runId && row.type === "RUN_CANCELLED");
-    expect(cancelNote).toBeTruthy();
-    expect(cancelNote!.discordDeliveryStatus).toBe("SKIPPED");
-
-    const announcements = (await runDiscordAnnouncementRepository.listPending(50)).filter(
-      (row) => row.runId === runId,
-    );
-    expect(announcements).toHaveLength(1);
-    expect(announcements[0].status).toBe("PENDING");
-
-    await orm.User.where({ id: ids.player }).update({
-      discordDmEnabled: true,
-      updatedAt: new Date().toISOString(),
+      const notes = await userNotificationRepository.listForUser(player.id, 20);
+      const cancelNote = notes.find((row) => row.runId === runId && row.type === "RUN_CANCELLED");
+      expect(cancelNote?.discordDeliveryStatus).toBe("SKIPPED");
+      expect((await announcementsFor(runId)).map((row) => [row.type, row.status])).toEqual([["RUN_CANCELLED", "PENDING"]]);
     });
   });
 
   it("channel announcement ignores User DM preferences", async () => {
-    await orm.User.where({ id: ids.player }).update({
-      dmRunRescheduledEnabled: false,
-      updatedAt: new Date().toISOString(),
+    await withPlayerPreference({ dmRunRescheduledEnabled: false }, async () => {
+      const runId = await openSignedRun(futureIso());
+      await updateSchedule(runId, futureIso(22));
+
+      const notes = await userNotificationRepository.listForUser(player.id, 20);
+      const rescheduleNote = notes.find((row) => row.runId === runId && row.type === "RUN_RESCHEDULED");
+      expect(rescheduleNote?.discordDeliveryStatus).toBe("SKIPPED");
+      expect((await announcementsFor(runId)).map((row) => [row.type, row.status])).toEqual([["RUN_RESCHEDULED", "PENDING"]]);
     });
-    const runId = await openSignedRun(futureIso());
-    await updateSchedule(runId, futureIso(22));
-
-    const notes = await userNotificationRepository.listForUser(ids.player, 20);
-    const rescheduleNote = notes.find((row) => row.runId === runId && row.type === "RUN_RESCHEDULED");
-    expect(rescheduleNote?.discordDeliveryStatus).toBe("SKIPPED");
-
-    const announcements = (await runDiscordAnnouncementRepository.listPending(50)).filter(
-      (row) => row.runId === runId && row.type === "RUN_RESCHEDULED",
-    );
-    expect(announcements).toHaveLength(1);
-    expect(announcements[0].status).toBe("PENDING");
-
-    await orm.User.where({ id: ids.player }).update({
-      dmRunRescheduledEnabled: true,
-      updatedAt: new Date().toISOString(),
-    });
-  });
-});
-
-describe("channel embed copy", () => {
-  it("reschedule embed includes native Discord old/new timestamps", () => {
-    const oldIso = "2026-10-01T18:00:00.000Z";
-    const newIso = "2026-10-01T20:00:00.000Z";
-    const embed = buildRunRescheduledChannelEmbed({
-      runId: "run-123",
-      productLabel: "Season 2 Bundle",
-      previousScheduledStartAt: oldIso,
-      scheduledStartAt: newIso,
-      difficulty: "HEROIC",
-      lootType: "VIP",
-    });
-    const json = embed.toJSON();
-    expect(json.title).toContain("📅 Rescheduled");
-    expect(json.description).toContain(discordTimestamp(oldIso, "F"));
-    expect(json.description).toContain(discordTimestamp(newIso, "F"));
-    expect(json.description).not.toMatch(/@everyone|@here/);
-  });
-
-  it("cancel embed includes product and schedule timestamp", () => {
-    const when = "2026-10-02T19:00:00.000Z";
-    const embed = buildRunCancelledChannelEmbed({
-      runId: "run-123",
-      productLabel: "Season 2 Bundle",
-      scheduledStartAt: when,
-      difficulty: "HEROIC",
-      lootType: "VIP",
-    });
-    const json = embed.toJSON();
-    expect(json.title).toContain("Run Cancelled");
-    expect(json.description).toContain("Season 2 Bundle");
-    expect(json.description).toContain(discordTimestamp(when, "F"));
   });
 });

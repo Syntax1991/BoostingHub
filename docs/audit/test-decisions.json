@@ -406,7 +406,7 @@
     ],
     "src/discord-bot/embeds/run-lifecycle-announcement.test.ts": [
       "KEEP",
-      "Embeds link the Run, no URL without a base URL"
+      "Embeds link the Run, no URL without a base URL; gained the no @everyone/@here check from the service suite"
     ],
     "src/discord-bot/sync-emoji-cache.test.ts": [
       "KEEP",
@@ -1203,6 +1203,18 @@
     "src/services/signup-draft-selection-visibility.test.ts": [
       "REWRITE",
       "Frozen RAID_WEEK_TEST_CLOCK instead of fixed December 2026 starts, which Run creation would refuse from 1 Dec 2026; fresh users instead of fixed ids, swallowed creates and a leftover delete; offers through setCharacterOffers; exact ROSTERING status instead of OPEN-or-ROSTERING; spy restored in finally and the batched lookup asserted to contain the offers"
+    ],
+    "src/services/run-discord-announcement.test.ts": [
+      "REWRITE",
+      "Fresh users with a synthetic snowflake instead of fixed ids, a pre-clean and swallowed deletes; reads the Run's own announcements instead of a global listPending(limit) that other pending rows could push past the limit; preference changes restored in finally; the two pure embed tests merged into discord-bot/embeds/run-lifecycle-announcement.test.ts"
+    ],
+    "src/services/roster-builder.service.test.ts": [
+      "REWRITE",
+      "Fresh ids per test instead of invalid fixed ids with a pre-clean and swallowed deletes; verified cleanup after each test; proposals asserted as exact signup-role pairs instead of \"some row is MELEE_DPS\""
+    ],
+    "src/services/character.service.test.ts": [
+      "REWRITE",
+      "Own users, Run and Lead instead of fixed ids, the seeded admin and a seeded Run; lockout raids compared with the loaded catalog instead of three hardcoded names; valid random ids for the missing-Character and empty-user cases; all four same-name identities asserted, not one"
     ]
   },
   "tests": {
@@ -1879,6 +1891,14 @@
     "src/services/signup-eligibility.test.ts::signup creation rules > treats a non-withdrawn matching combination as an active duplicate": [
       "REMOVE",
       "isBlockingDuplicate was only used by the removed createBoosterSignup path and is deleted with it"
+    ],
+    "src/services/run-discord-announcement.test.ts::channel embed copy > reschedule embed includes native Discord old/new timestamps": [
+      "MERGE",
+      "Timestamps already asserted in the embed suite; its no-mass-ping check moved there"
+    ],
+    "src/services/run-discord-announcement.test.ts::channel embed copy > cancel embed includes product and schedule timestamp": [
+      "MERGE",
+      "Identical assertions already in the embed suite"
     ]
   }
 }

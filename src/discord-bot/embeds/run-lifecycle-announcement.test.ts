@@ -30,6 +30,8 @@ describe("run lifecycle channel embeds", () => {
     expect(json.url).toBe("https://example.test/runs/run-123");
     expect(json.description).toContain(discordTimestamp(oldIso, "F"));
     expect(json.description).toContain(discordTimestamp(newIso, "F"));
+    // A channel announcement never mass-pings.
+    expect(json.description).not.toMatch(/@everyone|@here/);
   });
 
   it("links cancel embed title to the canonical run page", () => {
