@@ -114,17 +114,21 @@ describe("BotApiClient", () => {
     expect(loggedText).not.toContain("secret-token");
   });
 
-  it("logs the status/body and throws a clear error when the response is not JSON (e.g. a framework error page)", async () => {
+  it("logs the status but not the body, and throws a clear error, when the response is not JSON (e.g. a framework error page)", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response("<html>Internal Server Error</html>", { status: 500, headers: { "content-type": "text/html" } }),
+      new Response("<html>Internal Server Error for player@example.test</html>", {
+        status: 500,
+        headers: { "content-type": "text/html" },
+      }),
     );
     const client = new BotApiClient({ apiBaseUrl: "https://api.test", botApiToken: "secret-token" });
 
     await expect(client.listSyncWork()).rejects.toThrow(/non-JSON response/);
     const loggedText = errorSpy.mock.calls.map((call) => call.join(" ")).join(" ");
     expect(loggedText).toContain("status=500");
-    expect(loggedText).toContain("Internal Server Error");
+    expect(loggedText).not.toContain("Internal Server Error");
+    expect(loggedText).not.toContain("player@example.test");
     expect(loggedText).not.toContain("secret-token");
   });
 
