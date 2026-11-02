@@ -151,7 +151,7 @@ export const RAIDLEAD_GUIDE_CARDS: readonly RaidleadGuideCard[] = [
       ``,
       `**Last step:** press **Archive Run** on the run's Discord signup message. This saves the chat and removes the channel. You can also use **Archive** in the **⋯** menu under **Manage** → **Runs**.`,
     ].join("\n"),
-    imageFile: "rl-07-attendance.png",
+    imageFile: "rl-09-finish-run.png",
   },
 ] as const;
 
