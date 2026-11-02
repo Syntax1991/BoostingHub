@@ -16,31 +16,25 @@ import { communityScheduleService } from "@/services/community-schedule.service"
 import { createSchedulePlanSchema } from "@/validators/community-schedule";
 import { SCHEDULE_FORM_OUTDATED_MESSAGE } from "@/lib/community-schedule-form";
 import { runService } from "@/services/run.service";
+import { testActor } from "@tests/fixtures/actors";
+import {
+  assertIsolatedTestDatabase,
+  createTestUser,
+  deleteCreatedRows,
+} from "@tests/fixtures/db-fixtures";
+import { expectDomainError } from "@tests/helpers/domain-error";
 
-/** Distinct prefix from the other schedule suites (`cs…`, `csm…`). */
-const ids = {
-  lead: "aaaaaaaa-aaaa-4aaa-8aaa-csa000000001",
-  otherLead: "aaaaaaaa-aaaa-4aaa-8aaa-csa000000002",
-  admin: "aaaaaaaa-aaaa-4aaa-8aaa-csa000000003",
+const owned = {
+  runIds: [] as string[],
+  userIds: [] as string[],
+  slotIds: [] as string[],
+  templateIds: [] as string[],
 };
-const testUserIds = new Set(Object.values(ids));
+const ownedUserIds = new Set<string>();
 
-function asUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"]): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@csa.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
-}
-
-const lead = asUser(ids.lead, "CSA Lead", "RAID_LEAD");
-const otherLead = asUser(ids.otherLead, "CSA Other Lead", "RAID_LEAD");
-const admin = asUser(ids.admin, "CSA Admin", "ADMIN");
+let lead: AuthenticatedUser;
+let otherLead: AuthenticatedUser;
+let admin: AuthenticatedUser;
 
 // Fri 15 Jan 2027 12:00Z — CURRENT raid ID Wed 13 Jan 06:00 CET, NEXT Wed 20 Jan.
 const OCC_NOW = new Date("2027-01-15T12:00:00.000Z");
@@ -51,57 +45,53 @@ const NEXT_FRIDAY_2000 = "2027-01-22T19:00:00.000Z";
 /** Mon 25 Jan 2027 12:00 CET — releases the raid ID starting Wed 27 Jan. */
 const RELEASE_27_JAN = new Date("2027-01-25T11:00:00.000Z");
 
-async function upsertUser(user: AuthenticatedUser) {
-  const now = new Date().toISOString();
-  const existing = await orm.User.where({ id: user.id }).first();
-  if (existing) {
-    await orm.User.where({ id: user.id }).update({ name: user.name, accountRole: user.accountRole, accountStatus: "ACTIVE", updatedAt: now });
-    return;
-  }
-  await orm.User.create({
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    emailVerified: true,
-    accountRole: user.accountRole,
-    accountStatus: "ACTIVE",
-    createdAt: now,
-    updatedAt: now,
-  });
+async function createUser(name: string, accountRole: AuthenticatedUser["accountRole"]) {
+  const id = await createTestUser({ name, accountRole });
+  owned.userIds.push(id);
+  ownedUserIds.add(id);
+  return testActor(id, accountRole, { name });
 }
 
-async function deleteRun(runId: string) {
-  await orm.CommunityScheduleRun.where({ runId }).delete().catch(() => {});
-  await orm.RunDomainEvent.where({ runId }).delete().catch(() => {});
-  await orm.RunRoster.where({ runId }).delete().catch(() => {});
-  await orm.RunRaidContent.where({ runId }).delete().catch(() => {});
-  await orm.RunDiscordAnnouncement.where({ runId }).delete().catch(() => {});
-  await orm.UserNotification.where({ runId }).delete().catch(() => {});
-  await orm.Run.where({ id: runId }).delete().catch(() => {});
-}
-
-async function cleanup() {
-  for (const row of (await orm.Run.all()) as Array<{ id: string; raidLeadId: string }>) {
-    if (testUserIds.has(row.raidLeadId)) await deleteRun(row.id);
-  }
-  for (const row of (await orm.CommunityScheduleSlot.all()) as Array<{ id: string; raidLeadId: string; createdById: string }>) {
-    if (testUserIds.has(row.raidLeadId) || testUserIds.has(row.createdById)) {
-      await orm.CommunityScheduleSlot.where({ id: row.id }).delete().catch(() => {});
+async function deleteOwnedScheduleRows() {
+  assertIsolatedTestDatabase();
+  // Slots before templates (FK community_schedule_slot_runTemplateId_fkey).
+  for (const userId of owned.userIds) {
+    const byCreator = (await orm.CommunityScheduleSlot.where({ createdById: userId }).select("id").all()) as Array<{
+      id: string;
+    }>;
+    const byLead = (await orm.CommunityScheduleSlot.where({ raidLeadId: userId }).select("id").all()) as Array<{
+      id: string;
+    }>;
+    for (const slot of [...byCreator, ...byLead]) {
+      await orm.CommunityScheduleRun.where({ scheduleSlotId: slot.id }).deleteAndCount();
+      await orm.CommunityScheduleSlot.where({ id: slot.id }).deleteAndCount();
     }
   }
-  for (const row of (await orm.RunTemplate.all()) as Array<{ id: string; createdById: string }>) {
-    if (testUserIds.has(row.createdById)) await orm.RunTemplate.where({ id: row.id }).delete().catch(() => {});
+  for (const id of owned.slotIds.splice(0)) {
+    await orm.CommunityScheduleRun.where({ scheduleSlotId: id }).deleteAndCount();
+    await orm.CommunityScheduleSlot.where({ id }).deleteAndCount();
   }
-  await orm.ActivityEvent.where({ userId: ids.lead }).delete().catch(() => {});
-  await orm.ActivityEvent.where({ userId: ids.admin }).delete().catch(() => {});
-}
-
-async function expectCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected ${code}`);
-  } catch (error) {
-    expect(isDomainError(error) && error.code).toBe(code);
+  for (const id of owned.templateIds.splice(0)) {
+    await orm.CommunityScheduleSlot.where({ runTemplateId: id }).deleteAndCount();
+    await orm.RunTemplate.where({ id }).deleteAndCount();
+  }
+  for (const userId of owned.userIds) {
+    const templates = (await orm.RunTemplate.where({ createdById: userId }).select("id").all()) as Array<{ id: string }>;
+    for (const template of templates) {
+      await orm.CommunityScheduleSlot.where({ runTemplateId: template.id }).deleteAndCount();
+      await orm.RunTemplate.where({ id: template.id }).deleteAndCount();
+    }
+  }
+  const runIds = owned.runIds.splice(0);
+  for (const runId of runIds) await orm.CommunityScheduleRun.where({ runId }).deleteAndCount();
+  await deleteCreatedRows({ runIds });
+  for (const userId of owned.userIds) {
+    await orm.ActivityEvent.where({ userId }).deleteAndCount();
+    const runs = (await orm.Run.where({ raidLeadId: userId }).select("id").all()) as Array<{ id: string }>;
+    for (const run of runs) {
+      await orm.CommunityScheduleRun.where({ runId: run.id }).deleteAndCount();
+      await deleteCreatedRows({ runIds: [run.id] });
+    }
   }
 }
 
@@ -126,6 +116,7 @@ async function manualRun(input: {
       desiredLootbuddyCount: lootbuddies,
     }),
   );
+  owned.runIds.push(created.id);
   return created.id;
 }
 
@@ -147,12 +138,12 @@ async function runSnapshot(runId: string) {
 
 async function testTemplates() {
   return ((await orm.RunTemplate.all()) as Array<{ id: string; createdById: string }>).filter((row) =>
-    testUserIds.has(row.createdById),
+    ownedUserIds.has(row.createdById),
   );
 }
 
 async function setupA() {
-  return runTemplateRepository.create({
+  const id = await runTemplateRepository.create({
     name: "CSA Setup A",
     difficulty: "HEROIC",
     lootType: "UNSAVED",
@@ -162,9 +153,11 @@ async function setupA() {
     desiredDpsCount: 13,
     desiredLootbuddyCount: 1,
     notes: null,
-    createdById: ids.admin,
-    updatedById: ids.admin,
+    createdById: admin.id,
+    updatedById: admin.id,
   });
+  owned.templateIds.push(id);
+  return id;
 }
 
 async function candidateFor(runId: string, start?: { mode: "SKIP_FIRST" | "IMMEDIATE" }) {
@@ -198,17 +191,25 @@ beforeEach(() => freezeSystemTime(SCHEDULE_TEST_CLOCK, { advance: true }));
 afterEach(() => restoreSystemTime());
 
 beforeAll(async () => {
-  await upsertUser(lead);
-  await upsertUser(otherLead);
-  await upsertUser(admin);
+  assertIsolatedTestDatabase();
   await raidRepository.ensureReferenceRaids();
-  await cleanup();
+  lead = await createUser("CSA Lead", "RAID_LEAD");
+  otherLead = await createUser("CSA Other Lead", "RAID_LEAD");
+  admin = await createUser("CSA Admin", "ADMIN");
+}, 60_000);
+
+beforeEach(async () => {
+  await deleteOwnedScheduleRows();
 });
-beforeEach(cleanup);
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 afterAll(async () => {
-  await cleanup();
-  for (const id of Object.values(ids)) await orm.User.where({ id }).delete().catch(() => {});
-});
+  await deleteOwnedScheduleRows();
+  await deleteCreatedRows({ userIds: owned.userIds.splice(0) });
+}, 60_000);
 
 describe("Create Schedule from an existing Run (adoption)", () => {
   it("equivalent Run Setup is adopted exactly (no duplicate); Raid Lead, weekday and time from the Run", async () => {
@@ -220,7 +221,7 @@ describe("Create Schedule from an existing Run (adoption)", () => {
     expect(candidate).toMatchObject({
       weekday: "FRIDAY",
       localStartTime: "20:00",
-      raidLeadId: ids.lead,
+      raidLeadId: lead.id,
       windowStartAt: NEXT_WINDOW,
       runSetup: { mode: "existing", templateId: templateA, templateName: "CSA Setup A" },
     });
@@ -229,7 +230,7 @@ describe("Create Schedule from an existing Run (adoption)", () => {
     expect(plan.templateId).toBe(templateA);
     expect((await testTemplates()).map((row) => row.id)).toEqual([templateA]);
     const slot = (await communityScheduleRepository.findById(plan.slotIds[0]!))!;
-    expect(slot).toMatchObject({ runTemplateId: templateA, raidLeadId: ids.lead, weekday: "FRIDAY", localStartTime: "20:00" });
+    expect(slot).toMatchObject({ runTemplateId: templateA, raidLeadId: lead.id, weekday: "FRIDAY", localStartTime: "20:00" });
 
     const link = (await communityScheduleRunRepository.findByRunId(runId))!;
     expect(link).toMatchObject({ origin: "ATTACHED", scheduleSlotId: slot.id, windowStartAt: NEXT_WINDOW });
@@ -301,7 +302,7 @@ describe("Create Schedule from an existing Run (adoption)", () => {
     expect(release.status === "COMPLETED" && release.created).toBe(1);
     const next = (await communityScheduleRunRepository.listBySlotIds([slotId])).find((link) => link.origin === "MATERIALIZED")!;
     const nextRun = (await runRepository.findById(next.runId))!;
-    expect(nextRun.raidLeadId).toBe(ids.lead);
+    expect(nextRun.raidLeadId).toBe(lead.id);
     expect(Date.parse(nextRun.scheduledStartAt)).toBe(Date.parse("2027-01-29T19:00:00.000Z"));
     expect(nextRun.contents.map((row) => row.plannedBossCount)).toEqual([6]);
     expect([nextRun.desiredTankCount, nextRun.desiredHealerCount, nextRun.desiredDpsCount, nextRun.desiredLootbuddyCount]).toEqual([2, 3, 13, 1]);
@@ -322,8 +323,8 @@ describe("Create Schedule from an existing Run (adoption)", () => {
       desiredHealerCount: 4,
       desiredDpsCount: 14,
       notes: null,
-      createdById: ids.admin,
-      updatedById: ids.admin,
+      createdById: admin.id,
+      updatedById: admin.id,
     });
 
     const edited = await communityScheduleService.updateSlot(
@@ -333,7 +334,7 @@ describe("Create Schedule from an existing Run (adoption)", () => {
         weekday: "FRIDAY",
         localStartTime: "20:30",
         label: "Changed",
-        raidLeadId: ids.otherLead,
+        raidLeadId: otherLead.id,
         notes: null,
         runTemplateId: other,
         autoCreateRun: true,
@@ -356,13 +357,13 @@ describe("Create Schedule from an existing Run (adoption)", () => {
     expect((await candidateFor(runId))?.windowStartAt).toBe(CURRENT_WINDOW);
     expect(await candidateFor(runId, { mode: "SKIP_FIRST" })).toBeNull();
 
-    await expectCode(
+    await expectDomainError(
       planFromRun(runId, { weekday: "FRIDAY", localStartTime: "20:00" }, { start: { mode: "SKIP_FIRST" } }),
       "COMMUNITY_SCHEDULE_NOT_STARTED",
     );
     // Nothing partial: no setup snapshot, no slot, no link.
     expect(await testTemplates()).toHaveLength(0);
-    expect(await orm.CommunityScheduleSlot.where({ raidLeadId: ids.lead }).all()).toHaveLength(0);
+    expect(await orm.CommunityScheduleSlot.where({ raidLeadId: lead.id }).all()).toHaveLength(0);
     expect(await communityScheduleRunRepository.findByRunId(runId)).toBeNull();
   });
 
@@ -372,12 +373,12 @@ describe("Create Schedule from an existing Run (adoption)", () => {
     const templatesBefore = (await testTemplates()).length;
     expect(await candidateFor(runId)).toBeNull();
 
-    await expectCode(
+    await expectDomainError(
       communityScheduleService.createSchedulePlan(
         admin,
         {
           basisRunId: runId,
-          raidLeadId: ids.otherLead,
+          raidLeadId: otherLead.id,
           slots: [],
           autoCreateRun: false,
           notes: null,
@@ -387,14 +388,14 @@ describe("Create Schedule from an existing Run (adoption)", () => {
       "COMMUNITY_SCHEDULE_RUN_ALREADY_ATTACHED",
     );
     expect(await testTemplates()).toHaveLength(templatesBefore);
-    expect(await orm.CommunityScheduleSlot.where({ raidLeadId: ids.otherLead }).all()).toHaveLength(0);
+    expect(await orm.CommunityScheduleSlot.where({ raidLeadId: otherLead.id }).all()).toHaveLength(0);
   });
 
   it("an occurrence that is already fulfilled cannot take a second existing Run", async () => {
     const first = await manualRun({ scheduledStartAt: NEXT_FRIDAY_2000, bosses: 5, composition: [3, 3, 12, 2] });
     const second = await manualRun({ scheduledStartAt: "2027-01-22T20:00:00.000Z", bosses: 5, composition: [3, 3, 12, 2] });
     const plan = await planFromRun(first, { weekday: "FRIDAY", localStartTime: "20:00" });
-    await expectCode(
+    await expectDomainError(
       communityScheduleOccurrenceService.attachExistingRun(admin, { scheduleSlotId: plan.slotIds[0]!, runId: second, now: OCC_NOW }),
       "COMMUNITY_SCHEDULE_OCCURRENCE_FULFILLED",
     );
@@ -409,16 +410,16 @@ describe("Create Schedule from an existing Run (adoption)", () => {
       spy.mockRestore();
     }
     expect(await testTemplates()).toHaveLength(0);
-    expect(await orm.CommunityScheduleSlot.where({ raidLeadId: ids.lead }).all()).toHaveLength(0);
+    expect(await orm.CommunityScheduleSlot.where({ raidLeadId: lead.id }).all()).toHaveLength(0);
     expect(await communityScheduleRunRepository.findByRunId(runId)).toBeNull();
   });
 
   it("without a Run Setup or an existing first-occurrence Run the plan is refused", async () => {
-    await expectCode(
+    await expectDomainError(
       communityScheduleService.createSchedulePlan(
         admin,
         {
-          raidLeadId: ids.lead,
+          raidLeadId: lead.id,
           slots: [{ weekday: "FRIDAY", localStartTime: "20:00", runMode: "INHOUSE" }],
           autoCreateRun: false,
           notes: null,
@@ -433,9 +434,9 @@ describe("Create Schedule from an existing Run (adoption)", () => {
     await setupA();
     const runId = await manualRun({ scheduledStartAt: NEXT_FRIDAY_2000, bosses: 6, composition: [2, 3, 13, 1] });
     const before = await runSnapshot(runId);
-    const plan = await planFromRun(runId, { weekday: "FRIDAY", localStartTime: "20:30" }, { raidLeadId: ids.otherLead });
+    const plan = await planFromRun(runId, { weekday: "FRIDAY", localStartTime: "20:30" }, { raidLeadId: otherLead.id });
     const slot = (await communityScheduleRepository.findById(plan.slotIds[0]!))!;
-    expect(slot).toMatchObject({ raidLeadId: ids.otherLead, localStartTime: "20:30" });
+    expect(slot).toMatchObject({ raidLeadId: otherLead.id, localStartTime: "20:30" });
     expect((await communityScheduleRunRepository.findByRunId(runId))?.windowStartAt).toBe(NEXT_WINDOW);
     expect(await runSnapshot(runId)).toEqual(before);
 
@@ -443,7 +444,7 @@ describe("Create Schedule from an existing Run (adoption)", () => {
     expect(release.status === "COMPLETED" && release.created).toBe(1);
     const next = (await communityScheduleRunRepository.listBySlotIds([slot.id])).find((link) => link.origin === "MATERIALIZED")!;
     const nextRun = (await runRepository.findById(next.runId))!;
-    expect(nextRun.raidLeadId).toBe(ids.otherLead);
+    expect(nextRun.raidLeadId).toBe(otherLead.id);
     expect(Date.parse(nextRun.scheduledStartAt)).toBe(Date.parse("2027-01-29T19:30:00.000Z"));
   });
 
@@ -459,8 +460,8 @@ describe("Create Schedule from an existing Run (adoption)", () => {
       desiredHealerCount: 4,
       desiredDpsCount: 14,
       notes: null,
-      createdById: ids.admin,
-      updatedById: ids.admin,
+      createdById: admin.id,
+      updatedById: admin.id,
     });
     const plan = await planFromRun(runId, { weekday: "FRIDAY", localStartTime: "20:00" }, {
       runSetup: { mode: "existing", templateId: other },
@@ -498,7 +499,7 @@ describe("Create Schedule from an existing Run (adoption)", () => {
     expect(slots[0]).toMatchObject({ weekday: "FRIDAY", localStartTime: "20:00" });
     expect(new Set(slots.map((slot) => slot!.runTemplateId))).toEqual(new Set([plan.templateId]));
     expect((await runTemplateRepository.findById(plan.templateId))?.name).toBe("CSA Setup A");
-    expect(new Set(slots.map((slot) => slot!.raidLeadId))).toEqual(new Set([ids.lead]));
+    expect(new Set(slots.map((slot) => slot!.raidLeadId))).toEqual(new Set([lead.id]));
     expect((await communityScheduleRunRepository.findByRunId(basisRun))?.scheduleSlotId).toBe(slots[0]!.id);
     expect((await communityScheduleRunRepository.findByRunId(other))).toMatchObject({ origin: "ATTACHED", scheduleSlotId: slots[2]!.id });
     expect(await runSnapshot(other)).toEqual(otherBefore);
@@ -523,11 +524,11 @@ describe("Create Schedule from an existing Run (adoption)", () => {
 
   it("an existing Run on a time without a basis Run never defines the Run Setup", async () => {
     const runId = await manualRun({ scheduledStartAt: NEXT_FRIDAY_2000, bosses: 5, composition: [3, 3, 12, 2] });
-    await expectCode(
+    await expectDomainError(
       communityScheduleService.createSchedulePlan(
         admin,
         {
-          raidLeadId: ids.lead,
+          raidLeadId: lead.id,
           slots: [{ weekday: "FRIDAY", localStartTime: "20:00", runMode: "INHOUSE", attachRunId: runId }],
           autoCreateRun: false,
           notes: null,
@@ -554,7 +555,7 @@ describe("Create Schedule from an existing Run (adoption)", () => {
 
   it("the basis Run cannot also be an additional time's first occurrence", async () => {
     const runId = await manualRun({ scheduledStartAt: NEXT_FRIDAY_2000, bosses: 5, composition: [3, 3, 12, 2] });
-    await expectCode(
+    await expectDomainError(
       communityScheduleService.createSchedulePlan(
         admin,
         {
@@ -576,7 +577,7 @@ describe("Create Schedule from an existing Run (adoption)", () => {
       composition: [3, 3, 12, 2],
       raidLead: otherLead,
     });
-    await orm.User.where({ id: ids.otherLead }).update({ accountRole: "USER" });
+    await orm.User.where({ id: otherLead.id }).update({ accountRole: "USER" });
     try {
       const candidate = (await candidateFor(runId))!;
       expect(candidate.raidLeadId).toBeNull();
@@ -584,13 +585,13 @@ describe("Create Schedule from an existing Run (adoption)", () => {
       expect(candidate.runSetup.mode).toBe("fromRun");
 
       // Without a chosen Raid Lead the server refuses; the Setup is still adopted once one is chosen.
-      await expectCode(planFromRun(runId, { weekday: "FRIDAY", localStartTime: "20:00" }), "COMMUNITY_SCHEDULE_RAID_LEAD_INVALID");
+      await expectDomainError(planFromRun(runId, { weekday: "FRIDAY", localStartTime: "20:00" }), "COMMUNITY_SCHEDULE_RAID_LEAD_INVALID");
       expect(await testTemplates()).toHaveLength(0);
-      const plan = await planFromRun(runId, { weekday: "FRIDAY", localStartTime: "20:00" }, { raidLeadId: ids.lead });
+      const plan = await planFromRun(runId, { weekday: "FRIDAY", localStartTime: "20:00" }, { raidLeadId: lead.id });
       expect((await runTemplateRepository.findById(plan.templateId))?.contents.map((row) => row.plannedBossCount)).toEqual([5]);
-      expect((await communityScheduleRepository.findById(plan.slotIds[0]!))?.raidLeadId).toBe(ids.lead);
+      expect((await communityScheduleRepository.findById(plan.slotIds[0]!))?.raidLeadId).toBe(lead.id);
     } finally {
-      await orm.User.where({ id: ids.otherLead }).update({ accountRole: "RAID_LEAD" });
+      await orm.User.where({ id: otherLead.id }).update({ accountRole: "RAID_LEAD" });
     }
   });
 });
@@ -599,7 +600,7 @@ describe("draft-slot picker (create dialogs)", () => {
   it("names the selected Raid Lead in the Raid Lead warning", async () => {
     const runId = await manualRun({ scheduledStartAt: NEXT_FRIDAY_2000, bosses: 5, composition: [3, 3, 12, 2] });
     const candidates = await communityScheduleOccurrenceService.listAttachCandidates(admin, {
-      slot: { weekday: "FRIDAY", localStartTime: "20:00", raidLeadId: ids.otherLead, runTemplateId: null },
+      slot: { weekday: "FRIDAY", localStartTime: "20:00", raidLeadId: otherLead.id, runTemplateId: null },
       now: OCC_NOW,
     });
     const warning = candidates.find((row) => row.runId === runId)?.warnings.find((row) => row.code === "RAID_LEAD");
@@ -641,13 +642,13 @@ describe("Create Schedule request shape (basis-Run submit regression)", () => {
       expect((await communityScheduleRunRepository.findByRunId(runId))?.origin).toBe("ATTACHED");
     }
     expect((await communityScheduleRunRepository.findByRunId(basisRun))?.scheduleSlotId).toBe(plan.slotIds[0]);
-    expect(await orm.Run.where({ raidLeadId: ids.lead, status: "DRAFT" }).all()).toHaveLength(3);
+    expect(await orm.Run.where({ raidLeadId: lead.id, status: "DRAFT" }).all()).toHaveLength(3);
     expect([await runSnapshot(basisRun), await runSnapshot(extraA), await runSnapshot(extraB)]).toEqual(before);
   });
 
   it("an outdated client's payload (no scheduleSource, #248 shape) is refused with a reload hint", () => {
     const result = createSchedulePlanSchema.safeParse({
-      raidLeadId: ids.lead,
+      raidLeadId: lead.id,
       slots: [{ weekday: "FRIDAY", localStartTime: "20:00", runMode: "INHOUSE", attachRunId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }],
       autoCreateRun: true,
       notes: "",
@@ -659,20 +660,20 @@ describe("Create Schedule request shape (basis-Run submit regression)", () => {
   it("no hybrid states: run without basis, setup with basis, neither source", async () => {
     const runId = await manualRun({ scheduledStartAt: NEXT_FRIDAY_2000, bosses: 5, composition: [3, 3, 12, 2] });
     const base = { slots: [{ weekday: "FRIDAY", localStartTime: "20:00", runMode: "INHOUSE" }], autoCreateRun: false, notes: null };
-    await expectCode(
-      communityScheduleService.createSchedulePlan(admin, { ...base, scheduleSource: "run", raidLeadId: ids.lead } as never, OCC_NOW),
+    await expectDomainError(
+      communityScheduleService.createSchedulePlan(admin, { ...base, scheduleSource: "run", raidLeadId: lead.id } as never, OCC_NOW),
       "VALIDATION_FAILED",
     );
-    await expectCode(
+    await expectDomainError(
       communityScheduleService.createSchedulePlan(
         admin,
-        { ...base, scheduleSource: "setup", basisRunId: runId, raidLeadId: ids.lead, runSetup: { mode: "existing", templateId: await setupA() } } as never,
+        { ...base, scheduleSource: "setup", basisRunId: runId, raidLeadId: lead.id, runSetup: { mode: "existing", templateId: await setupA() } } as never,
         OCC_NOW,
       ),
       "VALIDATION_FAILED",
     );
     try {
-      await communityScheduleService.createSchedulePlan(admin, { ...base, scheduleSource: "setup", raidLeadId: ids.lead } as never, OCC_NOW);
+      await communityScheduleService.createSchedulePlan(admin, { ...base, scheduleSource: "setup", raidLeadId: lead.id } as never, OCC_NOW);
       throw new Error("expected refusal");
     } catch (error) {
       expect(isDomainError(error) && error.message).toBe("Choose a Run Setup or an existing Run as the Schedule source.");
@@ -694,7 +695,7 @@ describe("Add times with an existing Run", () => {
     const added = await communityScheduleService.addTimesToSetup(
       admin,
       {
-        raidLeadId: ids.lead,
+        raidLeadId: lead.id,
         runTemplateId: templateA,
         slots: [{ weekday: "FRIDAY", localStartTime: "20:00", runMode: "INHOUSE", attachRunId: runId }],
         autoCreateRun: false,
@@ -703,7 +704,7 @@ describe("Add times with an existing Run", () => {
       OCC_NOW,
     );
     const slot = (await communityScheduleRepository.findById(added.slotIds[0]!))!;
-    expect(slot).toMatchObject({ runTemplateId: templateA, raidLeadId: ids.lead });
+    expect(slot).toMatchObject({ runTemplateId: templateA, raidLeadId: lead.id });
     expect((await communityScheduleRunRepository.findByRunId(runId))?.origin).toBe("ATTACHED");
     expect((await testTemplates()).map((row) => row.id)).toEqual([templateA]);
     expect(await runSnapshot(runId)).toEqual(before);
@@ -721,13 +722,13 @@ describe("Use existing Run on an existing Schedule", () => {
       desiredHealerCount: 4,
       desiredDpsCount: 14,
       notes: null,
-      createdById: ids.admin,
-      updatedById: ids.admin,
+      createdById: admin.id,
+      updatedById: admin.id,
     });
     const plan = await communityScheduleService.createSchedulePlan(
       admin,
       {
-        raidLeadId: ids.otherLead,
+        raidLeadId: otherLead.id,
         runSetup: { mode: "existing", templateId: other },
         slots: [{ weekday: "FRIDAY", localStartTime: "21:00", runMode: "INHOUSE" }],
         autoCreateRun: false,
@@ -743,7 +744,7 @@ describe("Use existing Run on an existing Schedule", () => {
     const runId = await manualRun({ scheduledStartAt: NEXT_FRIDAY_2000, bosses: 5, composition: [3, 3, 12, 2] });
     await communityScheduleOccurrenceService.attachExistingRun(admin, { scheduleSlotId: slotId, runId, now: OCC_NOW });
     const slot = (await communityScheduleRepository.findById(slotId))!;
-    expect(slot).toMatchObject({ runTemplateId: other, raidLeadId: ids.otherLead, localStartTime: "21:00" });
+    expect(slot).toMatchObject({ runTemplateId: other, raidLeadId: otherLead.id, localStartTime: "21:00" });
     expect(await testTemplates()).toHaveLength(1);
   });
 
@@ -759,7 +760,7 @@ describe("Use existing Run on an existing Schedule", () => {
     });
     const slot = (await communityScheduleRepository.findById(slotId))!;
     expect(slot.runTemplateId).not.toBe(other);
-    expect(slot).toMatchObject({ raidLeadId: ids.otherLead, localStartTime: "21:00", weekday: "FRIDAY" });
+    expect(slot).toMatchObject({ raidLeadId: otherLead.id, localStartTime: "21:00", weekday: "FRIDAY" });
     const adopted = (await runTemplateRepository.findById(slot.runTemplateId!))!;
     expect(adopted.contents.map((row) => row.plannedBossCount)).toEqual([5]);
     expect(await runSnapshot(runId)).toEqual(before);

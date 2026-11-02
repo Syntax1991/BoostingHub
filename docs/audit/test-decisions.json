@@ -1295,6 +1295,10 @@
     "tests/integration/services/run-lifecycle-notifications.test.ts": [
       "REWRITE",
       "Fresh users/Characters via shared fixtures with synthetic Discord ids and DM prefs; frozen RAID_WEEK_TEST_CLOCK; verified deleteCreatedRows; expectDomainError for idempotent cancel (RUN_CANNOT_CANCEL) instead of swallowed rejection"
+    ],
+    "tests/integration/services/community-schedule-adoption.service.test.ts": [
+      "REWRITE",
+      "Owned users/slots/templates/runs via createTestUser; slots deleted before templates (FK); deleteAndCount + deleteCreatedRows; frozen OCC_NOW; expectDomainError for start-boundary refusal"
     ]
   },
   "tests": {

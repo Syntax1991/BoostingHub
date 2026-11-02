@@ -131,7 +131,7 @@ Order follows the assignment. Each line is one PR, stacked on the one before.
 | 4 | MVCS boundaries: app and controllers no longer import repositories; lib no longer imports components | PR #326, awaiting review |
 | 4b | Move pure rules from `src/services` to `src/domain` | PR #327, awaiting review |
 | 5 | Guide code: drop legacy paths, share publisher code | PR #328, awaiting review |
-| 6 | Test cleanup by module | In progress on `test/audit-batch-a`: 323 of 341 live files decided (+1 tombstone), 3141 of 3825 ledger tests reviewed, 684 UNREVIEWED across 18 files |
+| 6 | Test cleanup by module | In progress on `test/audit-batch-a`: 324 of 341 live files decided (+1 tombstone), 3165 of 3825 ledger tests reviewed, 660 UNREVIEWED across 17 files |
 | 7 | Frontend: error, loading and not-found pages; shared dialog effect | PR #329, awaiting review |
 | 8 | Performance, measured: run detail payload, event purge, rate-limit log | PR #330, awaiting review |
 | 9 | Dependencies and final verification | Dependencies audited, no change; TruffleHog scan still invalid |
@@ -356,7 +356,7 @@ Handover to Cursor (2026-11-02): Claude left branch `test/audit-batch-a` at loca
 The test audit is not complete. Order for the rest, smallest risk first:
 
 1. Done on branch `test/audit-batch-a`: `src/repositories` (11 files), `src/components` (39), `src/discord-bot` (37), `src/lib` (88), `src/domain` (22), `src/guides`, `src/services` batches 1–11. All tests now live under `tests/` (see above); paths below that still name `src/...test.ts` are as they were at the time.
-2. Phase 2 batch (Cursor): through `raid-catalog`, plus post-QC `run-lifecycle-notifications`. **18 live files left** (ledger UNREVIEWED rows: 684). QC 2026-11-02: the prior "323/341 with 19 left" report was an off-by-one caused by a stale `src/services/management-hub.community-stats.test.ts` KEEP tombstone (suite was MERGED into overview and deleted); corrected to REMOVE tombstone → then 322 + lifecycle = 323 live decided + 18 remaining = 341. Full suite on audit DB: 341 files / 3824 tests pass; lint/typecheck/build pass; five-commit suites repeatable without reset. `roster.service` still passes only on a freshly reset DB. A test file without an entry in `test-decisions.json` is unreviewed.
+2. Phase 2 batch (Cursor): through `run-lifecycle-notifications`, plus `community-schedule-adoption` (REWRITE: owned users/slots/templates/runs, slots-before-templates FK cleanup, 24/24 ×2 on audit DB). **17 live files left** (ledger UNREVIEWED rows: 660). QC 2026-11-02: the prior "323/341 with 19 left" report was an off-by-one caused by a stale `src/services/management-hub.community-stats.test.ts` KEEP tombstone (suite was MERGED into overview and deleted); corrected to REMOVE tombstone → then 322 + lifecycle = 323 live decided + 18 remaining = 341; CSA brings live decided to 324. Full suite on audit DB (pre-CSA): 341 files / 3824 tests pass; lint/typecheck/build pass; five-commit suites repeatable without reset. `roster.service` still passes only on a freshly reset DB. A test file without an entry in `test-decisions.json` is unreviewed.
 3. Done: `signupService.createBoosterSignup` is removed with `persistSignup`, `signupRepository.create` / `findDuplicate`, `isBlockingDuplicate` and `boosterSignupSchema`. All 13 suites offer through `offerCharacters` / `offerCharacter` in `tests/helpers/signup-offers.ts`, which calls the production `setCharacterOffers`. `signup.service.test.ts` is rewritten.
 
 Services batch 2 notes worth keeping:
