@@ -892,7 +892,7 @@ async function runLifecycleRetry(runId: string, contentRevision: number, changes
   const { db } = await import("@/lib/prisma");
   const run = await runRepository.findById(runId);
   await db.transaction(async (tx) => {
-    const txOrm = ((tx.orm as { public?: typeof orm }).public ?? (tx.orm as unknown as typeof orm)) as typeof orm;
+    const txOrm = tx.orm.public;
     await createRunScopeChangedNotificationsInTx(txOrm, {
       runId,
       productLabel: run!.contentDisplay.productLabel,

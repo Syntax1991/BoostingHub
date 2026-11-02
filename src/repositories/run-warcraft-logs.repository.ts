@@ -20,10 +20,6 @@ import type {
 
 type TxOrm = typeof orm;
 
-function txOrmOf(tx: { orm: unknown }): TxOrm {
-  return ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
-}
-
 /** Not in the raid: excluded from roster-overlap evidence. */
 const ABSENT: readonly AttendanceStatus[] = ["NO_SHOW", "EXCUSED", "STANDBY"];
 
@@ -422,7 +418,7 @@ export const runWarcraftLogsRepository = {
   }): Promise<void> {
     const now = input.scannedAt;
     await db.transaction(async (tx) => {
-      const txOrm = txOrmOf(tx);
+      const txOrm = tx.orm.public;
       let association = (await txOrm.RunWarcraftLogsReport.where({
         runId: input.runId,
         reportId: input.reportId,
@@ -496,7 +492,7 @@ export const runWarcraftLogsRepository = {
     now: string;
   }): Promise<void> {
     await db.transaction(async (tx) => {
-      const txOrm = txOrmOf(tx);
+      const txOrm = tx.orm.public;
       const row = (await txOrm.RunWarcraftLogsFight.where({ id: input.fightRowId, runId: input.runId }).first()) as
         | Record<string, unknown>
         | null;
@@ -537,7 +533,7 @@ export const runWarcraftLogsRepository = {
    */
   async detach(input: { runId: string; reportId: string; reportCode: string }): Promise<void> {
     await db.transaction(async (tx) => {
-      const txOrm = txOrmOf(tx);
+      const txOrm = tx.orm.public;
       await txOrm.RunWarcraftLogsReport.where({ runId: input.runId, reportId: input.reportId }).deleteAndCount();
       const audit = (await txOrm.RunConsumableAudit.where({ runId: input.runId }).first()) as Record<
         string,

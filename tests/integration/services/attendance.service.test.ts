@@ -633,7 +633,7 @@ describe("attendance concurrency", () => {
     let held!: () => void;
     const lockHeld = new Promise<void>((resolve) => (held = resolve));
     const holder = db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: typeof orm }).public ?? (tx.orm as unknown as typeof orm)) as typeof orm;
+      const txOrm = tx.orm.public;
       await lockRosterInTx(txOrm, roster.id);
       held();
       await released;

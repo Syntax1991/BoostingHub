@@ -707,7 +707,7 @@ export const runRepository = {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       await txOrm.Run.create({
         id,
         title: input.title,
@@ -763,7 +763,7 @@ export const runRepository = {
 
     try {
       await db.transaction(async (tx) => {
-        const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+        const txOrm = tx.orm.public;
         if (input.guardInTx) {
           await input.guardInTx(txOrm);
         }
@@ -831,7 +831,7 @@ export const runRepository = {
     const ids = inputs.map(() => crypto.randomUUID());
 
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       for (let index = 0; index < inputs.length; index += 1) {
         const input = inputs[index]!;
         const id = ids[index]!;
@@ -900,7 +900,7 @@ export const runRepository = {
     writeInTx?: (txOrm: TxOrm, context: { cancelRevision: number }) => Promise<void>,
   ): Promise<{ cancelRevision: number }> {
     return db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       const now = new Date().toISOString();
 
       // Shared lifecycle lock — must precede any authoritative Run read.
@@ -1006,7 +1006,7 @@ export const runRepository = {
     writeInTx?: (txOrm: TxOrm, context: { cancelRevision: number }) => Promise<void>,
   ): Promise<{ cancelRevision: number; restoredStatus: RunStatus }> {
     return db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       const now = new Date().toISOString();
 
       const rosterLookup = (await txOrm.RunRoster.where({ runId }).select("id").first()) as Record<
@@ -1170,7 +1170,7 @@ export const runRepository = {
     hooks: LifecycleAnnouncementTxHooks = {},
   ): Promise<void> {
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       const rosterLookup = (await txOrm.RunRoster.where({ runId: id }).select("id").first()) as Record<
         string,
         unknown
@@ -1371,7 +1371,7 @@ export const runRepository = {
   /** Hard delete. Callers must already have confirmed getDeleteBlockers() is empty. */
   async deleteRun(id: string) {
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       const roster = await txOrm.RunRoster.where({ runId: id }).first();
       if (roster) {
         await txOrm.RunRoster.where({ id: asString((roster as Record<string, unknown>).id) }).delete();

@@ -16,7 +16,7 @@ export const devAccountBootstrapRepository = {
    */
   async restoreDevAdminAccount(userId: string): Promise<void> {
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
 
       const user = await txOrm.User.where({ id: userId }).first();
       if (!user) return;

@@ -230,7 +230,7 @@ export const runDiscordAnnouncementRepository = {
     now: string;
   }): Promise<{ created: RunDiscordAnnouncementRecord | null; cooling: Array<{ key: PingRoleKey; availableAt: string }> }> {
     return db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       await lockRosterInTx(txOrm, input.rosterId);
       const lastAt = await lastPingAtByKey(txOrm, input.runId, input.now, input.cooldownMs);
       const cooling = input.ping.roles
@@ -261,7 +261,7 @@ export const runDiscordAnnouncementRepository = {
     lootType: RunLootType;
   }): Promise<LateFillHelpWriteResult> {
     return db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       await lockRosterInTx(txOrm, input.rosterId);
       const lastAt = await lastPingAtByKey(txOrm, input.runId, input.now, input.cooldownMs);
       const cooling = input.roles
@@ -293,7 +293,7 @@ export const runDiscordAnnouncementRepository = {
     const id = input.id ?? crypto.randomUUID();
     try {
       await db.transaction(async (tx) => {
-        const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+        const txOrm = tx.orm.public;
         await insertAnnouncementIgnoreDuplicateTx(txOrm, { ...input, id });
       });
     } catch {

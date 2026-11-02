@@ -265,7 +265,7 @@ export const attendanceRepository = {
     markedById: string;
   }): Promise<{ previousStatus: AttendanceStatus }> {
     return db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       await lockRunRosterInTx(txOrm, input.runId);
       await assertRunInProgressInTx(txOrm, input.runId);
       const row = (await txOrm.RunAttendance.where({ id: input.attendanceId })
@@ -301,7 +301,7 @@ export const attendanceRepository = {
    */
   async markAllUnmarkedPresent(runId: string, markedById: string): Promise<number> {
     return db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       await lockRunRosterInTx(txOrm, runId);
       await assertRunInProgressInTx(txOrm, runId);
       const now = new Date().toISOString();
@@ -321,7 +321,7 @@ export const attendanceRepository = {
     },
   ) {
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       // Start is the roster lock point. Take the roster lock before reading
       // anything (the same order every roster write uses): a concurrent Save /
       // Publish / Add Player either committed before this and is included, or
@@ -482,7 +482,7 @@ export const attendanceRepository = {
     replacement: { kind: "signup"; signupId: string } | ({ kind: "external" } & ExternalBoosterInput);
   }): Promise<{ replacementName: string }> {
     return db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       const run = (await txOrm.Run.where({ id: input.runId }).first()) as Record<string, unknown> | null;
       if (!run || asString(run.status) !== "IN_PROGRESS") {
         throw new DomainError("ATTENDANCE_NOT_MANAGEABLE", "Participants can only be replaced while the run is in progress.");
@@ -686,7 +686,7 @@ export const attendanceRepository = {
     actorId: string;
   }): Promise<{ fromStatus: AttendanceStatus; toStatus: AttendanceStatus; participantName: string }> {
     return db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       const now = new Date().toISOString();
 
       // Row lock (same pattern as lockRosterInTx): a concurrent correction of
@@ -757,7 +757,7 @@ export const attendanceRepository = {
 
   async completeRunIfAttendanceComplete(runId: string) {
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       // Same lock as attendance changes: no status can return to UNMARKED after the check below.
       await lockRunRosterInTx(txOrm, runId);
       const run = await txOrm.Run.where({ id: runId }).first();

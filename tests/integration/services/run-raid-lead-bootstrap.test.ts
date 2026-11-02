@@ -175,7 +175,7 @@ describe("Raid Lead Character bootstrap on Run creation", () => {
     });
     expect(plan).toHaveLength(3);
     const inserted = await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: typeof orm }).public ?? (tx.orm as unknown as typeof orm)) as typeof orm;
+      const txOrm = tx.orm.public;
       return insertInitialBoosterSignupsInTx(txOrm, run.id, plan, new Date().toISOString());
     });
     expect(inserted).toBe(0);

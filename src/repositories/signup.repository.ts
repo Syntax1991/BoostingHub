@@ -515,7 +515,7 @@ export const signupRepository = {
     if (input.lootbuddyVerification !== undefined) patch.lootbuddyVerification = input.lootbuddyVerification;
 
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       if (Object.keys(patch).length > 0) {
         await txOrm.RunSignup.where({ id }).update(patch);
       }
@@ -548,7 +548,7 @@ export const signupRepository = {
     const ids = rows.filter((row) => row.status !== "WITHDRAWN").map((row) => asString(row.id));
     if (ids.length === 0) return 0;
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       for (const id of ids) {
         await txOrm.RunSignup.where({ id }).update({ notes: note });
       }
@@ -613,7 +613,7 @@ export const signupRepository = {
     const withdrawn: string[] = [];
 
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       const now = new Date().toISOString();
 
       /**
@@ -743,7 +743,7 @@ export const signupRepository = {
     const withdrawn: string[] = [];
 
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       const now = new Date().toISOString();
 
       for (const id of input.toWithdraw) {

@@ -862,10 +862,6 @@ async function listTemplateOptions(): Promise<{
   return { options, recordsById, products };
 }
 
-function resolveTxOrm(tx: { orm: unknown }): TxOrm {
-  return ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
-}
-
 async function createSlotsInTx(input: {
   txOrm: TxOrm;
   slots: ReadonlyArray<{
@@ -1256,7 +1252,7 @@ export const communityScheduleService = {
     }
 
     const result = await db.transaction(async (tx) => {
-      const txOrm = resolveTxOrm(tx);
+      const txOrm = tx.orm.public;
       let resolvedTemplateId = templateId;
       let resolvedName = templateName;
 
@@ -1325,7 +1321,7 @@ export const communityScheduleService = {
 
     const { slotIds, attached } = await db
       .transaction(async (tx) => {
-        const txOrm = resolveTxOrm(tx);
+        const txOrm = tx.orm.public;
         return createSlotsInTx({
           txOrm,
           slots: input.slots,
@@ -1406,7 +1402,7 @@ export const communityScheduleService = {
     const composition = normalizeScheduleCompositionWrite(input);
     const at = now ?? new Date();
     const result = await db.transaction(async (tx) => {
-      const txOrm = resolveTxOrm(tx);
+      const txOrm = tx.orm.public;
       // Lock first: a concurrent Draft materialization for this slot serializes with this edit.
       const locked = await communityScheduleRepository.lockInTx(input.slotId, txOrm);
       if (!locked) {
@@ -1460,7 +1456,7 @@ export const communityScheduleService = {
   ): Promise<ScheduleMutationResult<{ slot: CommunityScheduleSlotRecord }>> {
     requireManage(user);
     const result = await db.transaction(async (tx) => {
-      const txOrm = resolveTxOrm(tx);
+      const txOrm = tx.orm.public;
       const existing = await communityScheduleRepository.lockInTx(slotId, txOrm);
       if (!existing) {
         throw new DomainError("COMMUNITY_SCHEDULE_NOT_FOUND", "Schedule slot was not found.", 404);
@@ -1524,7 +1520,7 @@ export const communityScheduleService = {
   ): Promise<ScheduleMutationResult<{ id: string }>> {
     requireManage(user);
     const result = await db.transaction(async (tx) => {
-      const txOrm = resolveTxOrm(tx);
+      const txOrm = tx.orm.public;
       const existing = await communityScheduleRepository.lockInTx(slotId, txOrm);
       if (!existing) {
         throw new DomainError("COMMUNITY_SCHEDULE_NOT_FOUND", "Schedule slot was not found.", 404);
@@ -1552,7 +1548,7 @@ export const communityScheduleService = {
     let cleanup = NO_CLEANUP;
     const retiredRunIds: string[] = [];
     await db.transaction(async (tx) => {
-      const txOrm = resolveTxOrm(tx);
+      const txOrm = tx.orm.public;
       const template = await runTemplateRepository.findById(runTemplateId, txOrm);
       if (!template) {
         throw new DomainError("RUN_TEMPLATE_NOT_FOUND", "Run Setup was not found.", 404);

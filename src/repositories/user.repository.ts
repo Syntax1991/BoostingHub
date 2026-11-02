@@ -490,7 +490,7 @@ export const userRepository = {
     }
     let result: { name: string; previousRole: AccountRole; accountStatus: AccountStatus } | null = null;
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: typeof orm }).public ?? (tx.orm as unknown as typeof orm)) as typeof orm;
+      const txOrm = tx.orm.public;
       const now = new Date().toISOString();
 
       const before = (await txOrm.User.where({ id: input.targetUserId }).first()) as Record<string, unknown> | null;
@@ -571,7 +571,7 @@ export const userRepository = {
     let result: { name: string; previousRole: AccountRole } | null = null;
     try {
       await db.transaction(async (tx) => {
-        const txOrm = ((tx.orm as { public?: typeof orm }).public ?? (tx.orm as unknown as typeof orm)) as typeof orm;
+        const txOrm = tx.orm.public;
         const now = new Date().toISOString();
         await txOrm.User.where({ id: targetUserId }).update({ updatedAt: now });
         const target = (await txOrm.User.where({ id: targetUserId }).first()) as Record<string, unknown> | null;

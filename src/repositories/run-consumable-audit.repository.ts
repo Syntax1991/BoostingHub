@@ -84,10 +84,6 @@ export type RunConsumableAuditSnapshot = {
   players: AuditPlayerFact[];
 };
 
-function txOrmOf(tx: { orm: unknown }): TxOrm {
-  return ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
-}
-
 function pick<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
   return typeof value === "string" && (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
 }
@@ -459,7 +455,7 @@ export const runConsumableAuditRepository = {
     }
 
     await db.transaction(async (tx) => {
-      const txOrm = txOrmOf(tx);
+      const txOrm = tx.orm.public;
       await txOrm.RunConsumableAudit.where({ runId: input.runId }).update(header);
       const audit = (await txOrm.RunConsumableAudit.where({ runId: input.runId }).first()) as Record<
         string,

@@ -430,7 +430,7 @@ export const characterRepository = {
    */
   async repairBlizzardIdentity(characterId: string, input: CharacterBlizzardIdentityRepairInput): Promise<void> {
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: typeof orm }).public ?? (tx.orm as unknown as typeof orm)) as typeof orm;
+      const txOrm = tx.orm.public;
       await txOrm.Character.where({ id: characterId }).update({
         name: input.name,
         realm: input.realm,
@@ -473,7 +473,7 @@ export const characterRepository = {
    */
   async recordSyncAttempt(characterId: string, attemptedAt: string): Promise<void> {
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: typeof orm }).public ?? (tx.orm as unknown as typeof orm)) as typeof orm;
+      const txOrm = tx.orm.public;
       const row = (await txOrm.Character.where({ id: characterId }).select("updatedAt").first()) as
         | { updatedAt: string }
         | null;
@@ -493,7 +493,7 @@ export const characterRepository = {
    */
   async recordSyncFailure(characterId: string, input: { code: CharacterSyncErrorCode; failedAt: string }): Promise<void> {
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: typeof orm }).public ?? (tx.orm as unknown as typeof orm)) as typeof orm;
+      const txOrm = tx.orm.public;
       const row = (await txOrm.Character.where({ id: characterId }).select("syncFailureCount", "updatedAt").first()) as
         | { syncFailureCount: unknown; updatedAt: string }
         | null;
@@ -518,7 +518,7 @@ export const characterRepository = {
    */
   async deleteGuarded(characterId: string): Promise<void> {
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: typeof orm }).public ?? (tx.orm as unknown as typeof orm)) as typeof orm;
+      const txOrm = tx.orm.public;
       const signups = (await txOrm.RunSignup.where({ characterId })
         .where((signup) => signup.status.neq("WITHDRAWN"))
         .include("run", (run) => run.select("status"))

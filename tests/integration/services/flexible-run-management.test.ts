@@ -722,7 +722,7 @@ describe("Run edit vs Start", () => {
     let signalLocked!: () => void;
     const lockHeld = new Promise<void>((resolve) => (signalLocked = resolve));
     const startTx = db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: typeof orm }).public ?? (tx.orm as unknown as typeof orm)) as typeof orm;
+      const txOrm = tx.orm.public;
       await lockRosterInTx(txOrm, roster!.id);
       signalLocked();
       await startMayCommit;

@@ -849,7 +849,7 @@ export const rosterRepository = {
     options?: DraftWriteOptions,
   ) {
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       const roster = await lockRosterInTx(txOrm, rosterId);
       await this.assertVersion(roster, expectedVersion);
       await assertRunPreStartInTx(txOrm, roster.runId);
@@ -881,7 +881,7 @@ export const rosterRepository = {
   }): Promise<{ signupId: string; created: boolean }> {
     let result: { signupId: string; created: boolean } | null = null;
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       const roster = await lockRosterInTx(txOrm, input.rosterId);
       await this.assertVersion(roster, input.expectedVersion);
       await assertRunPreStartInTx(txOrm, roster.runId);
@@ -1012,7 +1012,7 @@ export const rosterRepository = {
     scheduledStartAt: string;
   }) {
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       const roster = await lockRosterInTx(txOrm, input.rosterId);
       await this.assertVersion(roster, input.expectedVersion);
       await assertRunPreStartInTx(txOrm, roster.runId);
@@ -1101,7 +1101,7 @@ export const rosterRepository = {
     }
     const now = new Date().toISOString();
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       const entries = (await txOrm.RunRosterEntry.where((entry) => entry.signupId.in(uniqueIds)).all()) as Array<
         Record<string, unknown>
       >;
@@ -1133,7 +1133,7 @@ export const rosterRepository = {
    */
   async replaceExternalBoosters(rosterId: string, expectedVersion: number, boosters: ExternalBoosterInput[]) {
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       const roster = await lockRosterInTx(txOrm, rosterId);
       const version = roster.version;
       if (version !== expectedVersion) {
@@ -1169,7 +1169,7 @@ export const rosterRepository = {
     characterLabel: string | null;
   }): Promise<void> {
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       // Lock first (same order as every roster write and Start), then make sure
       // the Run has not started meanwhile — a started lineup is frozen.
       const rosterRow = (await txOrm.RunRoster.where({ runId: input.runId }).select("id").first()) as Record<
@@ -1261,7 +1261,7 @@ export const rosterRepository = {
    */
   async publishAtomic(input: PublishSelectionsInput & { rosterId: string; expectedVersion: number }) {
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       const mapped = await lockRosterInTx(txOrm, input.rosterId);
       if (mapped.version !== input.expectedVersion) {
         throw new DomainError("ROSTER_ALREADY_CHANGED", ROSTER_ALREADY_CHANGED_MESSAGE);
@@ -1289,7 +1289,7 @@ export const rosterRepository = {
     },
   ) {
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       const mapped = await lockRosterInTx(txOrm, input.rosterId);
       if (mapped.version !== input.expectedVersion) {
         throw new DomainError("ROSTER_ALREADY_CHANGED", ROSTER_ALREADY_CHANGED_MESSAGE);
@@ -1329,7 +1329,7 @@ export const rosterRepository = {
   }): Promise<{ postRevision: number }> {
     let postRevision = 0;
     await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const txOrm = tx.orm.public;
       const mapped = await lockRosterInTx(txOrm, input.rosterId);
       if (mapped.version !== input.expectedVersion || mapped.postRevision !== input.expectedPostRevision) {
         throw new DomainError("ROSTER_ALREADY_CHANGED", ROSTER_ALREADY_CHANGED_MESSAGE);

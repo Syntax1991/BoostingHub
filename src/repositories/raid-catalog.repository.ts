@@ -36,10 +36,6 @@ export function isRaidReferenced(counts: RaidReferenceCounts): boolean {
 
 type TxOrm = typeof orm;
 
-function txOrmOf(tx: { orm: unknown }): TxOrm {
-  return ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
-}
-
 type GroupedCount = { raidId: unknown; count: unknown };
 
 function toCountMap(rows: readonly GroupedCount[]): Map<string, number> {
@@ -158,7 +154,7 @@ export const raidCatalogRepository = {
   ): Promise<void> {
     await db.transaction(async (tx) => {
       await lockRaidImports(tx as unknown as { execute: (plan: never) => Promise<unknown> });
-      const txOrm = txOrmOf(tx);
+      const txOrm = tx.orm.public;
       for (const write of writes) {
         const owners = (await txOrm.Raid.where({ blizzardInstanceId: write.blizzardInstanceId })
           .select("id", "name")
@@ -371,7 +367,7 @@ export const raidCatalogRepository = {
   }): Promise<{ droppedLockouts: number; movedLockouts: number }> {
     const result = await db.transaction(async (tx) => {
       await lockRaidImports(tx as unknown as { execute: (plan: never) => Promise<unknown> });
-      const txOrm = txOrmOf(tx);
+      const txOrm = tx.orm.public;
       const raidId = input.sourceRaidId;
       // Sequential: one transaction connection.
       const usages = [
@@ -452,7 +448,7 @@ export const raidCatalogRepository = {
   /** Rewrite one raid's encounter order (ids unchanged). */
   async setEncounterOrder(orderedBossIds: readonly string[]): Promise<void> {
     await db.transaction(async (tx) => {
-      const txOrm = txOrmOf(tx);
+      const txOrm = tx.orm.public;
       for (const [index, id] of orderedBossIds.entries()) {
         await txOrm.RaidBoss.where({ id }).update({ sortOrder: index + 1 });
       }
@@ -462,7 +458,7 @@ export const raidCatalogRepository = {
 
   async deleteEncounter(bossId: string, remainingOrderedBossIds: readonly string[]): Promise<void> {
     await db.transaction(async (tx) => {
-      const txOrm = txOrmOf(tx);
+      const txOrm = tx.orm.public;
       await txOrm.RaidBoss.where({ id: bossId }).delete();
       for (const [index, id] of remainingOrderedBossIds.entries()) {
         await txOrm.RaidBoss.where({ id }).update({ sortOrder: index + 1 });
@@ -478,7 +474,7 @@ export const raidCatalogRepository = {
 
   async createProduct(input: ProductWrite & { id: string; key: string; now: string }): Promise<void> {
     await db.transaction(async (tx) => {
-      const txOrm = txOrmOf(tx);
+      const txOrm = tx.orm.public;
       await txOrm.Product.create({
         id: input.id,
         key: input.key,
@@ -496,7 +492,7 @@ export const raidCatalogRepository = {
   /** Updates catalog rows only — RunRaidContent / RunTemplateRaidContent are never touched. */
   async updateProduct(productId: string, input: ProductWrite & { now: string }): Promise<void> {
     await db.transaction(async (tx) => {
-      const txOrm = txOrmOf(tx);
+      const txOrm = tx.orm.public;
       await txOrm.Product.where({ id: productId }).update({
         name: input.name,
         active: input.active,
