@@ -1,4 +1,6 @@
+import { pgConnectionConfig, pgPool } from "@/lib/pg-pool";
 import { orm } from "@/lib/prisma";
+import { assertConnectedDatabaseMatches, assertSeedTargetAllowed } from "@/prisma/seed-guard";
 
 /**
  * Empties every table the seed fills, child rows before the rows they
@@ -8,6 +10,10 @@ import { orm } from "@/lib/prisma";
  * and `npm run test:db:reset` against TEST_DATABASE_URL) — never from the app.
  */
 export async function wipeSeedDatabase(): Promise<void> {
+  const allowed = assertSeedTargetAllowed(pgConnectionConfig.connectionString);
+  const connected = await pgPool.query<{ name: string }>("SELECT current_database() AS name");
+  assertConnectedDatabaseMatches(allowed, connected.rows[0]?.name);
+
   // Strike.userId/createdById are Restrict against User; must go before Users.
   for (const row of await orm.Strike.select("id").all()) {
     await orm.Strike.where({ id: row.id }).delete();

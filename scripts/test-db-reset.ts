@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { spawnSync } from "node:child_process";
 import { resolveTestDatabaseUrl } from "@/lib/test-database-guard";
+import { databaseNameOf } from "@/prisma/seed-guard";
 
 /**
  * Destructively resets and reseeds the dedicated automated-test database
@@ -42,7 +43,11 @@ const testUrl = resolveTestDatabaseUrl();
 console.log("Resetting the automated-test database only — DATABASE_URL is never touched:");
 console.log(`  ${maskCredentials(testUrl)}`);
 
-const childEnv: NodeJS.ProcessEnv = { ...process.env, DATABASE_URL: testUrl };
+const childEnv: NodeJS.ProcessEnv = {
+  ...process.env,
+  DATABASE_URL: testUrl,
+  SEED_CONFIRM_DATABASE: databaseNameOf(testUrl) ?? "",
+};
 
 run("Applying schema to the test database", "db:migrate", childEnv);
 run("Seeding deterministic fixtures into the test database", "db:seed", childEnv);

@@ -112,6 +112,7 @@ All configuration comes from `.env` (production: owner `boostinghub`, mode `600`
 | `DEV_AUTH_ENABLED`, `DEV_AUTH_PASSWORD` | web, seed | Development identities; ignored in production, keep `false` there |
 | `DEV_ACCOUNT_BOOTSTRAP_ENABLED`, `DEV_ADMIN_DISCORD_USER_ID` | web | Local account restore; hard-disabled in production |
 | `SKIP_DEV_DB_SCHEMA_CHECK` | dev | `1` skips the `predev` schema check |
+| `SEED_CONFIRM_DATABASE` | dev, seed | Exact name of the local database that `npm run db:seed` may wipe. **Never set this in production.** |
 | `BLIZZARD_CLIENT_ID`, `BLIZZARD_CLIENT_SECRET`, `BLIZZARD_REDIRECT_URI` | web, jobs | Blizzard API and Battle.net OAuth; required for Add Character (secret) |
 | `BLIZZARD_SYNC_STALE_MINUTES` | jobs, web | Positive integer, default 120; anything else fails loudly |
 | `WARCRAFT_LOGS_CLIENT_ID`, `WARCRAFT_LOGS_CLIENT_SECRET` | web | Warcraft Logs API (secret) |
@@ -478,6 +479,7 @@ Backups are stored on the production host only. An off-site copy is not document
   never files inside the app checkout.
 - Ops scripts never print secret values. Use `env-status.py` rather than `cat .env`.
 - Development switches (`DEV_AUTH_ENABLED`, `DEV_ACCOUNT_BOOTSTRAP_ENABLED`) stay `false`.
+- **`npm run db:seed` deletes existing data** and replaces it with test fixtures. Never run it on the server. It refuses `NODE_ENV=production`, the production database, non-local hosts, extra connection parameters and any database not named in `SEED_CONFIRM_DATABASE`. To recover data, use the restore procedure, never the seed.
 
 ## Operational non-goals
 
