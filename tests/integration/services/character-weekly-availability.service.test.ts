@@ -184,11 +184,10 @@ describe("characterWeeklyAvailabilityService", () => {
     );
     const view = await rosterService.getRosterManagementView(lead, heroicRun.id);
     await expectDomainError(
-      rosterService.setDraftSelection(lead, {
+      rosterService.saveDraftSelection(lead, {
         runId: heroicRun.id,
-        signupId,
-        selected: true,
         version: view.roster.version,
+        selections: [{ signupId, selectedRole: "HEALER" }],
       }),
       "CHARACTER_SCHEDULE_CONFLICT",
     );
@@ -201,11 +200,10 @@ describe("characterWeeklyAvailabilityService", () => {
 
     const signupId = await offerCharacter(kael, run.id, ids.kaelResto, "HEALER");
     let view = await rosterService.getRosterManagementView(lead, run.id);
-    await rosterService.setDraftSelection(lead, {
+    await rosterService.saveDraftSelection(lead, {
       runId: run.id,
-      signupId,
-      selected: true,
       version: view.roster.version,
+      selections: [{ signupId, selectedRole: "HEALER" }],
     });
 
     await characterWeeklyAvailabilityRepository.replaceUnavailableDifficulties(

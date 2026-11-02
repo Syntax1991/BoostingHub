@@ -96,11 +96,10 @@ describe("runDetailService", () => {
 
   it("keeps USER roster mutations rejected", async () => {
     await expectDomainError(
-      rosterService.setDraftSelection(kael, {
+      rosterService.saveDraftSelection(kael, {
         runId: ids.weekend,
-        signupId: ids.publishedKael,
-        selected: true,
         version: 1,
+        selections: [{ signupId: ids.publishedKael, selectedRole: null }],
       }),
       "RUN_NOT_MANAGEABLE",
     );

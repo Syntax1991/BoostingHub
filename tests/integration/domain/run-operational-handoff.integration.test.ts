@@ -145,15 +145,12 @@ async function createSignup(input: {
 }
 
 async function selectAndPublish(actor: AuthenticatedUser, runId: string, signupIds: string[]) {
-  for (const signupId of signupIds) {
-    const view = await rosterService.getRosterManagementView(actor, runId);
-    await rosterService.setDraftSelection(actor, {
-      runId,
-      signupId,
-      selected: true,
-      version: view.roster.version,
-    });
-  }
+  const draft = await rosterService.getRosterManagementView(actor, runId);
+  await rosterService.saveDraftSelection(actor, {
+    runId,
+    version: draft.roster.version,
+    selections: signupIds.map((signupId) => ({ signupId, selectedRole: null })),
+  });
   const ready = await rosterService.getRosterManagementView(actor, runId);
   await rosterService.publishRoster(actor, {
     runId,

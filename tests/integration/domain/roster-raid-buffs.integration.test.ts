@@ -33,8 +33,16 @@ function isCovered(view: RosterView, buffId: string) {
   return view.raidBuffCoverage.buffs.find((buff) => buff.id === buffId)?.covered;
 }
 
+/** Saves the draft with `signupId` added or removed; every slot here resolves its own role (single-role Booster or Lootbuddy). */
 async function setDraftSelected(view: RosterView, signupId: string, selected: boolean) {
-  await rosterService.setDraftSelection(lead, { runId, signupId, selected, version: view.roster.version });
+  const others = [...view.boosters, ...view.groups.lootbuddies]
+    .filter((row) => row.draftSelected && row.id !== signupId)
+    .map((row) => row.id);
+  await rosterService.saveDraftSelection(lead, {
+    runId,
+    version: view.roster.version,
+    selections: (selected ? [...others, signupId] : others).map((id) => ({ signupId: id, selectedRole: null })),
+  });
   return loadView();
 }
 

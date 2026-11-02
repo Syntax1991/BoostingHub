@@ -882,7 +882,7 @@
     ],
     "tests/integration/domain/roster-raid-buffs.integration.test.ts": [
       "REWRITE",
-      "Own Run per test, fresh fixture rows, frozen clock, no pre-delete; buff ids asserted explicitly; WITHDRAWN exclusion on the real view"
+      "Own Run per test, fresh fixture rows, frozen clock, no pre-delete; buff ids asserted explicitly; WITHDRAWN exclusion on the real view; phase 2: draft changes go through the production saveDraftSelection instead of the test-only setDraftSelection"
     ],
     "tests/unit/domain/roster-raid-buffs.test.ts": [
       "KEEP",
@@ -898,7 +898,7 @@
     ],
     "tests/integration/domain/run-operational-handoff.integration.test.ts": [
       "KEEP",
-      "Real DB handoff projection. A conditional assertion is now unconditional; dropped vacuous id checks and a settlement-absence test for a feature removed in #228"
+      "Real DB handoff projection. A conditional assertion is now unconditional; dropped vacuous id checks and a settlement-absence test for a feature removed in #228; phase 2: one saveDraftSelection call instead of one setDraftSelection per signup"
     ],
     "tests/unit/domain/run-operational-handoff.test.ts": [
       "KEEP",
@@ -998,7 +998,7 @@
     ],
     "tests/integration/services/run-detail.service.test.ts": [
       "KEEP",
-      "Run detail visibility on seed data, now named via SEED_IDS and testActor; the route helper test moved to lib/run-routes.test.ts"
+      "Run detail visibility on seed data, now named via SEED_IDS and testActor; the route helper test moved to lib/run-routes.test.ts; phase 2: the USER refusal is checked on the production saveDraftSelection"
     ],
     "tests/integration/services/create-run-recurring-schedule.test.ts": [
       "KEEP",
@@ -1158,11 +1158,11 @@
     ],
     "tests/integration/services/roster-legacy-dps.test.ts": [
       "REWRITE",
-      "Own Raid Lead and Boosters instead of seeded users; frozen raid week; verified cleanup replaces a 40-line manual delete"
+      "Own Raid Lead and Boosters instead of seeded users; frozen raid week; verified cleanup replaces a 40-line manual delete; phase 2: production saveDraftSelection; the ambiguous historic DPS slot is now saved unresolved by the real path instead of being nulled in the database by hand, and publish still refuses it"
     ],
     "tests/integration/services/raid-lockout-informational.test.ts": [
       "REWRITE",
-      "Fresh saved Character per test; the lockout helper reuses an existing row instead of deleting it with errors swallowed; exact offer counts"
+      "Fresh saved Character per test; the lockout helper reuses an existing row instead of deleting it with errors swallowed; exact offer counts; phase 2: warning confirmation checked on the production saveDraftSelection"
     ],
     "tests/integration/services/strike.service.test.ts": [
       "REWRITE",
@@ -1170,7 +1170,7 @@
     ],
     "tests/integration/services/character-weekly-availability.service.test.ts": [
       "REWRITE",
-      "Own owner, Characters and Raid Lead instead of seeded users, seeded Characters and the seeded admin; one Run helper replaces three 12-line blocks; the Booster grant through the seeded admin is unnecessary with a Booster owner"
+      "Own owner, Characters and Raid Lead instead of seeded users, seeded Characters and the seeded admin; one Run helper replaces three 12-line blocks; the Booster grant through the seeded admin is unnecessary with a Booster owner; phase 2: selections through the production saveDraftSelection"
     ],
     "tests/integration/services/raid-catalog-lifecycle.test.ts": [
       "REWRITE",

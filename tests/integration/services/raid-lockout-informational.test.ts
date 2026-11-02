@@ -167,16 +167,16 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
     // A known save on an UNSAVED Run is a WARNING: selectable, but only with
     // the Raid Lead's explicit confirmation (never a blocker).
     expect(candidate?.selectionRisk.level).toBe("WARNING");
+    const selections = [{ signupId: candidate!.id, selectedRole: "RANGED_DPS" as const }];
     await expectDomainError(
-      rosterService.setDraftSelection(lead, { runId: runA, signupId: candidate!.id, selected: true, version: view.roster.version }),
+      rosterService.saveDraftSelection(lead, { runId: runA, version: view.roster.version, selections }),
       "ROSTER_WARNING_CONFIRMATION_REQUIRED",
     );
 
-    await rosterService.setDraftSelection(lead, {
+    await rosterService.saveDraftSelection(lead, {
       runId: runA,
-      signupId: candidate!.id,
-      selected: true,
       version: view.roster.version,
+      selections,
       confirmedWarnings: confirmWarnings(candidate!),
     });
 
@@ -207,11 +207,10 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
     await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: saved, offeredRoles: ["RANGED_DPS"] }] });
     const viewA = await rosterService.getRosterManagementView(lead, runA);
     const signupA = rosterBoosters(viewA).find((item) => item.character?.id === saved)!;
-    await rosterService.setDraftSelection(lead, {
+    await rosterService.saveDraftSelection(lead, {
       runId: runA,
-      signupId: signupA.id,
-      selected: true,
       version: viewA.roster.version,
+      selections: [{ signupId: signupA.id, selectedRole: "RANGED_DPS" }],
       confirmedWarnings: confirmWarnings(signupA),
     });
 

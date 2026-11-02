@@ -217,11 +217,11 @@ describe("historic generic DPS roster assignment", () => {
       }),
     ).rejects.toMatchObject({ code: "INVALID_ROSTER_SELECTION" });
 
-    await rosterService.setDraftSelection(lead, {
+    // Without a role, the historic DPS offer of a Frost Mage resolves to its only DPS role.
+    await rosterService.saveDraftSelection(lead, {
       runId,
-      signupId,
-      selected: true,
       version: view.roster.version,
+      selections: [{ signupId, selectedRole: null }],
     });
     view = await rosterService.getRosterManagementView(lead, runId);
     expect(view.boosters.find((row) => row.id === signupId)?.selectedRole).toBe("RANGED_DPS");
@@ -243,27 +243,14 @@ describe("historic generic DPS roster assignment", () => {
     const beforeSpecs = await orm.CharacterPlayableSpec.where({ characterId: signupRow.characterId }).all();
     let view = await rosterService.getRosterManagementView(lead, runId);
 
-    await expect(
-      rosterService.setDraftSelection(lead, {
-        runId,
-        signupId,
-        selected: true,
-        version: view.roster.version,
-      }),
-    ).rejects.toMatchObject({
-      code: "INVALID_ROSTER_SELECTION",
-      message: "Choose Melee or Ranged DPS for Testblast-Antonidas.",
-    });
-
+    // Saved without a role, the ambiguous slot stays unresolved: the draft keeps it, publish refuses it.
     await rosterService.saveDraftSelection(lead, {
       runId,
       version: view.roster.version,
-      selections: [{ signupId, selectedRole: "MELEE_DPS" }],
+      selections: [{ signupId, selectedRole: null }],
     });
     view = await rosterService.getRosterManagementView(lead, runId);
-    const entry = (await orm.RunRosterEntry.where({ signupId }).first()) as { id: string } | null;
-    expect(entry).not.toBeNull();
-    await orm.RunRosterEntry.where({ id: entry!.id }).update({ selectedRole: null });
+    expect(view.boosters.find((row) => row.id === signupId)).toMatchObject({ draftSelected: true, selectedRole: null });
 
     await expect(
       rosterService.publishRoster(lead, {
