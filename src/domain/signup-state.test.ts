@@ -5,7 +5,6 @@ import {
   isSignedUpSignup,
   isPickedSignup,
   normalizeWithdrawReason,
-  PICKED_WITHDRAW_RUN_STATUSES,
   WITHDRAW_REASON_MAX_LENGTH,
   planCharacterOfferReconciliation,
   planLootbuddyReconciliation,
@@ -208,10 +207,6 @@ describe("picked-player withdrawal rules", () => {
     expect(isPickedSignup({ id: "c", status: "NOT_SELECTED" }, ["c"])).toBe(true);
     expect(isPickedSignup({ id: "d", status: "PENDING" }, ["x"])).toBe(false);
     expect(isPickedSignup({ id: "e", status: "WITHDRAWN" }, ["e"])).toBe(false);
-  });
-
-  it("allows it only until the Run starts", () => {
-    expect(PICKED_WITHDRAW_RUN_STATUSES).toEqual(["OPEN", "ROSTERING", "PUBLISHED"]);
   });
 
   it("requires a real reason and caps its length", () => {

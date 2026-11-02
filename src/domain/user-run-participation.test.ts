@@ -58,27 +58,6 @@ describe("resolveUserRunParticipation", () => {
     expect(result.displayRole).toBe("HEALER");
   });
 
-  it("draft deselected → falls back to OFFERED", () => {
-    const result = resolveUserRunParticipation({
-      status: "PENDING",
-      draftSelected: false,
-      selectedRole: null,
-      publishedRole: null,
-    });
-    expect(result.selectionState).toBe("OFFERED");
-    expect(result.picked).toBe(false);
-  });
-
-  it("offspec draft role is authoritative displayRole", () => {
-    const result = resolveUserRunParticipation({
-      status: "PENDING",
-      draftSelected: true,
-      selectedRole: "RANGED_DPS",
-      publishedRole: null,
-    });
-    expect(result.displayRole).toBe("RANGED_DPS");
-  });
-
   it("NOT_SELECTED without draft pick stays not selected", () => {
     const result = resolveUserRunParticipation({
       status: "NOT_SELECTED",

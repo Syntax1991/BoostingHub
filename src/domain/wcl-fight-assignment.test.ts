@@ -95,11 +95,6 @@ describe("absolute WCL time", () => {
     expect(first!.endAtMs).toBe(at("14:13"));
   });
 
-  it("never compares relative milliseconds against Run timestamps", () => {
-    // Relative 3 min would be 1970 if misused as absolute: nothing would match.
-    const assigned = assignReportFights({ raidIdByWclEncounter: WCL_ENCOUNTERS, report: sameReport, target: runA, others: [runB] });
-    expect(assigned.filter((row) => row.status === "ASSIGNED")).toHaveLength(8);
-  });
 });
 
 describe("same report, two consecutive identical Runs", () => {

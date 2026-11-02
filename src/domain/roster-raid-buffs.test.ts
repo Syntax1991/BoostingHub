@@ -98,12 +98,6 @@ describe("evaluateRaidBuffCoverage", () => {
     expect(byId.ARCANE_INTELLECT?.providers[0]?.signupId).toBe("s1");
   });
 
-  it("C: caller responsibility — unselected Mage is simply omitted from the input", () => {
-    // Domain evaluator only sees selected participants. An unselected Mage never appears here.
-    const result = evaluateRaidBuffCoverage([]);
-    expect(result.buffs.find((item) => item.id === "ARCANE_INTELLECT")?.covered).toBe(false);
-  });
-
   it("D: Mage LOOT_ONLY Lootbuddy covers Arcane Intellect", () => {
     const byId = coverageById([
       participant({
@@ -129,19 +123,6 @@ describe("evaluateRaidBuffCoverage", () => {
     ]);
     expect(byId.ARCANE_INTELLECT?.covered).toBe(true);
     expect(byId.ARCANE_INTELLECT?.providers[0]?.participationType).toBe("LOOTBUDDY");
-  });
-
-  it("F: legacy Character-backed PLAYING Mage Lootbuddy covers via resolved class", () => {
-    const byId = coverageById([
-      participant({
-        signupId: "lb-legacy",
-        wowClass: "MAGE",
-        participationType: "LOOTBUDDY",
-        lootbuddyMode: "PLAYING",
-        characterName: "Oldmage",
-      }),
-    ]);
-    expect(byId.ARCANE_INTELLECT?.covered).toBe(true);
   });
 
   it("G: duplicate Mages still count as one covered buff, but keep all providers", () => {

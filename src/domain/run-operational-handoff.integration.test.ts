@@ -8,7 +8,6 @@ import { raidRepository } from "@/repositories/raid.repository";
 import { attendanceRepository } from "@/repositories/attendance.repository";
 import { attendanceService } from "@/services/attendance.service";
 import { managementHubService } from "@/services/management-hub.service";
-import { runRepository } from "@/repositories/run.repository";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import type { CharacterRole, ParticipationType } from "@/models/enums";
@@ -364,16 +363,16 @@ describe("raid lead lifecycle handoffs (managed runs)", () => {
     for (const actor of [lead, admin]) {
       const view = await runService.getManagedRunsPage(actor, {});
       const completed = view.runs.find((run) => run.id === completedId);
-      if (!completed) continue; // completed Runs may be filtered out of the active list
-      expect(completed.attention).toBe("NONE");
-      expect(completed.nextAction.kind).toBe("VIEW");
+      expect(completed).toBeDefined();
+      expect(completed!.attention).toBe("NONE");
+      expect(completed!.nextAction.kind).toBe("VIEW");
     }
   }, 120_000);
 
   it("management hub attention metrics use the same projection", async () => {
     const rosterId = await createDraft(lead, "Handoff hub roster");
     await runService.openRun(lead, rosterId);
-    const needsAttendanceId = await inProgressWithTwoBoosters("Handoff hub unmarked");
+    await inProgressWithTwoBoosters("Handoff hub unmarked");
     const readyId = await inProgressWithTwoBoosters("Handoff hub ready");
     await markAllPresent(readyId);
 
@@ -385,21 +384,6 @@ describe("raid lead lifecycle handoffs (managed runs)", () => {
     expect(byLabel["Needs attendance"]).toBeGreaterThanOrEqual(1);
     expect(byLabel["Ready to complete"]).toBeGreaterThanOrEqual(1);
     expect(byLabel["Needs settlement"]).toBeUndefined();
-
-    // Keep fixtures referenced for cleanup clarity.
-    expect(needsAttendanceId).toBeTruthy();
-    expect(rosterId).toBeTruthy();
   }, 120_000);
 
-  it("completing a Run creates no settlement work and keeps the Run COMPLETED", async () => {
-    const runId = await inProgressWithTwoBoosters("Handoff complete is final");
-    await markAllPresent(runId);
-    await runService.completeRun(lead, runId);
-    const run = await runRepository.findById(runId);
-    expect(run?.status).toBe("COMPLETED");
-    const overview = await managementHubService.getOverview(admin);
-    const runsCard = overview.cards.find((card) => card.id === "runs");
-    const labels = (runsCard?.metrics ?? []).map((metric) => metric.label);
-    expect(labels.some((label) => /settle|payout|paid/i.test(label))).toBe(false);
-  }, 60_000);
 });

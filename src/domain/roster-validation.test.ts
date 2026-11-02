@@ -95,23 +95,6 @@ describe("validateRosterDraft", () => {
     expect(result.blockers).toEqual([]);
   });
 
-  it("characterless lootbuddy with characterActive true is not blocked as inactive", () => {
-    const result = validateRosterDraft({
-      runStatus: "ROSTERING",
-      selected: [
-        member({
-          signupId: "l1",
-          characterName: "Mage",
-          participationType: "LOOTBUDDY",
-          selectedRole: null,
-          characterActive: true,
-          boosterApproved: true,
-        }),
-      ],
-      targets: { tanks: 2, healers: 4, dps: 14 },
-    });
-    expect(result.canPublish).toBe(true);
-  });
   it("19. publish rejects unresolved historic DPS and stored generic DPS", () => {
     const unresolved = validateRosterDraft({
       runStatus: "ROSTERING",
@@ -141,16 +124,4 @@ describe("validateRosterDraft", () => {
     expect(generic.composition.dps.selected).toBe(0);
   });
 
-  it("raid lockouts are informational only — a locked/saved character never blocks publish", () => {
-    // RosterValidationMember carries no lockout field at all anymore; this
-    // documents the invariant that validateRosterDraft has nothing left that
-    // could reject a member for being raid-saved.
-    const result = validateRosterDraft({
-      runStatus: "ROSTERING",
-      selected: [member({ characterName: "Saved Character" })],
-      targets: { tanks: 2, healers: 4, dps: 14 },
-    });
-    expect(result.canPublish).toBe(true);
-    expect(result.blockers).toEqual([]);
-  });
 });

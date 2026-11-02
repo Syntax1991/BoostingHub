@@ -160,11 +160,6 @@ describe("weapon enhancement — Death Knight Runeforge (product rule: an oil is
     });
   });
 
-  it("5. a valid Runeforge never produces an oil failure", () => {
-    const gear = [mainHand({ permanentEnchantId: FALLEN_CRUSADER, temporaryEnchantId: null })];
-    expect(dkMissingTexts(gear)).toEqual([]);
-  });
-
   it("6. a valid Runeforge never produces a generic weapon-enchant failure", () => {
     const check = evaluateEnchants({ wowClass: "DEATH_KNIGHT", gear: [...enchantedArmor(), mainHand({ permanentEnchantId: FALLEN_CRUSADER })] });
     expect(check).toMatchObject({ status: "PASS", enchanted: 8, required: 8, missing: [], runeforges: ["Rune of the Fallen Crusader"] });

@@ -223,6 +223,8 @@ Found with an AST scan for exports and object methods that nothing references, t
 
 Requested as an addendum: inspect every source, config, script, test and doc for hardcoded Discord ids, URLs, infrastructure values, business constants, secrets and test fixtures; classify each finding KEEP / CENTRALIZE / CONFIGURE / DERIVE / REMOVE / BLOCKED and implement the justified changes. Runs after the lib and domain test audit and before the services test audit and performance work. Findings: `docs/audit/hardcoding-findings.md` (to be written).
 
+Second addendum, same pass: replace unexplained magic strings and numbers in business logic with named constants close to their owning domain (retry limits, delays, intervals, pagination limits, Discord error codes, thresholds, repeated API paths). Keep obvious literals, messages and JSX text inline; no global constants file; no new configuration layer; behaviour and public contracts unchanged.
+
 ## Continuation point
 
 The test audit is not complete. Order for the rest, smallest risk first:

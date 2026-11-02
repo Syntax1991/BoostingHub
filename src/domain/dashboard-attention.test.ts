@@ -89,15 +89,6 @@ describe("projectPersonalDashboardAttention", () => {
     expect(personal.nextSelectedRun?.hasScheduleConflict).toBe(true);
   });
 
-  it("SELECTED without conflict still shows next run", () => {
-    const personal = projectPersonalDashboardAttention({
-      ...emptyMyRuns(),
-      selected: [baseItem()],
-    });
-    expect(personal.conflicts).toHaveLength(0);
-    expect(personal.nextSelectedRun).not.toBeNull();
-  });
-
   it("picks earliest scheduled SELECTED Run", () => {
     const personal = projectPersonalDashboardAttention({
       ...emptyMyRuns(),

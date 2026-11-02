@@ -843,6 +843,94 @@
     "src/lib/wow-weekly-reset.test.ts": [
       "KEEP",
       "Read in full; pure logic checked against exact expected values"
+    ],
+    "src/domain/character-schedule-conflict.test.ts": [
+      "KEEP",
+      "Conflict projection; also checks the 2 h reservation boundary that lives in signup.repository (misplaced, kept)"
+    ],
+    "src/domain/consumable-audit-extract.test.ts": [
+      "KEEP",
+      "Read in full; pure rules checked against exact expected values"
+    ],
+    "src/domain/consumable-audit-policy.test.ts": [
+      "KEEP",
+      "Read in full; pure rules checked against exact expected values"
+    ],
+    "src/domain/dashboard-attention.test.ts": [
+      "KEEP",
+      "Personal and operations projections. One test repeated the first"
+    ],
+    "src/domain/gear-readiness-policy.test.ts": [
+      "KEEP",
+      "Enchant, gem and weapon enhancement rules. One Runeforge test repeated test 1"
+    ],
+    "src/domain/operational-analytics.test.ts": [
+      "KEEP",
+      "Read in full; pure rules checked against exact expected values"
+    ],
+    "src/domain/roster-builder-optimizer.test.ts": [
+      "KEEP",
+      "Read in full; pure rules checked against exact expected values"
+    ],
+    "src/domain/roster-composition.test.ts": [
+      "KEEP",
+      "Read in full; pure rules checked against exact expected values"
+    ],
+    "src/domain/roster-publish-state.test.ts": [
+      "KEEP",
+      "Read in full; pure rules checked against exact expected values"
+    ],
+    "src/domain/roster-raid-buffs.integration.test.ts": [
+      "KEEP",
+      "Real DB buff coverage through draft selection; uses the test-only rosterService.setDraftSelection"
+    ],
+    "src/domain/roster-raid-buffs.test.ts": [
+      "KEEP",
+      "Buff coverage matrix. Two tests repeated others (empty roster, PLAYING Mage)"
+    ],
+    "src/domain/roster-selection-risk.test.ts": [
+      "KEEP",
+      "CLEAN / WARNING / BLOCKED classifier and fingerprints. A pure-function-with-itself test was removed"
+    ],
+    "src/domain/roster-validation.test.ts": [
+      "KEEP",
+      "Publish blockers and warnings. Two tests repeated the passing case without any lockout or characterless input"
+    ],
+    "src/domain/run-operational-handoff.integration.test.ts": [
+      "KEEP",
+      "Real DB handoff projection. A conditional assertion is now unconditional; dropped vacuous id checks and a settlement-absence test for a feature removed in #228"
+    ],
+    "src/domain/run-operational-handoff.test.ts": [
+      "KEEP",
+      "Read in full; pure rules checked against exact expected values"
+    ],
+    "src/domain/run-state.test.ts": [
+      "KEEP",
+      "Read in full; pure rules checked against exact expected values"
+    ],
+    "src/domain/signup-state.test.ts": [
+      "KEEP",
+      "Offer reconciliation and withdraw rules. A constant-echo test was removed"
+    ],
+    "src/domain/user-run-participation.test.ts": [
+      "KEEP",
+      "Selection state rules. Two tests repeated others with the same branch"
+    ],
+    "src/domain/wcl-fight-assignment.test.ts": [
+      "KEEP",
+      "Fight assignment across Runs. One test repeated the 8-fight assignment check"
+    ],
+    "src/domain/wcl-report-discovery.test.ts": [
+      "KEEP",
+      "Read in full; pure rules checked against exact expected values"
+    ],
+    "src/domain/wcl-report-overlap.test.ts": [
+      "KEEP",
+      "Duplicate report pull matching; timings modeled on a real raid, no personal data"
+    ],
+    "src/domain/wipe-collapse.test.ts": [
+      "KEEP",
+      "Read in full; pure rules checked against exact expected values"
     ]
   },
   "tests": {
@@ -961,6 +1049,14 @@
     "src/lib/roster-boss-plan-outputs.test.ts::roster DMs > a newly selected player with a plan sees it in the selected DM": [
       "REWRITE",
       "Now checks the plan line"
+    ],
+    "src/domain/run-operational-handoff.integration.test.ts::raid lead lifecycle handoffs (managed runs) > projects independent handoffs across batched runs": [
+      "REWRITE",
+      "Assertion inside an if could be skipped; now required"
+    ],
+    "src/domain/run-operational-handoff.integration.test.ts::raid lead lifecycle handoffs (managed runs) > management hub attention metrics use the same projection": [
+      "REWRITE",
+      "Dropped vacuous id checks"
     ]
   },
   "removed": {
@@ -1243,6 +1339,54 @@
     "src/lib/create-run-form-defaults.test.ts::Create Run opt-in defaults > recurring Schedule payload requires explicit discordRolePing opt-in (false stays false)": [
       "MERGE",
       "Same as the create-run-recurring payload test"
+    ],
+    "src/domain/run-operational-handoff.integration.test.ts::raid lead lifecycle handoffs (managed runs) > completing a Run creates no settlement work and keeps the Run COMPLETED": [
+      "REMOVE",
+      "Guards absence of payouts, removed in #228; completeRun is covered elsewhere"
+    ],
+    "src/domain/dashboard-attention.test.ts::projectPersonalDashboardAttention > SELECTED without conflict still shows next run": [
+      "MERGE",
+      "Same input as the first test"
+    ],
+    "src/domain/gear-readiness-policy.test.ts::weapon enhancement — Death Knight Runeforge (product rule: an oil is never required) > 5. a valid Runeforge never produces an oil failure": [
+      "MERGE",
+      "Same as test 1"
+    ],
+    "src/domain/roster-raid-buffs.test.ts::evaluateRaidBuffCoverage > C: caller responsibility — unselected Mage is simply omitted from the input": [
+      "MERGE",
+      "Evaluates an empty roster like test A"
+    ],
+    "src/domain/roster-raid-buffs.test.ts::evaluateRaidBuffCoverage > F: legacy Character-backed PLAYING Mage Lootbuddy covers via resolved class": [
+      "MERGE",
+      "Same input shape as test E"
+    ],
+    "src/domain/wcl-fight-assignment.test.ts::absolute WCL time > never compares relative milliseconds against Run timestamps": [
+      "MERGE",
+      "The same-report test asserts the same 8 assignments"
+    ],
+    "src/domain/signup-state.test.ts::picked-player withdrawal rules > allows it only until the Run starts": [
+      "REMOVE",
+      "Repeats a constant"
+    ],
+    "src/domain/roster-selection-risk.test.ts::warning fingerprint and acknowledgement > is stable for the same lockout state": [
+      "REMOVE",
+      "Pure function compared with itself"
+    ],
+    "src/domain/roster-validation.test.ts::validateRosterDraft > characterless lootbuddy with characterActive true is not blocked as inactive": [
+      "MERGE",
+      "Same passing path as the lootbuddy test"
+    ],
+    "src/domain/roster-validation.test.ts::validateRosterDraft > raid lockouts are informational only — a locked/saved character never blocks publish": [
+      "REMOVE",
+      "The input has no lockout data; it repeats the passing case"
+    ],
+    "src/domain/user-run-participation.test.ts::resolveUserRunParticipation > draft deselected → falls back to OFFERED": [
+      "MERGE",
+      "Same input as the first test"
+    ],
+    "src/domain/user-run-participation.test.ts::resolveUserRunParticipation > offspec draft role is authoritative displayRole": [
+      "MERGE",
+      "Same branch as the draft-selected test"
     ]
   }
 }

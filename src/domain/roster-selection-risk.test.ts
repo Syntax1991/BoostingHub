@@ -211,13 +211,6 @@ describe("warning fingerprint and acknowledgement", () => {
     contentSaves({ [VENOMOUS_ABYSS_RAID_ID]: save(VENOMOUS_ABYSS_RAID_ID, 6, 8) }),
   )!;
 
-  it("is stable for the same lockout state", () => {
-    const again = lockoutAttentionWarning(
-      contentSaves({ [VENOMOUS_ABYSS_RAID_ID]: save(VENOMOUS_ABYSS_RAID_ID, 6, 8) }),
-    )!;
-    expect(again.fingerprint).toBe(sixOfEight.fingerprint);
-  });
-
   it("changes when progress changes, when a saved raid is added, and across resets", () => {
     const sevenOfEight = lockoutAttentionWarning(
       contentSaves({ [VENOMOUS_ABYSS_RAID_ID]: save(VENOMOUS_ABYSS_RAID_ID, 7, 8) }),
