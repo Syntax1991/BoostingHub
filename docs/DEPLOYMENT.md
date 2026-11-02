@@ -317,7 +317,8 @@ systemctl restart boostinghub-web.service boostinghub-discord-bot.service
 - [ ] Discord sign-in completes with no redirect loop; a returning login maps to the same user
 - [ ] A member holding the configured Booster role receives Booster on sign-in;
       manual Booster grants remain enabled and role absence does not revoke them
-- [ ] `/profile` renders, including Active Sessions (no raw tokens)
+- [ ] `/profile` renders
+- [ ] `/settings` renders, including Active sessions (no raw tokens)
 - [ ] `/characters` loads (availability, lockouts, WCL, Battle.net)
 - [ ] `/runs`, `/my-runs` and `/manage/runs` (for authorized roles) load
 - [ ] Discord bot shows online in the guild
@@ -326,6 +327,7 @@ systemctl restart boostinghub-web.service boostinghub-discord-bot.service
       `systemd-cgls -u boostinghub-discord-bot.service --no-pager`
 - [ ] `systemctl list-timers 'boostinghub-*'` shows all four timers with a next run
 - [ ] Newest `/var/backups/boostinghub/*.dump` is non-empty and passes `pg_restore --list`
+- [ ] Do **not** use `npm run db:seed` as a check. It is guarded, but it exists to delete data
 - [ ] Fresh logs are clean since the restart:
       `journalctl -u boostinghub-web --since "10 min ago"` and
       `journalctl -u boostinghub-discord-bot --since "10 min ago"` show no startup errors,
@@ -349,7 +351,7 @@ Do not restart the host, and do not touch SSH or firewall settings, as part of f
 
 **Status: planned. Nothing here is implemented, and the switch is not approved.** Today production still pulls `main` from the existing repository `Syntax1991/BoostingHub`, with its full history.
 
-Goal: a new repository under the same name starts with one reviewed initial commit, and the existing repository stays complete as a private archive.
+Goal: a new repository, `Syntax1991/ManawyrmHub`, starts with one reviewed initial commit and no old history. The existing repository is not deleted or renamed and stays the rollback source. Whether it later becomes private is an open decision, because its history stays public until then. The switch comes only after the planned refactoring, and it needs its own approval.
 
 ### Checkpoint
 
@@ -357,7 +359,7 @@ The new initial commit must equal the last cleaned, tested and successfully depl
 
 | Item | Requirement |
 | --- | --- |
-| Commit `C` | The final cleanup commit on `main`, tagged `handover-checkpoint-<date>` in the archive |
+| Commit `C` | The final cleanup commit on `main`, tagged `handover-checkpoint-<date>` in the existing repository |
 | Cleanup done | Documentation consolidated, security cleanup merged, secret scanners without open findings |
 | Tests | Lint, typecheck, full test suite and build passed on exactly `C` |
 | Deployed | `DEPLOY_OK … after=<C>` from the release helper, and the smoke checklist passed |
@@ -372,13 +374,13 @@ The new initial commit `R` is valid only if `R^{tree}` equals the tree of `C`. B
 | Area | Effect | Planned handling |
 | --- | --- | --- |
 | Server checkout | `git pull --ff-only` refuses the unrelated history. The helper aborts safely and restores the timers | One deliberate step: tag the old `HEAD` locally, fetch `R`, compare the tree with `C`, move `main` to `R`, confirm `git status` |
-| Git remote | Stays the same URL once the new repository owns the name; the old repository moves to a new private name | Test anonymous fetch before and after. A private new repository would require server credentials |
+| Git remote | Changes to `Syntax1991/ManawyrmHub`; the old URL keeps working | Test anonymous fetch before and after. A private new repository would require server credentials |
 | Deploy scripts | No change needed for the switch; they keep using `origin` and the branch argument | A later move to a `production` branch is a separate, tested change |
-| Rollback | Old commit ids no longer exist in the new repository | Keep the local tag on the server and the private archive. Rollback targets after the switch are commits of the new history. Update [Rollback](#rollback) at that time |
+| Rollback | Old commit ids do not exist in the new repository | Keep the local tag on the server and the existing repository. Rollback targets after the switch are commits of the new history. Update [Rollback](#rollback) at that time |
 | Open pull requests | Not carried over | Merge or close every open PR before `C` |
-| Local worktrees and old clones | Their `origin` would point at the new repository and could push old history into it | Before the switch, point them at the archive and disable pushes (`git remote set-url --push origin no_push`). Remove leftover worktrees and branches. Enable secret scanning and push protection on the new repository before the first push |
+| Local worktrees and old clones | They still point at the existing repository, and adding the new one as a remote could push old history into it | Push only the single new commit, never a branch with old history. Disable pushes in old clones (`git remote set-url --push origin no_push`). Remove leftover worktrees and branches. Enable secret scanning and push protection on the new repository before the first push |
 | Public old content | Existing clones and third-party caches cannot be recalled | Removal is best effort. Exposed credentials are rotated, not hidden |
 
 ### Abort criteria
 
-Stop the switch if a scanner finds a real credential (rotate first), if any fingerprint differs from the checkpoint, if the archive or backup cannot be restored, if the old repository stays publicly reachable, or if the server shows tracked changes, another commit or another remote. The switch never includes SSH, firewall or package changes, because there is no independent console access to recover the server.
+Stop the switch if a scanner finds a real credential (rotate first), if any fingerprint differs from the checkpoint, if the existing repository or the backup cannot be restored, or if the server shows tracked changes, another commit or another remote. The switch never includes SSH, firewall or package changes, because there is no independent console access to recover the server.

@@ -25,6 +25,7 @@ Values and the private server details (access, certificate, provider account) ar
 - [Regular maintenance](#regular-maintenance)
   - [Publishing the Discord guides](#publishing-the-discord-guides)
 - [Backups](#backups)
+- [Testing a backup without touching production](#testing-a-backup-without-touching-production)
 - [Restore (operator decision only)](#restore-operator-decision-only)
 - [Operational dependencies](#operational-dependencies)
 - [Security checklist](#security-checklist)
@@ -343,7 +344,7 @@ analyzed Run is re-audited only if the link is new to it.
 
 ### Publishing the Discord guides
 
-The guides live in two normal Discord channels (ids in `src/discord-bot/guide-channels.ts`) and are edited in place. No threads, no forum posts. Canonical text: `src/guides/booster-guide.ts` and `src/guides/raidlead-guide.ts`. Screenshots: `docs/guides/screenshots/`, captured at 1440×900 in the dark theme with no browser chrome.
+The guides live in two normal Discord channels (ids in `src/discord-bot/guide-channels.ts`). `guide:*:publish` edits a card in place, which suits a small change to recent messages. Discord limits edits to messages older than one hour, so use the replace flow below for a larger refresh. No threads, no forum posts. Canonical text: `src/guides/booster-guide.ts` and `src/guides/raidlead-guide.ts`. Screenshots: `docs/guides/screenshots/`. The guide cards use 700 px wide images, and the `USER.md` images were captured at 1440×900 in the dark theme with no browser chrome.
 
 ```bash
 npm run guide:screenshots            # Booster screenshots (local DEV_AUTH + Playwright)
@@ -414,6 +415,19 @@ systemctl show -p Result --value boostinghub-backup.service   # success
 ls -lt /var/backups/boostinghub | head -3
 pg_restore --list /var/backups/boostinghub/<file>.dump >/dev/null && echo valid
 ```
+
+## Testing a backup without touching production
+
+This proves a dump can be restored, without restoring over anything. Run it as root on the host that holds the backups, when no Run is active. Never copy a dump to another machine without a decision on where personal data may go.
+
+1. Create a private temporary folder owned by `postgres` (mode `700`), and run `initdb` there.
+2. Start that temporary cluster on an unused port with `listen_addresses=''` and `unix_socket_directories` set to the folder, so it has no TCP listener. Its only link to production is what you read from it in step 5.
+3. Create a database named `restore_test` in the temporary cluster, never in the production cluster.
+4. Pipe the newest dump into `pg_restore --no-owner --no-privileges --exit-on-error`, connected to the temporary socket.
+5. Compare with production, read-only: counts of tables, columns, constraints and indexes, then row counts per table. Print counts and object names only, never row data. Tables written after the backup may differ.
+6. Stop the temporary cluster, delete the folder, and confirm the production database list is unchanged.
+
+The last result is recorded in [HANDOVER.md](HANDOVER.md#security-risks).
 
 ## Restore (operator decision only)
 
