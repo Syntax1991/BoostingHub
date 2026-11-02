@@ -232,5 +232,3 @@ export const strikeService = {
   },
 };
 
-export type OwnStrikeRow = ReturnType<typeof toOwnRow>;
-export type ManagerStrikeRow = ReturnType<typeof toManagerRow>;

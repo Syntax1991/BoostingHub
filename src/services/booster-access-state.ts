@@ -30,6 +30,3 @@ export function canRequestFromStatus(status: BoosterAccessStatus | null): boolea
   return status === null || status === "REJECTED" || status === "REVOKED";
 }
 
-export function isApprovedAccessStatus(status: BoosterAccessStatus): boolean {
-  return status === "APPROVED";
-}

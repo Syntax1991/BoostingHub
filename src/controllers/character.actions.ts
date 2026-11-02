@@ -4,14 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/auth/session";
 import { mapActionError, type ActionResult } from "@/lib/action-result";
 import { characterService } from "@/services/character.service";
-import {
-  characterIdSchema,
-  createCharacterSchema,
-  createCharactersSchema,
-  lookupCharacterFromRaiderIoSchema,
-  lookupCharactersFromRaiderIoSchema,
-  updateCharacterSchema,
-} from "@/validators/character";
+import { characterIdSchema, createCharactersSchema, lookupCharactersFromRaiderIoSchema, updateCharacterSchema } from "@/validators/character";
 
 function revalidateCharacterSurfaces(characterId?: string) {
   revalidatePath("/characters");
@@ -40,24 +33,6 @@ export type RaiderIoPreviewData = {
 };
 
 /**
- * Parse a Raider.IO Character profile URL and preview via Blizzard.
- * Returns Blizzard-canonical name/realm — never the Raider.IO realm slug.
- * Does not fetch Raider.IO and does not persist anything.
- */
-export async function lookupCharacterFromRaiderIoAction(
-  input: unknown,
-): Promise<ActionResult & { data: RaiderIoPreviewData | null }> {
-  try {
-    const user = await requireUser();
-    const parsed = lookupCharacterFromRaiderIoSchema.parse(input);
-    const data = await characterService.previewCharacterFromRaiderIoUrl(parsed.url, user);
-    return { ok: true, message: "Character found.", data };
-  } catch (error) {
-    return { ...mapActionError(error), data: null };
-  }
-}
-
-/**
  * Bulk Raider.IO → Blizzard preview. Server enforces 1–10 URLs.
  * Per-URL failures are returned alongside successes (partial ok).
  */
@@ -76,22 +51,6 @@ export async function lookupCharactersFromRaiderIoAction(input: unknown): Promis
     return { ok: true, message: "Lookup finished.", results };
   } catch (error) {
     return { ...mapActionError(error), results: null };
-  }
-}
-
-/**
- * wowClass and itemLevel are never accepted from the client — they are
- * re-resolved from Blizzard's public Character Profile inside the service.
- */
-export async function createCharacterAction(input: unknown): Promise<ActionResult> {
-  try {
-    const user = await requireUser();
-    const parsed = createCharacterSchema.parse(input);
-    const created = await characterService.addCharacterFromBlizzard(user, parsed);
-    revalidateCharacterSurfaces(created.id);
-    return { ok: true, message: "Character added." };
-  } catch (error) {
-    return mapActionError(error);
   }
 }
 

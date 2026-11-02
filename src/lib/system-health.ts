@@ -51,8 +51,6 @@ export const SYSTEM_DOMAIN_NEUTRAL_ERROR_CODES = [
   "BATTLENET_NOT_CONFIGURED",
 ] as const;
 
-export type SystemDomainNeutralErrorCode = (typeof SYSTEM_DOMAIN_NEUTRAL_ERROR_CODES)[number];
-
 const SYSTEM_DOMAIN_NEUTRAL_ERROR_CODE_SET: ReadonlySet<string> = new Set(
   SYSTEM_DOMAIN_NEUTRAL_ERROR_CODES,
 );

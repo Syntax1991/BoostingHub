@@ -325,5 +325,3 @@ export const attendanceService = {
   },
 };
 
-export type ManagerAttendanceView = Awaited<ReturnType<typeof attendanceService.getManagerAttendance>>;
-export type OwnAttendanceView = Awaited<ReturnType<typeof attendanceService.getOwnAttendance>>;

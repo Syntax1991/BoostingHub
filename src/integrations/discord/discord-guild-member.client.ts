@@ -8,9 +8,6 @@ export type DiscordRoleAccessSyncConfig = {
   lootbuddyRoleId: string;
 };
 
-/** @deprecated Use DiscordRoleAccessSyncConfig. */
-export type DiscordBoosterRoleSyncConfig = DiscordRoleAccessSyncConfig;
-
 function invalidRoleData(): Error {
   return new Error("Discord returned invalid role data.");
 }

@@ -98,4 +98,3 @@ export const createManyRunsSchema = z.object({
 export type CreateManyRunsInput = z.infer<typeof createManyRunsSchema>;
 export type MassCreateDefaults = CreateManyRunsInput["defaults"];
 export type MassCreateRunRow = CreateManyRunsInput["runs"][number];
-export type MassCreateRowOverrides = NonNullable<MassCreateRunRow["overrides"]>;

@@ -256,11 +256,5 @@ export const addScheduleTimesSchema = refineUniquePlanSlots(
 
 export type CreateCommunityScheduleSlotInput = z.infer<typeof createCommunityScheduleSlotSchema>;
 export type UpdateCommunityScheduleSlotInput = z.infer<typeof updateCommunityScheduleSlotSchema>;
-export type MaterializeCommunityScheduleOccurrenceInput = z.infer<
-  typeof materializeCommunityScheduleOccurrenceSchema
->;
 export type CreateSchedulePlanInput = z.infer<typeof createSchedulePlanSchema>;
 export type AddScheduleTimesInput = z.infer<typeof addScheduleTimesSchema>;
-export type DeleteCommunityScheduleRunSetupInput = z.infer<
-  typeof deleteCommunityScheduleRunSetupSchema
->;

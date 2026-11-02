@@ -3,11 +3,6 @@ import { entityIdSchema } from "@/validators/ids";
 
 export const BOOSTER_ACCESS_REVIEW_REASON_MAX = 280;
 
-/** Self-service requests are disabled; the character is only used for the ownership check. */
-export const requestBoosterAccessSchema = z.object({
-  characterId: entityIdSchema,
-});
-
 const reviewReasonSchema = z
   .string()
   .trim()

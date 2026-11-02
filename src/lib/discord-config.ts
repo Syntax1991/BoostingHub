@@ -30,11 +30,6 @@ export function getDiscordRoleAccessSyncConfig(): DiscordRoleAccessSyncConfig | 
   return { botToken, guildId, raidBoosterRoleId, lootbuddyRoleId };
 }
 
-/** @deprecated Prefer getDiscordRoleAccessSyncConfig — kept for transitional imports. */
-export function getDiscordBoosterRoleSyncConfig(): DiscordRoleAccessSyncConfig | null {
-  return getDiscordRoleAccessSyncConfig();
-}
-
 /** Server-only: what a read of the community guild needs (the Ping roles dialog's role list). */
 export function getDiscordGuildReadConfig(): { botToken: string; guildId: string } | null {
   const botToken = process.env.DISCORD_BOT_TOKEN?.trim();
@@ -71,7 +66,3 @@ export function getDiscordManagementScheduleRoleId(): string | null {
   return value && value.length > 0 ? value : null;
 }
 
-/** Whether Discord role-access sync is fully configured (both role IDs present). */
-export function isDiscordRoleAccessConfigured(): boolean {
-  return getDiscordRoleAccessSyncConfig() !== null;
-}

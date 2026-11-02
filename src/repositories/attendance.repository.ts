@@ -219,11 +219,6 @@ export const attendanceRepository = {
     return rows.length;
   },
 
-  async countUnmarked(runId: string): Promise<number> {
-    const rows = await orm.RunAttendance.where({ runId, status: "UNMARKED" }).select("id").all();
-    return rows.length;
-  },
-
   /**
    * Batched attendance totals / unmarked counts for Manage Runs handoffs.
    * One query for all run ids; empty input → empty Map.

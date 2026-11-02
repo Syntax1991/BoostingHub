@@ -285,15 +285,6 @@ export function findRaidCatalogById(id: string): WowRaidCatalogEntry | null {
   return WOW_RAID_CATALOG.find((raid) => raid.id === id) ?? null;
 }
 
-export function findRaidCatalogByBlizzardInstanceId(instanceId: number): WowRaidCatalogEntry | null {
-  return WOW_RAID_CATALOG.find((raid) => raid.blizzardInstanceId === instanceId) ?? null;
-}
-
-export function findRaidCatalogByName(name: string): WowRaidCatalogEntry | null {
-  const needle = normalizeRaidName(name);
-  return WOW_RAID_CATALOG.find((raid) => normalizeRaidName(raid.name) === needle) ?? null;
-}
-
 export function normalizeRaidName(value: string): string {
   return value
     .normalize("NFKD")

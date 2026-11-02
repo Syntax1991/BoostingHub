@@ -1,5 +1,3 @@
-import type { RunStatus } from "@/models/enums";
-
 /**
  * Canonical Run entity URL. Future Discord/notification links should use this
  * path, not a /manage-only URL.
@@ -103,29 +101,3 @@ export function runDetailPath(runId: string, tab?: RunDetailTab): string {
   return `${base}?tab=${tab}`;
 }
 
-export function rosterActionLabel(
-  status: RunStatus,
-  hasRoster: boolean,
-  publishedAt: string | null,
-  draftCount: number,
-): string {
-  if (status === "DRAFT") {
-    return "Manage";
-  }
-  if (status === "IN_PROGRESS") {
-    return "Attendance";
-  }
-  if (status === "COMPLETED" || status === "CANCELLED") {
-    return "View";
-  }
-  if (publishedAt) {
-    return "View/Edit Roster";
-  }
-  if (hasRoster && draftCount > 0) {
-    return "Continue Roster";
-  }
-  if (status === "ROSTERING") {
-    return "Continue Roster";
-  }
-  return "Build Roster";
-}

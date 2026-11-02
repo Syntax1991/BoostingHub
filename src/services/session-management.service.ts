@@ -74,11 +74,6 @@ export const sessionManagementService = {
     await auth.api.revokeSessions({ headers: requestHeaders });
   },
 
-  async signOutCurrentSession(): Promise<void> {
-    const requestHeaders = await headers();
-    await auth.api.signOut({ headers: requestHeaders });
-  },
-
   summarizeUserAgent,
 };
 

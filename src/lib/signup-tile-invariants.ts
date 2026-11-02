@@ -2,19 +2,6 @@ import { isDpsRole } from "@/lib/character-roles";
 import { resolveOfferedSpecs, type OfferedSpecChoice } from "@/lib/signup-offered-specs";
 import type { CharacterRole, WowClass } from "@/models/enums";
 
-/**
- * View helpers for the Signup tile grid.
- * Domain may still expand multi-role Boosters into role-section cards; the
- * unified grid must show each Signup identity at most once.
- */
-
-export type SignupTileIdentity = {
-  id: string;
-  characterId: string | null;
-  characterName: string | null;
-  assignableRoles: readonly CharacterRole[];
-};
-
 /** Deduplicate by signup id (never by character name — same name, different realms stay distinct). */
 export function uniqueSignupTiles<T extends { id: string }>(rows: readonly T[]): T[] {
   const seen = new Set<string>();

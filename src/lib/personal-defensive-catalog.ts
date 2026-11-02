@@ -35,13 +35,6 @@ export type PersonalDefensiveEntry = {
 /** Observation category of a personal defensive CAST fact (text column — no enum migration). */
 export const PERSONAL_DEFENSIVE_CATEGORY = "PERSONAL_DEFENSIVE";
 
-export const PERSONAL_DEFENSIVE_KIND_LABELS: Record<PersonalDefensiveKind, string> = {
-  MITIGATION: "Damage reduction",
-  IMMUNITY: "Immunity",
-  ABSORB: "Absorb",
-  SELF_HEAL_MAJOR: "Self-heal",
-};
-
 export const PERSONAL_DEFENSIVE_CATALOG: readonly PersonalDefensiveEntry[] = [
   { spellId: 48707, name: "Anti-Magic Shell", wowClass: "DEATH_KNIGHT", kind: "ABSORB" },
   { spellId: 48792, name: "Icebound Fortitude", wowClass: "DEATH_KNIGHT", kind: "MITIGATION" },

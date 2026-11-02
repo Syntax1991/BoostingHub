@@ -138,12 +138,6 @@ export function groupSignupMembersByUser(
   return order.map((key) => groups.get(key)!);
 }
 
-export function formatRaidLeadFieldValue(data: SignupEmbedData): string {
-  if (data.raidLeadDiscordUserId) return `<@${data.raidLeadDiscordUserId}>`;
-  const name = data.raidLeadName.trim();
-  return name.length > 0 ? name : EMPTY_FIELD_VALUE;
-}
-
 function unixSeconds(iso: string): number {
   return Math.floor(new Date(iso).getTime() / 1000);
 }

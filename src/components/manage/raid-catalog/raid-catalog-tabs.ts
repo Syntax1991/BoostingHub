@@ -138,6 +138,3 @@ export function raidCatalogHref(
   return `/manage/raid-catalog?${params.toString()}`;
 }
 
-export function raidCatalogTabHref(tab: RaidCatalogTab): string {
-  return raidCatalogHref(tab);
-}

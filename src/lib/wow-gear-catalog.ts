@@ -33,8 +33,6 @@ export const GEAR_SLOT = {
   TABARD: 17,
 } as const;
 
-export type GearSlotIndex = (typeof GEAR_SLOT)[keyof typeof GEAR_SLOT];
-
 export const GEAR_SLOT_LABELS: Record<number, string> = {
   0: "Head",
   1: "Neck",

@@ -29,13 +29,6 @@ export const discordSchedulePostRepository = {
     return rows.map((row) => mapRow(row as Record<string, unknown>));
   },
 
-  async findByBucket(bucket: DiscordScheduleBucket): Promise<DiscordSchedulePostRecord | null> {
-    const row = await orm.DiscordSchedulePost.where({ bucket })
-      .select("bucket", "channelId", "messageId", "lastSignature")
-      .first();
-    return row ? mapRow(row as Record<string, unknown>) : null;
-  },
-
   async recordPost(input: {
     bucket: DiscordScheduleBucket;
     channelId: string;

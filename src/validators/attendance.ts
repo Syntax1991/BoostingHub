@@ -5,10 +5,6 @@ import { entityIdSchema } from "@/validators/ids";
 
 export { startRunSchema } from "@/validators/run";
 
-export const completeRunSchema = z.object({
-  runId: entityIdSchema,
-});
-
 export const markAllPresentSchema = z.object({
   runId: entityIdSchema,
 });

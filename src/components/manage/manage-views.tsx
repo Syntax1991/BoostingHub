@@ -165,17 +165,3 @@ export function ManageRunsView({ data, massCreatedCount }: { data: ManagedRunsPa
   );
 }
 
-export function RosterUnavailable({ title, description }: { title: string; description: string }) {
-  return (
-    <PageWorkspace>
-      <PageHeader title={title} description={description} />
-      <Card>
-        <div className="px-3 py-3 text-sm">
-          <Link href="/manage/runs" className="text-accent hover:underline">
-            Back to manage runs
-          </Link>
-        </div>
-      </Card>
-    </PageWorkspace>
-  );
-}

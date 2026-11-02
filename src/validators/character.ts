@@ -38,11 +38,6 @@ const offspecRolesSchema = z
   .default([])
   .transform((roles) => [...new Set(roles)]);
 
-/** Raider.IO Character profile URL for a single Add Character row. */
-export const lookupCharacterFromRaiderIoSchema = z.object({
-  url: z.string().trim().min(1, "Enter a Raider.IO character profile link.").max(500),
-});
-
 /** Bulk Raider.IO URL preview — server enforces 1–10 independently of the client. */
 export const lookupCharactersFromRaiderIoSchema = z.object({
   urls: z

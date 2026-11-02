@@ -5,7 +5,7 @@
 import { createHash } from "node:crypto";
 import { DIFFICULTY_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
 import type { RaidDifficulty, RunLootType, RunStatus } from "@/models/enums";
-import { classifyRunWeek, type WowRunWeekBucket } from "@/lib/wow-run-week";
+import { classifyRunWeek } from "@/lib/wow-run-week";
 
 export const SCHEDULE_MESSAGE_FORMAT_VERSION = "v1" as const;
 
@@ -155,7 +155,3 @@ export function buildScheduleSignature(input: {
   return createHash("sha256").update(JSON.stringify(payload)).digest("hex").slice(0, 32);
 }
 
-/** Week buckets that never appear on either Schedule. */
-export function isExcludedWeekBucket(bucket: WowRunWeekBucket): boolean {
-  return bucket === "PAST" || bucket === "FUTURE";
-}

@@ -42,13 +42,6 @@ export type BoostingRoles = {
   discordLootbuddy: boolean;
 };
 
-export const EMPTY_BOOSTING_ROLES: BoostingRoles = {
-  isBooster: false,
-  isLootbuddy: false,
-  discordRaidBooster: false,
-  discordLootbuddy: false,
-};
-
 /** Effective access with independent source flags (for admin / diagnostics). */
 export type BoostingAccessGrant = {
   granted: boolean;

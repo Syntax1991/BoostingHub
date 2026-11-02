@@ -112,8 +112,6 @@ export const encounterFieldsSchema = z.object({
   blizzardEncounterIds: encounterIdList("Blizzard encounter"),
   wclEncounterIds: encounterIdList("Warcraft Logs encounter"),
 });
-export type EncounterFieldsInput = z.infer<typeof encounterFieldsSchema>;
-
 /** Admin create/edit: Blizzard ids optional; WCL ids are discovered server-side. */
 export const encounterAdminFieldsSchema = z.object({
   name,

@@ -6,14 +6,7 @@ import { mapActionError, type ActionResult } from "@/lib/action-result";
 import { battleNetService } from "@/services/battle-net.service";
 import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
 import { characterBlizzardSyncService } from "@/services/character-blizzard-sync.service";
-import {
-  battleNetRegionSchema,
-  importBattleNetCharactersSchema,
-  importSessionIdSchema,
-  linkBattleNetCharacterSchema,
-  refreshBlizzardCharacterSchema,
-  enrichImportCandidateSchema,
-} from "@/validators/blizzard";
+import { battleNetRegionSchema, importBattleNetCharactersSchema, refreshBlizzardCharacterSchema, enrichImportCandidateSchema } from "@/validators/blizzard";
 
 function revalidateCharacterSurfaces(characterId?: string) {
   revalidatePath("/characters");
@@ -23,10 +16,6 @@ function revalidateCharacterSurfaces(characterId?: string) {
     revalidatePath(`/characters/${characterId}`);
   }
 }
-
-type ImportSessionPayload = Awaited<
-  ReturnType<typeof characterBlizzardImportService.resolveImportCandidates>
->;
 
 export async function disconnectBattleNetAction(input: unknown): Promise<ActionResult> {
   try {
@@ -62,24 +51,6 @@ export async function importBattleNetCharactersAction(input: unknown): Promise<A
           ? `Successfully ${parts.join(" and ")} character(s).`
           : "No characters changed.",
     };
-  } catch (error) {
-    return mapActionError(error);
-  }
-}
-
-export async function linkBattleNetCharacterAction(input: unknown): Promise<ActionResult> {
-  try {
-    const user = await requireUser();
-    const parsed = linkBattleNetCharacterSchema.parse(input);
-    const result = await characterBlizzardImportService.linkCharacter(
-      user,
-      parsed.importSessionId,
-      parsed.blizzardCharacterId,
-      parsed.characterId,
-      { specialization: parsed.specialization },
-    );
-    revalidateCharacterSurfaces(result.characterId);
-    return { ok: true, message: "Character linked to Battle.net." };
   } catch (error) {
     return mapActionError(error);
   }
@@ -147,18 +118,3 @@ export async function enrichImportCandidateAction(
   }
 }
 
-export async function loadImportSessionAction(
-  input: unknown,
-): Promise<ActionResult & { data: ImportSessionPayload | null }> {
-  try {
-    const user = await requireUser();
-    const parsed = importSessionIdSchema.parse(input);
-    const data = await characterBlizzardImportService.resolveImportCandidates(
-      user,
-      parsed.importSessionId,
-    );
-    return { ok: true, message: "Import session loaded.", data };
-  } catch (error) {
-    return { ...mapActionError(error), data: null };
-  }
-}

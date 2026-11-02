@@ -1,5 +1,5 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { assertCanManageRun, canManageRun } from "@/auth/authorization";
+import { assertCanManageRun } from "@/auth/authorization";
 import { DomainError, RosterWarningConfirmationRequiredError } from "@/lib/errors";
 import {
   EXTERNAL_BOOSTERS_MAX_PER_ROSTER,
@@ -27,7 +27,7 @@ import {
 } from "@/lib/blizzard/sync-health";
 import { assertRunTransition, isSignupWindowOpen } from "@/services/run-state";
 import { assertSignupTransition } from "@/services/signup-state";
-import { validateRosterDraft, type RosterIssue, type RosterValidationResult } from "@/services/roster-validation";
+import { validateRosterDraft, type RosterIssue } from "@/services/roster-validation";
 import {
   evaluateRaidBuffCoverage,
   resolveBuffContributorClass,
@@ -64,7 +64,6 @@ import {
   unresolvedHistoricDpsMessage,
   type SignupAssignableRoleInput,
 } from "@/lib/signup-assignable-roles";
-import { rosterActionLabel } from "@/lib/run-routes";
 import type { CharacterRole, ParticipationType, RaidDifficulty, RunLootType, RunStatus, SignupStatus, WowClass } from "@/models/enums";
 import {
   projectRunContentLockouts,
@@ -749,37 +748,6 @@ async function planAuthoritativeRoster(
  * Publish runs again.
  */
 export const rosterService = {
-  async listManagedRuns(user: AuthenticatedUser) {
-    const runs = await runRepository.listManaged();
-    return runs.filter((run) => canManageRun(user, run)).map((run) => ({
-      id: run.id,
-      title: run.title,
-      productLabel: run.contentDisplay.productLabel,
-      contentSummary: run.contentDisplay.summary,
-      difficulty: run.difficulty,
-      scheduledStartAt: run.scheduledStartAt,
-      status: run.status,
-      raidLeadId: run.raidLeadId,
-      raidLeadName: run.raidLeadDisplayName,
-      signupsOpen: run.signupsOpen,
-      signupWindowOpen: isSignupWindowOpen(run.status, run.signupsOpen),
-      signupCount: run.signups.filter((signup) => signup.status !== "WITHDRAWN").length,
-      selectedCount: run.signups.filter((signup) => signup.status === "SELECTED").length,
-      draftSelectedCount: run.roster?.draftSelectedCount ?? 0,
-      publishedAt: run.roster?.publishedAt ?? null,
-      desiredTankCount: run.desiredTankCount,
-      desiredHealerCount: run.desiredHealerCount,
-      desiredDpsCount: run.desiredDpsCount,
-        desiredLootbuddyCount: run.desiredLootbuddyCount,
-      actionLabel: rosterActionLabel(
-        run.status,
-        Boolean(run.roster),
-        run.roster?.publishedAt ?? null,
-        run.roster?.draftSelectedCount ?? 0,
-      ),
-    }));
-  },
-
   /**
    * Participant-safe published roster. Uses live SELECTED signup rows and their
    * publishedRole snapshot — never mutable draft selection.
@@ -1632,11 +1600,6 @@ export const rosterService = {
     });
   },
 
-  async validateDraft(user: AuthenticatedUser, runId: string): Promise<RosterValidationResult> {
-    const view = await this.getRosterManagementView(user, runId);
-    return view.validation;
-  },
-
   /**
    * Publish Roster.
    * - Never published: the first authoritative publication of the SAVED draft
@@ -1855,5 +1818,4 @@ export const rosterService = {
 
 export type { RosterIssue };
 export type RosterManagementView = Awaited<ReturnType<typeof rosterService.getRosterManagementView>>;
-export type RosterSignupView = RosterManagementView["groups"]["tanks"][number];
 export type { ParticipationType, CharacterRole, SignupStatus };

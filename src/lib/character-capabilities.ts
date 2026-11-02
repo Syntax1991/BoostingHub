@@ -59,17 +59,6 @@ export function availableRoles(input: CharacterCapabilityInput): ConcreteCharact
   return CONCRETE_CHARACTER_ROLES.filter((role) => roles.has(role));
 }
 
-/** Spec label for a concrete role — prefers primary when it matches, else first playable. */
-export function specLabelForRole(
-  input: CharacterCapabilityInput,
-  role: CharacterRole,
-): string | null {
-  if (!isConcreteCharacterRole(role)) return null;
-  const specs = configuredSpecs(input).filter((entry) => entry.role === role);
-  if (specs.length === 0) return null;
-  return specs[0]!.specialization;
-}
-
 /**
  * Normalize + validate additional playable specs for create/update.
  * Rejects invalid class specs, duplicates, and overlap with primary.

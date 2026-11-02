@@ -59,28 +59,6 @@ export function DataTd({
   );
 }
 
-/** Compact list row for non-table dense lists (divide-y containers). */
-export function DataRow({
-  children,
-  className,
-  as: Comp = "li",
-}: {
-  children: ReactNode;
-  className?: string;
-  as?: "li" | "div";
-}) {
-  return (
-    <Comp
-      className={cn(
-        "flex flex-wrap items-center justify-between gap-2 px-3 py-2",
-        className,
-      )}
-    >
-      {children}
-    </Comp>
-  );
-}
-
 /** Mobile card alternative to a table row. */
 export function MobileDataCard({
   children,

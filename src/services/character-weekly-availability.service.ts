@@ -191,15 +191,4 @@ export const characterWeeklyAvailabilityService = {
     }
     return characterIds;
   },
-
-  isUnavailableForResetDifficulty(
-    unavailableByKey: Map<string, RaidDifficulty[]>,
-    characterId: string,
-    resetIdentifier: string,
-    difficulty: RaidDifficulty,
-  ): boolean {
-    return (unavailableByKey.get(resetKey(characterId, resetIdentifier)) ?? []).includes(
-      difficulty,
-    );
-  },
 };

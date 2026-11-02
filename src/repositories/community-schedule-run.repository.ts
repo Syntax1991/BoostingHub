@@ -50,11 +50,6 @@ export function isUniqueViolation(error: unknown): boolean {
   return hasPgErrorCode(error, "23505");
 }
 
-/** Postgres foreign-key violation (23503), including wrapped driver errors. */
-export function isForeignKeyViolation(error: unknown): boolean {
-  return hasPgErrorCode(error, "23503");
-}
-
 export const communityScheduleRunRepository = {
   async findBySlotAndWindow(
     scheduleSlotId: string,
@@ -87,27 +82,6 @@ export const communityScheduleRunRepository = {
     return rows.map((row) => mapRow(row as Record<string, unknown>));
   },
 
-  /**
-   * Batch: which of the given slots currently have at least one linked
-   * CommunityScheduleRun (scheduleSlotId not yet SET NULL).
-   */
-  async slotIdsWithMaterialization(
-    slotIds: readonly string[],
-    txOrm?: TxOrm,
-  ): Promise<Set<string>> {
-    const unique = [...new Set(slotIds)];
-    if (unique.length === 0) return new Set();
-    const client = txOrm ?? orm;
-    const rows = await client.CommunityScheduleRun.where((link) =>
-      link.scheduleSlotId.in(unique),
-    ).all();
-    const out = new Set<string>();
-    for (const row of rows) {
-      const slotId = (row as Record<string, unknown>).scheduleSlotId;
-      if (slotId != null) out.add(asString(slotId));
-    }
-    return out;
-  },
 
   async create(
     input: {

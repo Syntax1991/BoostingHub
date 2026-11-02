@@ -15,8 +15,6 @@ for (const [count, ids] of Object.entries(data.itemsBySocketCount)) {
   for (const id of ids) baseSocketsByItem.set(id, Number(count));
 }
 
-/** Client build the socket table was generated from. */
-export const WOW_ITEM_SOCKETS_BUILD: string | null = data.build;
 /** Highest item id the table knows; newer items (a later patch) are unknown. */
 export const WOW_ITEM_SOCKETS_MAX_ITEM_ID: number = data.maxKnownItemId;
 

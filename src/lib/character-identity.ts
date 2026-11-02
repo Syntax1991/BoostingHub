@@ -13,9 +13,6 @@ export const CHARACTER_NAME_MIN = 2;
 export const CHARACTER_NAME_MAX = 16;
 export const CHARACTER_REALM_MIN = 2;
 export const CHARACTER_REALM_MAX = 64;
-export const CHARACTER_ITEM_LEVEL_MIN = 0;
-export const CHARACTER_ITEM_LEVEL_MAX = 9999;
-
 const NAME_PATTERN = /^[\p{L}][\p{L}'’-]*$/u;
 const REALM_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N} '’-]*[\p{L}\p{N}]$/u;
 

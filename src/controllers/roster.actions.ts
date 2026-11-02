@@ -59,23 +59,6 @@ export async function prepareRosterEditAction(input: unknown): Promise<ActionRes
   }
 }
 
-export async function validateRosterAction(input: unknown): Promise<ActionResult> {
-  try {
-    const user = await requireUser();
-    const parsed = rosterRunSchema.parse(input);
-    const result = await rosterService.validateDraft(user, parsed.runId);
-    if (!result.canPublish) {
-      return { ok: false, code: "ROSTER_VALIDATION_FAILED", message: result.blockers[0]?.message ?? "Cannot publish." };
-    }
-    if (result.warnings.length > 0) {
-      return { ok: true, message: result.warnings[0]?.message ?? "Roster has warnings." };
-    }
-    return { ok: true, message: "Roster is ready to publish." };
-  } catch (error) {
-    return mapActionError(error);
-  }
-}
-
 export async function publishRosterAction(input: unknown): Promise<ActionResult> {
   try {
     const user = await requireUser();

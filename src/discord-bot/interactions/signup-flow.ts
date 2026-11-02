@@ -774,11 +774,4 @@ export async function handleStaleLootbuddyWizardSelect(interaction: StringSelect
   await interaction.editReply({ content: STALE_LOOTBUDDY_WIZARD_MESSAGE, components: [] });
 }
 
-export function describeLootbuddyResult(entryCount: number): string {
-  if (entryCount === 0) {
-    return "Your lootbuddy entries for this run were cleared.";
-  }
-  return `Signed up with ${entryCount} lootbuddy entr${entryCount === 1 ? "y" : "ies"}.`;
-}
-
 //#endregion

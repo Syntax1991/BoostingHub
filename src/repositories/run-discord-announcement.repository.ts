@@ -320,11 +320,6 @@ export const runDiscordAnnouncementRepository = {
       );
   },
 
-  async countPendingByRunId(runId: string): Promise<number> {
-    const rows = await orm.RunDiscordAnnouncement.where({ runId, status: "PENDING" }).select("id").all();
-    return rows.length;
-  },
-
   async findById(id: string): Promise<RunDiscordAnnouncementRecord | null> {
     const row = await orm.RunDiscordAnnouncement.where({ id }).first();
     return row ? mapRunDiscordAnnouncementRow(row as Record<string, unknown>) : null;

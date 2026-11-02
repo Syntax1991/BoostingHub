@@ -12,10 +12,6 @@ export function snowflakeAtTime(at: Date | number): string {
   return (sinceEpoch << BigInt(22)).toString();
 }
 
-export function isSnowflake(value: unknown): value is string {
-  return typeof value === "string" && /^\d{1,25}$/.test(value);
-}
-
 /** Numeric comparison of two snowflakes (string comparison is wrong across lengths). */
 export function compareSnowflakes(a: string, b: string): number {
   const x = BigInt(a);

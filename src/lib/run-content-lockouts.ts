@@ -29,15 +29,6 @@ export type RunContentRaidSaveInfo = {
   bosses: LockoutBossState[] | null;
 };
 
-export type LockoutMatchInput = {
-  raidId: string;
-  difficulty: RaidDifficulty;
-  resetIdentifier: string;
-  bossesDefeated: number;
-  totalBossCount: number;
-  isComplete: boolean;
-};
-
 /**
  * Project ordered Run contents into per-raid lockout labels.
  * `findSave` returns the verified row for that content, or null (Unknown).

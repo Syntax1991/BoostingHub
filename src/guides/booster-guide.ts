@@ -170,10 +170,6 @@ export const BOOSTER_GUIDE_CARDS: readonly BoosterGuideCard[] = [
   },
 ] as const;
 
-export function boosterGuideCardByKey(key: string): BoosterGuideCard | undefined {
-  return BOOSTER_GUIDE_CARDS.find((card) => card.key === key);
-}
-
 /** Discord embed payload (API shape) for one card — no attachments. */
 export function buildBoosterGuideEmbed(
   card: BoosterGuideCard,

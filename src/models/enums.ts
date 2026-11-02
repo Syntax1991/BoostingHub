@@ -12,8 +12,6 @@ export type AccountRole = (typeof ACCOUNT_ROLES)[number];
  * absent: ownership is only ever set by the explicit owner bootstrap.
  */
 export const MANAGEABLE_ACCOUNT_ROLES = ["USER", "RAID_LEAD", "ADMIN"] as const satisfies readonly AccountRole[];
-export type ManageableAccountRole = (typeof MANAGEABLE_ACCOUNT_ROLES)[number];
-
 /**
  * Safe persisted category of a Character's latest failed Blizzard sync attempt
  * (Character.lastSyncErrorCode). Never raw upstream text.

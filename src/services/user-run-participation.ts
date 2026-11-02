@@ -1,6 +1,4 @@
 import type { CharacterRole, SignupStatus } from "@/models/enums";
-import { isPickedSignup } from "@/services/signup-state";
-
 /**
  * User-facing selection visibility for one signup participation.
  * Draft roster selection is operationally real — not equivalent to "Pending".
@@ -85,13 +83,6 @@ export function resolveUserRunParticipationFromDraftIds(
     selectedRole: draftSelected ? (draftBySignupId.get(signup.id) ?? null) : null,
     publishedRole: signup.publishedRole,
   });
-}
-
-export function isUserRunPicked(
-  signup: { id: string; status: SignupStatus },
-  draftSelectedSignupIds: readonly string[],
-): boolean {
-  return isPickedSignup(signup, draftSelectedSignupIds);
 }
 
 /** My Runs "Selected" bucket: published or draft-picked. */

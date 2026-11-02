@@ -54,6 +54,3 @@ export const setLootbuddiesSchema = z.object({
   lootbuddies: z.array(lootbuddyEntrySchema).max(20),
 });
 
-export const cancelSignupSchema = z.object({
-  runId: entityIdSchema,
-});

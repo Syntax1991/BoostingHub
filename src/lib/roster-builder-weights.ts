@@ -48,11 +48,6 @@ export const ROSTER_BUILDER_WCL_HEALER_WEIGHT = 0.35;
 /** Soft item-level weight (ilvl typically ~300–700). */
 export const ROSTER_BUILDER_ILVL_WEIGHT = 0.02;
 
-/** Prefer avg percentile when present; else best. */
-export type RosterBuilderWclMetricPreference = "avg_then_best";
-
-export const ROSTER_BUILDER_WCL_METRIC: RosterBuilderWclMetricPreference = "avg_then_best";
-
 /** Per-buff importance — currently uniform; keep explicit for future tuning. */
 export const ROSTER_BUILDER_BUFF_IMPORTANCE: Readonly<Record<RaidBuffId, number>> = Object.freeze(
   Object.fromEntries(

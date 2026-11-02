@@ -202,8 +202,6 @@ export type ScheduleStart =
   /** First occurrence starting on or after this Europe/Berlin calendar date (YYYY-MM-DD). */
   | { mode: "FROM_DATE"; date: string };
 
-export const SCHEDULE_START_MODES = ["IMMEDIATE", "NEXT_RAID_ID", "SKIP_FIRST", "FROM_DATE"] as const;
-
 /**
  * Resolves a start choice into the persisted boundary (`firstWindowStartAt`:
  * raid-ID window start of the first eligible occurrence; null = immediately)

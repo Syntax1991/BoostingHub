@@ -33,8 +33,6 @@ export const RUN_DOMAIN_EVENT_PAYLOAD_ALLOWLIST = [
   "correctionPhase",
 ] as const;
 
-export type RunDomainEventPayloadKey = (typeof RUN_DOMAIN_EVENT_PAYLOAD_ALLOWLIST)[number];
-
 const FORBIDDEN_KEY_PATTERN =
   /(token|secret|password|authorization|cookie|refresh|access[_-]?token|bot[_-]?token|client[_-]?secret|api[_-]?key|bearer)/i;
 

@@ -216,4 +216,3 @@ export function projectDashboardOperations(input: {
   };
 }
 
-export const DASHBOARD_ATTENTION_CAP = ATTENTION_CAP;

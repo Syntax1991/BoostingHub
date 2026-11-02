@@ -1,14 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin, requireUser } from "@/auth/session";
+import { requireAdmin } from "@/auth/session";
 import { mapActionError, type ActionResult } from "@/lib/action-result";
 import { boosterAccessService } from "@/services/booster-access.service";
-import {
-  boosterAccessIdSchema,
-  rejectBoosterAccessSchema,
-  requestBoosterAccessSchema,
-} from "@/validators/booster-access";
+import { boosterAccessIdSchema, rejectBoosterAccessSchema } from "@/validators/booster-access";
 
 function revalidateAccessSurfaces(characterId?: string | null) {
   revalidatePath("/characters");
@@ -19,22 +15,6 @@ function revalidateAccessSurfaces(characterId?: string | null) {
   revalidatePath("/manage/users");
   if (characterId) {
     revalidatePath(`/characters/${characterId}`);
-  }
-}
-
-/**
- * Self-service requests are disabled. Kept so unauthorized/direct calls still
- * hit the domain rejection path.
- */
-export async function requestBoosterAccessAction(input: unknown): Promise<ActionResult> {
-  try {
-    const user = await requireUser();
-    const parsed = requestBoosterAccessSchema.parse(input);
-    await boosterAccessService.requestAccess(user, parsed);
-    revalidateAccessSurfaces(parsed.characterId);
-    return { ok: true, message: "Access request submitted." };
-  } catch (error) {
-    return mapActionError(error);
   }
 }
 

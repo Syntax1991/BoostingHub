@@ -89,7 +89,3 @@ export async function syncDiscordRoleAccess(
   }
 }
 
-/** @deprecated Prefer syncDiscordRoleAccess. */
-export const syncDiscordBoosterRole = syncDiscordRoleAccess;
-/** @deprecated Prefer syncDiscordRoleAccessOrThrow. */
-export const syncDiscordBoosterRoleOrThrow = syncDiscordRoleAccessOrThrow;

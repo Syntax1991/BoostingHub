@@ -1,5 +1,4 @@
 import type { RaidDifficulty, RunLootType, RunStatus } from "@/models/enums";
-import { UPCOMING_RUN_STATUSES } from "@/models/enums";
 import { DomainError } from "@/lib/errors";
 
 /**
@@ -20,7 +19,6 @@ export const RUN_TRANSITIONS: Record<RunStatus, readonly RunStatus[]> = {
 
 export const RUN_COMPOSITION_MIN = 0;
 export const RUN_COMPOSITION_MAX = 40;
-export const RUN_TITLE_MAX = 80;
 export const RUN_NOTES_MAX = 500;
 export const ATTENDANCE_NOTE_MAX = 200;
 /** New runs may be a few minutes in the past to avoid brittle clock races. */
@@ -57,17 +55,6 @@ export function assertRunTransition(from: RunStatus, to: RunStatus): void {
 
 export function isSignupWindowOpen(status: RunStatus, signupsOpen: boolean): boolean {
   return signupsOpen && SIGNUP_WINDOW_STATUSES.includes(status);
-}
-
-/**
- * A Character offered/selected on a Run in one of these statuses still
- * occupies a real scheduling slot, for cross-Run Character reservation —
- * the same status set as "upcoming" operational Runs (UPCOMING_RUN_STATUSES):
- * DRAFT has no signups yet, and COMPLETED/CANCELLED are terminal and never
- * block a future Run. A separate concern from raid lockouts.
- */
-export function isReservationBlockingRunStatus(status: RunStatus): boolean {
-  return UPCOMING_RUN_STATUSES.includes(status);
 }
 
 /**

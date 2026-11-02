@@ -40,15 +40,6 @@ export const customPingSchema = z.object({
   roles: z.array(z.enum(PING_ROLE_KEYS), { message: "Choose an allowed role." }).max(PING_ROLE_KEYS.length),
 });
 
-export const rosterDraftSelectionSchema = z.object({
-  runId: entityIdSchema,
-  signupId: entityIdSchema,
-  selected: z.boolean(),
-  version: z.number().int().positive(),
-  /** Omitted for a single-role booster offer (auto-resolved) and for lootbuddy slots. */
-  selectedRole: z.enum(CHARACTER_ROLES).nullish(),
-});
-
 /** One draft roster slot: the signup, plus the role the raid lead assigns it. */
 const rosterSelectionSchema = z.object({
   signupId: entityIdSchema,

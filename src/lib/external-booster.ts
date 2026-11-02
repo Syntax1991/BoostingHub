@@ -102,15 +102,3 @@ export function mapExternalBoosters(value: unknown): ExternalBooster[] {
     });
 }
 
-/** External entries that fill a Tank/Healer/DPS slot. */
-export function externalBoostersOnly(boosters: readonly ExternalBooster[]): Array<ExternalBooster & { role: CharacterRole }> {
-  return boosters.filter(
-    (booster): booster is ExternalBooster & { role: CharacterRole } =>
-      booster.participationType === "BOOSTER" && booster.role != null,
-  );
-}
-
-/** External lootbuddies (class only). */
-export function externalLootbuddies(boosters: readonly ExternalBooster[]): ExternalBooster[] {
-  return boosters.filter((booster) => booster.participationType === "LOOTBUDDY");
-}

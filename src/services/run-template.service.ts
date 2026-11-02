@@ -478,8 +478,3 @@ export const runTemplateService = {
   },
 };
 
-export type MyRunTemplatesPage = Awaited<ReturnType<typeof runTemplateService.listOwn>>;
-export type ManageRunTemplatesPage = Awaited<ReturnType<typeof runTemplateService.listAll>>;
-export type CreateRunTemplateFormData = Awaited<
-  ReturnType<typeof runTemplateService.getCreateFormData>
->;

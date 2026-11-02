@@ -155,10 +155,6 @@ export const RAIDLEAD_GUIDE_CARDS: readonly RaidleadGuideCard[] = [
   },
 ] as const;
 
-export function raidleadGuideCardByKey(key: string): RaidleadGuideCard | undefined {
-  return RAIDLEAD_GUIDE_CARDS.find((card) => card.key === key);
-}
-
 export function buildRaidleadGuideEmbed(
   card: RaidleadGuideCard,
   options?: { assetRevision?: string | null },

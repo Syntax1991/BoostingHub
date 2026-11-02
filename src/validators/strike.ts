@@ -27,10 +27,3 @@ export const revokeStrikeSchema = z.object({
     .max(STRIKE_REVOKE_REASON_MAX, `Revoke reasons must be ${STRIKE_REVOKE_REASON_MAX} characters or fewer.`),
 });
 
-export const userStrikeHistorySchema = z.object({
-  userId: entityIdSchema,
-});
-
-export const runStrikeHistorySchema = z.object({
-  runId: entityIdSchema,
-});

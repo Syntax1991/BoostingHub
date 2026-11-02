@@ -1,0 +1,110 @@
+{
+  "files": {
+    "src/auth/auth-session-hardening.test.ts": [
+      "KEEP",
+      "Safe redirects, base URL and session view are security behavior"
+    ],
+    "src/auth/authorization.consumable-audit.test.ts": [
+      "KEEP",
+      "Permission boundary with negative cases"
+    ],
+    "src/auth/authorization.user-management.test.ts": [
+      "KEEP",
+      "Canonical management navigation and user-management gates"
+    ],
+    "src/auth/discord-oauth-url.test.ts": [
+      "KEEP",
+      "Exercises the real Better Auth sign-in route"
+    ],
+    "src/auth/platform-owner-authorization.test.ts": [
+      "KEEP",
+      "Owner hierarchy and protected role control"
+    ],
+    "src/proxy.test.ts": [
+      "KEEP",
+      "Signed-out redirects and route coverage guard"
+    ],
+    "src/app/(app)/manage/runs/create/page.test.ts": [
+      "KEEP",
+      "Legacy URL redirect still exists"
+    ],
+    "src/app/(app)/manage/runs/create-many/page.test.ts": [
+      "KEEP",
+      "Legacy URL redirect still exists"
+    ],
+    "src/app/api/bot/bot-routes.test.ts": [
+      "KEEP",
+      "Real routes and database: credentials, acting user, ownership, signup rules"
+    ],
+    "src/app/api/bot/runs/[runId]/archive/archive-route.test.ts": [
+      "KEEP",
+      "Real route: permission, state and idempotency"
+    ],
+    "src/app/api/integrations/battlenet/callback/route.test.ts": [
+      "KEEP",
+      "Regression for the account-profile 403, including safe logging"
+    ],
+    "src/controllers/run-consumable-audit.actions.test.ts": [
+      "KEEP",
+      "Authorization and validation before any external call"
+    ],
+    "src/controllers/run-create-route.test.ts": [
+      "KEEP",
+      "Create form permission gate"
+    ],
+    "src/controllers/system-health.actions.test.ts": [
+      "KEEP",
+      "Telemetry severity classification, which drives health status"
+    ],
+    "src/controllers/warcraft-logs.actions.test.ts": [
+      "KEEP",
+      "Result mapping and user-facing messages"
+    ],
+    "src/prisma/boosting-roles-migration.test.ts": [
+      "KEEP",
+      "Runs the shipped migration SQL against the old table shape"
+    ],
+    "src/prisma/notification-visibility-backfill.test.ts": [
+      "KEEP",
+      "Runs the shipped backfill SQL, including idempotency"
+    ],
+    "src/prisma/seed-guard.test.ts": [
+      "KEEP",
+      "Destructive operation protection"
+    ],
+    "src/prisma/seed-wipe.test.ts": [
+      "KEEP",
+      "Runs the real seed; slow, but the only proof of a working reset"
+    ]
+  },
+  "tests": {
+    "src/auth/auth-session-hardening.test.ts::Better Auth session policy constants > uses a 30-day expiresIn and 1-day updateAge": [
+      "REMOVE",
+      "Only repeats two constants. Replacement: discord-oauth-url.test.ts checks the same values on the real auth options"
+    ],
+    "src/auth/platform-owner-authorization.test.ts::account role hierarchy — OWNER > ADMIN > RAID_LEAD > USER > existing USER / RAID_LEAD / ADMIN behavior is unchanged": [
+      "REWRITE",
+      "Half repeats authorization.user-management.test.ts. Keep the canManageRun and isEligibleRaidLead assertions, which are unique"
+    ],
+    "src/auth/platform-owner-authorization.test.ts::account role hierarchy — OWNER > ADMIN > RAID_LEAD > USER > OWNER inherits every Admin capability": [
+      "REWRITE",
+      "Drop the module list repeated from the ADMIN test; equality with ADMIN already covers it"
+    ],
+    "src/auth/platform-owner-authorization.test.ts::OWNER presentation and the generic role picker > OWNER is excluded from the generic assignable role options": [
+      "REWRITE",
+      "The second assertion is implied by the first"
+    ],
+    "src/app/(app)/manage/runs/create/page.test.ts::run create path helpers > exposes the canonical /runs/create path": [
+      "REMOVE",
+      "Only repeats a constant. Replacement: both redirect tests assert the same path"
+    ],
+    "src/app/api/bot/bot-routes.test.ts::POST /api/bot/runs/:runId/signup/quick > calls signupService.quickSignupBoosters for the URL runId and returns the result DTO": [
+      "REWRITE",
+      "Good behavior, misleading name: it asserts results and idempotency, not the service call"
+    ],
+    "src/services/discord-booster-role-sync.service.test.ts::discord-booster-role-sync compatibility re-exports > aliases syncDiscordBoosterRole to syncDiscordRoleAccess": [
+      "REMOVE",
+      "Done in batch 2. Only compared an alias with itself; the alias is gone. Real coverage: discord-role-access-sync.service.test.ts"
+    ]
+  }
+}

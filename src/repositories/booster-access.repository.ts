@@ -102,16 +102,6 @@ export const boosterAccessRepository = {
     return row ? mapAccess(row as Record<string, unknown>) : null;
   },
 
-  async findExact(
-    userId: string,
-    wowClass: WowClass,
-    role: CharacterRole,
-    difficulty: RaidDifficulty,
-  ): Promise<BoosterAccessRecord | null> {
-    const row = await orm.BoosterAccess.where({ userId, wowClass, role, difficulty }).first();
-    return row ? mapAccess(row as Record<string, unknown>) : null;
-  },
-
   async listPendingByUser(userId: string): Promise<BoosterAccessRecord[]> {
     const rows = await orm.BoosterAccess.where({ userId, status: "PENDING" }).all();
     return rows.map((row) => mapAccess(row as Record<string, unknown>));

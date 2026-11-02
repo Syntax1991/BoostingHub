@@ -168,19 +168,6 @@ export function WarningIcon({
   return <OpsGlyph icon={TriangleAlert} label={label} size={size} tone="warning" className={className} />;
 }
 
-/** Hard blocker / error. */
-export function BlockerIcon({
-  label = "Blocked",
-  className,
-  size = OPS_ICON_SIZE,
-}: {
-  label?: string;
-  className?: string;
-  size?: number;
-}) {
-  return <OpsGlyph icon={X} label={label} size={size} tone="danger" className={className} />;
-}
-
 /** Swap a roster slot for another signup (Find replacement). */
 export function ReplaceIcon({
   label = "Find replacement",

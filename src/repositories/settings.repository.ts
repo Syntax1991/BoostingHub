@@ -88,11 +88,6 @@ export const settingsRepository = {
     return mapSettings(row ? (row as Record<string, unknown>) : null);
   },
 
-  async getNotificationDmPreferences(userId: string): Promise<NotificationDmPreferences> {
-    const settings = await this.getSettings(userId);
-    return settings.notifications;
-  },
-
   async getTimeZone(userId: string): Promise<string> {
     const settings = await this.getSettings(userId);
     return settings.regional.timeZone;

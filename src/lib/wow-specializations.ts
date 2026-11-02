@@ -1,5 +1,4 @@
 import type { CharacterRole, WowClass } from "@/models/enums";
-import { WOW_CLASSES } from "@/models/enums";
 import { DomainError } from "@/lib/errors";
 import type { ConcreteCharacterRole } from "@/lib/character-roles";
 import { CONCRETE_CHARACTER_ROLES, isConcreteCharacterRole } from "@/lib/character-roles";
@@ -83,8 +82,6 @@ export const WOW_SPECIALIZATIONS: Record<WowClass, readonly WowSpecialization[]>
     { name: "Protection", role: "TANK" },
   ],
 };
-
-export const WOW_CLASS_OPTIONS = WOW_CLASSES;
 
 export type DpsAttackType = "MELEE" | "RANGED";
 
