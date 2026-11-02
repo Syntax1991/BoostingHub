@@ -97,7 +97,7 @@ export const RAIDLEAD_GUIDE_CARDS: readonly RaidleadGuideCard[] = [
     key: "open-manage-signups",
     title: "📣 How do I manage signups?",
     description: [
-      `**1.** Open your run and press **Open Run**. This button is only there while the run is a draft.`,
+      `**1.** Open your run and press **Open Run**. You only see this button while the run is a draft, so it is not in the picture.`,
       `**2.** Boosters can now sign up. The Discord channel appears once the run's raid week is the current or next one.`,
       `**3.** Press **Close Signups** when you have enough. **Reopen Signups** opens them again.`,
       ``,
@@ -115,7 +115,7 @@ export const RAIDLEAD_GUIDE_CARDS: readonly RaidleadGuideCard[] = [
       ``,
       `**1.** Open the **Roster** tab of your run.`,
       `**2.** Under **Signups**, click a player to add them. Click again to remove them.`,
-      `**3.** Press **Save**, then **Publish**. Your roster now shows in Discord.`,
+      `**3.** Press **Save** (it appears after your first change), then **Publish**. Your roster now shows in Discord.`,
       ``,
       `Short on people? **Auto Build Roster** fills the team for you, **Add Booster** adds someone by hand, and **Ping roles** asks Discord for missing roles.`,
       ``,
