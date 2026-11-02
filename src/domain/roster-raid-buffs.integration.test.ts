@@ -174,6 +174,14 @@ describe("rosterService Class Buff Checker integration", () => {
         ?.providers.some((provider) => provider.signupId === booster!.id),
     ).toBe(true);
 
+    // A draft-selected row that is later WITHDRAWN no longer counts toward coverage.
+    const { status } = (await orm.RunSignup.where({ id: booster!.id }).select("status").first()) as { status: string };
+    await orm.RunSignup.where({ id: booster!.id }).update({ status: "WITHDRAWN" });
+    view = await rosterService.getRosterManagementView(lead, runId);
+    expect(view.raidBuffCoverage.buffs.find((item) => item.id === "SKYFURY")?.covered).toBe(false);
+    await orm.RunSignup.where({ id: booster!.id }).update({ status });
+    view = await rosterService.getRosterManagementView(lead, runId);
+
     await rosterService.setDraftSelection(lead, {
       runId,
       signupId: booster!.id,

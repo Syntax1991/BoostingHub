@@ -5,14 +5,6 @@ import {
 } from "@/services/discord-sync.service";
 
 describe("shouldRetireDiscordChannel (destructive TEXT-channel authority)", () => {
-  it("A: COMPLETED + archivedAt=null → false", () => {
-    expect(shouldRetireDiscordChannel({ status: "COMPLETED", archivedAt: null })).toBe(false);
-  });
-
-  it("B: CANCELLED + archivedAt=null → false", () => {
-    expect(shouldRetireDiscordChannel({ status: "CANCELLED", archivedAt: null })).toBe(false);
-  });
-
   it("C: PUBLISHED + archivedAt set → true", () => {
     expect(shouldRetireDiscordChannel({ status: "PUBLISHED", archivedAt: "2026-10-01T12:00:00.000Z" })).toBe(true);
   });

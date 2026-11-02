@@ -115,7 +115,7 @@ describe("Better Auth session lifecycle (1.7.3 APIs)", () => {
     expect(sessionA!.session.id).not.toBe(sessionB!.session.id);
 
     const listedFromB = await auth.api.listSessions({ headers: headersB });
-    expect(listedFromB.length).toBeGreaterThanOrEqual(2);
+    expect(listedFromB).toHaveLength(2);
 
     const publicViews = listedFromB.map((session) =>
       toPublicSessionView(session, sessionB!.session.id),

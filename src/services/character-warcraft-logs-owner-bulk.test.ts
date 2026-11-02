@@ -98,28 +98,6 @@ describe("characterWarcraftLogsService.linkMissingForOwner", () => {
     expect(batch).not.toHaveBeenCalled();
   });
 
-  it("preserves mixed batch summary counts on COMPLETED", async () => {
-    listByUserId.mockResolvedValue([
-      { id: "A", isActive: true, warcraftLogsId: null },
-      { id: "B", isActive: true, warcraftLogsId: null },
-    ]);
-    const summary = {
-      total: 2,
-      attempted: 2,
-      linked: 1,
-      alreadyLinked: 0,
-      notFound: 1,
-      mismatch: 0,
-      unsupportedRegion: 0,
-      temporaryFailure: 0,
-      skippedAfterFailure: 0,
-    };
-    vi.spyOn(characterWarcraftLogsService, "tryAutoLinkManyIfMissing").mockResolvedValue(summary);
-
-    const result = await characterWarcraftLogsService.linkMissingForOwner(owner);
-    expect(result).toEqual({ status: "COMPLETED", summary });
-  });
-
   it("propagates unexpected repository failures", async () => {
     listByUserId.mockRejectedValue(new Error("db down"));
     await expect(characterWarcraftLogsService.linkMissingForOwner(owner)).rejects.toThrow("db down");

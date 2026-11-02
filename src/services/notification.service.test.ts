@@ -130,7 +130,7 @@ describe("notificationService web read/unread/ownership", () => {
     });
 
     const bell = await notificationService.getBellData(owner);
-    expect(bell.unreadCount).toBeGreaterThanOrEqual(2);
+    expect(bell.unreadCount).toBe(2);
     expect(bell.latest.some((row) => row.id === ownedA)).toBe(true);
 
     await notificationService.markRead(owner, ownedA);

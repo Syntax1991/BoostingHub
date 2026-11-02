@@ -150,7 +150,7 @@
     ],
     "src/services/session-management-ownership.test.ts": [
       "KEEP",
-      "New in batch 3; mutation-checked"
+      "Session ownership against real rows"
     ],
     "src/next-config.test.ts": [
       "KEEP",
@@ -302,7 +302,7 @@
     ],
     "src/lib/wcl-performance-display.test.ts": [
       "KEEP",
-      "Read in full; pure logic checked against exact expected values"
+      "Display formatting and filters; took the exact metric-label assertions from the services test"
     ],
     "src/components/runs/signup-dialog.wcl.test.ts": [
       "KEEP",
@@ -882,7 +882,7 @@
     ],
     "src/domain/roster-raid-buffs.integration.test.ts": [
       "KEEP",
-      "Real DB buff coverage through draft selection; uses the test-only rosterService.setDraftSelection"
+      "Real DB buff coverage through draft selection; now also proves a WITHDRAWN draft-selected row stops counting"
     ],
     "src/domain/roster-raid-buffs.test.ts": [
       "KEEP",
@@ -931,6 +931,94 @@
     "src/domain/wipe-collapse.test.ts": [
       "KEEP",
       "Read in full; pure rules checked against exact expected values"
+    ],
+    "src/services/dashboard.service.test.ts": [
+      "KEEP",
+      "Dashboard projection through the service"
+    ],
+    "src/services/discord-run-channel-retirement.test.ts": [
+      "KEEP",
+      "Destructive channel retirement guard. Two single-status cases repeated the status loop"
+    ],
+    "src/services/raid-catalog-import-plan.test.ts": [
+      "KEEP",
+      "Import plan rules"
+    ],
+    "src/services/notification-content-withdrawn.test.ts": [
+      "KEEP",
+      "Tests a domain notification builder; misplaced under services (rename candidate)"
+    ],
+    "src/services/raid-id-filter.integration.test.ts": [
+      "KEEP",
+      "Raid id filter against the real DB"
+    ],
+    "src/services/signup-embed-semantics.test.ts": [
+      "KEEP",
+      "Signup embed grouping semantics"
+    ],
+    "src/services/settings-preferences-helpers.test.ts": [
+      "KEEP",
+      "Grab-bag of lib helpers (misplaced). Three timezone tests passed constants that the functions never read"
+    ],
+    "src/services/blizzard-raid-metadata.service.test.ts": [
+      "KEEP",
+      "Journal discovery mapping and outage handling"
+    ],
+    "src/services/character-raider-io-ilvl.test.ts": [
+      "KEEP",
+      "Raider.IO enrichment preference and telemetry"
+    ],
+    "src/services/management-hub.community-stats.test.ts": [
+      "KEEP",
+      "Community Stats role gate"
+    ],
+    "src/services/raid-catalog-blizzard-discovery.test.ts": [
+      "KEEP",
+      "Journal id fill, manual-id survival, retry replacement, outage"
+    ],
+    "src/services/character-warcraft-logs-owner-bulk.test.ts": [
+      "KEEP",
+      "Owner bulk link filter and statuses. One summary pass-through test repeated test 1"
+    ],
+    "src/services/run-selection-label.integration.test.ts": [
+      "KEEP",
+      "Live select labels; one source-text guard that option builders use the shared helper"
+    ],
+    "src/app/dialog-centering.test.ts": [
+      "KEEP",
+      "Source guard for the single global dialog centering rule"
+    ],
+    "src/services/notification.service.test.ts": [
+      "KEEP",
+      "Bell read/unread/ownership. Unread count is now exact"
+    ],
+    "src/services/character-wcl-performance.service.test.ts": [
+      "KEEP",
+      "Role and spec relevance rules. Constant echo removed; the format test merged into lib/wcl-performance-display.test.ts"
+    ],
+    "src/services/run-detail.service.test.ts": [
+      "KEEP",
+      "Run detail visibility per role on seed data; also covers run-routes helpers (misplaced). Vacuous length >= 0 dropped"
+    ],
+    "src/services/create-run-recurring-schedule.test.ts": [
+      "KEEP",
+      "Create Run recurring path through the schedule service"
+    ],
+    "src/services/session-management.service.test.ts": [
+      "KEEP",
+      "Better Auth session lifecycle and public views (tests the auth library, not sessionManagementService; rename candidate). Session count now exact"
+    ],
+    "src/services/warcraft-logs-raid-metadata.service.test.ts": [
+      "KEEP",
+      "WCL zone resolution, ambiguity, soft vs forced discovery"
+    ],
+    "src/services/character-warcraft-logs-batch.test.ts": [
+      "KEEP",
+      "Batch dedupe, circuit breaker and concurrency cap"
+    ],
+    "src/services/signup-note.test.ts": [
+      "KEEP",
+      "Signup notes and raid short names through the embed"
     ]
   },
   "tests": {
@@ -1057,6 +1145,26 @@
     "src/domain/run-operational-handoff.integration.test.ts::raid lead lifecycle handoffs (managed runs) > management hub attention metrics use the same projection": [
       "REWRITE",
       "Dropped vacuous id checks"
+    ],
+    "src/services/notification.service.test.ts::notificationService web read/unread/ownership > tracks unread count, markRead, markAllRead, and rejects foreign ids": [
+      "REWRITE",
+      "Unread count >= 2 for a fresh user is now exactly 2"
+    ],
+    "src/services/run-detail.service.test.ts::runDetailService > gives a USER own signups and published roster without manager payload": [
+      "REWRITE",
+      "Dropped a length >= 0 assertion that cannot fail"
+    ],
+    "src/services/session-management.service.test.ts::Better Auth session lifecycle (1.7.3 APIs) > lists, identifies, and revokes sessions without exposing tokens in public views": [
+      "REWRITE",
+      "Session count >= 2 for a fresh user is now exactly 2"
+    ],
+    "src/domain/roster-raid-buffs.integration.test.ts::rosterService Class Buff Checker integration > updates coverage when a Shaman Booster is draft-selected and deselected": [
+      "REWRITE",
+      "Added the WITHDRAWN exclusion against the real roster view"
+    ],
+    "src/lib/wcl-performance-display.test.ts::formatWclPerformanceRaidLine > renders Bundle multi-role lines without collapsing raids": [
+      "REWRITE",
+      "Absorbed the exact metric-label assertions"
     ]
   },
   "removed": {
@@ -1387,6 +1495,50 @@
     "src/domain/user-run-participation.test.ts::resolveUserRunParticipation > offspec draft role is authoritative displayRole": [
       "MERGE",
       "Same branch as the draft-selected test"
+    ],
+    "src/services/discord-run-channel-retirement.test.ts::shouldRetireDiscordChannel (destructive TEXT-channel authority) > A: COMPLETED + archivedAt=null → false": [
+      "MERGE",
+      "Covered by the status-alone loop"
+    ],
+    "src/services/discord-run-channel-retirement.test.ts::shouldRetireDiscordChannel (destructive TEXT-channel authority) > B: CANCELLED + archivedAt=null → false": [
+      "MERGE",
+      "Covered by the status-alone loop"
+    ],
+    "src/services/settings-preferences-helpers.test.ts::community timezone authority regression > Run.title stays community-derived regardless of viewer timezone": [
+      "REMOVE",
+      "The viewer timezone was never passed to the function"
+    ],
+    "src/services/settings-preferences-helpers.test.ts::community timezone authority regression > Discord channel name stays community-derived": [
+      "REMOVE",
+      "The viewer timezone was never passed to the function"
+    ],
+    "src/services/settings-preferences-helpers.test.ts::community timezone authority regression > raid-ID week classification ignores viewer timezone": [
+      "REMOVE",
+      "The viewer timezone was never passed to the function"
+    ],
+    "src/services/roster-raid-buffs-stale-selection.test.ts::class buff coverage after signup removal > drops WITHDRAWN draft-selected providers from coverage": [
+      "REWRITE",
+      "Re-implemented the roster filter in the test; replaced by a real-view assertion in roster-raid-buffs.integration.test.ts"
+    ],
+    "src/services/roster-raid-buffs-stale-selection.test.ts::class buff coverage after signup removal > live staged deselect removes class coverage immediately": [
+      "REMOVE",
+      "Re-implemented client coverage in the test; deselect through the real view is covered by the integration test"
+    ],
+    "src/services/roster-raid-buffs-stale-selection.test.ts::live composition from staged selection > updates tank/healer/dps counts when a staged signup is removed": [
+      "MERGE",
+      "composeRoster counts are covered in roster-composition.test.ts"
+    ],
+    "src/services/character-warcraft-logs-owner-bulk.test.ts::characterWarcraftLogsService.linkMissingForOwner > preserves mixed batch summary counts on COMPLETED": [
+      "MERGE",
+      "Pass-through of a mocked summary, as in test 1"
+    ],
+    "src/services/character-wcl-performance.service.test.ts::specNameForOfferedRole / metric keys > maps run difficulty to WCL filters": [
+      "REMOVE",
+      "Repeats constants"
+    ],
+    "src/services/character-wcl-performance.service.test.ts::formatWclPerformanceRaidLine > formats with metric labels and optional spec": [
+      "MERGE",
+      "Moved the exact assertions into lib/wcl-performance-display.test.ts"
     ]
   }
 }

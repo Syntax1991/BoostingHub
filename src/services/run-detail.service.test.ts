@@ -83,7 +83,6 @@ describe("runDetailService", () => {
     expect(view.capabilities.canOpen).toBe(false);
     expect(view.capabilities.canStart).toBe(false);
     expect(view.attendance.manager).toBeNull();
-    expect(view.attendance.own.length).toBeGreaterThanOrEqual(0);
     expect(view.viewerSignups.some((signup) => signup.id === ids.publishedKael)).toBe(true);
     expect(view.publishedRoster?.members.some((member) => member.signupId === ids.publishedKael)).toBe(true);
     expect(view.publishedRoster?.members.every((member) => member.participationType)).toBeTruthy();

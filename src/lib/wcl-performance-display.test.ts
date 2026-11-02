@@ -33,6 +33,8 @@ describe("roster WCL performance display copy", () => {
     expect(tide).toContain("Tank (Protection)");
     expect(tide).toContain("HPS");
     expect(venomous).toContain("The Venomous Abyss");
+    expect(venomous).toContain("Tank (Protection) Best Perf. Avg 88% · Median Perf. Avg 62%");
+    expect(venomous).toContain("HPS Best Perf. Avg 75% · Median Perf. Avg 58%");
     expect(venomous).not.toMatch(/9\/9|4\/9/);
   });
 

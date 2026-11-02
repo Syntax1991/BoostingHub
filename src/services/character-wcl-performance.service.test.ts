@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { formatWclPerformanceRaidLine } from "@/lib/wcl-performance-display";
 import {
   TIDEBOUND_GROTTO_RAID_ID,
   VENOMOUS_ABYSS_RAID_ID,
@@ -11,7 +10,6 @@ import {
   buildMetricKey,
   rolesRelevantForWclPerformance,
   specNameForOfferedRole,
-  WCL_DIFFICULTY,
 } from "@/services/character-wcl-performance.service";
 import { mapZoneRankings } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
 
@@ -57,12 +55,6 @@ describe("specNameForOfferedRole / metric keys", () => {
   it("builds metric keys with optional spec", () => {
     expect(buildMetricKey("hps", "Holy")).toBe("hps:Holy");
     expect(buildMetricKey("tank-dps", null)).toBe("tank-dps");
-  });
-
-  it("maps run difficulty to WCL filters", () => {
-    expect(WCL_DIFFICULTY.NORMAL).toBe(3);
-    expect(WCL_DIFFICULTY.HEROIC).toBe(4);
-    expect(WCL_DIFFICULTY.MYTHIC).toBe(5);
   });
 });
 
@@ -130,21 +122,5 @@ describe("specsForOfferedRole", () => {
     expect(specsForOfferedRole("SHAMAN", "Restoration", ["Elemental"], "HEALER")).toEqual(["Restoration"]);
     expect(specsForOfferedRole("SHAMAN", "Restoration", ["Elemental"], "RANGED_DPS")).toEqual(["Elemental"]);
     expect(specsForOfferedRole("PRIEST", "Holy", ["Discipline"], "HEALER")).toEqual(["Holy", "Discipline"]);
-  });
-});
-
-describe("formatWclPerformanceRaidLine", () => {
-  it("formats with metric labels and optional spec", () => {
-    const line = formatWclPerformanceRaidLine({
-      raidId: VENOMOUS_ABYSS_RAID_ID,
-      raidName: "The Venomous Abyss",
-      roles: [
-        { role: "TANK", specLabel: "Protection", bestPct: 88, avgPct: 62 },
-        { role: "HEALER", specLabel: null, bestPct: 75, avgPct: 58 },
-      ],
-    });
-    expect(line).toContain("The Venomous Abyss");
-    expect(line).toContain("Tank (Protection) Best Perf. Avg 88% · Median Perf. Avg 62%");
-    expect(line).toContain("HPS Best Perf. Avg 75% · Median Perf. Avg 58%");
   });
 });

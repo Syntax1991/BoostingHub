@@ -1,9 +1,6 @@
 ﻿import { describe, expect, it } from "vitest";
 import { preferDefaultCharacterId } from "@/lib/default-character-preference";
 import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
-import { buildRunTitle } from "@/lib/run-title";
-import { buildDiscordRunChannelName } from "@/lib/discord-channel-name";
-import { classifyRunWeek } from "@/lib/wow-run-week";
 import { isValidIanaTimeZone, listIanaTimeZones } from "@/lib/timezone";
 import { resolveDiscordDelivery } from "@/domain/notification-content";
 
@@ -69,41 +66,5 @@ describe("resolveDiscordDelivery master override", () => {
         discordUserId: "1",
       }),
     ).toEqual({ status: "PENDING", discordUserId: "1", discordDeliverAfter: null });
-  });
-});
-
-describe("community timezone authority regression", () => {
-  const scheduledStartAt = "2026-09-17T19:00:00.000Z";
-
-  it("Run.title stays community-derived regardless of viewer timezone", () => {
-    const title = buildRunTitle({
-      scheduledStartAt,
-      difficulty: "HEROIC",
-      lootType: "VIP",
-      titleCoverage: "8/8",
-      raidLeadName: "Gamma_1991",
-    });
-    expect(title).toContain("HC");
-    expect(title).toContain("VIP");
-    expect(title).toContain("Gamma_1991");
-  });
-
-  it("Discord channel name stays community-derived", () => {
-    const name = buildDiscordRunChannelName({
-      scheduledStartAt,
-      difficulty: "HEROIC",
-      lootType: "VIP",
-      coverage: "8of8",
-      raidLeadChannelName: "Gamma_1991",
-    });
-    expect(name.length).toBeGreaterThan(0);
-    expect(name).toMatch(/hc|vip|gamma/i);
-  });
-
-  it("raid-ID week classification ignores viewer timezone", () => {
-    const now = new Date("2026-09-15T12:00:00.000Z");
-    const a = classifyRunWeek({ scheduledStartAt, now });
-    const b = classifyRunWeek({ scheduledStartAt, now });
-    expect(a.bucket).toBe(b.bucket);
   });
 });
