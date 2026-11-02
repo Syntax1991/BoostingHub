@@ -24,6 +24,7 @@ This repository is public, so concrete server details, access data and secret va
 - Stack: Next.js, React, TypeScript, PostgreSQL, Prisma 8 (release candidate), Better Auth, discord.js. Details: [DEVELOPER.md](DEVELOPER.md).
 - The app runs on one Linux server with a web process, one Discord bot process and four systemd timers. See [OPERATIONS.md](OPERATIONS.md).
 - Last recorded production release: `418fd7b` (security dependency update, PR #318), deployed 2026-11-01. The owner's production smoke test passed, including a real Discord login and session survival. `main` is ahead of production only by documentation, comments, guide text, four bot messages, test changes and removed one-off scripts; they reach the server with the next normal release.
+- Master audit branch `test/audit-batch-a`: phase reports under [docs/audit/reports/](audit/reports/) (`PHASE-1` …). Ledger: [docs/audit/EXECUTION_LEDGER.md](audit/EXECUTION_LEDGER.md).
 
 ## Production and disabled features
 
@@ -57,7 +58,8 @@ This repository is public, so concrete server details, access data and secret va
 - **Prisma 8 release candidate** in production. Better Auth needs `--legacy-peer-deps` because of it.
 - **No CI, no branch protection, no dependency updates automation.** Checks run only locally.
 - **Stale comments:** `.env.example` describes the old difficulty-based bootstrap and an older Warcraft Logs use; `GET /api/bot/runs/:runId/start` mentions gold collectors.
-- **Legacy kept for compatibility:** `lootType` as the name of Run type, `RunTemplate` for Run Setup, generic `DPS` role rows, Character-backed Lootbuddy rows, `BoosterAccess` history, `raidInvites` always empty in the sync payload, `User.discordRunChannelNickname` unused, `runService.createRun` used only by tests, `clear-channel` no longer used for retirement.
+- **Legacy kept for compatibility:** `lootType` as the name of Run type, `RunTemplate` for Run Setup, generic `DPS` role rows, Character-backed Lootbuddy rows, `BoosterAccess` history, `User.discordRunChannelNickname` unused, `runService.createRun` used only by tests, `clear-channel` no longer used for retirement.
+- **Removed (audit A19):** empty `raidInvites` sync-work lane — Raid Invites are `notificationDms` only. Co-deploy web + bot.
 - **Naming:** BoostingHub, Manawyrm Hub, `boostting-bot` and a Discord emoji named `PhoenixStarDiscord` all still exist.
 - **Screenshots:** the Discord guides use redacted production images from 2026-11-01 (`live-*.png`), which show real run dates and counts that will age, plus `rl-09-finish-run.png` from the local test system. The other images, used by `USER.md`, were recaptured on 2026-11-01 from a fresh seed database, without real names or the removed Payout tab. The seed's Run dates are fixed and lie in the past, so the capture scripts' default views of `/runs` and `/my-runs` come out empty; `bo-03`, `bo-04`, `bo-05` and `rl-02` were taken with `?id=all`, and there is no capture script for `common-01-login.png`. The old images remain in Git history.
 - **Large files:** `src/discord-bot/sync-loop.ts` and `run.service.ts` have grown large.

@@ -72,7 +72,7 @@ Confirmed by import analysis of all non-test files. Severity is about real impac
 | A15 | Medium | `src/services/discord-sync.service.ts`, `src/discord-bot/sync-loop.ts` | 2240 and 2289 lines | Split only along tested lanes |
 | A16 | Open | `src/lib/gold.ts` | Payout leftover with no caller. Payouts were removed on purpose in #228 | **Owner decision**, see below |
 | A17 | High | `src/repositories/user.repository.ts` `changeAccountRoleAtomic` | The "lock every Admin-level row" step used `update()`, which in Prisma Next writes only the first matching row. Two Admins demoting each other could leave none | Fixed in `26a80d5` with `updateAndCount()`; an AST scan of every ORM `update()` / `delete()` in `src` found no other multi-row filter |
-| A19 | Done | `discordSyncService.listSyncWork`, `api/bot/discord/sync/route.ts`, `bot-api-client.ts`, `sync-loop.ts` | `raidInvites` is declared and returned but never filled; Raid Invites travel as `notificationDms`. The bot still has a lane and `syncRaidInvite` for it | Remove the lane on both sides (the bot reads it with `?? []`, so either deploy order is safe) |
+| A19 | Done | `discordSyncService.listSyncWork`, `api/bot/discord/sync/route.ts`, `bot-api-client.ts`, `sync-loop.ts` | Empty `raidInvites` lane removed; Raid Invites are `notificationDms` only | Done in `cc14bdf` ([PHASE-3.md](reports/PHASE-3.md)) |
 | A18 | Done | `src/repositories/*` (40 sites), 10 test files | `((tx.orm as { public?: … }).public ?? (tx.orm as unknown as …)) as …` copied everywhere; `tx.orm.public` is already typed and present at runtime (checked) | Replace with `tx.orm.public` in one refactor commit |
 
 Healthy and to be left alone: no import cycles, no repository bypass from components, bot API uses constant-time token comparison, all 127 server actions authenticate directly or through the service they call.
@@ -358,7 +358,7 @@ Found while moving, not changed (feature freeze): four production modules are im
 | 2 | Test quality audit | DONE | [PHASE-2.md](reports/PHASE-2.md) |
 | 3 | Production refactoring / code quality | DONE | [PHASE-3.md](reports/PHASE-3.md) |
 | 4 | Performance, security, reliability | DONE | [PHASE-4.md](reports/PHASE-4.md) |
-| 5 | UX and documentation | NOT STARTED | — |
+| 5 | UX and documentation | DONE | [PHASE-5.md](reports/PHASE-5.md) |
 | 6 | Final validation and readiness | NOT STARTED | — |
 
 ### Phase 2 remaining (authoritative)

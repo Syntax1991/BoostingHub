@@ -3928,7 +3928,7 @@ Each member renders as `<@discordUserId> <:class:> — Character-Realm` when the
 
 When a Run is **started** (`Start Run` → `IN_PROGRESS`), BoostingHub creates a `RAID_INVITE` `UserNotification` for each SELECTED participant. Publishing the roster earlier does **not** send invites. Discord DM intent is snapshotted from `User.dmRaidInviteEnabled` + linked Discord id at creation.
 
-The bot delivers from `listSyncWork.notificationDms` (PENDING rows only). Legacy `raidInvites` is always empty — do not regenerate invites from SELECTED + `raidInviteSentSignupIds` (avoids double DMs). See [User settings and notifications](#user-settings-and-notifications).
+The bot delivers from `listSyncWork.notificationDms` (PENDING rows only). The legacy `raidInvites` sync lane was removed (audit A19) — do not regenerate invites from SELECTED + `raidInviteSentSignupIds` (avoids double DMs). SENT RAID_INVITE DMs still append `raidInviteSentSignupIds` via `recordNotificationDmDelivery`. See [User settings and notifications](#user-settings-and-notifications).
 
 ```text
 📣 **Raid Invite**
