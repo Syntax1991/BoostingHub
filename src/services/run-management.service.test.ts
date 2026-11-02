@@ -16,7 +16,7 @@ import { raidRepository } from "@/repositories/raid.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { runDetailService } from "@/services/run-detail.service";
 import { runService } from "@/services/run.service";
-import { signupService } from "@/services/signup.service";
+import { offerCharacter } from "@/test/signup-offers";
 
 const raidId = VENOMOUS_ABYSS_RAID_ID;
 const ids = {
@@ -596,25 +596,15 @@ describe("opened run signup integration", () => {
 
     const draftId = await createDraft(lead, { title: "Signup closed draft" });
     await expectDomainCode(
-      signupService.createBoosterSignup(user, {
-        runId: draftId,
-        characterId: ids.character,
-        role: "TANK",
-        isBackup: false,
-      }),
+      offerCharacter(user, draftId, ids.character, "TANK"),
       "SIGNUP_CLOSED",
     );
 
     const openId = await createDraft(lead, { title: "Signup open run" });
     await runService.openRun(lead, openId);
-    const signup = await signupService.createBoosterSignup(user, {
-      runId: openId,
-      characterId: ids.character,
-      role: "TANK",
-      isBackup: false,
-    });
-    createdSignupIds.push(signup.id);
-    expect(signup.revived).toBe(false);
+    const signupId = await offerCharacter(user, openId, ids.character, "TANK");
+    createdSignupIds.push(signupId);
+    expect(((await orm.RunSignup.where({ id: signupId }).first()) as { status: string } | null)?.status).toBe("PENDING");
   });
 });
 

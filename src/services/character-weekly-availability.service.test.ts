@@ -8,11 +8,11 @@ import { lockoutService } from "@/services/lockout.service";
 import { anyContentRunInput } from "@/lib/test-run-input";
 import { runService } from "@/services/run.service";
 import { rosterService } from "@/services/roster.service";
-import { signupService } from "@/services/signup.service";
 import { testActor } from "@/test/actors";
 import { assertIsolatedTestDatabase, createTestCharacter, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
 import { expectDomainError } from "@/test/domain-error";
 import { DAY_MS } from "@/test/time";
+import { offerCharacter } from "@/test/signup-offers";
 
 /** Runs cascade; Characters and their availability rows go with the owners. */
 const created = { runIds: [] as string[], userIds: [] as string[] };
@@ -164,33 +164,18 @@ describe("characterWeeklyAvailabilityService", () => {
     );
 
     await expectDomainError(
-      signupService.createBoosterSignup(kael, {
-        runId: heroicRun.id,
-        characterId: ids.kaelResto,
-        role: "HEALER",
-        isBackup: false,
-      }),
+      offerCharacter(kael, heroicRun.id, ids.kaelResto, "HEALER"),
       "CHARACTER_UNAVAILABLE",
     );
 
     // The owner holds the Booster role, so only weekly availability gates Heroic here.
     const mythicRun = await openRun("MYTHIC", 4.5);
 
-    const mythicSignup = await signupService.createBoosterSignup(kael, {
-      runId: mythicRun.id,
-      characterId: ids.kaelResto,
-      role: "HEALER",
-      isBackup: false,
-    });
-    expect(mythicSignup.id).toBeTruthy();
+    // Unavailable for Heroic only: the Mythic offer is accepted.
+    await offerCharacter(kael, mythicRun.id, ids.kaelResto, "HEALER");
 
     await characterWeeklyAvailabilityRepository.clearUnavailable(ids.kaelResto, resetForRun);
-    const signup = await signupService.createBoosterSignup(kael, {
-      runId: heroicRun.id,
-      characterId: ids.kaelResto,
-      role: "HEALER",
-      isBackup: false,
-    });
+    const signupId = await offerCharacter(kael, heroicRun.id, ids.kaelResto, "HEALER");
 
     await characterWeeklyAvailabilityRepository.replaceUnavailableDifficulties(
       ids.kaelResto,
@@ -201,7 +186,7 @@ describe("characterWeeklyAvailabilityService", () => {
     await expectDomainError(
       rosterService.setDraftSelection(lead, {
         runId: heroicRun.id,
-        signupId: signup.id,
+        signupId,
         selected: true,
         version: view.roster.version,
       }),
@@ -214,16 +199,11 @@ describe("characterWeeklyAvailabilityService", () => {
     const resetForRun = lockoutService.getResetIdentifierForRun("EU", run.scheduledStartAt);
     await characterWeeklyAvailabilityRepository.clearUnavailable(ids.kaelResto, resetForRun);
 
-    const signup = await signupService.createBoosterSignup(kael, {
-      runId: run.id,
-      characterId: ids.kaelResto,
-      role: "HEALER",
-      isBackup: false,
-    });
+    const signupId = await offerCharacter(kael, run.id, ids.kaelResto, "HEALER");
     let view = await rosterService.getRosterManagementView(lead, run.id);
     await rosterService.setDraftSelection(lead, {
       runId: run.id,
-      signupId: signup.id,
+      signupId,
       selected: true,
       version: view.roster.version,
     });
@@ -234,7 +214,7 @@ describe("characterWeeklyAvailabilityService", () => {
       ["HEROIC"],
     );
     view = await rosterService.getRosterManagementView(lead, run.id);
-    const selected = view.boosters.find((item) => item.id === signup.id);
+    const selected = view.boosters.find((item) => item.id === signupId);
     expect(selected?.draftSelected).toBe(true);
     expect(selected?.scheduleConflicts.some((row) => row.source === "WEEKLY_UNAVAILABLE")).toBe(
       true,
@@ -255,7 +235,7 @@ describe("characterWeeklyAvailabilityService", () => {
     await characterWeeklyAvailabilityRepository.clearUnavailable(ids.kaelResto, resetForRun);
     view = await rosterService.getRosterManagementView(lead, run.id);
     expect(
-      view.boosters.find((item) => item.id === signup.id)?.scheduleConflicts.some(
+      view.boosters.find((item) => item.id === signupId)?.scheduleConflicts.some(
         (row) => row.source === "WEEKLY_UNAVAILABLE",
       ),
     ).toBe(false);

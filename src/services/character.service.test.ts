@@ -6,6 +6,7 @@ import { characterRepository } from "@/repositories/character.repository";
 import { signupRepository } from "@/repositories/signup.repository";
 import { characterService } from "@/services/character.service";
 import { signupService } from "@/services/signup.service";
+import { offerCharacter } from "@/test/signup-offers";
 
 // Warcraft Logs auto-link enrichment runs after Character writes/syncs; keep it
 // offline (a real WARCRAFT_LOGS_* in .env would otherwise hit the live API).
@@ -415,12 +416,7 @@ describe("characterService lifecycle and signup eligibility", () => {
     const beforeAccess = await signupService.getSignupOptions(owner, ids.heroicOpen);
     expect(beforeAccess.booster.eligible.some((item) => item.characterId === character.id)).toBe(false);
     await expectDomainCode(
-      signupService.createBoosterSignup(owner, {
-        runId: ids.heroicOpen,
-        characterId: character.id,
-        role: "HEALER",
-        isBackup: false,
-      }),
+      offerCharacter(owner, ids.heroicOpen, character.id, "HEALER"),
       "BOOSTER_ACCESS_REQUIRED",
     );
 
@@ -431,19 +427,14 @@ describe("characterService lifecycle and signup eligibility", () => {
       withAccess.booster.eligible.some((item) => item.characterId === character.id && item.defaultRole === "HEALER"),
     ).toBe(true);
 
-    const signup = await signupService.createBoosterSignup(owner, {
-      runId: ids.heroicOpen,
-      characterId: character.id,
-      role: "HEALER",
-      isBackup: false,
-    });
-    createdSignupIds.push(signup.id);
+    const signupId = await offerCharacter(owner, ids.heroicOpen, character.id, "HEALER");
+    createdSignupIds.push(signupId);
 
     await characterService.deactivateCharacter(owner, character.id);
     const stored = await characterRepository.findById(character.id);
     expect(stored?.isActive).toBe(false);
 
-    const historical = await signupRepository.findById(signup.id);
+    const historical = await signupRepository.findById(signupId);
     expect(historical?.status).toBe("PENDING");
 
     // Deactivating a Character never touches the owner's account-level Booster role.
@@ -453,12 +444,7 @@ describe("characterService lifecycle and signup eligibility", () => {
     const inactiveOptions = await signupService.getSignupOptions(owner, ids.heroicOpen);
     expect(inactiveOptions.booster.eligible.some((item) => item.characterId === character.id)).toBe(false);
     await expectDomainCode(
-      signupService.createBoosterSignup(owner, {
-        runId: ids.heroicOpen,
-        characterId: character.id,
-        role: "HEALER",
-        isBackup: false,
-      }),
+      offerCharacter(owner, ids.heroicOpen, character.id, "HEALER"),
       "CHARACTER_INACTIVE",
     );
 

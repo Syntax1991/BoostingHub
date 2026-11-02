@@ -497,58 +497,6 @@ export const signupRepository = {
     return signup ? mapSignup(signup as Record<string, unknown>) : null;
   },
 
-  async findDuplicate(input: {
-    runId: string;
-    userId: string;
-    characterId: string;
-    participationType: ParticipationType;
-  }): Promise<SignupListRecord | null> {
-    const signup = await orm.RunSignup
-      .where({
-        runId: input.runId,
-        userId: input.userId,
-        characterId: input.characterId,
-        participationType: input.participationType,
-      })
-      .include("run", (run) =>
-        run
-          .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses"))),
-      )
-      .include("character")
-      .include("offeredRoles")
-      .first();
-
-    return signup ? mapSignup(signup as Record<string, unknown>) : null;
-  },
-
-  /** The signup row and its offered-role rows are written together — a BOOSTER offer is never briefly roleless. */
-  async create(input: SignupWriteInput): Promise<{ id: string }> {
-    const now = new Date().toISOString();
-    const id = crypto.randomUUID();
-
-    await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
-      await txOrm.RunSignup.create({
-        id,
-        runId: input.runId,
-        userId: input.userId,
-        characterId: input.characterId,
-        participationType: input.participationType,
-        isBackup: input.isBackup,
-        status: input.status,
-        publishedRole: null,
-        lootbuddyClass: input.lootbuddyClass,
-        lootbuddyMode: input.lootbuddyMode,
-        lootbuddyVerification: input.lootbuddyVerification,
-        createdAt: now,
-        updatedAt: now,
-      });
-      await syncOfferedRoles(txOrm, id, input.offeredRoles, now);
-    });
-
-    return { id };
-  },
-
   async update(id: string, input: Partial<SignupWriteInput>) {
     const patch: Record<string, unknown> = {};
     if (input.characterId !== undefined) patch.characterId = input.characterId;

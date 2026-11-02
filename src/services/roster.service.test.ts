@@ -12,6 +12,7 @@ import { runDetailService } from "@/services/run-detail.service";
 import { runService } from "@/services/run.service";
 import { venomousCreateInput } from "@/lib/test-run-input";
 import { signupService } from "@/services/signup.service";
+import { offerCharacter } from "@/test/signup-offers";
 
 const ids = {
   kael: "11111111-1111-4111-8111-111111111111",
@@ -359,12 +360,7 @@ describe("rosterService saveDraftSelection", () => {
   it("transitions OPEN to ROSTERING only when the saved selection is non-empty", async () => {
     const run = await runService.createRun(thorne, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: "2030-06-15T18:00:00.000Z", desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14 }));
     await runService.openRun(thorne, run.id);
-    const signup = await signupService.createBoosterSignup(kael, {
-      runId: run.id,
-      characterId: ids.kaelResto,
-      role: "HEALER",
-      isBackup: false,
-    });
+    const signupId = await offerCharacter(kael, run.id, ids.kaelResto, "HEALER");
 
     const empty = await rosterService.getRosterManagementView(thorne, run.id);
     expect(empty.run.status).toBe("OPEN");
@@ -379,7 +375,7 @@ describe("rosterService saveDraftSelection", () => {
     await rosterService.saveDraftSelection(thorne, {
       runId: run.id,
       version: openView.roster.version,
-      selections: [{ signupId: signup.id, selectedRole: null }],
+      selections: [{ signupId, selectedRole: null }],
     });
     expect((await rosterService.getRosterManagementView(thorne, run.id)).run.status).toBe("ROSTERING");
   });

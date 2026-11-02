@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { EligibilityCharacter, EligibilityRun } from "@/services/signup-eligibility";
 import { evaluateBoosterOptions } from "@/services/signup-eligibility";
 import { assertSignupWindowOpen } from "@/services/signup-eligibility";
-import { canSelfWithdrawSignup, canTransitionSignup, isBlockingDuplicate } from "@/domain/signup-state";
+import { canSelfWithdrawSignup, canTransitionSignup } from "@/domain/signup-state";
 import { canTransitionRun } from "@/domain/run-state";
-import { boosterSignupSchema, setLootbuddiesSchema, signupOptionsSchema } from "@/validators/signup";
+import { setLootbuddiesSchema, signupOptionsSchema } from "@/validators/signup";
 
 const reset = "2026-W37";
 
@@ -460,15 +460,7 @@ describe("raid lockouts are informational, never a Booster eligibility blocker",
 });
 
 describe("signup creation rules", () => {
-  it("accepts valid booster and lootbuddy payloads", () => {
-    expect(
-      boosterSignupSchema.parse({
-        runId: "11111111-1111-4111-8111-111111111111",
-        characterId: "c1111111-1111-4111-8111-111111111111",
-        role: "HEALER",
-        isBackup: true,
-      }).isBackup,
-    ).toBe(true);
+  it("accepts valid lootbuddy payloads", () => {
     expect(
       setLootbuddiesSchema.parse({
         runId: "11111111-1111-4111-8111-111111111111",
@@ -493,13 +485,6 @@ describe("signup creation rules", () => {
     expect(assertSignupWindowOpen({ status: "OPEN", signupsOpen: true })).toBe(true);
     expect(assertSignupWindowOpen({ status: "ROSTERING", signupsOpen: true })).toBe(true);
     expect(assertSignupWindowOpen({ status: "PUBLISHED", signupsOpen: true })).toBe(true);
-  });
-
-  it("treats a non-withdrawn matching combination as an active duplicate", () => {
-    expect(isBlockingDuplicate("PENDING")).toBe(true);
-    expect(isBlockingDuplicate("SELECTED")).toBe(true);
-    expect(isBlockingDuplicate("NOT_SELECTED")).toBe(true);
-    expect(isBlockingDuplicate("WITHDRAWN")).toBe(false);
   });
 
   it("accepts prefixed seed run ids that are not strict RFC UUIDs", () => {

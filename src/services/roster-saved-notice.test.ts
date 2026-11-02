@@ -30,7 +30,7 @@ import {
 } from "@/services/roster-saved-notice.service";
 import { runService } from "@/services/run.service";
 import { runStartSavedCheckService } from "@/services/run-start-saved-check.service";
-import { signupService } from "@/services/signup.service";
+import { offerCharacter, offerCharacters } from "@/test/signup-offers";
 
 // Warcraft Logs auto-link enrichment runs after Character writes; keep it offline.
 vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOriginal) => ({
@@ -408,12 +408,7 @@ describe("rosterSavedNoticeService.notifyNewKills", () => {
     );
     createdRunIds.push(created.id);
     await runService.openRun(lead, created.id);
-    const offer = await signupService.createBoosterSignup(owner, {
-      runId: created.id,
-      characterId: character.id,
-      role: "HEALER",
-      isBackup: false,
-    });
+    const offerId = await offerCharacter(owner, created.id, character.id, "HEALER");
 
     const run = (await runRepository.findById(created.id))!;
     const content = run.contents[0]!;
@@ -429,7 +424,7 @@ describe("rosterSavedNoticeService.notifyNewKills", () => {
     await rosterService.saveDraftSelection(lead, {
       runId: created.id,
       version: view.roster.version,
-      selections: [{ signupId: offer.id, selectedRole: "HEALER" }],
+      selections: [{ signupId: offerId, selectedRole: "HEALER" }],
     });
 
     expect(await rosterSavedNoticeService.notifyNewKills(character.id, newKill([first!.id], [first!.id]))).toBe(2);
@@ -490,7 +485,7 @@ describe("runStartSavedCheckService (Start Run re-check)", () => {
     const content = run.contents[0]!;
     const bosses = [...content.bosses].sort((a, b) => a.sortOrder - b.sortOrder);
     const resetIdentifier = lockoutService.getResetIdentifierForRun("EU", start);
-    const picks: Array<{ signupId: string; label: string }> = [];
+    const characterIds: string[] = [];
     for (const entry of entries) {
       const character = await characterService.createCharacter(owner, {
         name: entry.name,
@@ -501,18 +496,23 @@ describe("runStartSavedCheckService (Start Run re-check)", () => {
         itemLevel: 640,
       });
       createdCharacterIds.push(character.id);
-      const offer = await signupService.createBoosterSignup(owner, {
-        runId: created.id,
-        characterId: character.id,
-        role: "HEALER",
-        isBackup: false,
-      });
-      await orm.RunSignup.where({ id: offer.id }).update({ status: "SELECTED", publishedRole: "HEALER" });
+      characterIds.push(character.id);
+    }
+    const offerIds = await offerCharacters(
+      owner,
+      created.id,
+      characterIds.map((characterId) => ({ characterId, roles: ["HEALER"] })),
+    );
+    const picks: Array<{ signupId: string; label: string }> = [];
+    for (const [index, entry] of entries.entries()) {
+      const characterId = characterIds[index]!;
+      const offerId = offerIds[index]!;
+      await orm.RunSignup.where({ id: offerId }).update({ status: "SELECTED", publishedRole: "HEALER" });
       if (entry.kills.length > 0) {
         const now = new Date().toISOString();
         await orm.CharacterRaidLockout.create({
           id: crypto.randomUUID(),
-          characterId: character.id,
+          characterId,
           raidId: content.raidId,
           difficulty: run.difficulty,
           resetIdentifier,
@@ -523,7 +523,7 @@ describe("runStartSavedCheckService (Start Run re-check)", () => {
           updatedAt: now,
         });
       }
-      picks.push({ signupId: offer.id, label: `${entry.name}-Antonidas` });
+      picks.push({ signupId: offerId, label: `${entry.name}-Antonidas` });
     }
     return { runId: created.id, run, bosses, picks };
   }

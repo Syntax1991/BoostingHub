@@ -21,6 +21,7 @@ import { boostingRoleService } from "@/services/boosting-role.service";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
+import { offerCharacter } from "@/test/signup-offers";
 
 const ids = {
   lead: "cccccccc-cccc-4ccc-8ccc-crc000000001",
@@ -184,12 +185,7 @@ describe("character run commitments (roster informational)", () => {
     const runPub = await createOpenRun(lead, futureIso(72));
     const runTarget = await createOpenRun(lead, futureIso(96));
 
-    await signupService.createBoosterSignup(owner, {
-      runId: runDraft.id,
-      characterId,
-      role: "MELEE_DPS",
-      isBackup: false,
-    });
+    await offerCharacter(owner, runDraft.id, characterId, "MELEE_DPS");
     const draftView = await rosterService.getRosterManagementView(lead, runDraft.id);
     const draftSignup = draftView.boosters.find((row) => row.character?.id === characterId)!;
     await rosterService.saveDraftSelection(lead, {
@@ -198,12 +194,7 @@ describe("character run commitments (roster informational)", () => {
       selections: [{ signupId: draftSignup.id, selectedRole: "MELEE_DPS" }],
     });
 
-    await signupService.createBoosterSignup(owner, {
-      runId: runPub.id,
-      characterId,
-      role: "MELEE_DPS",
-      isBackup: false,
-    });
+    await offerCharacter(owner, runPub.id, characterId, "MELEE_DPS");
     const pubView = await rosterService.getRosterManagementView(lead, runPub.id);
     const pubSignup = pubView.boosters.find((row) => row.character?.id === characterId)!;
     await rosterService.saveDraftSelection(lead, {
@@ -217,12 +208,7 @@ describe("character run commitments (roster informational)", () => {
       acknowledgeWarnings: true,
     });
 
-    await signupService.createBoosterSignup(owner, {
-      runId: runTarget.id,
-      characterId,
-      role: "MELEE_DPS",
-      isBackup: false,
-    });
+    await offerCharacter(owner, runTarget.id, characterId, "MELEE_DPS");
 
     const targetView = await rosterService.getRosterManagementView(lead, runTarget.id);
     const row = targetView.boosters.find((item) => item.character?.id === characterId)!;
@@ -245,12 +231,7 @@ describe("character run commitments (roster informational)", () => {
     const runTarget = await createOpenRun(lead, futureIso(100));
 
     for (const run of [runDone, runCancel]) {
-      await signupService.createBoosterSignup(owner, {
-        runId: run.id,
-        characterId,
-        role: "MELEE_DPS",
-        isBackup: false,
-      });
+      await offerCharacter(owner, run.id, characterId, "MELEE_DPS");
       const view = await rosterService.getRosterManagementView(lead, run.id);
       const signup = view.boosters.find((row) => row.character?.id === characterId)!;
       await rosterService.saveDraftSelection(lead, {
@@ -268,12 +249,7 @@ describe("character run commitments (roster informational)", () => {
     await runService.cancelRun(lead, runCancel.id);
     await orm.Run.where({ id: runDone.id }).update({ status: "COMPLETED" });
 
-    await signupService.createBoosterSignup(owner, {
-      runId: runTarget.id,
-      characterId,
-      role: "MELEE_DPS",
-      isBackup: false,
-    });
+    await offerCharacter(owner, runTarget.id, characterId, "MELEE_DPS");
     const targetView = await rosterService.getRosterManagementView(lead, runTarget.id);
     const row = targetView.boosters.find((item) => item.character?.id === characterId)!;
     expect(row.runCommitments).toEqual([]);
@@ -286,12 +262,7 @@ describe("character run commitments (roster informational)", () => {
     const runA = await createOpenRun(lead, new Date(t0).toISOString());
     const runB = await createOpenRun(lead, new Date(t0 + 3 * 60 * 60 * 1000).toISOString());
 
-    await signupService.createBoosterSignup(owner, {
-      runId: runA.id,
-      characterId,
-      role: "MELEE_DPS",
-      isBackup: false,
-    });
+    await offerCharacter(owner, runA.id, characterId, "MELEE_DPS");
     const viewA = await rosterService.getRosterManagementView(lead, runA.id);
     const signupA = viewA.boosters.find((row) => row.character?.id === characterId)!;
     await rosterService.saveDraftSelection(lead, {
@@ -305,12 +276,7 @@ describe("character run commitments (roster informational)", () => {
       acknowledgeWarnings: true,
     });
 
-    await signupService.createBoosterSignup(owner, {
-      runId: runB.id,
-      characterId,
-      role: "MELEE_DPS",
-      isBackup: false,
-    });
+    await offerCharacter(owner, runB.id, characterId, "MELEE_DPS");
     const viewB = await rosterService.getRosterManagementView(lead, runB.id);
     const rowB = viewB.boosters.find((item) => item.character?.id === characterId)!;
     expect(rowB.runCommitments).toHaveLength(1);
@@ -332,12 +298,7 @@ describe("character run commitments (roster informational)", () => {
     const runA = await createOpenRun(lead, new Date(t0).toISOString());
     const runB = await createOpenRun(lead, new Date(t0 + CROSS_RUN_RESERVATION_MIN_GAP_MS).toISOString());
 
-    await signupService.createBoosterSignup(owner, {
-      runId: runA.id,
-      characterId,
-      role: "MELEE_DPS",
-      isBackup: false,
-    });
+    await offerCharacter(owner, runA.id, characterId, "MELEE_DPS");
     const viewA = await rosterService.getRosterManagementView(lead, runA.id);
     const signupA = viewA.boosters.find((row) => row.character?.id === characterId)!;
     await rosterService.saveDraftSelection(lead, {
@@ -346,12 +307,7 @@ describe("character run commitments (roster informational)", () => {
       selections: [{ signupId: signupA.id, selectedRole: "MELEE_DPS" }],
     });
 
-    await signupService.createBoosterSignup(owner, {
-      runId: runB.id,
-      characterId,
-      role: "MELEE_DPS",
-      isBackup: false,
-    });
+    await offerCharacter(owner, runB.id, characterId, "MELEE_DPS");
     const viewB = await rosterService.getRosterManagementView(lead, runB.id);
     const rowB = viewB.boosters.find((item) => item.character?.id === characterId)!;
     expect(rowB.runCommitments).toHaveLength(1);
@@ -371,18 +327,8 @@ describe("character run commitments (roster informational)", () => {
 
     // Sign up both first — eligibility blocks a second signup after draft-select
     // when the gap is under 2h (unchanged reservation rule).
-    await signupService.createBoosterSignup(owner, {
-      runId: runA.id,
-      characterId,
-      role: "MELEE_DPS",
-      isBackup: false,
-    });
-    await signupService.createBoosterSignup(owner, {
-      runId: runB.id,
-      characterId,
-      role: "MELEE_DPS",
-      isBackup: false,
-    });
+    await offerCharacter(owner, runA.id, characterId, "MELEE_DPS");
+    await offerCharacter(owner, runB.id, characterId, "MELEE_DPS");
 
     const viewA = await rosterService.getRosterManagementView(lead, runA.id);
     const signupA = viewA.boosters.find((row) => row.character?.id === characterId)!;
@@ -415,12 +361,7 @@ describe("character run commitments (roster informational)", () => {
     const runTarget = await createOpenRun(lead, new Date(t0 + 12 * 60 * 60 * 1000).toISOString());
 
     for (const run of [runLate, runEarly]) {
-      await signupService.createBoosterSignup(owner, {
-        runId: run.id,
-        characterId,
-        role: "MELEE_DPS",
-        isBackup: false,
-      });
+      await offerCharacter(owner, run.id, characterId, "MELEE_DPS");
       const view = await rosterService.getRosterManagementView(lead, run.id);
       const signup = view.boosters.find((row) => row.character?.id === characterId)!;
       await rosterService.saveDraftSelection(lead, {
@@ -430,12 +371,7 @@ describe("character run commitments (roster informational)", () => {
       });
     }
 
-    await signupService.createBoosterSignup(owner, {
-      runId: runTarget.id,
-      characterId,
-      role: "MELEE_DPS",
-      isBackup: false,
-    });
+    await offerCharacter(owner, runTarget.id, characterId, "MELEE_DPS");
     const targetView = await rosterService.getRosterManagementView(lead, runTarget.id);
     const row = targetView.boosters.find((item) => item.character?.id === characterId)!;
     expect(row.runCommitments.map((c) => c.runId)).toEqual([runEarly.id, runLate.id]);
@@ -457,12 +393,7 @@ describe("character run commitments (roster informational)", () => {
     const runA = await createOpenRun(lead, futureIso(85));
     const runTarget = await createOpenRun(lead, futureIso(110));
 
-    await signupService.createBoosterSignup(owner, {
-      runId: runA.id,
-      characterId,
-      role: "MELEE_DPS",
-      isBackup: false,
-    });
+    await offerCharacter(owner, runA.id, characterId, "MELEE_DPS");
     const viewA = await rosterService.getRosterManagementView(lead, runA.id);
     const signupA = viewA.boosters.find((row) => row.character?.id === characterId)!;
     await rosterService.saveDraftSelection(lead, {
@@ -488,12 +419,7 @@ describe("character run commitments (roster informational)", () => {
       selections: [],
     });
 
-    await signupService.createBoosterSignup(owner, {
-      runId: runTarget.id,
-      characterId,
-      role: "MELEE_DPS",
-      isBackup: false,
-    });
+    await offerCharacter(owner, runTarget.id, characterId, "MELEE_DPS");
     const targetView = await rosterService.getRosterManagementView(lead, runTarget.id);
     const row = targetView.boosters.find((item) => item.character?.id === characterId)!;
     expect(row.runCommitments).toHaveLength(1);
@@ -508,18 +434,8 @@ describe("character run commitments (roster informational)", () => {
     const runA = await createOpenRun(lead, futureIso(90));
     const runTarget = await createOpenRun(lead, futureIso(120));
 
-    await signupService.createBoosterSignup(owner, {
-      runId: runA.id,
-      characterId,
-      role: "MELEE_DPS",
-      isBackup: false,
-    });
-    await signupService.createBoosterSignup(other, {
-      runId: runA.id,
-      characterId: otherChar,
-      role: "MELEE_DPS",
-      isBackup: false,
-    });
+    await offerCharacter(owner, runA.id, characterId, "MELEE_DPS");
+    await offerCharacter(other, runA.id, otherChar, "MELEE_DPS");
     const viewA = await rosterService.getRosterManagementView(lead, runA.id);
     const signupOwner = viewA.boosters.find((row) => row.character?.id === characterId)!;
     const signupOther = viewA.boosters.find((row) => row.character?.id === otherChar)!;
@@ -551,12 +467,7 @@ describe("character run commitments (roster informational)", () => {
       acknowledgeWarnings: true,
     });
 
-    await signupService.createBoosterSignup(owner, {
-      runId: runTarget.id,
-      characterId,
-      role: "MELEE_DPS",
-      isBackup: false,
-    });
+    await offerCharacter(owner, runTarget.id, characterId, "MELEE_DPS");
     const targetView = await rosterService.getRosterManagementView(lead, runTarget.id);
     const row = targetView.boosters.find((item) => item.character?.id === characterId)!;
     expect(row.runCommitments).toEqual([]);
@@ -572,18 +483,8 @@ describe("character run commitments (roster informational)", () => {
       [owner, charA],
       [other, charB],
     ] as const) {
-      await signupService.createBoosterSignup(user, {
-        runId: runOther.id,
-        characterId,
-        role: "MELEE_DPS",
-        isBackup: false,
-      });
-      await signupService.createBoosterSignup(user, {
-        runId: runTarget.id,
-        characterId,
-        role: "MELEE_DPS",
-        isBackup: false,
-      });
+      await offerCharacter(user, runOther.id, characterId, "MELEE_DPS");
+      await offerCharacter(user, runTarget.id, characterId, "MELEE_DPS");
     }
 
     const otherView = await rosterService.getRosterManagementView(lead, runOther.id);
@@ -653,7 +554,7 @@ describe("commitments are scoped to the target Run's raid ID (not the 2h conflic
     const runOther = await createOpenRun(lead, new Date(input.otherAt).toISOString());
     const runTarget = await createOpenRun(lead, new Date(input.targetAt).toISOString());
     for (const runId of [runOther.id, runTarget.id]) {
-      await signupService.createBoosterSignup(owner, { runId, characterId, role: "MELEE_DPS", isBackup: false });
+      await offerCharacter(owner, runId, characterId, "MELEE_DPS");
     }
     const otherView = await rosterService.getRosterManagementView(lead, runOther.id);
     await rosterService.saveDraftSelection(lead, {

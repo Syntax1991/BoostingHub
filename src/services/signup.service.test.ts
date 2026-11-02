@@ -1,102 +1,75 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
-import { orm } from "@/lib/prisma";
+import { anyContentRunInput, futureTestIso } from "@/lib/test-run-input";
+import { raidRepository } from "@/repositories/raid.repository";
 import { signupRepository } from "@/repositories/signup.repository";
+import { rosterService } from "@/services/roster.service";
+import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestCharacter, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { expectDomainError } from "@/test/domain-error";
+import { offerCharacter } from "@/test/signup-offers";
 
-const ids = {
-  kael: "11111111-1111-4111-8111-111111111111",
-  mira: "22222222-2222-4222-8222-222222222222",
-  brann: "55555555-5555-4555-8555-555555555555",
-  kaelResto: "c1111111-1111-4111-8111-111111111111",
-  kaelEle: "c1111111-1111-4111-8111-111111111112",
-  miraPriest: "c2222222-2222-4222-8222-222222222221",
-  brannPaladin: "c5555555-5555-4555-8555-555555555551",
-  brannHoly: "c5555555-5555-4555-8555-555555555552",
-  weekend: "r7777777-7777-4777-8777-777777777777",
-  draft: "r6666666-6666-4666-8666-666666666666",
-  normal: "r4444444-4444-4444-8444-444444444444",
-  published: "r5555555-5555-4555-8555-555555555555",
-};
+/**
+ * Withdraw rules and Lootbuddy entries. Booster offers themselves (create,
+ * reconcile, reactivate, validation, signup window) are covered against
+ * setCharacterOffers in signup-offers.service.test.ts.
+ */
+const created = { runIds: [] as string[], characterIds: [] as string[], userIds: [] as string[] };
+let booster: AuthenticatedUser;
+let other: AuthenticatedUser;
+let lead: AuthenticatedUser;
 
-const createdIds: string[] = [];
+async function createUser(name: string, accountRole: AuthenticatedUser["accountRole"], isBooster: boolean) {
+  const id = await createTestUser({ name, accountRole, isBooster });
+  created.userIds.push(id);
+  return testActor(id, accountRole, { name });
+}
 
-function asUser(id: string, name: string): AuthenticatedUser {
-  return {
-    id,
+async function createHealer(owner: AuthenticatedUser, name: string) {
+  const id = await createTestCharacter({
+    userId: owner.id,
     name,
-    email: `${id}@dev.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole: "USER",
-    accountStatus: "ACTIVE",
-  };
+    realm: "Signup Lab",
+    wowClass: "PRIEST",
+    specialization: "Holy",
+    primaryRole: "HEALER",
+  });
+  created.characterIds.push(id);
+  return id;
 }
 
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    expect(isDomainError(error) && error.code).toBe(code);
-  }
+let startSlot = 0;
+async function createOpenRun() {
+  startSlot += 1;
+  const run = await runService.createRun(lead, anyContentRunInput({ scheduledStartAt: futureTestIso(20 + startSlot) }));
+  created.runIds.push(run.id);
+  await runService.openRun(lead, run.id);
+  return run.id;
 }
 
-afterAll(async () => {
-  for (const id of createdIds) {
-    await orm.RunSignup.where({ id }).delete();
-  }
+async function statusOf(signupId: string) {
+  return (await signupRepository.findById(signupId))?.status;
+}
+
+beforeAll(async () => {
+  assertIsolatedTestDatabase();
+  await raidRepository.ensureReferenceRaids();
+  booster = await createUser("Signup Booster", "USER", true);
+  other = await createUser("Signup Other", "USER", true);
+  lead = await createUser("Signup Lead", "RAID_LEAD", false);
 });
 
-describe("signupService create/withdraw", () => {
-  const kael = asUser(ids.kael, "Kael Stormhowl");
-  const mira = asUser(ids.mira, "Mira Dawnward");
-  const brann = asUser(ids.brann, "Brann Emberforge");
+afterAll(async () => {
+  await deleteCreatedRows(created);
+});
 
-  it("creates a booster signup and a backup signup for different characters", async () => {
-    const primary = await signupService.createBoosterSignup(kael, {
-      runId: ids.weekend,
-      characterId: ids.kaelEle,
-      role: "RANGED_DPS",
-      isBackup: false,
-    });
-    createdIds.push(primary.id);
-    expect(primary.revived).toBe(false);
-
-    const stored = await signupRepository.findById(primary.id);
-    expect(stored?.status).toBe("PENDING");
-    expect(stored?.isBackup).toBe(false);
-    expect(stored?.participationType).toBe("BOOSTER");
-
-    const backup = await signupService.createBoosterSignup(kael, {
-      runId: ids.weekend,
-      characterId: ids.kaelResto,
-      role: "HEALER",
-      isBackup: true,
-    });
-    createdIds.push(backup.id);
-    const backupRow = await signupRepository.findById(backup.id);
-    expect(backupRow?.isBackup).toBe(true);
-    expect(backupRow?.character?.id).toBe(ids.kaelResto);
-  });
-
-  it("rejects an exact duplicate booster combination", async () => {
-    await expectDomainCode(
-      signupService.createBoosterSignup(kael, {
-        runId: ids.weekend,
-        characterId: ids.kaelEle,
-        role: "RANGED_DPS",
-        isBackup: false,
-      }),
-      "DUPLICATE_SIGNUP",
-    );
-  });
-
+describe("signupService lootbuddies", () => {
   it("creates loot-only and playing lootbuddy signups with verification metadata", async () => {
-    const result = await signupService.setLootbuddies(mira, {
-      runId: ids.normal,
+    const runId = await createOpenRun();
+    const result = await signupService.setLootbuddies(booster, {
+      runId,
       lootbuddies: [
         { wowClass: "PRIEST", mode: "LOOT_ONLY", verification: "ACCESS" },
         { wowClass: "MAGE", mode: "PLAYING", verification: "TRIAL" },
@@ -104,125 +77,62 @@ describe("signupService create/withdraw", () => {
     });
     expect(result.created).toBe(2);
 
-    const rows = (await signupRepository.listByRunAndUser(ids.normal, ids.mira)).filter(
+    const rows = (await signupRepository.listByRunAndUser(runId, booster.id)).filter(
       (row) => row.participationType === "LOOTBUDDY" && row.status === "PENDING",
     );
-    for (const row of rows) createdIds.push(row.id);
-
+    expect(rows).toHaveLength(2);
     const lootOnly = rows.find((row) => row.lootbuddyMode === "LOOT_ONLY");
     const playing = rows.find((row) => row.lootbuddyMode === "PLAYING");
-    expect(lootOnly?.lootbuddyClass).toBe("PRIEST");
-    expect(lootOnly?.lootbuddyVerification).toBe("ACCESS");
-    expect(lootOnly?.character).toBeNull();
-    expect(playing?.lootbuddyClass).toBe("MAGE");
-    expect(playing?.lootbuddyVerification).toBe("TRIAL");
-    expect(playing?.id).not.toBe(lootOnly?.id);
+    expect(lootOnly).toMatchObject({ lootbuddyClass: "PRIEST", lootbuddyVerification: "ACCESS", character: null });
+    expect(playing).toMatchObject({ lootbuddyClass: "MAGE", lootbuddyVerification: "TRIAL" });
 
-    await signupService.withdrawSignup(mira, playing!.id);
-    const restored = await signupRepository.findById(playing!.id);
-    expect(restored?.status).toBe("WITHDRAWN");
+    await signupService.withdrawSignup(booster, playing!.id);
+    expect(await statusOf(playing!.id)).toBe("WITHDRAWN");
+    expect(await statusOf(lootOnly!.id)).toBe("PENDING");
   });
+});
 
-  it("allows identical class+mode lootbuddy entries as distinct signup ids", async () => {
-    const result = await signupService.setLootbuddies(mira, {
-      runId: ids.weekend,
-      lootbuddies: [
-        { wowClass: "MAGE", mode: "LOOT_ONLY" },
-        { wowClass: "MAGE", mode: "LOOT_ONLY" },
-      ],
-    });
-    expect(result.created).toBe(2);
-    const rows = (await signupRepository.listByRunAndUser(ids.weekend, ids.mira)).filter(
-      (row) => row.participationType === "LOOTBUDDY" && row.status === "PENDING",
-    );
-    for (const row of rows) createdIds.push(row.id);
-    expect(rows).toHaveLength(2);
-    expect(rows[0]!.id).not.toBe(rows[1]!.id);
-  });
-
-  it("rejects booster signup when the user has no characters / character not owned", async () => {
-    await expectDomainCode(
-      signupService.createBoosterSignup(kael, {
-        runId: ids.weekend,
-        characterId: ids.miraPriest,
-        role: "HEALER",
-        isBackup: false,
-      }),
-      "CHARACTER_NOT_OWNED",
-    );
-  });
-
-  it("rejects a closed/non-signable run", async () => {
-    await expectDomainCode(
-      signupService.createBoosterSignup(kael, {
-        runId: ids.draft,
-        characterId: ids.kaelEle,
-        role: "RANGED_DPS",
-        isBackup: false,
-      }),
-      "SIGNUP_CLOSED",
-    );
-  });
-
+describe("signupService.withdrawSignup", () => {
   it("lets a user withdraw an own pending signup and keeps the row", async () => {
-    const created = await signupService.createBoosterSignup(brann, {
-      runId: ids.weekend,
-      characterId: ids.brannHoly,
-      role: "HEALER",
-      isBackup: false,
-    });
-    createdIds.push(created.id);
-    await signupService.withdrawSignup(brann, created.id);
-    const stored = await signupRepository.findById(created.id);
-    expect(stored?.status).toBe("WITHDRAWN");
+    const runId = await createOpenRun();
+    const signupId = await offerCharacter(booster, runId, await createHealer(booster, "Withdrawown"), "HEALER");
+
+    await signupService.withdrawSignup(booster, signupId);
+
+    expect(await statusOf(signupId)).toBe("WITHDRAWN");
   });
 
   it("rejects withdrawing someone else's signup", async () => {
-    const mine = await signupService.getMyRuns(kael);
-    const foreign = mine.selected.find((item) => item.runId === ids.published);
-    expect(foreign).toBeTruthy();
-    await expectDomainCode(signupService.withdrawSignup(mira, foreign!.id), "NOT_AUTHORIZED");
-  });
+    const runId = await createOpenRun();
+    const signupId = await offerCharacter(booster, runId, await createHealer(booster, "Withdrawforeign"), "HEALER");
 
-  it("a selected signup after roster publication withdraws only with a reason", async () => {
-    const mine = await signupService.getMyRuns(kael);
-    const published = mine.selected.find((item) => item.runId === ids.published);
-    expect(published?.canWithdraw).toBe(false);
-    expect(published?.canWithdrawWithReason).toBe(true);
-    await expectDomainCode(
-      signupService.withdrawSignup(kael, published!.id),
-      "WITHDRAW_REASON_REQUIRED",
-    );
+    await expectDomainError(signupService.withdrawSignup(other, signupId), "NOT_AUTHORIZED");
+    expect(await statusOf(signupId)).toBe("PENDING");
   });
 
   it("rejects withdrawing a withdrawn signup", async () => {
-    const mine = await signupService.getMyRuns(mira);
-    const withdrawn = mine.withdrawn.find((item) => item.runId === ids.weekend);
-    expect(withdrawn).toBeTruthy();
-    await expectDomainCode(
-      signupService.withdrawSignup(mira, withdrawn!.id),
-      "INVALID_STATE_TRANSITION",
-    );
+    const runId = await createOpenRun();
+    const signupId = await offerCharacter(booster, runId, await createHealer(booster, "Withdrawtwice"), "HEALER");
+    await signupService.withdrawSignup(booster, signupId);
+
+    await expectDomainError(signupService.withdrawSignup(booster, signupId), "INVALID_STATE_TRANSITION");
   });
 
-  it("can offer two different Brann characters on the same open run", async () => {
-    const tank = await signupService.createBoosterSignup(brann, {
-      runId: ids.weekend,
-      characterId: ids.brannPaladin,
-      role: "TANK",
-      isBackup: false,
+  it("a selected signup after roster publication withdraws only with a reason", async () => {
+    const runId = await createOpenRun();
+    const signupId = await offerCharacter(booster, runId, await createHealer(booster, "Withdrawpicked"), "HEALER");
+    let view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.saveDraftSelection(lead, {
+      runId,
+      version: view.roster.version,
+      selections: [{ signupId, selectedRole: "HEALER" }],
     });
-    createdIds.push(tank.id);
-    const healer = await signupService.createBoosterSignup(brann, {
-      runId: ids.weekend,
-      characterId: ids.brannHoly,
-      role: "HEALER",
-      isBackup: false,
-    });
-    if (!createdIds.includes(healer.id)) {
-      createdIds.push(healer.id);
-    }
-    expect(healer.revived).toBe(true);
-    expect(tank.id).not.toBe(healer.id);
+    view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.publishRoster(lead, { runId, version: view.roster.version, acknowledgeWarnings: true });
+
+    const published = (await signupService.getMyRuns(booster)).selected.find((item) => item.id === signupId);
+    expect(published).toMatchObject({ canWithdraw: false, canWithdrawWithReason: true });
+    await expectDomainError(signupService.withdrawSignup(booster, signupId), "WITHDRAW_REASON_REQUIRED");
+    expect(await statusOf(signupId)).toBe("SELECTED");
   });
 });

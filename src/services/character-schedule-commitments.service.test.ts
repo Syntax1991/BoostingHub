@@ -7,12 +7,12 @@ import { characterScheduleCommitmentsService } from "@/services/character-schedu
 import { characterService } from "@/services/character.service";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
-import { signupService } from "@/services/signup.service";
 import { CharacterScheduleCommitmentsSection } from "@/components/characters/character-schedule-commitments-section";
 import { testActor } from "@/test/actors";
 import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
 import { expectDomainError } from "@/test/domain-error";
 import { CURRENT_WEEK_RUN_START, DAY_MS, HOUR_MS, RAID_WEEK_TEST_CLOCK, freezeSystemTime, restoreSystemTime } from "@/test/time";
+import { offerCharacter } from "@/test/signup-offers";
 
 // Warcraft Logs auto-link enrichment runs after Character writes/syncs; keep it
 // offline (a real WARCRAFT_LOGS_* in .env would otherwise hit the live API).
@@ -84,23 +84,13 @@ describe("characterScheduleCommitmentsService", () => {
     const runPending = await createOpenRun(lead, new Date(t0).toISOString());
     const runSelected = await createOpenRun(lead, new Date(t0 + 3 * HOUR_MS).toISOString());
 
-    await signupService.createBoosterSignup(owner, {
-      runId: runPending.id,
-      characterId: character.id,
-      role: "HEALER",
-      isBackup: false,
-    });
-    const selectedSignup = await signupService.createBoosterSignup(owner, {
-      runId: runSelected.id,
-      characterId: character.id,
-      role: "HEALER",
-      isBackup: false,
-    });
+    await offerCharacter(owner, runPending.id, character.id, "HEALER");
+    const selectedSignupId = await offerCharacter(owner, runSelected.id, character.id, "HEALER");
 
     await rosterService.saveDraftSelection(lead, {
       runId: runSelected.id,
       version: (await rosterService.getRosterManagementView(lead, runSelected.id)).roster.version,
-      selections: [{ signupId: selectedSignup.id, selectedRole: "HEALER" }],
+      selections: [{ signupId: selectedSignupId, selectedRole: "HEALER" }],
     });
     await rosterService.publishRoster(lead, {
       runId: runSelected.id,
@@ -133,17 +123,12 @@ describe("characterScheduleCommitmentsService", () => {
 
     const start = new Date(Date.parse(CURRENT_WEEK_RUN_START) + DAY_MS);
     const run = await createOpenRun(lead, start.toISOString());
-    const signup = await signupService.createBoosterSignup(owner, {
-      runId: run.id,
-      characterId: character.id,
-      role: "HEALER",
-      isBackup: false,
-    });
+    const signupId = await offerCharacter(owner, run.id, character.id, "HEALER");
 
     await rosterService.saveDraftSelection(lead, {
       runId: run.id,
       version: (await rosterService.getRosterManagementView(lead, run.id)).roster.version,
-      selections: [{ signupId: signup.id, selectedRole: "HEALER" }],
+      selections: [{ signupId, selectedRole: "HEALER" }],
     });
 
     const beforeBlock = await characterScheduleCommitmentsService.listForOwner(owner, character.id);

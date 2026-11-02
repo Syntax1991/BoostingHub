@@ -25,6 +25,7 @@ import { runRepository } from "@/repositories/run.repository";
 import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
 import type { CharacterRole } from "@/models/enums";
+import { offerCharacter, offerCharacters } from "@/test/signup-offers";
 
 const ids = {
   lead: "n3333333-3333-4333-8333-333333333301",
@@ -249,24 +250,11 @@ describe("run lifecycle notifications", () => {
     // The Raid Lead's two Characters were signed up when the Run was created.
     await leadSignup(created.id, charLeadTank);
     await leadSignup(created.id, charLeadDps);
-    await signupService.createBoosterSignup(player, {
-      runId: created.id,
-      characterId: charPlayer,
-      role: "HEALER",
-      isBackup: false,
-    });
-    await signupService.createBoosterSignup(multi, {
-      runId: created.id,
-      characterId: charMultiA,
-      role: "HEALER",
-      isBackup: false,
-    });
-    await signupService.createBoosterSignup(multi, {
-      runId: created.id,
-      characterId: charMultiB,
-      role: "HEALER",
-      isBackup: false,
-    });
+    await offerCharacter(player, created.id, charPlayer, "HEALER");
+    await offerCharacters(multi, created.id, [
+      { characterId: charMultiA, roles: ["HEALER"] },
+      { characterId: charMultiB, roles: ["HEALER"] },
+    ]);
 
     const multiSignups = await orm.RunSignup.where({ runId: created.id, userId: ids.multi }).all();
     expect(multiSignups.length).toBe(2);
@@ -312,12 +300,7 @@ describe("run lifecycle notifications", () => {
     );
     createdRunIds.push(created.id);
     await runService.openRun(lead, created.id);
-    await signupService.createBoosterSignup(player, {
-      runId: created.id,
-      characterId: charPlayer,
-      role: "HEALER",
-      isBackup: false,
-    });
+    await offerCharacter(player, created.id, charPlayer, "HEALER");
 
     const run = await runRepository.findById(created.id);
     expect(run?.scheduleRevision).toBe(0);
@@ -416,9 +399,11 @@ describe("run scope change notifications", () => {
     await runService.openRun(lead, runId);
 
     const tank = await leadSignup(runId, charLeadTank);
-    await signupService.createBoosterSignup(player, { runId, characterId: charPlayer, role: "HEALER", isBackup: false });
-    const multiA = await signupService.createBoosterSignup(multi, { runId, characterId: charMultiA, role: "HEALER", isBackup: false });
-    await signupService.createBoosterSignup(multi, { runId, characterId: charMultiB, role: "HEALER", isBackup: false });
+    await offerCharacter(player, runId, charPlayer, "HEALER");
+    const [multiAId] = await offerCharacters(multi, runId, [
+      { characterId: charMultiA, roles: ["HEALER"] },
+      { characterId: charMultiB, roles: ["HEALER"] },
+    ]);
 
     let view = await rosterService.getRosterManagementView(lead, runId);
     await rosterService.saveDraftSelection(lead, {
@@ -426,7 +411,7 @@ describe("run scope change notifications", () => {
       version: view.roster.version,
       selections: [
         { signupId: tank.id, selectedRole: "TANK" },
-        { signupId: multiA.id, selectedRole: "HEALER" },
+        { signupId: multiAId, selectedRole: "HEALER" },
       ],
     });
     view = await rosterService.getRosterManagementView(lead, runId);
@@ -538,17 +523,17 @@ describe("run scope change notifications", () => {
     createdRunIds.push(created.id);
     const runId = created.id;
     await runService.openRun(lead, runId);
-    const picked = await signupService.createBoosterSignup(player, { runId, characterId: charPlayer, role: "HEALER", isBackup: false });
-    const leaving = await signupService.createBoosterSignup(multi, { runId, characterId: charMultiA, role: "HEALER", isBackup: false });
-    await signupService.withdrawSignup(multi, leaving.id);
+    const pickedId = await offerCharacter(player, runId, charPlayer, "HEALER");
+    const leavingId = await offerCharacter(multi, runId, charMultiA, "HEALER");
+    await signupService.withdrawSignup(multi, leavingId);
 
     const view = await rosterService.getRosterManagementView(lead, runId);
     await rosterService.saveDraftSelection(lead, {
       runId,
       version: view.roster.version,
-      selections: [{ signupId: picked.id, selectedRole: "HEALER" }],
+      selections: [{ signupId: pickedId, selectedRole: "HEALER" }],
     });
-    expect((await orm.RunSignup.where({ id: picked.id }).first() as { status: string } | null)?.status).toBe("PENDING");
+    expect((await orm.RunSignup.where({ id: pickedId }).first() as { status: string } | null)?.status).toBe("PENDING");
 
     // Venomous-only → Bundle: Tide added, Venomous unchanged.
     const base = await runRepository.findById(runId);
@@ -639,9 +624,11 @@ describe("Run edit notification atomicity", () => {
     for (const characterId of [charLeadTank, charLeadDps]) {
       await signupService.withdrawSignup(lead, (await leadSignup(created.id, characterId)).id);
     }
-    await signupService.createBoosterSignup(player, { runId: created.id, characterId: charPlayer, role: "HEALER", isBackup: false });
-    await signupService.createBoosterSignup(multi, { runId: created.id, characterId: charMultiA, role: "HEALER", isBackup: false });
-    await signupService.createBoosterSignup(multi, { runId: created.id, characterId: charMultiB, role: "HEALER", isBackup: false });
+    await offerCharacter(player, created.id, charPlayer, "HEALER");
+    await offerCharacters(multi, created.id, [
+      { characterId: charMultiA, roles: ["HEALER"] },
+      { characterId: charMultiB, roles: ["HEALER"] },
+    ]);
     return created.id;
   }
 
@@ -761,7 +748,7 @@ describe("Run edit notification atomicity", () => {
 
     const playerSignup = (await orm.RunSignup.where({ runId, userId: ids.player }).first()) as { id: string };
     await signupService.withdrawSignup(player, playerSignup.id);
-    await signupService.createBoosterSignup(lead, { runId, characterId: charLeadTank, role: "TANK", isBackup: false });
+    await offerCharacter(lead, runId, charLeadTank, "TANK");
 
     const notes = await notesOf(runId, "RUN_SCOPE_CHANGED");
     expect(notes.map((row) => row.userId).sort()).toEqual([ids.multi, ids.player].sort());
@@ -816,16 +803,18 @@ describe("Cancel / Reactivate notification atomicity", () => {
     const runId = created.id;
     await runService.openRun(lead, runId);
     const tank = await leadSignup(runId, charLeadTank);
-    const heal = await signupService.createBoosterSignup(player, { runId, characterId: charPlayer, role: "HEALER", isBackup: false });
-    await signupService.createBoosterSignup(multi, { runId, characterId: charMultiA, role: "HEALER", isBackup: false });
-    await signupService.createBoosterSignup(multi, { runId, characterId: charMultiB, role: "HEALER", isBackup: false });
+    const healId = await offerCharacter(player, runId, charPlayer, "HEALER");
+    await offerCharacters(multi, runId, [
+      { characterId: charMultiA, roles: ["HEALER"] },
+      { characterId: charMultiB, roles: ["HEALER"] },
+    ]);
     let view = await rosterService.getRosterManagementView(lead, runId);
     await rosterService.saveDraftSelection(lead, {
       runId,
       version: view.roster.version,
       selections: [
         { signupId: tank.id, selectedRole: "TANK" },
-        { signupId: heal.id, selectedRole: "HEALER" },
+        { signupId: healId, selectedRole: "HEALER" },
       ],
     });
     view = await rosterService.getRosterManagementView(lead, runId);

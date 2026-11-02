@@ -12,6 +12,7 @@ import { testActor } from "@/test/actors";
 import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
 import { expectDomainError } from "@/test/domain-error";
 import { CURRENT_WEEK_RUN_START, HOUR_MS, RAID_WEEK_TEST_CLOCK, freezeSystemTime, restoreSystemTime } from "@/test/time";
+import { offerCharacter } from "@/test/signup-offers";
 
 // Warcraft Logs auto-link enrichment runs after Character writes/syncs; keep it
 // offline (a real WARCRAFT_LOGS_* in .env would otherwise hit the live API).
@@ -93,7 +94,7 @@ describe("schedule conflict integrity", () => {
     });
     const start = at(0);
     const run = await createOpenRun(start, { healers: 1 });
-    await signupService.createBoosterSignup(owner, { runId: run.id, characterId: character.id, role: "HEALER", isBackup: false });
+    await offerCharacter(owner, run.id, character.id, "HEALER");
     await draftSelect(run.id, character.id, "HEALER");
 
     // A legacy block covering the whole Run.
@@ -132,10 +133,10 @@ describe("schedule conflict integrity", () => {
     const runA = await createOpenRun(at(24), { dps: 1 });
     const runB = await createOpenRun(at(27), { dps: 1 });
 
-    await signupService.createBoosterSignup(owner, { runId: runA.id, characterId: character.id, role: "RANGED_DPS", isBackup: false });
+    await offerCharacter(owner, runA.id, character.id, "RANGED_DPS");
     await draftSelect(runA.id, character.id, "RANGED_DPS");
 
-    await signupService.createBoosterSignup(owner, { runId: runB.id, characterId: character.id, role: "RANGED_DPS", isBackup: false });
+    await offerCharacter(owner, runB.id, character.id, "RANGED_DPS");
     let viewB = await rosterService.getRosterManagementView(lead, runB.id);
     expect(ownerRow(viewB, character.id).scheduleConflicts).toEqual([]);
     await draftSelect(runB.id, character.id, "RANGED_DPS");

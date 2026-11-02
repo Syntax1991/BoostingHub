@@ -7,13 +7,6 @@ import {
 } from "@/models/enums";
 import { entityIdSchema } from "@/validators/ids";
 
-export const boosterSignupSchema = z.object({
-  runId: entityIdSchema,
-  characterId: entityIdSchema,
-  role: z.enum(CHARACTER_ROLES),
-  isBackup: z.boolean(),
-});
-
 export const withdrawSignupSchema = z.object({
   signupId: entityIdSchema,
 });

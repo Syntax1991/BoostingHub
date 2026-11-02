@@ -29,7 +29,6 @@ import { isApprovedBooster } from "@/domain/boosting-access";
 import {
   assertSignupTransition,
   canSelfWithdrawSignup,
-  isBlockingDuplicate,
   isPickedSignup,
   normalizeWithdrawReason,
   PICKED_WITHDRAW_RUN_STATUSES,
@@ -49,10 +48,6 @@ import {
 
 export type { QuickSignupBoostersResult } from "@/lib/quick-signup-message";
 export { formatQuickSignupBoostersMessage } from "@/lib/quick-signup-message";
-
-function uniqueViolation(error: unknown): boolean {
-  return error instanceof Error && /unique|duplicate|constraint/i.test(error.message);
-}
 
 /** Both sides are already normalized, so set equality is a plain element-wise compare. */
 function sameRoleSet(a: readonly CharacterRole[], b: readonly CharacterRole[]): boolean {
@@ -303,65 +298,6 @@ export const signupService = {
         verification: signup.lootbuddyVerification ?? "NONE",
       })),
     };
-  },
-
-  /** Single-role convenience entry point; the offer it writes is a one-element `offeredRoles` set. */
-  async createBoosterSignup(
-    user: AuthenticatedUser,
-    input: { runId: string; characterId: string; role: CharacterRole; isBackup: boolean },
-  ) {
-    const { run, character } = await loadSignupContext(
-      user.id,
-      input.runId,
-      input.characterId,
-    );
-
-    if (!assertSignupWindowOpen(run)) {
-      throw new DomainError("SIGNUP_CLOSED", "Signups are not open for this run.");
-    }
-
-    const [enrichedCharacter] = await withSignupEligibilityContext(
-      [character],
-      run.id,
-      run.scheduledStartAt,
-      run.difficulty,
-    );
-    const { eligible, ineligible } = evaluateBoosterOptions(
-      [enrichedCharacter],
-      toEligibilityRun(run),
-    );
-
-    const option = eligible.find((item) => item.characterId === input.characterId);
-    if (!option) {
-      throw boosterRejection(ineligible[0]);
-    }
-    if (!option.roles.includes(input.role)) {
-      throw new DomainError(
-        "INVALID_CHARACTER_ROLE",
-        `${character.name} cannot be offered as ${CHARACTER_ROLE_LABELS[input.role]}.`,
-      );
-    }
-
-    const record = await persistSignup({
-      runId: run.id,
-      userId: user.id,
-      characterId: character.id,
-      participationType: "BOOSTER",
-      offeredRoles: [input.role],
-      isBackup: input.isBackup,
-      status: "PENDING",
-      lootbuddyClass: null,
-      lootbuddyMode: null,
-      lootbuddyVerification: null,
-    });
-
-    await activityRepository.create({
-      userId: user.id,
-      type: "SIGNUP",
-      message: `${user.name} signed ${character.name} as ${input.role}${input.isBackup ? " (backup)" : ""}.`,
-    });
-
-    return record;
   },
 
   /**
@@ -1139,23 +1075,6 @@ export const signupService = {
   },
 };
 
-async function loadSignupContext(userId: string, runId: string, characterId: string) {
-  const run = await runRepository.findById(runId);
-  if (!run) {
-    throw new DomainError("NOT_FOUND", "Run was not found.", 404);
-  }
-
-  const character = await characterRepository.findOwnedById(userId, characterId);
-  if (!character) {
-    throw new DomainError("CHARACTER_NOT_OWNED", "That character does not belong to you.");
-  }
-
-  return {
-    run,
-    character,
-  };
-}
-
 function boosterRejection(ineligible: IneligibleBoosterCharacter | undefined): DomainError {
   const reason = ineligible?.reason;
   if (reason === "INACTIVE") {
@@ -1176,32 +1095,6 @@ function boosterRejection(ineligible: IneligibleBoosterCharacter | undefined): D
     );
   }
   return new DomainError("BOOSTER_ACCESS_REQUIRED", "The Booster role is required to sign up as a booster.");
-}
-
-async function persistSignup(input: Parameters<typeof signupRepository.create>[0]) {
-  const existing = await signupRepository.findDuplicate({
-    runId: input.runId,
-    userId: input.userId,
-    characterId: input.characterId,
-    participationType: input.participationType,
-  });
-
-  if (existing && isBlockingDuplicate(existing.status)) {
-    throw new DomainError("DUPLICATE_SIGNUP", "This character is already signed for this run.");
-  }
-
-  try {
-    if (existing?.status === "WITHDRAWN") {
-      await signupRepository.update(existing.id, input);
-      return { id: existing.id, revived: true };
-    }
-    return { ...(await signupRepository.create(input)), revived: false };
-  } catch (error) {
-    if (uniqueViolation(error)) {
-      throw new DomainError("DUPLICATE_SIGNUP", "This character is already signed for this run.");
-    }
-    throw error;
-  }
 }
 
 type LoadedRun = NonNullable<Awaited<ReturnType<typeof runRepository.findById>>>;

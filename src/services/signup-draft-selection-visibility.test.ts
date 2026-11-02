@@ -6,13 +6,16 @@ import { attendanceRepository } from "@/repositories/attendance.repository";
 import { rosterRepository } from "@/repositories/roster.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { userNotificationRepository } from "@/repositories/user-notification.repository";
-import { boostingRoleService } from "@/services/boosting-role.service";
 import { characterService } from "@/services/character.service";
 import { rosterBuilderService } from "@/services/roster-builder.service";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
 import { groupMyRunsByRun } from "@/lib/my-runs-groups";
+import { testActor } from "@/test/actors";
+import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
+import { offerCharacter, offerCharacters } from "@/test/signup-offers";
+import { CURRENT_WEEK_RUN_START, DAY_MS, HOUR_MS, RAID_WEEK_TEST_CLOCK, freezeSystemTime, restoreSystemTime } from "@/test/time";
 
 // Warcraft Logs auto-link enrichment runs after Character writes/syncs; keep it
 // offline (a real WARCRAFT_LOGS_* in .env would otherwise hit the live API).
@@ -24,15 +27,10 @@ vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", async (importOr
   },
 }));
 
-const ids = {
-  owner: "dddddddd-dddd-4ddd-8ddd-dsv000000001",
-  other: "dddddddd-dddd-4ddd-8ddd-dsv000000002",
-  lead: "dddddddd-dddd-4ddd-8ddd-dsv000000003",
-  admin: "dddddddd-dddd-4ddd-8ddd-dsv000000004",
-};
-
-const createdCharacterIds: string[] = [];
-const createdRunIds: string[] = [];
+const created = { runIds: [] as string[], characterIds: [] as string[], userIds: [] as string[] };
+let owner: AuthenticatedUser;
+let other: AuthenticatedUser;
+let lead: AuthenticatedUser;
 let nameSeq = 0;
 
 function charName(prefix: string) {
@@ -44,44 +42,34 @@ function charName(prefix: string) {
   );
 }
 
-function asUser(
-  id: string,
-  name: string,
-  accountRole: AuthenticatedUser["accountRole"] = "USER",
-): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@dsv.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
+async function createUser(name: string, accountRole: AuthenticatedUser["accountRole"], isBooster: boolean) {
+  const id = await createTestUser({ name, accountRole, isBooster });
+  created.userIds.push(id);
+  return testActor(id, accountRole, { name });
 }
 
-async function ensureUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"]) {
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@dsv.boostting.local`,
-    emailVerified: false,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }).catch(() => {});
+async function createHealer(prefix: string, specialization: "Holy" | "Discipline", extra: { playableSpecs?: string[] } = {}) {
+  const character = await characterService.createCharacter(owner, {
+    name: charName(prefix),
+    realm: "Antonidas",
+    region: "EU",
+    wowClass: "PRIEST",
+    specialization,
+    itemLevel: 640,
+    ...extra,
+  });
+  created.characterIds.push(character.id);
+  return character;
 }
 
-async function createOpenRun(
-  lead: AuthenticatedUser,
-  scheduledStartAt: string,
-  targets: { tanks?: number; healers?: number; dps?: number } = {},
-) {
+/** Distinct start times inside the frozen raid week, so no two Runs of the owner overlap. */
+let startSlot = 0;
+function nextStartInRaidWeek() {
+  startSlot += 1;
+  return new Date(Date.parse(RAID_WEEK_TEST_CLOCK) + startSlot * 6 * HOUR_MS).toISOString();
+}
+
+async function createOpenRun(scheduledStartAt: string, targets: { tanks?: number; healers?: number; dps?: number } = {}) {
   const run = await runService.createRun(
     lead,
     venomousCreateInput({
@@ -91,76 +79,31 @@ async function createOpenRun(
       desiredDpsCount: targets.dps ?? 0,
     }),
   );
-  createdRunIds.push(run.id);
+  created.runIds.push(run.id);
   await runService.openRun(lead, run.id);
   return run;
 }
 
-async function cleanupRun(runId: string) {
-  await orm.RunAttendance.where({ runId }).delete().catch(() => {});
-  await orm.UserNotification.where({ runId }).delete().catch(() => {});
-  const roster = await orm.RunRoster.where({ runId }).first();
-  if (roster) {
-    const rosterId = (roster as { id: string }).id;
-    await orm.RunExternalBooster.where({ rosterId }).delete().catch(() => {});
-    await orm.RunRosterEntry.where({ rosterId }).delete().catch(() => {});
-    await orm.RunRoster.where({ id: rosterId }).delete().catch(() => {});
-  }
-  const signups = (await orm.RunSignup.where({ runId }).all()) as Array<{ id: string }>;
-  for (const signup of signups) {
-    await orm.RunSignupRole.where({ signupId: signup.id }).delete().catch(() => {});
-  }
-  await orm.RunSignup.where({ runId }).delete().catch(() => {});
-  await orm.RunRaidContent.where({ runId }).delete().catch(() => {});
-  await orm.Run.where({ id: runId }).delete().catch(() => {});
-}
-
-const owner = asUser(ids.owner, "DSV Owner");
-const other = asUser(ids.other, "DSV Other");
-const lead = asUser(ids.lead, "DSV Lead", "RAID_LEAD");
-const admin = asUser(ids.admin, "DSV Admin", "ADMIN");
-
 beforeAll(async () => {
-  await ensureUser(ids.owner, "DSV Owner", "USER");
-  await ensureUser(ids.other, "DSV Other", "USER");
-  await ensureUser(ids.lead, "DSV Lead", "RAID_LEAD");
-  await ensureUser(ids.admin, "DSV Admin", "ADMIN");
-  await boostingRoleService.setRole(admin, { userId: ids.owner, role: "BOOSTER", enabled: true }).catch(() => {});
-  await boostingRoleService.setRole(admin, { userId: ids.other, role: "BOOSTER", enabled: true }).catch(() => {});
-  // Prior failed runs may leave Characters for this fixture owner.
-  const leftover = (await orm.Character.where({ userId: ids.owner }).all()) as Array<{ id: string }>;
-  for (const row of leftover) {
-    await orm.Character.where({ id: row.id }).delete().catch(() => {});
-  }
+  assertIsolatedTestDatabase();
+  freezeSystemTime(RAID_WEEK_TEST_CLOCK, { advance: true });
+  owner = await createUser("DSV Owner", "USER", true);
+  other = await createUser("DSV Other", "USER", true);
+  lead = await createUser("DSV Lead", "RAID_LEAD", false);
 });
 
 afterAll(async () => {
-  for (const runId of createdRunIds) {
-    await cleanupRun(runId);
-  }
-  for (const id of createdCharacterIds) {
-    await orm.Character.where({ id }).delete().catch(() => {});
-  }
+  assertIsolatedTestDatabase();
+  // Attendance references roster entries with RESTRICT, so it goes before its Run.
+  for (const runId of created.runIds) await orm.RunAttendance.where({ runId }).deleteAndCount();
+  await deleteCreatedRows(created);
+  restoreSystemTime();
 });
 
 describe("draft selection user visibility", () => {
   it("signup only stays offered; manual draft select/deselect/change/publish update projection", async () => {
-    const charA = await characterService.createCharacter(owner, {
-      name: charName("Dsvmist"),
-      realm: "Antonidas",
-      region: "EU",
-      wowClass: "PRIEST",
-      specialization: "Holy",
-      itemLevel: 640,
-    });
-    const charB = await characterService.createCharacter(owner, {
-      name: charName("Dsvlight"),
-      realm: "Antonidas",
-      region: "EU",
-      wowClass: "PRIEST",
-      specialization: "Discipline",
-      itemLevel: 640,
-    });
+    const charA = await createHealer("Dsvmist", "Holy");
+    const charB = await createHealer("Dsvlight", "Discipline");
     const charC = await characterService.createCharacter(owner, {
       name: charName("Dsvbloom"),
       realm: "Antonidas",
@@ -169,29 +112,15 @@ describe("draft selection user visibility", () => {
       specialization: "Restoration",
       itemLevel: 640,
     });
-    createdCharacterIds.push(charA.id, charB.id, charC.id);
+    created.characterIds.push(charC.id);
 
-    const run = await createOpenRun(lead, "2026-12-01T18:00:00.000Z", { healers: 1 });
-
-    const offerA = await signupService.createBoosterSignup(owner, {
-      runId: run.id,
-      characterId: charA.id,
-      role: "HEALER",
-      isBackup: false,
-    });
-    const offerB = await signupService.createBoosterSignup(owner, {
-      runId: run.id,
-      characterId: charB.id,
-      role: "HEALER",
-      isBackup: false,
-    });
-    const offerC = await signupService.createBoosterSignup(owner, {
-      runId: run.id,
-      characterId: charC.id,
-      role: "HEALER",
-      isBackup: false,
-    });
-    const notesBeforeDraft = await userNotificationRepository.listForUser(ids.owner);
+    const run = await createOpenRun(nextStartInRaidWeek(), { healers: 1 });
+    const [offerA, offerB, offerC] = await offerCharacters(owner, run.id, [
+      { characterId: charA.id, roles: ["HEALER"] },
+      { characterId: charB.id, roles: ["HEALER"] },
+      { characterId: charC.id, roles: ["HEALER"] },
+    ]);
+    const notesBeforeDraft = await userNotificationRepository.listForUser(owner.id);
 
     let mine = await signupService.getMyRuns(owner);
     expect(mine.pending.filter((row) => row.runId === run.id)).toHaveLength(3);
@@ -207,14 +136,14 @@ describe("draft selection user visibility", () => {
     await rosterService.saveDraftSelection(lead, {
       runId: run.id,
       version: before.roster.version,
-      selections: [{ signupId: offerA.id, selectedRole: "HEALER" }],
+      selections: [{ signupId: offerA!, selectedRole: "HEALER" }],
     });
 
     mine = await signupService.getMyRuns(owner);
     const draftSelected = mine.selected.filter((row) => row.runId === run.id);
     const stillPending = mine.pending.filter((row) => row.runId === run.id);
     expect(draftSelected).toHaveLength(1);
-    expect(draftSelected[0]?.id).toBe(offerA.id);
+    expect(draftSelected[0]?.id).toBe(offerA);
     expect(draftSelected[0]?.selectionState).toBe("DRAFT");
     expect(draftSelected[0]?.displayRole).toBe("HEALER");
     expect(draftSelected[0]?.status).toBe("PENDING");
@@ -222,41 +151,31 @@ describe("draft selection user visibility", () => {
     expect(stillPending.every((row) => row.selectionState === "OFFERED")).toBe(true);
 
     detail = await signupService.listOwnForRun(owner, run.id);
-    expect(detail.find((row) => row.id === offerA.id)?.selectionState).toBe("DRAFT");
+    expect(detail.find((row) => row.id === offerA)?.selectionState).toBe("DRAFT");
     expect(detail.filter((row) => row.selectionState === "DRAFT")).toHaveLength(1);
 
     const otherMine = await signupService.getMyRuns(other);
-    expect([...otherMine.pending, ...otherMine.selected].some((row) => row.runId === run.id)).toBe(
-      false,
-    );
+    expect([...otherMine.pending, ...otherMine.selected].some((row) => row.runId === run.id)).toBe(false);
 
-    const runAfterDraft = await runRepository.findById(run.id);
-    // Existing draft-save may advance OPEN → ROSTERING; must not publish/start/complete.
-    expect(["OPEN", "ROSTERING"]).toContain(runAfterDraft?.status);
-    expect(runAfterDraft?.status).not.toBe("PUBLISHED");
+    // A non-empty draft save moves OPEN → ROSTERING; it never publishes, starts or completes.
+    expect((await runRepository.findById(run.id))?.status).toBe("ROSTERING");
     expect(await attendanceRepository.listByRunId(run.id)).toHaveLength(0);
-    const notesAfterDraft = await userNotificationRepository.listForUser(ids.owner);
+    const notesAfterDraft = await userNotificationRepository.listForUser(owner.id);
     // Established Save Roster path already emits ROSTER_SELECTED on draft save —
     // leave that unchanged; draft visibility must not invent publish-only types.
-    const newNotes = notesAfterDraft.filter(
-      (row) => !notesBeforeDraft.some((before) => before.id === row.id),
-    );
+    const newNotes = notesAfterDraft.filter((row) => !notesBeforeDraft.some((earlier) => earlier.id === row.id));
     expect(newNotes.every((row) => row.type === "ROSTER_SELECTED")).toBe(true);
 
     const mid = await rosterService.getRosterManagementView(lead, run.id);
     await rosterService.saveDraftSelection(lead, {
       runId: run.id,
       version: mid.roster.version,
-      selections: [{ signupId: offerB.id, selectedRole: "HEALER" }],
+      selections: [{ signupId: offerB!, selectedRole: "HEALER" }],
     });
 
     mine = await signupService.getMyRuns(owner);
-    expect(mine.selected.filter((row) => row.runId === run.id).map((row) => row.id)).toEqual([
-      offerB.id,
-    ]);
-    expect(mine.pending.filter((row) => row.runId === run.id).map((row) => row.id).sort()).toEqual(
-      [offerA.id, offerC.id].sort(),
-    );
+    expect(mine.selected.filter((row) => row.runId === run.id).map((row) => row.id)).toEqual([offerB]);
+    expect(mine.pending.filter((row) => row.runId === run.id).map((row) => row.id).sort()).toEqual([offerA, offerC].sort());
 
     const cleared = await rosterService.getRosterManagementView(lead, run.id);
     await rosterService.saveDraftSelection(lead, {
@@ -273,7 +192,7 @@ describe("draft selection user visibility", () => {
     await rosterService.saveDraftSelection(lead, {
       runId: run.id,
       version: reselect.roster.version,
-      selections: [{ signupId: offerA.id, selectedRole: "HEALER" }],
+      selections: [{ signupId: offerA!, selectedRole: "HEALER" }],
     });
 
     const publishedView = await rosterService.getRosterManagementView(lead, run.id);
@@ -285,71 +204,42 @@ describe("draft selection user visibility", () => {
 
     mine = await signupService.getMyRuns(owner);
     const publishedSelected = mine.selected.filter((row) => row.runId === run.id);
-    expect(publishedSelected).toHaveLength(1);
-    expect(publishedSelected[0]?.id).toBe(offerA.id);
+    // Same Run appears once in selected — no duplicate selected entry after publish.
+    expect(publishedSelected.map((row) => row.id)).toEqual([offerA]);
     expect(publishedSelected[0]?.selectionState).toBe("PUBLISHED");
     expect(publishedSelected[0]?.status).toBe("SELECTED");
     expect(mine.pending.filter((row) => row.runId === run.id)).toHaveLength(0);
     expect(mine.notSelected.filter((row) => row.runId === run.id)).toHaveLength(2);
-    // Same Run appears once in selected — no duplicate selected entry after publish.
-    expect(publishedSelected.map((row) => row.id)).toEqual([offerA.id]);
   });
 
   it("offspec draft role is shown, not character primary role", async () => {
-    const character = await characterService.createCharacter(owner, {
-      name: charName("Dsvoff"),
-      realm: "Antonidas",
-      region: "EU",
-      wowClass: "PRIEST",
-      specialization: "Holy",
-      playableSpecs: ["Shadow"],
-      itemLevel: 640,
-    });
-    createdCharacterIds.push(character.id);
+    const character = await createHealer("Dsvoff", "Holy", { playableSpecs: ["Shadow"] });
+    expect(character.primaryRole).toBe("HEALER");
 
-    const run = await createOpenRun(lead, "2026-12-02T18:00:00.000Z", { healers: 0, dps: 1 });
-    const signup = await signupService.createBoosterSignup(owner, {
-      runId: run.id,
-      characterId: character.id,
-      role: "RANGED_DPS",
-      isBackup: false,
-    });
+    const run = await createOpenRun(nextStartInRaidWeek(), { healers: 0, dps: 1 });
+    const signupId = await offerCharacter(owner, run.id, character.id, "RANGED_DPS");
 
     const before = await rosterService.getRosterManagementView(lead, run.id);
     await rosterService.saveDraftSelection(lead, {
       runId: run.id,
       version: before.roster.version,
-      selections: [{ signupId: signup.id, selectedRole: "RANGED_DPS" }],
+      selections: [{ signupId, selectedRole: "RANGED_DPS" }],
     });
 
     const mine = await signupService.getMyRuns(owner);
-    const selected = mine.selected.find((row) => row.id === signup.id);
+    const selected = mine.selected.find((row) => row.id === signupId);
     expect(selected?.selectionState).toBe("DRAFT");
     expect(selected?.displayRole).toBe("RANGED_DPS");
-    expect(character.primaryRole).toBe("HEALER");
   });
 
   it("Auto Build Apply surfaces SELECTED_DRAFT without publish", async () => {
-    const healer = await characterService.createCharacter(owner, {
-      name: charName("Dsvauto"),
-      realm: "Antonidas",
-      region: "EU",
-      wowClass: "PRIEST",
-      specialization: "Holy",
-      itemLevel: 640,
-    });
-    createdCharacterIds.push(healer.id);
+    const healer = await createHealer("Dsvauto", "Holy");
 
-    const run = await createOpenRun(lead, "2026-12-03T18:00:00.000Z", { healers: 1, dps: 0 });
-    const signup = await signupService.createBoosterSignup(owner, {
-      runId: run.id,
-      characterId: healer.id,
-      role: "HEALER",
-      isBackup: false,
-    });
+    const run = await createOpenRun(nextStartInRaidWeek(), { healers: 1, dps: 0 });
+    const signupId = await offerCharacter(owner, run.id, healer.id, "HEALER");
 
     const proposal = await rosterBuilderService.proposeRoster(lead, run.id);
-    expect(proposal.applySelections.some((row) => row.signupId === signup.id)).toBe(true);
+    expect(proposal.applySelections.some((row) => row.signupId === signupId)).toBe(true);
 
     await rosterBuilderService.applyRosterProposal(lead, {
       runId: run.id,
@@ -361,92 +251,67 @@ describe("draft selection user visibility", () => {
     expect(roster?.publishedAt).toBeNull();
 
     const mine = await signupService.getMyRuns(owner);
-    const selected = mine.selected.find((row) => row.id === signup.id);
+    const selected = mine.selected.find((row) => row.id === signupId);
     expect(selected?.selectionState).toBe("DRAFT");
     expect(selected?.displayRole).toBe("HEALER");
     expect(selected?.status).toBe("PENDING");
 
     expect(await attendanceRepository.listByRunId(run.id)).toHaveLength(0);
-    const afterApply = await runRepository.findById(run.id);
-    expect(["OPEN", "ROSTERING"]).toContain(afterApply?.status);
-    expect(afterApply?.status).not.toBe("PUBLISHED");
+    expect((await runRepository.findById(run.id))?.status).toBe("ROSTERING");
   });
 
   it("batches draft selection lookup once for many signups", async () => {
-    const chars = await Promise.all(
-      ["Dsvba", "Dsvbb", "Dsvbc"].map((prefix) =>
-        characterService.createCharacter(owner, {
-          name: charName(prefix),
-          realm: "Antonidas",
-          region: "EU",
-          wowClass: "PRIEST",
-          specialization: "Holy",
-          itemLevel: 640,
-        }),
-      ),
-    );
-    createdCharacterIds.push(...chars.map((row) => row.id));
+    const chars = [];
+    for (const prefix of ["Dsvba", "Dsvbb", "Dsvbc"]) chars.push(await createHealer(prefix, "Holy"));
 
-    const run = await createOpenRun(lead, "2026-12-04T18:00:00.000Z", { healers: 1 });
-    for (const character of chars) {
-      await signupService.createBoosterSignup(owner, {
-        runId: run.id,
-        characterId: character.id,
-        role: "HEALER",
-        isBackup: false,
-      });
-    }
+    const run = await createOpenRun(nextStartInRaidWeek(), { healers: 1 });
+    const offerIds = await offerCharacters(
+      owner,
+      run.id,
+      chars.map((character) => ({ characterId: character.id, roles: ["HEALER"] })),
+    );
 
     const spy = vi.spyOn(rosterRepository, "listDraftSelectedRolesBySignupIds");
-    await signupService.getMyRuns(owner);
-    expect(spy).toHaveBeenCalledTimes(1);
-    const arg = spy.mock.calls[0]?.[0] as string[];
-    expect(arg.length).toBeGreaterThanOrEqual(3);
-    spy.mockRestore();
+    let lookups: string[][];
+    try {
+      await signupService.getMyRuns(owner);
+    } finally {
+      lookups = spy.mock.calls.map(([signupIds]) => [...signupIds]);
+      spy.mockRestore();
+    }
+    expect(lookups).toHaveLength(1);
+    expect(lookups[0]).toEqual(expect.arrayContaining(offerIds));
   });
 
   it("My Runs: a Pending Run block gets the same Run's draft pick as context; raid-ID filtering keeps weeks apart", async () => {
-    const [blast, beast, other1] = await Promise.all(
-      ["Dsvca", "Dsvcb", "Dsvcc"].map((prefix) =>
-        characterService.createCharacter(owner, {
-          name: charName(prefix),
-          realm: "Antonidas",
-          region: "EU",
-          wowClass: "PRIEST",
-          specialization: "Holy",
-          itemLevel: 640,
-        }),
-      ),
-    );
-    createdCharacterIds.push(blast!.id, beast!.id, other1!.id);
+    const blast = await createHealer("Dsvca", "Holy");
+    const beast = await createHealer("Dsvcb", "Holy");
+    const other1 = await createHealer("Dsvcc", "Holy");
 
     // Two different raid IDs (weekly reset Wednesday 06:00 Europe/Berlin).
-    const thisWeek = await createOpenRun(lead, "2026-12-11T19:00:00.000Z", { healers: 1 });
-    const nextWeek = await createOpenRun(lead, "2026-12-18T19:00:00.000Z", { healers: 1 });
-    const pickedOffer = await signupService.createBoosterSignup(owner, {
-      runId: thisWeek.id,
-      characterId: blast!.id,
-      role: "HEALER",
-      isBackup: false,
-    });
-    await signupService.createBoosterSignup(owner, { runId: thisWeek.id, characterId: beast!.id, role: "HEALER", isBackup: false });
-    await signupService.createBoosterSignup(owner, { runId: nextWeek.id, characterId: other1!.id, role: "HEALER", isBackup: false });
+    const thisWeek = await createOpenRun(CURRENT_WEEK_RUN_START, { healers: 1 });
+    const nextWeek = await createOpenRun(new Date(Date.parse(CURRENT_WEEK_RUN_START) + 7 * DAY_MS).toISOString(), { healers: 1 });
+    const [pickedOffer] = await offerCharacters(owner, thisWeek.id, [
+      { characterId: blast.id, roles: ["HEALER"] },
+      { characterId: beast.id, roles: ["HEALER"] },
+    ]);
+    await offerCharacter(owner, nextWeek.id, other1.id, "HEALER");
     const view = await rosterService.getRosterManagementView(lead, thisWeek.id);
     await rosterService.saveDraftSelection(lead, {
       runId: thisWeek.id,
       version: view.roster.version,
-      selections: [{ signupId: pickedOffer.id, selectedRole: "HEALER" }],
+      selections: [{ signupId: pickedOffer!, selectedRole: "HEALER" }],
     });
 
-    const now = new Date("2026-12-10T12:00:00.000Z");
+    const now = new Date(RAID_WEEK_TEST_CLOCK);
     const current = await signupService.getMyRuns(owner, { raidId: "current", now });
     expect(current.pending.some((row) => row.runId === nextWeek.id)).toBe(false);
     const groups = groupMyRunsByRun(current.pending, current.selected);
     const block = groups.find((group) => group.runId === thisWeek.id)!;
     expect(block.selectedContext.map((pick) => [pick.id, pick.selectionState, pick.displayRole])).toEqual([
-      [pickedOffer.id, "DRAFT", "HEALER"],
+      [pickedOffer, "DRAFT", "HEALER"],
     ]);
-    expect(block.offers.map((offer) => offer.characterId)).toEqual([beast!.id]);
+    expect(block.offers.map((offer) => offer.characterId)).toEqual([beast.id]);
     // Shared compact title (`contentShortTitle`), not the full raid names.
     expect(block.contentTitle).toBe("Venom");
 

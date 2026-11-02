@@ -45,11 +45,6 @@ export function canSelfWithdrawSignup(signupStatus: SignupStatus, runStatus: Run
   return signupStatus === "PENDING" || signupStatus === "SELECTED";
 }
 
-/** Withdrawn rows stay persisted; they do not block a later revive of the same combination. */
-export function isBlockingDuplicate(status: SignupStatus): boolean {
-  return status !== "WITHDRAWN";
-}
-
 /**
  * A current, counted Character offer — PENDING or SELECTED. WITHDRAWN is a
  * terminal exit. NOT_SELECTED is a published-roster outcome: still a legitimate

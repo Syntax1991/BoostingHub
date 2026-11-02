@@ -15,11 +15,11 @@ import { runRepository } from "@/repositories/run.repository";
 import { userNotificationRepository } from "@/repositories/user-notification.repository";
 import { discordSyncService } from "@/services/discord-sync.service";
 import { runService } from "@/services/run.service";
-import { signupService } from "@/services/signup.service";
 import {
   buildRunCancelledChannelEmbed,
   buildRunRescheduledChannelEmbed,
 } from "@/discord-bot/embeds/run-lifecycle-announcement";
+import { offerCharacter } from "@/test/signup-offers";
 
 const ids = {
   lead: "a4444444-4444-4444-8444-444444444401",
@@ -167,12 +167,7 @@ async function openSignedRun(scheduledStartAt: string) {
   );
   createdRunIds.push(created.id);
   await runService.openRun(lead, created.id);
-  await signupService.createBoosterSignup(player, {
-    runId: created.id,
-    characterId: charPlayer,
-    role: "HEALER",
-    isBackup: false,
-  });
+  await offerCharacter(player, created.id, charPlayer, "HEALER");
   return created.id;
 }
 

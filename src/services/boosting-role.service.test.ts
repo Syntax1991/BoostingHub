@@ -12,6 +12,7 @@ import { SEED_IDS } from "@/prisma/seed-ids";
 import { testActor } from "@/test/actors";
 import { assertIsolatedTestDatabase, createTestUser, deleteCreatedRows } from "@/test/db-fixtures";
 import { expectDomainError } from "@/test/domain-error";
+import { offerCharacter } from "@/test/signup-offers";
 
 // Warcraft Logs auto-link enrichment runs after Character writes/syncs; keep it
 // offline (a real WARCRAFT_LOGS_* in .env would otherwise hit the live API).
@@ -264,7 +265,7 @@ describe("Booster eligibility follows User.isBooster on every difficulty", () =>
     for (const runId of RUNS) {
       expect(await eligibleOn(runId)).toEqual({ eligible: false, reason: "NO_BOOSTER_ACCESS" });
       await expectDomainError(
-        signupService.createBoosterSignup(target, { runId, characterId, role: "HEALER", isBackup: false }),
+        offerCharacter(target, runId, characterId, "HEALER"),
         "BOOSTER_ACCESS_REQUIRED",
       );
     }
