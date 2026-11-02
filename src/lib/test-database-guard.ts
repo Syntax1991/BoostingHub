@@ -46,5 +46,26 @@ export function resolveTestDatabaseUrl(): string {
     );
   }
 
+  // Optional pin for machines with several test databases (one per worktree):
+  // a run aimed at another test database fails instead of writing to it.
+  const expectedName = process.env.TEST_DATABASE_EXPECTED_NAME?.trim();
+  if (expectedName) {
+    const actualName = databaseNameOf(testUrl);
+    if (actualName !== expectedName) {
+      throw new Error(
+        `TEST_DATABASE_URL names the database "${actualName ?? "(unparseable)"}", but ` +
+          `TEST_DATABASE_EXPECTED_NAME requires "${expectedName}". Refusing to run against it.`,
+      );
+    }
+  }
+
   return testUrl;
+}
+
+function databaseNameOf(url: string): string | null {
+  try {
+    return decodeURIComponent(new URL(url).pathname.replace(/^\//, "")) || null;
+  } catch {
+    return null;
+  }
 }
