@@ -368,7 +368,8 @@ Phase 2 complete. See [PHASE-2.md](reports/PHASE-2.md). Full suite 341 files / 3
 ## Continuation point
 
 Master audit Phases 1–6 complete on `test/audit-batch-a` — see [PHASE-6.md](reports/PHASE-6.md).  
-**Acceptance review:** [FINAL-ACCEPTANCE-REVIEW.md](reports/FINAL-ACCEPTANCE-REVIEW.md) — verdict **ACCEPTED WITH DOCUMENTED RISKS**. Fresh suite ×2 on `boostting_bot_test_audit` (338/3801) without reset. Open owner items: A16, CSP, Apache `X-Powered-By`, post-deploy rate-limit journal. Stop for owner decision before merge/deploy.
+**Acceptance review:** [FINAL-ACCEPTANCE-REVIEW.md](reports/FINAL-ACCEPTANCE-REVIEW.md) — verdict **ACCEPTED WITH DOCUMENTED RISKS**. Fresh suite ×2 on `boostting_bot_test_audit` (338/3801) without reset.  
+**Engineering freeze:** [FINAL-ENGINEERING-HANDOVER.md](FINAL-ENGINEERING-HANDOVER.md) at HEAD `755c971` (+ freeze docs commit). Open owner items: A16, CSP, Apache `X-Powered-By`, post-deploy rate-limit journal. No further audit phases. Stop for owner decision before merge/deploy.
 
 
 Handover to Cursor (2026-11-02): Claude left branch `test/audit-batch-a` at local `af6bb59` (1 commit ahead of origin `95c2eaf`, `setDraftSelection`→`saveDraftSelection` for six audited suites) plus uncommitted fixture isolation rewrites for three remaining suites. Cursor recovered that work, fixed one TDZ shadowing bug in `roster-pre-start-replacements`, validated 67/67 twice on `boostting_bot_test_audit` without reset, and recorded the decisions below.

@@ -24,7 +24,7 @@ This repository is public, so concrete server details, access data and secret va
 - Stack: Next.js, React, TypeScript, PostgreSQL, Prisma 8 (release candidate), Better Auth, discord.js. Details: [DEVELOPER.md](DEVELOPER.md).
 - The app runs on one Linux server with a web process, one Discord bot process and four systemd timers. See [OPERATIONS.md](OPERATIONS.md).
 - Last recorded production release: `418fd7b` (security dependency update, PR #318), deployed 2026-11-01. The owner's production smoke test passed, including a real Discord login and session survival. `main` is ahead of production only by documentation, comments, guide text, four bot messages, test changes and removed one-off scripts; they reach the server with the next normal release.
-- Master audit branch `test/audit-batch-a`: phase reports under [docs/audit/reports/](audit/reports/) (`PHASE-1` …). Ledger: [docs/audit/EXECUTION_LEDGER.md](audit/EXECUTION_LEDGER.md).
+- Master audit branch `test/audit-batch-a` at `755c971`: **ACCEPTED WITH DOCUMENTED RISKS**. Phase reports under [docs/audit/reports/](audit/reports/). Ledger: [docs/audit/EXECUTION_LEDGER.md](audit/EXECUTION_LEDGER.md). Engineering freeze note: [docs/audit/FINAL-ENGINEERING-HANDOVER.md](audit/FINAL-ENGINEERING-HANDOVER.md). Owner items still open: A16 `gold.ts`, CSP, Apache `X-Powered-By`, post-deploy rate-limit journal.
 
 ## Production and disabled features
 

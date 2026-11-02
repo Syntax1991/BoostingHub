@@ -1,6 +1,7 @@
 # Audit phase reports
 
-Branch: `test/audit-batch-a`. Authoritative status: [../EXECUTION_LEDGER.md](../EXECUTION_LEDGER.md).
+Branch: `test/audit-batch-a`. Authoritative status: [../EXECUTION_LEDGER.md](../EXECUTION_LEDGER.md).  
+**Freeze / owner handover:** [../FINAL-ENGINEERING-HANDOVER.md](../FINAL-ENGINEERING-HANDOVER.md).
 
 | Phase | Report | Focus |
 | --- | --- | --- |
@@ -11,3 +12,4 @@ Branch: `test/audit-batch-a`. Authoritative status: [../EXECUTION_LEDGER.md](../
 | 5 | [PHASE-5.md](PHASE-5.md) | UX and documentation |
 | 6 | [PHASE-6.md](PHASE-6.md) | Final validation matrix |
 | — | [FINAL-ACCEPTANCE-REVIEW.md](FINAL-ACCEPTANCE-REVIEW.md) | Independent acceptance review of Phases 1–6 |
+| — | [FINAL-ENGINEERING-HANDOVER.md](../FINAL-ENGINEERING-HANDOVER.md) | Engineering freeze and owner handover |
