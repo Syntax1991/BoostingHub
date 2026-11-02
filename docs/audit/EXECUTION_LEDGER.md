@@ -355,11 +355,23 @@ Found while moving, not changed (feature freeze): four production modules are im
 | Phase | Name | Status | Report |
 | --- | --- | --- | --- |
 | 1 | Centralized test structure | DONE | [PHASE-1.md](reports/PHASE-1.md) |
-| 2 | Test quality audit | IN PROGRESS | — |
+| 2 | Test quality audit | IN PROGRESS (5 UNREVIEWED files / 231 tests) | — |
 | 3 | Production refactoring / code quality | NOT STARTED | — |
 | 4 | Performance, security, reliability | NOT STARTED | — |
 | 5 | UX and documentation | NOT STARTED | — |
 | 6 | Final validation and readiness | NOT STARTED | — |
+
+### Phase 2 remaining (authoritative)
+
+HEAD at last ledger touch: see git. Still UNREVIEWED:
+
+1. `run-management.service.test.ts` (41)
+2. `signup-offers.service.test.ts` (32) — has `setDraftSelection`
+3. `attendance.service.test.ts` (36) — has `setDraftSelection`
+4. `roster.service.test.ts` (30) — has `setDraftSelection`; historically needs fresh DB reset
+5. `discord-sync.service.test.ts` (92) — has `setDraftSelection`
+
+Then: remove `rosterService.setDraftSelection` once callers are gone; full suite ×2 without reset; lint; typecheck; build; `PHASE-2.md`.
 
 ## Continuation point
 

@@ -3,6 +3,9 @@ import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
+import { testActor } from "@tests/fixtures/actors";
+import { assertIsolatedTestDatabase } from "@tests/fixtures/db-fixtures";
+import { expectDomainError } from "@tests/helpers/domain-error";
 import {
   contentLegacyUpdateInput,
   futureTestIso,
@@ -36,16 +39,7 @@ function asUser(
   name: string,
   accountRole: AuthenticatedUser["accountRole"] = "USER",
 ): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@rmtest.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole,
-    accountStatus: "ACTIVE",
-  };
+  return testActor(id, accountRole, { name, email: `${id}@rmtest.boostting.local` });
 }
 
 async function expectDomainCode(promise: Promise<unknown>, code: string) {
@@ -70,17 +64,14 @@ async function createTestUser(id: string, name: string, accountRole: Authenticat
   });
 }
 
-async function deleteIfPresent(table: "User" | "Character" | "RunSignup" | "RunSignupRole" | "BoosterAccess" | "Run", id: string) {
-  try {
-    if (table === "User") await orm.User.where({ id }).delete();
-    else if (table === "Character") await orm.Character.where({ id }).delete();
-    else if (table === "RunSignup") await orm.RunSignup.where({ id }).delete();
-    else if (table === "RunSignupRole") await orm.RunSignupRole.where({ id }).delete();
-    else if (table === "BoosterAccess") await orm.BoosterAccess.where({ id }).delete();
-    else await orm.Run.where({ id }).delete();
-  } catch {
-    // Already gone.
-  }
+async function deleteOwnedRow(table: "User" | "Character" | "RunSignup" | "RunSignupRole" | "BoosterAccess" | "Run", id: string) {
+  assertIsolatedTestDatabase();
+  if (table === "User") await orm.User.where({ id }).deleteAndCount();
+  else if (table === "Character") await orm.Character.where({ id }).deleteAndCount();
+  else if (table === "RunSignup") await orm.RunSignup.where({ id }).deleteAndCount();
+  else if (table === "RunSignupRole") await orm.RunSignupRole.where({ id }).deleteAndCount();
+  else if (table === "BoosterAccess") await orm.BoosterAccess.where({ id }).deleteAndCount();
+  else await orm.Run.where({ id }).deleteAndCount();
 }
 
 function futureIso(days = 7) {
@@ -105,7 +96,7 @@ async function expectVenomousUpdateDomainCode(
 ) {
   const run = await runRepository.findById(runId);
   if (!run) throw new Error("Run missing in test fixture");
-  await expectDomainCode(
+  await expectDomainError(
     runService.updateRun(actor, venomousUpdateInput(runId, run, overrides)),
     code,
   );
@@ -161,12 +152,13 @@ const otherLead = asUser(ids.otherLead, "Runmgmt Other Lead", "RAID_LEAD");
 const admin = asUser(ids.admin, "Runmgmt Admin", "ADMIN");
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   await raidRepository.ensureReferenceRaids();
   for (const id of [ids.user, ids.lead, ids.otherLead, ids.admin, ids.character, ids.access]) {
-    await deleteIfPresent("RunSignup", id);
-    await deleteIfPresent("BoosterAccess", id);
-    await deleteIfPresent("Character", id);
-    await deleteIfPresent("User", id);
+    await deleteOwnedRow("RunSignup", id);
+    await deleteOwnedRow("BoosterAccess", id);
+    await deleteOwnedRow("Character", id);
+    await deleteOwnedRow("User", id);
   }
   await createTestUser(ids.user, "Runmgmt User", "USER");
   await createTestUser(ids.lead, "Runmgmt Lead", "RAID_LEAD");
@@ -178,9 +170,9 @@ afterAll(async () => {
   for (const id of createdSignupIds) {
     const offered = await orm.RunSignupRole.where({ signupId: id }).select("id").all();
     for (const offer of offered) {
-      await deleteIfPresent("RunSignupRole", (offer as { id: string }).id);
+      await deleteOwnedRow("RunSignupRole", (offer as { id: string }).id);
     }
-    await deleteIfPresent("RunSignup", id);
+    await deleteOwnedRow("RunSignup", id);
   }
   for (const id of createdRunIds) {
     const roster = await orm.RunRoster.where({ runId: id }).first();
@@ -188,23 +180,23 @@ afterAll(async () => {
       const rosterId = (roster as { id: string }).id;
       const entries = await orm.RunRosterEntry.where({ rosterId }).all();
       for (const entry of entries) {
-        await orm.RunRosterEntry.where({ id: (entry as { id: string }).id }).delete();
+        await orm.RunRosterEntry.where({ id: (entry as { id: string }).id }).deleteAndCount();
       }
-      await orm.RunRoster.where({ id: rosterId }).delete();
+      await orm.RunRoster.where({ id: rosterId }).deleteAndCount();
     }
-    await deleteIfPresent("Run", id);
+    await deleteOwnedRow("Run", id);
   }
-  await deleteIfPresent("BoosterAccess", ids.access);
-  await deleteIfPresent("Character", ids.character);
-  await deleteIfPresent("User", ids.user);
-  await deleteIfPresent("User", ids.lead);
-  await deleteIfPresent("User", ids.otherLead);
-  await deleteIfPresent("User", ids.admin);
+  await deleteOwnedRow("BoosterAccess", ids.access);
+  await deleteOwnedRow("Character", ids.character);
+  await deleteOwnedRow("User", ids.user);
+  await deleteOwnedRow("User", ids.lead);
+  await deleteOwnedRow("User", ids.otherLead);
+  await deleteOwnedRow("User", ids.admin);
 });
 
 describe("run creation authorization", () => {
   it("rejects USER create", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       runService.createRun(user, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14 })),
       "NOT_AUTHORIZED",
     );
@@ -223,7 +215,7 @@ describe("run creation authorization", () => {
   });
 
   it("rejects a RAID_LEAD forging another raidLeadId", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       runService.createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1, raidLeadId: ids.otherLead })),
       "RUN_RAID_LEAD_INVALID",
     );
@@ -234,7 +226,7 @@ describe("run creation authorization", () => {
     const run = await runRepository.findById(id);
     expect(run?.raidLeadId).toBe(ids.lead);
 
-    await expectDomainCode(
+    await expectDomainError(
       runService.createRun(admin, venomousCreateInput({ difficulty: "NORMAL", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1, raidLeadId: ids.user })),
       "RUN_RAID_LEAD_INVALID",
     );
@@ -243,15 +235,15 @@ describe("run creation authorization", () => {
 
 describe("run creation domain", () => {
   it("rejects an invalid schedule and negative composition", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       runService.createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: "not-a-date", desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14 })),
       "RUN_SCHEDULE_INVALID",
     );
-    await expectDomainCode(
+    await expectDomainError(
       runService.createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14 })),
       "RUN_SCHEDULE_INVALID",
     );
-    await expectDomainCode(
+    await expectDomainError(
       runService.createRun(lead, {
         raidId,
         difficulty: "HEROIC",
@@ -279,7 +271,7 @@ describe("run creation domain", () => {
   });
 
   it("rejects MYTHIC + SAVED and accepts MYTHIC + UNSAVED / VIP / COMMUNITY", async () => {
-    await expectDomainCode(
+    await expectDomainError(
       createDraft(lead, { difficulty: "MYTHIC", lootType: "SAVED" }),
       "RUN_LOOT_TYPE_INVALID",
     );
@@ -304,8 +296,8 @@ describe("run creation domain", () => {
   });
 
   it("enforces plannedBossCount boundaries against the raid's total boss count", async () => {
-    await expectDomainCode(createDraft(lead, { plannedBossCount: 0 }), "RUN_BOSS_COUNT_INVALID");
-    await expectDomainCode(createDraft(lead, { plannedBossCount: 9 }), "RUN_BOSS_COUNT_INVALID");
+    await expectDomainError(createDraft(lead, { plannedBossCount: 0 }), "RUN_BOSS_COUNT_INVALID");
+    await expectDomainError(createDraft(lead, { plannedBossCount: 9 }), "RUN_BOSS_COUNT_INVALID");
     const id = await createDraft(lead, { plannedBossCount: 1 });
     expect(venomousPlannedFromRun(await runRepository.findById(id))).toBe(1);
   });
@@ -316,7 +308,7 @@ describe("draft visibility", () => {
     const id = await createDraft(lead, { title: "Hidden draft" });
     const listed = await runService.listRuns(user);
     expect(listed.some((run) => run.id === id)).toBe(false);
-    await expectDomainCode(runDetailService.getRunDetail(user, id), "NOT_FOUND");
+    await expectDomainError(runDetailService.getRunDetail(user, id), "NOT_FOUND");
 
     const assigned = await runDetailService.getRunDetail(lead, id);
     expect(assigned.permissions.canManageRun).toBe(true);
@@ -328,15 +320,15 @@ describe("draft visibility", () => {
 describe("open run", () => {
   it("opens a draft atomically with signups and rejects invalid callers", async () => {
     const id = await createDraft(lead, { title: "Open me" });
-    await expectDomainCode(runService.openRun(user, id), "RUN_NOT_MANAGEABLE");
-    await expectDomainCode(runService.openRun(otherLead, id), "RUN_NOT_MANAGEABLE");
+    await expectDomainError(runService.openRun(user, id), "RUN_NOT_MANAGEABLE");
+    await expectDomainError(runService.openRun(otherLead, id), "RUN_NOT_MANAGEABLE");
 
     await runService.openRun(lead, id);
     const opened = await runRepository.findById(id);
     expect(opened?.status).toBe("OPEN");
     expect(opened?.signupsOpen).toBe(true);
 
-    await expectDomainCode(runService.openRun(lead, id), "RUN_ALREADY_OPEN");
+    await expectDomainError(runService.openRun(lead, id), "RUN_ALREADY_OPEN");
   });
 });
 
@@ -477,7 +469,7 @@ describe("raid lead reassignment", () => {
 describe("signup window", () => {
   it("closes and reopens independently of status while preserving signups", async () => {
     const id = await createDraft(lead, { title: "Window" });
-    await expectDomainCode(runService.setSignupWindow(lead, id, true), "RUN_INVALID_TRANSITION");
+    await expectDomainError(runService.setSignupWindow(lead, id, true), "RUN_INVALID_TRANSITION");
     await runService.openRun(lead, id);
 
     const signupId = crypto.randomUUID();
@@ -497,7 +489,7 @@ describe("signup window", () => {
     let run = await runRepository.findById(id);
     expect(run?.status).toBe("OPEN");
     expect(run?.signupsOpen).toBe(false);
-    await expectDomainCode(runService.setSignupWindow(lead, id, false), "RUN_SIGNUPS_ALREADY_CLOSED");
+    await expectDomainError(runService.setSignupWindow(lead, id, false), "RUN_SIGNUPS_ALREADY_CLOSED");
 
     await runService.setSignupWindow(lead, id, true);
     run = await runRepository.findById(id);
@@ -516,9 +508,9 @@ describe("signup window", () => {
     expect((await runRepository.findById(id))?.signupsOpen).toBe(true);
 
     await runRepository.updateFields(id, { status: "IN_PROGRESS", signupsOpen: false });
-    await expectDomainCode(runService.setSignupWindow(lead, id, true), "RUN_INVALID_TRANSITION");
+    await expectDomainError(runService.setSignupWindow(lead, id, true), "RUN_INVALID_TRANSITION");
     await runRepository.updateFields(id, { status: "CANCELLED" });
-    await expectDomainCode(runService.setSignupWindow(lead, id, true), "RUN_INVALID_TRANSITION");
+    await expectDomainError(runService.setSignupWindow(lead, id, true), "RUN_INVALID_TRANSITION");
   });
 });
 
@@ -531,7 +523,7 @@ describe("cancel run", () => {
     expect(cancelledDraft?.cancelledFromStatus).toBe("DRAFT");
     expect(cancelledDraft?.cancelledFromSignupsOpen).toBe(false);
     expect(cancelledDraft?.cancelRevision).toBe(1);
-    await expectDomainCode(runService.cancelRun(lead, draftId), "RUN_CANNOT_CANCEL");
+    await expectDomainError(runService.cancelRun(lead, draftId), "RUN_CANNOT_CANCEL");
 
     const openId = await createDraft(lead, { title: "Cancel open" });
     await runService.openRun(lead, openId);
@@ -565,11 +557,11 @@ describe("cancel run", () => {
 
     const inProgressId = await createDraft(lead, { title: "No cancel in progress" });
     await runRepository.updateFields(inProgressId, { status: "IN_PROGRESS" });
-    await expectDomainCode(runService.cancelRun(lead, inProgressId), "RUN_CANNOT_CANCEL");
+    await expectDomainError(runService.cancelRun(lead, inProgressId), "RUN_CANNOT_CANCEL");
 
     const completedId = await createDraft(lead, { title: "No cancel completed" });
     await runRepository.updateFields(completedId, { status: "COMPLETED" });
-    await expectDomainCode(runService.cancelRun(lead, completedId), "RUN_CANNOT_CANCEL");
+    await expectDomainError(runService.cancelRun(lead, completedId), "RUN_CANNOT_CANCEL");
   }, 15_000);
 });
 
@@ -595,7 +587,7 @@ describe("opened run signup integration", () => {
     await orm.User.where({ id: ids.user }).update({ isBooster: true });
 
     const draftId = await createDraft(lead, { title: "Signup closed draft" });
-    await expectDomainCode(
+    await expectDomainError(
       offerCharacter(user, draftId, ids.character, "TANK"),
       "SIGNUP_CLOSED",
     );
@@ -612,16 +604,16 @@ describe("archive run", () => {
   it("rejects archiving a non-terminal Run at every non-terminal status", async () => {
     const openId = await createDraft(lead, { title: "Archive open rejected" });
     await runService.openRun(lead, openId);
-    await expectDomainCode(runService.archiveRun(lead, openId), "RUN_CANNOT_ARCHIVE");
+    await expectDomainError(runService.archiveRun(lead, openId), "RUN_CANNOT_ARCHIVE");
 
     await runRepository.updateFields(openId, { status: "ROSTERING" });
-    await expectDomainCode(runService.archiveRun(lead, openId), "RUN_CANNOT_ARCHIVE");
+    await expectDomainError(runService.archiveRun(lead, openId), "RUN_CANNOT_ARCHIVE");
 
     await runRepository.updateFields(openId, { status: "PUBLISHED" });
-    await expectDomainCode(runService.archiveRun(lead, openId), "RUN_CANNOT_ARCHIVE");
+    await expectDomainError(runService.archiveRun(lead, openId), "RUN_CANNOT_ARCHIVE");
 
     await runRepository.updateFields(openId, { status: "IN_PROGRESS" });
-    await expectDomainCode(runService.archiveRun(lead, openId), "RUN_CANNOT_ARCHIVE");
+    await expectDomainError(runService.archiveRun(lead, openId), "RUN_CANNOT_ARCHIVE");
   });
 
   it("lets ADMIN archive a COMPLETED run and preserves status/signup/roster history", async () => {
@@ -651,7 +643,7 @@ describe("archive run", () => {
     const roster = await orm.RunRoster.where({ runId: id }).first();
     expect(roster).toBeTruthy();
 
-    await expectDomainCode(runService.archiveRun(admin, id), "RUN_ALREADY_ARCHIVED");
+    await expectDomainError(runService.archiveRun(admin, id), "RUN_ALREADY_ARCHIVED");
   });
 
   it("lets ADMIN archive a CANCELLED run", async () => {
@@ -669,8 +661,8 @@ describe("archive run", () => {
 
     const unrelatedId = await createDraft(otherLead, { title: "Unrelated terminal run" });
     await runRepository.updateFields(unrelatedId, { status: "COMPLETED" });
-    await expectDomainCode(runService.archiveRun(lead, unrelatedId), "RUN_NOT_MANAGEABLE");
-    await expectDomainCode(runService.archiveRun(user, unrelatedId), "RUN_NOT_MANAGEABLE");
+    await expectDomainError(runService.archiveRun(lead, unrelatedId), "RUN_NOT_MANAGEABLE");
+    await expectDomainError(runService.archiveRun(user, unrelatedId), "RUN_NOT_MANAGEABLE");
   });
 });
 
@@ -678,7 +670,7 @@ describe("restore run", () => {
   it("clears archive metadata while preserving status and history, and rejects restoring a non-archived Run", async () => {
     const id = await createDraft(lead, { title: "Restore me" });
     await runRepository.updateFields(id, { status: "CANCELLED" });
-    await expectDomainCode(runService.restoreRun(admin, id), "RUN_NOT_ARCHIVED");
+    await expectDomainError(runService.restoreRun(admin, id), "RUN_NOT_ARCHIVED");
 
     await runService.archiveRun(admin, id);
     const result = await runService.restoreRun(admin, id);
@@ -694,8 +686,8 @@ describe("restore run", () => {
 describe("delete run", () => {
   it("lets ADMIN delete an empty Draft, and rejects RAID_LEAD/USER", async () => {
     const id = await createDraft(lead, { title: "Delete me" });
-    await expectDomainCode(runService.deleteRun(lead, id), "NOT_AUTHORIZED");
-    await expectDomainCode(runService.deleteRun(user, id), "NOT_AUTHORIZED");
+    await expectDomainError(runService.deleteRun(lead, id), "NOT_AUTHORIZED");
+    await expectDomainError(runService.deleteRun(user, id), "NOT_AUTHORIZED");
 
     await runService.deleteRun(admin, id);
     expect(await runRepository.findById(id)).toBeNull();
@@ -705,11 +697,11 @@ describe("delete run", () => {
   it("rejects deleting a non-Draft Run", async () => {
     const openId = await createDraft(lead, { title: "Delete open rejected" });
     await runService.openRun(lead, openId);
-    await expectDomainCode(runService.deleteRun(admin, openId), "RUN_CANNOT_DELETE");
+    await expectDomainError(runService.deleteRun(admin, openId), "RUN_CANNOT_DELETE");
 
     const completedId = await createDraft(lead, { title: "Delete completed rejected" });
     await runRepository.updateFields(completedId, { status: "COMPLETED" });
-    await expectDomainCode(runService.deleteRun(admin, completedId), "RUN_CANNOT_DELETE");
+    await expectDomainError(runService.deleteRun(admin, completedId), "RUN_CANNOT_DELETE");
   });
 
   it("rejects deleting a Draft with any real relation history", async () => {
@@ -726,7 +718,7 @@ describe("delete run", () => {
       updatedAt: new Date().toISOString(),
     });
     createdSignupIds.push(signupId);
-    await expectDomainCode(runService.deleteRun(admin, withSignup), "RUN_CANNOT_DELETE");
+    await expectDomainError(runService.deleteRun(admin, withSignup), "RUN_CANNOT_DELETE");
 
     const withRosterEntry = await createDraft(lead, { title: "Draft with roster entry" });
     const roster = await orm.RunRoster.where({ runId: withRosterEntry }).first();
@@ -751,7 +743,7 @@ describe("delete run", () => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
-    await expectDomainCode(runService.deleteRun(admin, withRosterEntry), "RUN_CANNOT_DELETE");
+    await expectDomainError(runService.deleteRun(admin, withRosterEntry), "RUN_CANNOT_DELETE");
 
     const withStrike = await createDraft(lead, { title: "Draft with strike" });
     const strikeId = crypto.randomUUID();
@@ -766,8 +758,8 @@ describe("delete run", () => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
-    await expectDomainCode(runService.deleteRun(admin, withStrike), "RUN_CANNOT_DELETE");
-    await orm.Strike.where({ id: strikeId }).delete();
+    await expectDomainError(runService.deleteRun(admin, withStrike), "RUN_CANNOT_DELETE");
+    await orm.Strike.where({ id: strikeId }).deleteAndCount();
 
     const withDiscordPost = await createDraft(lead, { title: "Draft with Discord state" });
     const discordPostId = crypto.randomUUID();
@@ -777,8 +769,8 @@ describe("delete run", () => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
-    await expectDomainCode(runService.deleteRun(admin, withDiscordPost), "RUN_CANNOT_DELETE");
-    await orm.RunDiscordPost.where({ id: discordPostId }).delete();
+    await expectDomainError(runService.deleteRun(admin, withDiscordPost), "RUN_CANNOT_DELETE");
+    await orm.RunDiscordPost.where({ id: discordPostId }).deleteAndCount();
   });
 });
 
@@ -867,7 +859,7 @@ describe("historical raid availability", () => {
 
   it("rejects creating a new Run targeting a historical raid, with no Run row created", async () => {
     const before = (await orm.RunRaidContent.where({ raidId: MANAFORGE_OMEGA_RAID_ID }).all()).length;
-    await expectDomainCode(
+    await expectDomainError(
       runService.createRun(lead, {
         raidId: MANAFORGE_OMEGA_RAID_ID,
         difficulty: "HEROIC",
@@ -922,7 +914,7 @@ describe("historical raid availability", () => {
   it("rejects changing an existing Run's raid to a historical one, with no partial mutation", async () => {
     const id = await createDraft(lead, { title: "Switch to historical" });
     const before = await runRepository.findById(id);
-    await expectDomainCode(
+    await expectDomainError(
       runService.updateRun(
         lead,
         contentLegacyUpdateInput(id, before!, { raidId: MANAFORGE_OMEGA_RAID_ID }),

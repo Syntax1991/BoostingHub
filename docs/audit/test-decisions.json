@@ -1347,6 +1347,10 @@
     "tests/integration/services/late-fill-help.integration.test.ts": [
       "REWRITE",
       "assertIsolatedTestDatabase; verified deleteAndCount cleanup (no swallowed .delete().catch); saveDraftSelection already used"
+    ],
+    "tests/integration/services/run-management.service.test.ts": [
+      "REWRITE",
+      "assertIsolatedTestDatabase; verified deleteAndCount cleanup; testActor; expectDomainError"
     ]
   },
   "tests": {
