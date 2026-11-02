@@ -333,8 +333,8 @@
       "WCL link or Find WCL, bulk action only when needed"
     ],
     "tests/unit/components/manage/roster-run-commitments.test.ts": [
-      "KEEP",
-      "Commitment chips and conflict alert. Two tests removed: one checked that a component without conflict input shows no conflict, one only placed two components side by side. Spec-letter prefixes dropped from titles"
+      "REMOVE",
+      "Phase 3: production module deleted (test-only import)"
     ],
     "tests/unit/components/manage/raid-catalog/manage-raid-catalog-view.tabs.test.ts": [
       "KEEP",
@@ -561,8 +561,8 @@
       "Read in full; pure logic checked against exact expected values"
     ],
     "tests/unit/lib/character-availability.test.ts": [
-      "KEEP",
-      "Read in full; pure logic checked against exact expected values"
+      "REMOVE",
+      "Phase 3: production module deleted (test-only import)"
     ],
     "tests/unit/lib/character-capabilities.test.ts": [
       "KEEP",
@@ -729,8 +729,8 @@
       "Read in full; pure logic checked against exact expected values"
     ],
     "tests/unit/lib/roster-candidate-counts.test.ts": [
-      "KEEP",
-      "Read in full; pure logic checked against exact expected values"
+      "REMOVE",
+      "Phase 3: production module deleted (test-only import)"
     ],
     "tests/unit/lib/roster-diff.test.ts": [
       "KEEP",

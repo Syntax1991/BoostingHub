@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { venomousCreateInput, venomousUpdateInput } from "@tests/fixtures/test-run-input";
 import { runRepository } from "@/repositories/run.repository";
-import { characterAvailabilityRepository } from "@/repositories/character-availability.repository";
+import { orm } from "@/lib/prisma";
 import { characterWeeklyAvailabilityService } from "@/services/character-weekly-availability.service";
 import { characterService } from "@/services/character.service";
 import { rosterService } from "@/services/roster.service";
@@ -97,12 +97,16 @@ describe("schedule conflict integrity", () => {
     await offerCharacter(owner, run.id, character.id, "HEALER");
     await draftSelect(run.id, character.id, "HEALER");
 
-    // A legacy block covering the whole Run.
-    await characterAvailabilityRepository.create({
+    // A legacy CharacterAvailabilityBlock covering the whole Run (ignored by product paths).
+    const now = new Date().toISOString();
+    await orm.CharacterAvailabilityBlock.create({
+      id: crypto.randomUUID(),
       characterId: character.id,
       startsAt: at(-1),
       endsAt: at(2),
       reason: "External boost",
+      createdAt: now,
+      updatedAt: now,
     });
 
     const view = await rosterService.getRosterManagementView(lead, run.id);

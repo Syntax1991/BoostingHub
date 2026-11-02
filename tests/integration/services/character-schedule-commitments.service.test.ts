@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AuthenticatedUser } from "@/auth/authorization";
+import { orm } from "@/lib/prisma";
 import { venomousCreateInput } from "@tests/fixtures/test-run-input";
 import { characterScheduleCommitmentsService } from "@/services/character-schedule-commitments.service";
 import { characterService } from "@/services/character.service";
@@ -137,14 +138,15 @@ describe("characterScheduleCommitmentsService", () => {
     expect(beforeBlock[0]?.signupStatus).toBe("PENDING");
     expect(beforeBlock[0]?.scheduleConflicts).toEqual([]);
 
-    const { characterAvailabilityRepository } = await import(
-      "@/repositories/character-availability.repository"
-    );
-    await characterAvailabilityRepository.create({
+    const now = new Date().toISOString();
+    await orm.CharacterAvailabilityBlock.create({
+      id: crypto.randomUUID(),
       characterId: character.id,
       startsAt: new Date(start.getTime() - 60 * 60 * 1000).toISOString(),
       endsAt: new Date(start.getTime() + 60 * 60 * 1000).toISOString(),
       reason: "External boost",
+      createdAt: now,
+      updatedAt: now,
     });
 
     const afterBlock = await characterScheduleCommitmentsService.listForOwner(owner, character.id);
