@@ -90,7 +90,7 @@ Statuses: **VERIFIED** | **PARTIALLY VERIFIED** | **NOT VERIFIED** | **FAILED**
 | 1 | Tests centralized under `tests/` | **VERIFIED** | Implemented and validated | Commit `1c10d74`; `vitest` include `tests/**/*.test.ts`; `git ls-files` / live glob: 0 `*.test.ts` under `src/`; 338 files now (341 after move) |
 | 2 | Every suite decided; `setDraftSelection` removed; ×2 green | **VERIFIED** | Implemented and validated | Decisions: KEEP 254 / REWRITE 84 / REMOVE 4 file entries, **0 UNREVIEWED** in `test-ledger.tsv`; `setDraftSelection` absent from `src/`; test-local adapters call `rosterService.saveDraftSelection`; Phase 2 ×2 claimed in `PHASE-2.md` (341/3824) |
 | 3 | A18, A19, dead modules, naming | **VERIFIED** | Implemented and validated | `11fc614` (0 remaining `tx.orm as { public` casts); `cc14bdf` (`raidInvites` absent from `src/`); `e2a0979`; `8666f32` rename |
-| 4 | Security/perf/reliability | **PARTIALLY VERIFIED** | Mix: implemented + inspected + deferred | Lodash override `2e98b8c` → `npm audit --omit=dev` **0**; headers in `next.config.ts` (`f95b223`); rate-limit log `2af7419` / `client.ts`; **perf numbers not re-measured** this review (Batch 8 / `d350f5b` ledger only); CSP / Apache / A16 deferred |
+| 4 | Security/perf/reliability | **PARTIALLY VERIFIED** | Mix: implemented + inspected + deferred | Lodash override `2e98b8c` → `npm audit --omit=dev` **0**; headers in `next.config.ts` (`f95b223`); rate-limit log `2af7419` / `client.ts`; **perf numbers not re-measured** this review (Batch 8 / `d350f5b` ledger only); CSP / Apache deferred (A16 later closed on owner approval) |
 | 5 | Docs + UX foundations | **VERIFIED** (docs) / deferred UX | Implemented docs; inspected UX; deferred redesigns | API/DEVELOPER/HANDOVER A19 wording; `(app)/error.tsx`, `loading.tsx`, root `not-found.tsx` present; A12/A14 deferred as stated; `hardcoding-findings.md` intentionally not authored |
 | 6 | Full suite ×2, lint/tsc/build, readiness | **VERIFIED** (gates) with doc errata | Validated on acceptance re-run | Fresh ×2 below; inventory attribution corrected; open items remain owner decisions |
 
@@ -100,7 +100,7 @@ Statuses: **VERIFIED** | **PARTIALLY VERIFIED** | **NOT VERIFIED** | **FAILED**
 | --- | --- | --- |
 | Implemented and validated | A18, A19, dead-module delete, lodash override, `setDraftSelection` removal, suite ×2 | Code + history + re-run confirm |
 | Inspected with no defect found | UX file presence, security headers content, isolation helpers | Present; not redesigned |
-| Documented but not corrected | A16 `gold.ts`, missing CSP, Apache `X-Powered-By`, hardcoding findings doc | Still open |
+| Documented but not corrected | Missing CSP, Apache `X-Powered-By`, hardcoding findings doc | Still open (A16 later closed on owner approval) |
 | Deferred | A12 reload policy, A14/A15 splits, naming ownership, CSP inventory | Explicit |
 | Not verified (by this review) | Batch 8 payload/purge timings as live numbers; production journal rate-limit | Evidence is historical ledger / deploy-gated |
 
@@ -112,13 +112,10 @@ Statuses: **VERIFIED** | **PARTIALLY VERIFIED** | **NOT VERIFIED** | **FAILED**
 
 | Aspect | Finding |
 | --- | --- |
-| Current implementation | Single export `formatGold(amount)` — ASCII-grouped WoW gold string. File present. |
-| Callers | **None** in `src/` or `tests/` (only audit docs reference it). |
-| Concrete risk | Dead code / confusion that payouts still exist. No runtime attack surface while unreferenced. |
-| Severity | **Low** (maintainability). |
-| Production readiness | **Does not block** readiness of the app; payouts were removed in #228. Leaving unused formatting code is not a confidentiality/integrity failure. |
-| Safe to fix on audit branch? | **Delete only with owner confirmation** (ledger A16). Acceptance did **not** delete it. |
-| Required validation | After owner says delete: remove file, `lint`/`typecheck`, confirm no imports. |
+| Acceptance-time state | Single export `formatGold(amount)`; **no callers** in `src/` or `tests/`. |
+| Post-acceptance resolution | **Owner approved delete.** File removed on `test/audit-batch-a`. No exclusively associated tests existed. |
+| Validation | `lint`, `typecheck`, `build`; repo-wide search shows no remaining imports of `formatGold` / `@/lib/gold`. |
+| Status | **Done** — closed. |
 
 ### Content Security Policy
 
@@ -156,7 +153,7 @@ Statuses: **VERIFIED** | **PARTIALLY VERIFIED** | **NOT VERIFIED** | **FAILED**
 | Required validation | Post-deploy: `journalctl -u boostinghub-discord-bot --since "1 hour ago" \| grep 'rate limited'`. |
 | Action this pass | Smoke + OPERATIONS notes added. |
 
-**No security finding above was marked non-blocking without a reason.** None required an unauthorized live-infra change. No code-level security patch was applied beyond documentation of operator steps; CSP/A16 remain correctly gated on owner decisions.
+**No security finding above was marked non-blocking without a reason.** None required an unauthorized live-infra change at acceptance time. A16 was later deleted on explicit owner approval; CSP and host Apache header remain owner/ops items.
 
 ---
 
@@ -238,7 +235,7 @@ Still present (non-exhaustive): `roster-reservation-concurrency`, `run-lifecycle
 | Phase 5 | **VERIFIED** (docs/UX presence); deferred items explicit |
 | Phase 6 gates | **VERIFIED** (re-run); inventory text corrected |
 | Removed-test reconciliation | **VERIFIED** |
-| A16 gold.ts | **PARTIALLY VERIFIED** (state confirmed; owner decision open) |
+| A16 gold.ts | **VERIFIED** closed — deleted on owner approval; no callers |
 | CSP | **PARTIALLY VERIFIED** (absence confirmed; fix deferred) |
 | Apache X-Powered-By | **PARTIALLY VERIFIED** (app-side fixed; host side docs-only) |
 | Rate-limit journal | **PARTIALLY VERIFIED** (code present; production journal **NOT VERIFIED**) |
@@ -255,7 +252,7 @@ Still present (non-exhaustive): `roster-reservation-concurrency`, `run-lifecycle
 3. Fresh suite ×2 evidence logs committed under `docs/audit/reports/_acceptance-suite*.log`.
 4. Reports index updated.
 
-No production modules restored. A16 not deleted. No CSP shipped. No live infrastructure touched.
+No production modules restored at acceptance. A16 later deleted on owner approval. No CSP shipped. No live infrastructure touched.
 
 ---
 
@@ -267,7 +264,7 @@ The six-phase audit on `test/audit-batch-a` is acceptance-ready as an audit comp
 
 **Documented risks / owner actions before or after merge (not silent):**
 
-1. Decide A16 (`gold.ts` delete vs keep).
+1. ~~Decide A16 (`gold.ts`)~~ — **Done** (deleted on owner approval).
 2. CSP inventory then staged rollout.
 3. Host: unset Apache/Plesk `X-Powered-By`.
 4. After co-deploy of web+bot: inspect Discord rate-limit journal lines.

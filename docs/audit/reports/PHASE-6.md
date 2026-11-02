@@ -62,7 +62,7 @@ Runtime test count **3801** (was 3824 at Phase 2 gate; −23 total):
 
 | ID | Item | Owner action |
 | --- | --- | --- |
-| A16 | `src/lib/gold.ts` unreferenced after payouts removal (#228) | Decide delete vs keep |
+| A16 | `src/lib/gold.ts` unreferenced after payouts removal (#228) | **Done** — deleted on owner approval |
 | A12 | 12× `window.location.reload` | Optional per-site `router.refresh` review |
 | A14 / A15 | Roster builder / discord-sync size | Split only with dedicated tests |
 | CSP | Content-Security-Policy | Inventory inline scripts/images, then ship |
@@ -93,5 +93,5 @@ The audit branch is **merge-ready from a quality-gate perspective** (tests ×2, 
 ## NEXT STEPS (owner)
 
 1. Review phase reports 1–6 and open-items table.
-2. Decide A16 / CSP / naming / reload policy.
+2. Decide CSP / naming / reload policy (A16 closed — `gold.ts` deleted).
 3. When ready: normal PR merge → release co-deploying web + Discord bot; then check rate-limit logs.

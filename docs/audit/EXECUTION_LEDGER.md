@@ -70,7 +70,7 @@ Confirmed by import analysis of all non-test files. Severity is about real impac
 | A13 | Low | `src/components` | 13 identical dialog effects | Frontend PR |
 | A14 | Medium | `src/components/manage/roster-builder.tsx` | 2471 lines, 23 state hooks, 54 functions | Only with tests first |
 | A15 | Medium | `src/services/discord-sync.service.ts`, `src/discord-bot/sync-loop.ts` | 2240 and 2289 lines | Split only along tested lanes |
-| A16 | Open | `src/lib/gold.ts` | Payout leftover with no caller. Payouts were removed on purpose in #228 | **Owner decision**, see below |
+| A16 | Done | `src/lib/gold.ts` | Unused `formatGold` after payouts removal (#228); no callers | Deleted on owner approval (`test/audit-batch-a`) |
 | A17 | High | `src/repositories/user.repository.ts` `changeAccountRoleAtomic` | The "lock every Admin-level row" step used `update()`, which in Prisma Next writes only the first matching row. Two Admins demoting each other could leave none | Fixed in `26a80d5` with `updateAndCount()`; an AST scan of every ORM `update()` / `delete()` in `src` found no other multi-row filter |
 | A19 | Done | `discordSyncService.listSyncWork`, `api/bot/discord/sync/route.ts`, `bot-api-client.ts`, `sync-loop.ts` | Empty `raidInvites` lane removed; Raid Invites are `notificationDms` only | Done in `cc14bdf` ([PHASE-3.md](reports/PHASE-3.md)) |
 | A18 | Done | `src/repositories/*` (40 sites), 10 test files | `((tx.orm as { public?: … }).public ?? (tx.orm as unknown as …)) as …` copied everywhere; `tx.orm.public` is already typed and present at runtime (checked) | Replace with `tx.orm.public` in one refactor commit |
@@ -140,7 +140,7 @@ Order follows the assignment. Each line is one PR, stacked on the one before.
 
 ## Decisions for the owner
 
-- **Payouts:** the assignment lists payout calculations as supported, but the feature was removed in #228 and no payout code path remains. Only the unused `src/lib/gold.ts` is left, and it stays until you confirm.
+- **Payouts:** the assignment lists payout calculations as supported, but the feature was removed in #228 and no payout code path remains. Unused leftover `src/lib/gold.ts` (`formatGold`) was deleted on owner approval (A16 Done).
 - **Off-site backup:** no destination exists, so the migration precondition stays open.
 - **Old repository visibility:** it stays public, including its history, unless you decide otherwise.
 
@@ -369,7 +369,7 @@ Phase 2 complete. See [PHASE-2.md](reports/PHASE-2.md). Full suite 341 files / 3
 
 Master audit Phases 1–6 complete on `test/audit-batch-a` — see [PHASE-6.md](reports/PHASE-6.md).  
 **Acceptance review:** [FINAL-ACCEPTANCE-REVIEW.md](reports/FINAL-ACCEPTANCE-REVIEW.md) — verdict **ACCEPTED WITH DOCUMENTED RISKS**. Fresh suite ×2 on `boostting_bot_test_audit` (338/3801) without reset.  
-**Engineering freeze:** [FINAL-ENGINEERING-HANDOVER.md](FINAL-ENGINEERING-HANDOVER.md) at HEAD `755c971` (+ freeze docs commit). Open owner items: A16, CSP, Apache `X-Powered-By`, post-deploy rate-limit journal. No further audit phases. Stop for owner decision before merge/deploy.
+**Engineering freeze:** [FINAL-ENGINEERING-HANDOVER.md](FINAL-ENGINEERING-HANDOVER.md). A16 (`gold.ts`) removed on owner approval. Remaining owner items: CSP, Apache `X-Powered-By`, post-deploy rate-limit journal. No further audit phases. Stop for owner decision before merge/deploy.
 
 
 Handover to Cursor (2026-11-02): Claude left branch `test/audit-batch-a` at local `af6bb59` (1 commit ahead of origin `95c2eaf`, `setDraftSelection`→`saveDraftSelection` for six audited suites) plus uncommitted fixture isolation rewrites for three remaining suites. Cursor recovered that work, fixed one TDZ shadowing bug in `roster-pre-start-replacements`, validated 67/67 twice on `boostting_bot_test_audit` without reset, and recorded the decisions below.
@@ -397,6 +397,6 @@ Not started: renames from the naming table, other than the move to `src/domain`.
 
 Owner decision (2026-11-02), done in the move above: every test moves to a root-level `tests/` directory (`unit/`, `integration/`, `e2e/`, `fixtures/`, `helpers/`, `setup/`), and `src/` keeps production code only. Tests are classified by what they do: a test that needs the database or several real components is `integration`, whatever its file name. The move is its own structural commit with no behaviour change; the discovered file inventory is compared exactly before and after, and the database guards stay in force.
 
-Open tracked items: multi-row `.delete()` cardinality leftovers outside audited suites (if any); A16 `gold.ts` owner decision; deferred naming overlaps. A18/A19/`setDraftSelection`/Phase-2 dead modules done.
+Open tracked items: multi-row `.delete()` cardinality leftovers outside audited suites (if any); deferred naming overlaps. A16/`gold.ts`, A18/A19/`setDraftSelection`/Phase-2 dead modules done.
 
 Order from here (owner master plan, 2026-11-02): phase 2 finishes the test audit (22 suites remaining after this batch; `setDraftSelection` with the remaining callers; the multi-row `.delete()` cleanups, each checked for intended cardinality and ownership before any change); phase 3 does A18, A19, the four dead-code candidates and a naming review in rename-only commits (no public fields, columns, persisted keys or Discord payloads); then performance, security and reliability with measured before/after; then UX and documentation; then the final validation matrix.

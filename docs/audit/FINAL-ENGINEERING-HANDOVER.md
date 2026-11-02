@@ -128,7 +128,6 @@ Do not create a `production` branch or new repository as part of this freeze.
 | --- | --- |
 | Merge to `main` | Owner release decision |
 | Production deploy | Forbidden in audit authorization |
-| Delete `src/lib/gold.ts` (A16) | Explicit owner decision; **file kept** |
 | Enforce CSP | Needs inline-script / image inventory; risk of breakage |
 | Unset Apache `X-Powered-By: PleskLin` | Hosting-panel / live server config |
 | Confirm Discord rate-limit waits in production journals | Needs post-deploy `journalctl` on the live host |
@@ -137,15 +136,13 @@ Do not create a `production` branch or new repository as part of this freeze.
 
 ---
 
-## 7. Four remaining owner items (acceptance risks)
+## 7. Remaining owner items (acceptance risks)
 
-### A16 — `src/lib/gold.ts`
+### A16 — `src/lib/gold.ts` (closed)
 
-- **State:** Unreferenced `formatGold` helper after payouts removal (#228). File **still present**.
-- **Risk:** Dead code / false impression that payouts remain. No runtime caller.
-- **Severity:** Low (maintainability).
-- **Owner action:** Decide **delete** or **keep**. Do not delete without explicit approval.
-- **If delete approved:** remove file → `lint` / `typecheck` → confirm no imports.
+- **State:** **Deleted** on explicit owner approval. Was an unreferenced `formatGold` leftover after payouts removal (#228).
+- **Verification:** Repo-wide search found no imports, re-exports, dynamic requires, or tests; `lint` / `typecheck` / `build` after delete.
+- **Status:** Done — not an open owner item.
 
 ### CSP — Content-Security-Policy
 
@@ -177,7 +174,7 @@ Operator notes also live in [OPERATIONS.md](../OPERATIONS.md#security-checklist)
 
 | Risk | Notes |
 | --- | --- |
-| Acceptance documented risks | A16, CSP, Apache header, rate-limit journal (above) |
+| Acceptance documented risks | CSP, Apache header, rate-limit journal (A16 closed) |
 | No CI / branch protection | Checks are local only |
 | Prisma 8 RC + `--legacy-peer-deps` | Production dependency reality |
 | Perf numbers in Phase 4 | Historical Batch 8 measurements; not re-timed at acceptance |
@@ -192,14 +189,14 @@ Operator notes also live in [OPERATIONS.md](../OPERATIONS.md#security-checklist)
 - [x] Branch synchronized with origin at freeze HEAD
 - [x] No unfinished audit code changes pending
 - [x] No untracked temporary audit scripts in `docs/audit/reports/`
-- [x] `src/lib/gold.ts` retained pending owner decision
+- [x] A16 `src/lib/gold.ts` removed after owner approval (post-freeze)
 - [x] No merge, deploy, production DB, live Discord, or new repository from this freeze
 
 ---
 
 ## 10. Stop
 
-Engineering work on the master audit is finished. Await the owner’s decision on merge, the four items above, and any production release.
+Engineering work on the master audit is finished. A16 is closed. Await the owner’s decision on merge, the three remaining ops items (CSP, Apache header, rate-limit journal), and any production release.
 
 Primary pointers:
 
