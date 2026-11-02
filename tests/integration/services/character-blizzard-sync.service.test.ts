@@ -55,112 +55,45 @@ import {
 } from "@/lib/wow-raid-catalog";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import type { BlizzardCharacterRaidEncounters } from "@/lib/blizzard/types";
+import { testActor } from "@tests/fixtures/actors";
+import {
+  assertIsolatedTestDatabase,
+  createTestUser,
+  deleteCreatedRows,
+} from "@tests/fixtures/db-fixtures";
+import { expectDomainError } from "@tests/helpers/domain-error";
 
-const ids = {
-  owner: "aaaaaaaa-aaaa-4aaa-8aaa-bn0000000021",
-  other: "aaaaaaaa-aaaa-4aaa-8aaa-bn0000000022",
+const created = {
+  userIds: [] as string[],
+  characterIds: [] as string[],
 };
 
-const createdCharacterIds: string[] = [];
+let owner: AuthenticatedUser;
+let other: AuthenticatedUser;
 
-function asUser(id: string, name = "Blizzard Owner"): AuthenticatedUser {
-  return {
-    id,
-    name,
-    email: `${id}@bnchar.boostting.local`,
-    image: null,
-    discordUserId: null,
-    discordUsername: null,
-    accountRole: "USER",
-    accountStatus: "ACTIVE",
-  };
+async function createUser(name: string) {
+  const id = await createTestUser({ name, accountRole: "USER" });
+  created.userIds.push(id);
+  return testActor(id, "USER", { name });
 }
 
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    if (error instanceof Error && error.message === `Expected domain error ${code}`) {
-      throw error;
+async function deleteOwnedBlizzardRows() {
+  assertIsolatedTestDatabase();
+  for (const userId of created.userIds) {
+    await orm.BoosterAccess.where({ userId }).deleteAndCount();
+    await orm.BattleNetImportSession.where({ userId }).deleteAndCount();
+    await orm.BattleNetConnection.where({ userId }).deleteAndCount();
+    const characters = (await orm.Character.where({ userId }).select("id").all()) as Array<{ id: string }>;
+    for (const character of characters) {
+      await orm.CharacterRaidLockout.where({ characterId: character.id }).deleteAndCount();
+      await orm.Character.where({ id: character.id }).deleteAndCount();
     }
-    expect(isDomainError(error) && error.code).toBe(code);
+    await orm.ActivityEvent.where({ userId }).deleteAndCount();
   }
-}
-
-async function createTestUser(id: string, name: string) {
-  await orm.User.create({
-    id,
-    name,
-    email: `${id}@bnchar.boostting.local`,
-    emailVerified: true,
-    accountRole: "USER",
-    accountStatus: "ACTIVE",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
-}
-
-async function deleteIfPresent(
-  table: "User" | "Character" | "BattleNetConnection" | "BattleNetImportSession" | "BoosterAccess" | "ActivityEvent",
-  id: string,
-) {
-  try {
-    if (table === "User") {
-      await orm.User.where({ id }).delete();
-      return;
-    }
-    if (table === "Character") {
-      await orm.Character.where({ id }).delete();
-      return;
-    }
-    if (table === "BattleNetConnection") {
-      await orm.BattleNetConnection.where({ id }).delete();
-      return;
-    }
-    if (table === "BattleNetImportSession") {
-      await orm.BattleNetImportSession.where({ id }).delete();
-      return;
-    }
-    if (table === "BoosterAccess") {
-      await orm.BoosterAccess.where({ id }).delete();
-      return;
-    }
-    await orm.ActivityEvent.where({ id }).delete();
-  } catch {
-    // Already gone from a previous isolated run.
+  for (const id of created.characterIds.splice(0)) {
+    await orm.CharacterRaidLockout.where({ characterId: id }).deleteAndCount();
+    await orm.Character.where({ id }).deleteAndCount();
   }
-}
-
-async function cleanupGeneratedRows() {
-  for (const userId of [ids.owner, ids.other]) {
-    const access = await orm.BoosterAccess.where({ userId }).all();
-    for (const row of access) {
-      await deleteIfPresent("BoosterAccess", String(row.id));
-    }
-    const sessions = await orm.BattleNetImportSession.where({ userId }).all();
-    for (const row of sessions) {
-      await deleteIfPresent("BattleNetImportSession", String(row.id));
-    }
-    const connections = await orm.BattleNetConnection.where({ userId }).all();
-    for (const row of connections) {
-      await deleteIfPresent("BattleNetConnection", String(row.id));
-    }
-    const characters = await orm.Character.where({ userId }).all();
-    for (const row of characters) {
-      await deleteIfPresent("Character", String(row.id));
-    }
-    const activities = await orm.ActivityEvent.where({ userId }).all();
-    for (const row of activities) {
-      await deleteIfPresent("ActivityEvent", String(row.id));
-    }
-  }
-  for (const id of createdCharacterIds) {
-    await deleteIfPresent("Character", id);
-  }
-  createdCharacterIds.length = 0;
-  await deleteIfPresent("User", ids.owner);
-  await deleteIfPresent("User", ids.other);
 }
 
 function ownedCharacter(overrides: Partial<OwnedBlizzardCharacter> = {}): OwnedBlizzardCharacter {
@@ -185,8 +118,8 @@ async function seedConnectionAndSession(
   await battleNetConnectionRepository.upsert({
     userId,
     region,
-    battleNetAccountId: `acct-${userId}-${region}`,
-    battleTag: `Tag#${region}`,
+    battleNetAccountId: "acct-" + userId + "-" + region,
+    battleTag: "Tag#" + region,
     scope: "wow.profile openid",
   });
 
@@ -222,16 +155,17 @@ function mockEnrichmentSuccess(input: {
 }
 
 beforeAll(async () => {
+  assertIsolatedTestDatabase();
   vi.stubEnv("BLIZZARD_CLIENT_ID", "test-client-id");
   vi.stubEnv("BLIZZARD_CLIENT_SECRET", "test-client-secret");
   vi.stubEnv("BLIZZARD_REDIRECT_URI", "http://localhost:3000/api/integrations/battlenet/callback");
-  await cleanupGeneratedRows();
-  await createTestUser(ids.owner, "Blizzard Owner");
-  await createTestUser(ids.other, "Blizzard Other");
+  owner = await createUser("Blizzard Owner");
+  other = await createUser("Blizzard Other");
 });
 
 afterAll(async () => {
-  await cleanupGeneratedRows();
+  await deleteOwnedBlizzardRows();
+  await deleteCreatedRows({ userIds: created.userIds.splice(0) });
   vi.unstubAllEnvs();
 });
 
@@ -243,27 +177,8 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  for (const userId of [ids.owner, ids.other]) {
-    const access = await orm.BoosterAccess.where({ userId }).all();
-    for (const row of access) {
-      await deleteIfPresent("BoosterAccess", String(row.id));
-    }
-    const sessions = await orm.BattleNetImportSession.where({ userId }).all();
-    for (const row of sessions) {
-      await deleteIfPresent("BattleNetImportSession", String(row.id));
-    }
-    const connections = await orm.BattleNetConnection.where({ userId }).all();
-    for (const row of connections) {
-      await deleteIfPresent("BattleNetConnection", String(row.id));
-    }
-    const characters = await orm.Character.where({ userId }).all();
-    for (const row of characters) {
-      await deleteIfPresent("Character", String(row.id));
-    }
-  }
-  createdCharacterIds.length = 0;
+  await deleteOwnedBlizzardRows();
 });
-
 
 /** The only failure log: structured, category + trigger + region, never identity or message. */
 function expectSafeFailureLog(
@@ -288,12 +203,9 @@ function expectSafeFailureLog(
   }
 }
 
-describe("characterBlizzardSyncService.refreshCharacter", () => {
-  const owner = asUser(ids.owner);
-
-  async function importLinkedShaman(blizzardId: string, name: string) {
+describe("characterBlizzardSyncService.refreshCharacter", () => {  async function importLinkedShaman(blizzardId: string, name: string) {
     const owned = ownedCharacter({ id: blizzardId, name });
-    const session = await seedConnectionAndSession(ids.owner, "EU", [owned]);
+    const session = await seedConnectionAndSession(owner.id, "EU", [owned]);
     mockEnrichmentSuccess({
       id: owned.id,
       name: owned.name,
@@ -305,7 +217,7 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
     const result = await characterBlizzardImportService.importCharacters(owner, session.id, [
       { blizzardCharacterId: owned.id, specialization: "Restoration" },
     ]);
-    createdCharacterIds.push(...result.importedCharacterIds);
+    created.characterIds.push(...result.importedCharacterIds);
     return { owned, characterId: result.importedCharacterIds[0]! };
   }
 
@@ -458,7 +370,7 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
   it("enforces BLIZZARD_REFRESH_COOLDOWN", async () => {
     const { characterId } = await importLinkedShaman("300031", "Bncool");
 
-    await expectDomainCode(
+    await expectDomainError(
       characterBlizzardSyncService.refreshCharacter(owner, characterId),
       "BLIZZARD_REFRESH_COOLDOWN",
     );
@@ -473,7 +385,7 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
       specialization: "Restoration",
       itemLevel: 600,
     });
-    createdCharacterIds.push(manual.id);
+    created.characterIds.push(manual.id);
     mockEnrichmentSuccess({ id: "300099", name: "Bnmanual", realmId: "1301", wowClass: "SHAMAN", itemLevel: 655 });
 
     const updated = await characterBlizzardSyncService.refreshCharacter(owner, manual.id);
@@ -494,10 +406,10 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
       specialization: "Restoration",
       itemLevel: 600,
     });
-    createdCharacterIds.push(manual.id);
+    created.characterIds.push(manual.id);
     mockEnrichmentSuccess({ id: "300098", name: "Bnmanualtwo", realmId: "1301", wowClass: "MAGE", itemLevel: 700 });
 
-    await expectDomainCode(characterBlizzardSyncService.refreshCharacter(owner, manual.id), "BLIZZARD_IDENTITY_CONFLICT");
+    await expectDomainError(characterBlizzardSyncService.refreshCharacter(owner, manual.id), "BLIZZARD_IDENTITY_CONFLICT");
     const row = await characterRepository.findById(manual.id);
     expect(row?.itemLevel).toBe(600);
     expect(row?.lastSyncErrorCode).toBe("IDENTITY_CONFLICT");
@@ -505,7 +417,7 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
 
   it("NO_CONNECTION: a linked character syncs PUBLIC after disconnect, keeps its ids and still checks them", async () => {
     const { owned, characterId } = await importLinkedShaman("300035", "Bnnoconn");
-    await orm.BattleNetConnection.where({ userId: ids.owner, region: "EU" }).delete();
+    await orm.BattleNetConnection.where({ userId: owner.id, region: "EU" }).deleteAndCount();
     const cooledDown = { lastSyncedAt: new Date(Date.now() - 120_000).toISOString(), lastSyncAttemptAt: new Date(Date.now() - 120_000).toISOString() };
     await orm.Character.where({ id: characterId }).update(cooledDown);
     mockEnrichmentSuccess({ id: owned.id, name: owned.name, realmId: owned.realmId, wowClass: owned.wowClass, itemLevel: 671 });
@@ -518,7 +430,7 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
     // The stored id is still checked on the public path: a different character at that name is refused.
     await orm.Character.where({ id: characterId }).update(cooledDown);
     mockEnrichmentSuccess({ id: "399035", name: owned.name, realmId: owned.realmId, wowClass: owned.wowClass, itemLevel: 700 });
-    await expectDomainCode(characterBlizzardSyncService.refreshCharacter(owner, characterId), "BLIZZARD_IDENTITY_CONFLICT");
+    await expectDomainError(characterBlizzardSyncService.refreshCharacter(owner, characterId), "BLIZZARD_IDENTITY_CONFLICT");
     const row = (await characterRepository.findById(characterId))!;
     expect(row.blizzardCharacterId).toBe(owned.id);
     expect(row.itemLevel).toBe(671);
@@ -792,12 +704,10 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
 });
 
 describe("characterBlizzardSyncService.refreshLinkedCharactersForRegion", () => {
-  const owner = asUser(ids.owner);
-  const other = asUser(ids.other, "Blizzard Other");
 
   it("refreshes every active character in the requested region (linked VERIFIED, manual PUBLIC)", async () => {
     const euOwned = ownedCharacter({ id: "300070", name: "Bnrefeu" });
-    const euSession = await seedConnectionAndSession(ids.owner, "EU", [euOwned]);
+    const euSession = await seedConnectionAndSession(owner.id, "EU", [euOwned]);
     mockEnrichmentSuccess({
       id: euOwned.id,
       name: euOwned.name,
@@ -810,10 +720,10 @@ describe("characterBlizzardSyncService.refreshLinkedCharactersForRegion", () => 
       { blizzardCharacterId: euOwned.id, specialization: "Restoration" },
     ]);
     const euId = euImport.importedCharacterIds[0]!;
-    createdCharacterIds.push(euId);
+    created.characterIds.push(euId);
 
     const usOwned = ownedCharacter({ id: "300071", name: "Bnrefus", region: "US", realmId: "57" });
-    const usSession = await seedConnectionAndSession(ids.owner, "US", [usOwned]);
+    const usSession = await seedConnectionAndSession(owner.id, "US", [usOwned]);
     mockEnrichmentSuccess({
       id: usOwned.id,
       name: usOwned.name,
@@ -826,7 +736,7 @@ describe("characterBlizzardSyncService.refreshLinkedCharactersForRegion", () => 
       { blizzardCharacterId: usOwned.id, specialization: "Restoration" },
     ]);
     const usId = usImport.importedCharacterIds[0]!;
-    createdCharacterIds.push(usId);
+    created.characterIds.push(usId);
 
     const manual = await characterService.createCharacter(owner, {
       name: "Bnmanual",
@@ -836,10 +746,10 @@ describe("characterBlizzardSyncService.refreshLinkedCharactersForRegion", () => 
       specialization: "Arcane",
       itemLevel: 500,
     });
-    createdCharacterIds.push(manual.id);
+    created.characterIds.push(manual.id);
 
     const inactiveOwned = ownedCharacter({ id: "300072", name: "Bninactive" });
-    const inactiveSession = await seedConnectionAndSession(ids.owner, "EU", [inactiveOwned]);
+    const inactiveSession = await seedConnectionAndSession(owner.id, "EU", [inactiveOwned]);
     mockEnrichmentSuccess({
       id: inactiveOwned.id,
       name: inactiveOwned.name,
@@ -852,7 +762,7 @@ describe("characterBlizzardSyncService.refreshLinkedCharactersForRegion", () => 
       { blizzardCharacterId: inactiveOwned.id, specialization: "Enhancement" },
     ]);
     const inactiveId = inactiveImport.importedCharacterIds[0]!;
-    createdCharacterIds.push(inactiveId);
+    created.characterIds.push(inactiveId);
     await characterRepository.setActive(inactiveId, false);
 
     await orm.Character.where({ id: euId }).update({
@@ -910,7 +820,7 @@ describe("characterBlizzardSyncService.refreshLinkedCharactersForRegion", () => 
   it("skips cooldown characters and keeps partial successes", async () => {
     const cool = ownedCharacter({ id: "300080", name: "Bncool" });
     const hot = ownedCharacter({ id: "300081", name: "Bnhot" });
-    const session = await seedConnectionAndSession(ids.owner, "EU", [cool, hot]);
+    const session = await seedConnectionAndSession(owner.id, "EU", [cool, hot]);
     mockEnrichmentSuccess({
       id: cool.id,
       name: cool.name,
@@ -922,7 +832,7 @@ describe("characterBlizzardSyncService.refreshLinkedCharactersForRegion", () => 
     const coolImport = await characterBlizzardImportService.importCharacters(owner, session.id, [
       { blizzardCharacterId: cool.id, specialization: "Restoration" },
     ]);
-    createdCharacterIds.push(...coolImport.importedCharacterIds);
+    created.characterIds.push(...coolImport.importedCharacterIds);
 
     mockEnrichmentSuccess({
       id: hot.id,
@@ -935,7 +845,7 @@ describe("characterBlizzardSyncService.refreshLinkedCharactersForRegion", () => 
     const hotImport = await characterBlizzardImportService.importCharacters(owner, session.id, [
       { blizzardCharacterId: hot.id, specialization: "Enhancement" },
     ]);
-    createdCharacterIds.push(...hotImport.importedCharacterIds);
+    created.characterIds.push(...hotImport.importedCharacterIds);
 
     const coolId = coolImport.importedCharacterIds[0]!;
     const hotId = hotImport.importedCharacterIds[0]!;
@@ -974,7 +884,7 @@ describe("characterBlizzardSyncService.refreshLinkedCharactersForRegion", () => 
 
   it("does not refresh another user's characters", async () => {
     const owned = ownedCharacter({ id: "300090", name: "Bnother" });
-    const session = await seedConnectionAndSession(ids.other, "EU", [owned]);
+    const session = await seedConnectionAndSession(other.id, "EU", [owned]);
     mockEnrichmentSuccess({
       id: owned.id,
       name: owned.name,
@@ -986,9 +896,9 @@ describe("characterBlizzardSyncService.refreshLinkedCharactersForRegion", () => 
     const imported = await characterBlizzardImportService.importCharacters(other, session.id, [
       { blizzardCharacterId: owned.id, specialization: "Restoration" },
     ]);
-    createdCharacterIds.push(...imported.importedCharacterIds);
+    created.characterIds.push(...imported.importedCharacterIds);
 
-    await seedConnectionAndSession(ids.owner, "EU", []);
+    await seedConnectionAndSession(owner.id, "EU", []);
     const result = await characterBlizzardSyncService.refreshLinkedCharactersForRegion(owner, "EU");
     expect(result.total).toBe(0);
     expect(Number((await orm.Character.where({ id: imported.importedCharacterIds[0] }).first())?.itemLevel)).toBe(
@@ -997,16 +907,13 @@ describe("characterBlizzardSyncService.refreshLinkedCharactersForRegion", () => 
   });
 });
 
-describe("Blizzard refresh × Warcraft Logs enrichment", () => {
-  const owner = asUser(ids.owner);
-
-  afterEach(() => {
+describe("Blizzard refresh × Warcraft Logs enrichment", () => {  afterEach(() => {
     vi.restoreAllMocks();
   });
 
   async function importLinkedShaman(blizzardId: string, name: string) {
     const owned = ownedCharacter({ id: blizzardId, name });
-    const session = await seedConnectionAndSession(ids.owner, "EU", [owned]);
+    const session = await seedConnectionAndSession(owner.id, "EU", [owned]);
     mockEnrichmentSuccess({
       id: owned.id,
       name: owned.name,
@@ -1018,7 +925,7 @@ describe("Blizzard refresh × Warcraft Logs enrichment", () => {
     const result = await characterBlizzardImportService.importCharacters(owner, session.id, [
       { blizzardCharacterId: owned.id, specialization: "Restoration" },
     ]);
-    createdCharacterIds.push(...result.importedCharacterIds);
+    created.characterIds.push(...result.importedCharacterIds);
     return { owned, characterId: result.importedCharacterIds[0]! };
   }
 
@@ -1077,7 +984,7 @@ describe("Blizzard refresh × Warcraft Logs enrichment", () => {
   it("Refresh All batches WCL after Blizzard outcomes; WCL failure does not increment failed", async () => {
     const ownedA = ownedCharacter({ id: "300310", name: "Bnwclra" });
     const ownedB = ownedCharacter({ id: "300311", name: "Bnwclrb" });
-    const session = await seedConnectionAndSession(ids.owner, "EU", [ownedA, ownedB]);
+    const session = await seedConnectionAndSession(owner.id, "EU", [ownedA, ownedB]);
 
     mockEnrichmentSuccess({
       id: ownedA.id,
@@ -1090,7 +997,7 @@ describe("Blizzard refresh × Warcraft Logs enrichment", () => {
     const importA = await characterBlizzardImportService.importCharacters(owner, session.id, [
       { blizzardCharacterId: ownedA.id, specialization: "Restoration" },
     ]);
-    createdCharacterIds.push(...importA.importedCharacterIds);
+    created.characterIds.push(...importA.importedCharacterIds);
 
     mockEnrichmentSuccess({
       id: ownedB.id,
@@ -1103,7 +1010,7 @@ describe("Blizzard refresh × Warcraft Logs enrichment", () => {
     const importB = await characterBlizzardImportService.importCharacters(owner, session.id, [
       { blizzardCharacterId: ownedB.id, specialization: "Enhancement" },
     ]);
-    createdCharacterIds.push(...importB.importedCharacterIds);
+    created.characterIds.push(...importB.importedCharacterIds);
 
     const idA = importA.importedCharacterIds[0]!;
     const idB = importB.importedCharacterIds[0]!;
@@ -1157,10 +1064,10 @@ describe("Blizzard refresh × Warcraft Logs enrichment", () => {
         expect(Number((await orm.Character.where({ id: idA }).first())?.itemLevel)).toBe(700);
         expect(Number((await orm.Character.where({ id: idB }).first())?.itemLevel)).toBe(701);
 
-        const connection = await battleNetConnectionRepository.findByUserAndRegion(ids.owner, "EU");
+        const connection = await battleNetConnectionRepository.findByUserAndRegion(owner.id, "EU");
         expect(connection?.lastSuccessfulSyncAt).not.toBeNull();
 
-        const activities = await orm.ActivityEvent.where({ userId: ids.owner }).all();
+        const activities = await orm.ActivityEvent.where({ userId: owner.id }).all();
         expect(
           activities.some(
             (row) => String((row as { type?: string }).type) === "BATTLENET_CHARACTERS_REFRESHED",
@@ -1194,14 +1101,12 @@ describe("Blizzard refresh × Warcraft Logs enrichment", () => {
   });
 });
 
-describe("Blizzard profile unavailable (status/profile 404)", () => {
-  const owner = asUser(ids.owner);
-  const notFound = (context: string) =>
+describe("Blizzard profile unavailable (status/profile 404)", () => {  const notFound = (context: string) =>
     new DomainError("BLIZZARD_CHARACTER_NOT_FOUND", `Blizzard resource was not found (${context}).`, 404);
 
   async function importLinked(blizzardId: string, name: string, profile: "ok" | "404") {
     const owned = ownedCharacter({ id: blizzardId, name });
-    const session = await seedConnectionAndSession(ids.owner, "EU", [owned]);
+    const session = await seedConnectionAndSession(owner.id, "EU", [owned]);
     if (profile === "ok") {
       mockEnrichmentSuccess({
         id: owned.id,
@@ -1218,7 +1123,7 @@ describe("Blizzard profile unavailable (status/profile 404)", () => {
     const result = await characterBlizzardImportService.importCharacters(owner, session.id, [
       { blizzardCharacterId: owned.id, specialization: "Restoration" },
     ]);
-    createdCharacterIds.push(...result.importedCharacterIds);
+    created.characterIds.push(...result.importedCharacterIds);
     return { owned, characterId: result.importedCharacterIds[0]! };
   }
 

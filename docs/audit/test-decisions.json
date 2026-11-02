@@ -1307,6 +1307,10 @@
     "tests/integration/services/community-schedule-materialization.service.test.ts": [
       "REWRITE",
       "Owned users via createTestUser; shared template recreated per test; slots-before-templates FK cleanup; deleteAndCount + deleteCreatedRows; expectDomainError; frozen OCC_NOW/RELEASE_NOW"
+    ],
+    "tests/integration/services/character-blizzard-sync.service.test.ts": [
+      "REWRITE",
+      "Owned users via createTestUser; verified deleteAndCount for BattleNet/BoosterAccess/lockouts/characters; expectDomainError; suite tracker renamed created to avoid ownedCharacter shadowing"
     ]
   },
   "tests": {
